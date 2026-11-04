@@ -14,8 +14,14 @@ use crate::LOG_DOMAIN;
 use crate::lab_panel::{format_param, param_row};
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::{Swatch, SwatchShape};
-use crate::tools::{KNIFE_HANDLING, UiTool};
 use crate::window::CadmiumWindow;
+
+mod presentation;
+
+use presentation::{
+    EYEDROPPER_HINT, PanelTool, describe_recipe, panel_tool, pile_is_highlighted,
+    tool_group_description, tool_hint, tool_wording, visible_controls,
+};
 
 const PANEL_MARGIN: i32 = 12;
 const GROUP_SPACING: i32 = 18;
@@ -39,69 +45,11 @@ const UNIT_STEP: f64 = 0.01;
 const UNIT_PAGE: f64 = 0.1;
 const MEDIUM_SLIDER_MAX: f64 = 0.9;
 const PERCENT: f64 = 100.0;
-const MIN_LISTED_SHARE: f32 = 0.01;
-const CLEAN_LABEL: &str = "Limpo";
 const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_TITLE: &str = "Espessura da placa";
 const PLATE_GAP_UNIT: &str = "µm";
 const RELOAD_EACH_STROKE: &str = "Recarregar a cada traço";
 const CLEAN_EACH_STROKE: &str = "Limpar a cada traço";
-const SIZE_TITLE: &str = "Tamanho";
-const NOZZLE_TITLE: &str = "Bico";
-const TUBE_PIGMENTS_HINT: &str = "Clique escolhe o tubo";
-const EYEDROPPER_HINT: &str = "Clique na tela para pegar a tinta que está nela. \
-O botão direito do mouse e o botão inferior da caneta pegam a cor com qualquer ferramenta.";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ToolWording {
-    pub pigments: &'static str,
-    pub loaded_title: &'static str,
-    pub loaded_tooltip: &'static str,
-    pub level_tooltip: &'static str,
-    pub clean: &'static str,
-    pub clean_button: &'static str,
-    pub size_subtitle: Option<&'static str>,
-    pub reload_hint: &'static str,
-    pub clean_each_hint: &'static str,
-}
-
-const BRUSH_WORDING: ToolWording = ToolWording {
-    pigments: "Clique carrega o pincel limpo, de novo mergulha mais; Ctrl+clique mistura um pouco",
-    loaded_title: "No pincel",
-    loaded_tooltip: "Esquerda: mistura na paleta · direita: ponta do pincel",
-    level_tooltip: "Tinta na reserva do pincel",
-    clean: CLEAN_LABEL,
-    clean_button: "Limpar pincel",
-    size_subtitle: None,
-    reload_hint: "Repõe a reserva com a mistura da paleta",
-    clean_each_hint: "Começa cada traço com o pincel limpo e recarregado",
-};
-
-const KNIFE_WORDING: ToolWording = ToolWording {
-    pigments: "Clique carrega a espátula limpa, de novo pega mais; Ctrl+clique mistura um pouco",
-    loaded_title: "Na espátula",
-    loaded_tooltip: "Esquerda: mistura na paleta · direita: tinta na espátula",
-    level_tooltip: "Tinta na espátula",
-    clean: "Limpa",
-    clean_button: "Limpar espátula",
-    size_subtitle: Some("Comprimento da lâmina"),
-    reload_hint: "Repõe a tinta da espátula até a carga",
-    clean_each_hint: "Começa cada traço com a espátula limpa e recarregada",
-};
-
-pub fn tool_wording(tool: Tool) -> ToolWording {
-    match tool {
-        Tool::Knife => KNIFE_WORDING,
-        _ => BRUSH_WORDING,
-    }
-}
-
-pub fn tool_hint(tool: Tool) -> &'static str {
-    match tool {
-        Tool::Knife => KNIFE_HANDLING,
-        _ => EYEDROPPER_HINT,
-    }
-}
 
 fn plate_gap_spec() -> &'static ParamSpec {
     SimParams::specs()
@@ -123,122 +71,6 @@ pub const SHAPES: [(BrushShape, &str); 3] = [
     (BrushShape::Fan, "Leque"),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct VisibleControls {
-    pub pigments: bool,
-    pub loaded: bool,
-    pub size: bool,
-    pub load: bool,
-    pub medium: bool,
-    pub plate_gap: bool,
-    pub shape: bool,
-    pub stroke_loading: bool,
-    pub clean: bool,
-    pub hint: bool,
-}
-
-const NO_CONTROLS: VisibleControls = VisibleControls {
-    pigments: false,
-    loaded: false,
-    size: false,
-    load: false,
-    medium: false,
-    plate_gap: false,
-    shape: false,
-    stroke_loading: false,
-    clean: false,
-    hint: false,
-};
-
-pub fn visible_controls(tool: Tool) -> VisibleControls {
-    match tool {
-        Tool::Brush => VisibleControls {
-            pigments: true,
-            loaded: true,
-            size: true,
-            load: true,
-            medium: true,
-            plate_gap: false,
-            shape: true,
-            stroke_loading: true,
-            clean: true,
-            hint: false,
-        },
-        Tool::Knife => VisibleControls {
-            pigments: true,
-            loaded: true,
-            size: true,
-            load: true,
-            plate_gap: true,
-            stroke_loading: true,
-            clean: true,
-            hint: true,
-            ..NO_CONTROLS
-        },
-        Tool::Blender => VisibleControls {
-            size: true,
-            shape: true,
-            ..NO_CONTROLS
-        },
-        Tool::Rag => VisibleControls {
-            size: true,
-            ..NO_CONTROLS
-        },
-        Tool::Eyedropper => VisibleControls {
-            hint: true,
-            ..NO_CONTROLS
-        },
-    }
-}
-
-pub fn panel_tool(ui_tool: UiTool, tool_in_hand: Tool) -> UiTool {
-    match ui_tool {
-        UiTool::Move => UiTool::Paint(tool_in_hand),
-        UiTool::Paint(_) | UiTool::Tube => ui_tool,
-    }
-}
-
-pub fn visible_controls_for(tool: UiTool) -> VisibleControls {
-    match tool {
-        UiTool::Paint(tool) => visible_controls(tool),
-        UiTool::Move => visible_controls(Tool::Brush),
-        UiTool::Tube => VisibleControls {
-            pigments: true,
-            size: true,
-            ..NO_CONTROLS
-        },
-    }
-}
-
-pub fn size_title(tool: UiTool) -> &'static str {
-    match tool {
-        UiTool::Tube => NOZZLE_TITLE,
-        UiTool::Move | UiTool::Paint(_) => SIZE_TITLE,
-    }
-}
-
-pub fn pigments_hint(tool: UiTool) -> &'static str {
-    match tool {
-        UiTool::Tube => TUBE_PIGMENTS_HINT,
-        UiTool::Paint(tool) => tool_wording(tool).pigments,
-        UiTool::Move => BRUSH_WORDING.pigments,
-    }
-}
-
-pub fn pile_is_highlighted(
-    tool: UiTool,
-    slot: usize,
-    tube_slot: usize,
-    recipe: &[(usize, f32)],
-) -> bool {
-    match tool {
-        UiTool::Tube => slot == tube_slot,
-        UiTool::Move | UiTool::Paint(_) => recipe
-            .iter()
-            .any(|(chosen, parts)| *chosen == slot && *parts > 0.0),
-    }
-}
-
 pub fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
         PigmentClick::Mix
@@ -251,29 +83,6 @@ pub fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
 
 pub fn slider_needs_sync(slider_value: f64, diameter_px: f32) -> bool {
     slider_to_size(slider_value) != diameter_px
-}
-
-pub fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String {
-    let mut shares: Vec<(&str, f32)> = recipe
-        .iter()
-        .filter(|(_, parts)| *parts > 0.0)
-        .filter_map(|(slot, parts)| names.get(*slot).map(|name| (*name, *parts)))
-        .collect();
-    let total: f32 = shares.iter().map(|(_, parts)| parts).sum();
-    if total <= 0.0 {
-        return CLEAN_LABEL.to_string();
-    }
-    if let [(name, _)] = shares.as_slice() {
-        return name.to_string();
-    }
-    shares.sort_by(|a, b| b.1.total_cmp(&a.1));
-    shares
-        .iter()
-        .map(|(name, parts)| (name, parts / total))
-        .filter(|(_, share)| *share >= MIN_LISTED_SHARE)
-        .map(|(name, share)| format!("{name} {:.0}%", f64::from(share) * PERCENT))
-        .collect::<Vec<_>>()
-        .join(" · ")
 }
 
 pub fn size_to_slider(diameter_px: f32) -> f64 {
@@ -326,8 +135,7 @@ struct PigmentChoice {
 }
 
 struct Snapshot {
-    shown_tool: UiTool,
-    tool: Tool,
+    tool: PanelTool,
     tube_slot: usize,
     slots: Vec<String>,
     slot_names: Vec<&'static str>,
@@ -399,7 +207,7 @@ impl BrushPanel {
         pigment_card.append(&pigment_box);
         let pigments_group = adw::PreferencesGroup::builder()
             .title("Pigmentos")
-            .description(BRUSH_WORDING.pigments)
+            .description(tool_wording(PanelTool::Paint(Tool::Brush)).pigments)
             .build();
         pigments_group.add(&pigment_card);
 
@@ -424,7 +232,7 @@ impl BrushPanel {
         let loaded_row = adw::ActionRow::builder().subtitle_lines(2).build();
         loaded_row.add_suffix(&loaded);
         let size = slider_row(
-            SIZE_TITLE,
+            tool_wording(PanelTool::Paint(Tool::Brush)).size_title,
             MIN_SIZE_PX.ln(),
             MAX_SIZE_PX.ln(),
             SIZE_STEP,
@@ -516,7 +324,7 @@ impl BrushPanel {
         }
         for (slot, swatch) in self.pigment_swatches.borrow().iter().enumerate() {
             swatch.set_selected(pile_is_highlighted(
-                snapshot.shown_tool,
+                snapshot.tool,
                 slot,
                 snapshot.tube_slot,
                 &snapshot.recipe,
@@ -559,9 +367,8 @@ impl BrushPanel {
         self.reload_row.set_active(snapshot.reload_each_stroke);
         self.clean_each_row.set_active(snapshot.clean_each_stroke);
         self.show_controls_for(
-            snapshot.shown_tool,
             snapshot.tool,
-            snapshot.slot_names.get(snapshot.tube_slot).copied(),
+            tool_group_description(snapshot.tool, &snapshot.slot_names, snapshot.tube_slot),
         );
         self.syncing.set(false);
     }
@@ -572,10 +379,7 @@ impl BrushPanel {
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
         let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
-        let tool = match state.ui_tool {
-            UiTool::Paint(tool) => tool,
-            UiTool::Move | UiTool::Tube => session.brush.tool,
-        };
+        let tool = panel_tool(state.ui_tool, session.brush.tool);
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| {
             if mixture.is_empty() {
@@ -585,7 +389,7 @@ impl BrushPanel {
             }
         };
         let palette_colour = colour_of(&state.palette_mixture());
-        let (held_colour, held_level, held_is_clean) = if tool == Tool::Knife {
+        let (held_colour, held_level, held_is_clean) = if tool == PanelTool::Paint(Tool::Knife) {
             (
                 colour_of(&state.knife_mixture),
                 state.knife_level(),
@@ -599,7 +403,6 @@ impl BrushPanel {
             )
         };
         Snapshot {
-            shown_tool: panel_tool(state.ui_tool, tool),
             tool,
             tube_slot: state.tube_slot,
             slot_names: pigments.iter().map(|pigment| pigment.name).collect(),
@@ -724,18 +527,16 @@ impl BrushPanel {
             }
             let id = row.widget_name();
             if let Some(panel) = panel.upgrade() {
-                panel.add_pigment(&id);
+                panel.add_pile(&id);
             }
         });
         button
     }
 
-    fn show_controls_for(&self, shown_tool: UiTool, tool: Tool, tube: Option<&str>) {
-        let shown = visible_controls_for(shown_tool);
+    fn show_controls_for(&self, tool: PanelTool, group_description: Option<&str>) {
+        let shown = visible_controls(tool);
         let wording = tool_wording(tool);
-        let is_tube = shown_tool == UiTool::Tube;
-        self.pigments_group
-            .set_description(Some(pigments_hint(shown_tool)));
+        self.pigments_group.set_description(Some(wording.pigments));
         self.loaded_row.set_title(wording.loaded_title);
         self.loaded_swatch
             .set_tooltip_text(Some(wording.loaded_tooltip));
@@ -743,23 +544,21 @@ impl BrushPanel {
             .set_tooltip_text(Some(wording.level_tooltip));
         self.reserve_bar
             .update_property(&[gtk::accessible::Property::Label(wording.level_tooltip)]);
-        let size_title = size_title(shown_tool);
-        self.size.0.set_title(size_title);
+        self.size.0.set_title(wording.size_title);
         self.size
             .1
-            .update_property(&[gtk::accessible::Property::Label(size_title)]);
-        let size_subtitle = if is_tube { None } else { wording.size_subtitle };
-        self.size.0.set_subtitle(size_subtitle.unwrap_or_default());
+            .update_property(&[gtk::accessible::Property::Label(wording.size_title)]);
+        self.size
+            .0
+            .set_subtitle(wording.size_subtitle.unwrap_or_default());
         self.reload_row.set_subtitle(wording.reload_hint);
         self.clean_each_row.set_subtitle(wording.clean_each_hint);
         self.clean_button.set_label(wording.clean_button);
         self.hint.set_label(tool_hint(tool));
         self.pigments_group.set_visible(shown.pigments);
-        self.brush_group
-            .set_visible(shown.size || shown.loaded || shown.shape);
-        self.brush_group.set_title(shown_tool.label());
-        self.brush_group
-            .set_description(if is_tube { tube } else { None });
+        self.brush_group.set_visible(shown.tool_group());
+        self.brush_group.set_title(tool.label());
+        self.brush_group.set_description(group_description);
         self.loaded_row.set_visible(shown.loaded);
         self.size.0.set_visible(shown.size);
         self.load.0.set_visible(shown.load);
@@ -834,10 +633,10 @@ impl BrushPanel {
         self.change_brush(|state| state.click_pile(slot, click));
     }
 
-    fn add_pigment(self: &Rc<Self>, id: &str) {
-        let added = self.state.borrow_mut().add_pigment(id);
+    fn add_pile(self: &Rc<Self>, id: &str) {
+        let added = self.state.borrow_mut().add_pile(id);
         match added {
-            Ok(slot) => self.click_pile(slot, PigmentClick::CleanAndLoad),
+            Ok(_) => self.after_brush_change(),
             Err(reason) => glib::g_warning!(LOG_DOMAIN, "could not add {id:?}: {reason}"),
         }
     }
@@ -902,25 +701,6 @@ mod tests {
     }
 
     #[test]
-    fn recipe_description_names_a_single_pigment() {
-        assert_eq!(describe_recipe(&["Branco", "Azul"], &[(1, 1.0)]), "Azul");
-    }
-
-    #[test]
-    fn recipe_description_lists_shares_largest_first() {
-        assert_eq!(
-            describe_recipe(&["Branco", "Azul", "Amarelo"], &[(1, 1.0), (2, 3.0)]),
-            "Amarelo 75% · Azul 25%"
-        );
-    }
-
-    #[test]
-    fn empty_recipe_reads_as_a_clean_brush() {
-        assert_eq!(describe_recipe(&["Branco"], &[]), CLEAN_LABEL);
-        assert_eq!(describe_recipe(&["Branco"], &[(0, 0.0)]), CLEAN_LABEL);
-    }
-
-    #[test]
     fn size_slider_is_logarithmic_and_clamped() {
         assert_eq!(slider_to_size(size_to_slider(40.0)), 40.0);
         assert_eq!(slider_to_size(size_to_slider(1.0)), MIN_SIZE_PX as f32);
@@ -930,120 +710,8 @@ mod tests {
     }
 
     #[test]
-    fn brush_shows_every_control_and_eyedropper_only_the_hint() {
-        let brush = visible_controls(Tool::Brush);
-        assert!(brush.pigments && brush.loaded && brush.size && brush.load && brush.medium);
-        assert!(brush.shape && brush.stroke_loading && brush.clean && !brush.hint);
-        assert!(!brush.plate_gap);
-        let eyedropper = visible_controls(Tool::Eyedropper);
-        assert!(eyedropper.hint);
-        assert!(!eyedropper.pigments && !eyedropper.loaded && !eyedropper.size);
-        assert!(!eyedropper.load && !eyedropper.medium && !eyedropper.plate_gap);
-        assert!(!eyedropper.shape && !eyedropper.clean);
-        assert!(!eyedropper.stroke_loading);
-    }
-
-    #[test]
-    fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() {
-        let knife = visible_controls(Tool::Knife);
-        assert!(knife.pigments && knife.loaded && knife.size && knife.load);
-        assert!(knife.plate_gap && knife.stroke_loading && knife.clean && knife.hint);
-        assert!(!knife.medium && !knife.shape);
-    }
-
-    #[test]
-    fn rag_shows_only_the_size() {
-        let shown = visible_controls(Tool::Rag);
-        assert!(shown.size);
-        assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
-        assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
-        assert!(!shown.clean && !shown.hint);
-    }
-
-    #[test]
-    fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
-        let knife = tool_wording(Tool::Knife);
-        assert_eq!(knife.clean_button, "Limpar espátula");
-        assert_eq!(knife.loaded_title, "Na espátula");
-        assert_eq!(tool_hint(Tool::Knife), KNIFE_HANDLING);
-        assert_eq!(tool_wording(Tool::Brush).clean_button, "Limpar pincel");
-        assert_eq!(tool_hint(Tool::Eyedropper), EYEDROPPER_HINT);
-    }
-
-    #[test]
     fn plate_gap_control_drives_the_knife_gap_parameter() {
         assert_eq!(plate_gap_spec().key, PLATE_GAP_KEY);
         assert_eq!(plate_gap_text(80.0), "80 µm");
-    }
-
-    #[test]
-    fn the_tube_shows_only_pigments_and_nozzle_size() {
-        let tube = visible_controls_for(UiTool::Tube);
-        assert!(tube.pigments && tube.size);
-        assert!(!tube.loaded && !tube.load && !tube.medium && !tube.plate_gap);
-        assert!(!tube.shape && !tube.stroke_loading && !tube.clean && !tube.hint);
-    }
-
-    #[test]
-    fn paint_tools_keep_their_own_controls() {
-        for tool in [
-            Tool::Brush,
-            Tool::Knife,
-            Tool::Blender,
-            Tool::Rag,
-            Tool::Eyedropper,
-        ] {
-            assert_eq!(
-                visible_controls_for(UiTool::Paint(tool)),
-                visible_controls(tool)
-            );
-        }
-    }
-
-    #[test]
-    fn moving_keeps_the_panel_of_the_tool_in_hand() {
-        assert_eq!(
-            panel_tool(UiTool::Move, Tool::Knife),
-            UiTool::Paint(Tool::Knife)
-        );
-        assert_eq!(panel_tool(UiTool::Tube, Tool::Knife), UiTool::Tube);
-        assert_eq!(
-            panel_tool(UiTool::Paint(Tool::Rag), Tool::Brush),
-            UiTool::Paint(Tool::Rag)
-        );
-    }
-
-    #[test]
-    fn the_tube_names_its_size_nozzle() {
-        assert_eq!(size_title(UiTool::Tube), "Bico");
-        assert_eq!(size_title(UiTool::Paint(Tool::Brush)), "Tamanho");
-    }
-
-    #[test]
-    fn the_tube_asks_for_a_pile_to_squeeze() {
-        assert_eq!(pigments_hint(UiTool::Tube), "Clique escolhe o tubo");
-        assert_eq!(
-            pigments_hint(UiTool::Paint(Tool::Knife)),
-            KNIFE_WORDING.pigments
-        );
-    }
-
-    #[test]
-    fn the_tube_highlights_its_own_pile_not_the_recipe() {
-        let recipe = [(0, 1.0), (2, 0.5)];
-        assert!(pile_is_highlighted(UiTool::Tube, 1, 1, &recipe));
-        assert!(!pile_is_highlighted(UiTool::Tube, 0, 1, &recipe));
-        assert!(pile_is_highlighted(
-            UiTool::Paint(Tool::Brush),
-            2,
-            1,
-            &recipe
-        ));
-        assert!(!pile_is_highlighted(
-            UiTool::Paint(Tool::Brush),
-            1,
-            1,
-            &recipe
-        ));
     }
 }
