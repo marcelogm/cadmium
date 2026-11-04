@@ -10,6 +10,10 @@ const EMPTY_VOLUME_UM: f32 = 1e-4;
 const QUANTIZE_LIMIT: f32 = 2.0e9;
 const KNIFE_LAID_ALTITUDE: f32 = radians(45.0);
 const KNIFE_UPRIGHT_ALTITUDE: f32 = radians(80.0);
+const REFERENCE_THREADS: u32 = 256u;
+
+var<workgroup> blade_heights: array<f32, REFERENCE_THREADS>;
+var<workgroup> blade_weights: array<f32, REFERENCE_THREADS>;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var wet_pig0: texture_storage_2d<rgba16float, read_write>;
@@ -74,11 +78,49 @@ fn read_fractions(pixel: vec2<i32>) -> array<f32, 8> {
     return array<f32, 8>(low.x, low.y, low.z, low.w, high.x, high.y, high.z, high.w);
 }
 
-@compute @workgroup_size(1)
-fn reference() {
+fn centre_height() -> f32 {
     let size = vec2<i32>(textureDimensions(wet_vol));
     let pixel = clamp(vec2<i32>(floor(dab.center)), vec2<i32>(0), size - vec2<i32>(1));
-    contact_reference.height = surface_height(pixel);
+    return surface_height(pixel);
+}
+
+@compute @workgroup_size(REFERENCE_THREADS)
+fn reference(@builtin(local_invocation_index) thread: u32) {
+    if (dab.tool_mode != TOOL_MODE_KNIFE) {
+        if (thread == 0u) {
+            contact_reference.height = centre_height();
+        }
+        return;
+    }
+    var height_sum = 0.0;
+    var weight_sum = 0.0;
+    let width = dab.canvas_size.x;
+    let count = width * dab.canvas_size.y;
+    for (var index = thread; index < count; index += REFERENCE_THREADS) {
+        let pixel = dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
+        let weight = footprint(brush_space(pixel));
+        if (weight > 0.0) {
+            height_sum += weight * surface_height(pixel);
+            weight_sum += weight;
+        }
+    }
+    blade_heights[thread] = height_sum;
+    blade_weights[thread] = weight_sum;
+    workgroupBarrier();
+    for (var stride = REFERENCE_THREADS / 2u; stride > 0u; stride /= 2u) {
+        if (thread < stride) {
+            blade_heights[thread] += blade_heights[thread + stride];
+            blade_weights[thread] += blade_weights[thread + stride];
+        }
+        workgroupBarrier();
+    }
+    if (thread == 0u) {
+        if (blade_weights[0] > 0.0) {
+            contact_reference.height = blade_heights[0] / blade_weights[0];
+        } else {
+            contact_reference.height = centre_height();
+        }
+    }
 }
 
 @compute @workgroup_size(8, 8)

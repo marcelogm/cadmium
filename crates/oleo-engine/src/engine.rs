@@ -249,11 +249,15 @@ fn spreads(tool: Tool) -> bool {
 }
 
 fn refills(tool: Tool) -> bool {
-    !matches!(tool, Tool::Blender | Tool::Rag)
+    matches!(tool, Tool::Brush)
 }
 
 fn wipes(tool: Tool) -> bool {
     tool == Tool::Rag
+}
+
+fn heading_known(dab: &Dab) -> bool {
+    dab.speed > 0.0
 }
 
 fn is_finite(dab: &Dab) -> bool {
@@ -344,6 +348,9 @@ fn place(
     canvas: &Canvas,
 ) -> Option<Placement> {
     if brush.tool == Tool::Eyedropper || !is_finite(dab) {
+        return None;
+    }
+    if brush.tool == Tool::Knife && !heading_known(dab) {
         return None;
     }
     let footprint = Footprint::of(dab, brush, params);

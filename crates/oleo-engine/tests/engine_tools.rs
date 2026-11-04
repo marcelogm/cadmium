@@ -15,6 +15,8 @@ const CANVAS_WIDTH: usize = 512;
 const SECTION_COLUMNS: std::ops::Range<usize> = 150..350;
 const STROKE_EXTENT_SHARE: f32 = 0.05;
 const CONSERVATION_TOLERANCE: f64 = 1e-6;
+const WIDE_KNIFE_DIAMETER_PX: f32 = 120.0;
+const LEVELLED_ABOVE_RESIDUAL: f32 = 2.0;
 
 fn session(gpu: &GpuContext) -> PaintSession {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -283,6 +285,52 @@ fn upright_knife_scrapes_wet_paint_down_to_the_residual() {
     let after = s.canvas.wet_totals(&gpu).volume;
     eprintln!("knife scrape {before} -> {after}");
     assert!(after < before * 0.6);
+}
+
+fn band_volume(gpu: &GpuContext, s: &PaintSession, rows: std::ops::Range<usize>) -> f32 {
+    cross_section(gpu, s, rows).iter().sum()
+}
+
+#[test]
+fn a_knife_tap_without_motion_leaves_the_canvas_untouched() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let painted = s.canvas.read_f32(&gpu, StateTexture::WetVol);
+    s.canvas.wet_tiles.take();
+    s.brush.tool = Tool::Knife;
+    drag(&gpu, &mut s, &line(128.0, 256.0, 256.0, 1.0, 0.0)[..1]);
+    assert!(s.canvas.wet_tiles.is_empty());
+    assert_eq!(s.canvas.read_f32(&gpu, StateTexture::WetVol), painted);
+}
+
+#[test]
+fn the_knife_lays_down_only_what_it_carries_and_never_draws_on_the_reservoir() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.brush.tool = Tool::Knife;
+    s.brush.geometry.max_diameter_px = WIDE_KNIFE_DIAMETER_PX;
+    drag(&gpu, &mut s, &line(128.0, 40.0, 470.0, 1.0, 0.0));
+    let carried = band_volume(&gpu, &s, 118..139);
+    let beyond_load = band_volume(&gpu, &s, 158..179) + band_volume(&gpu, &s, 78..99);
+    eprintln!("knife carried band {carried}, beyond the loaded tip {beyond_load}");
+    assert!(carried > 0.0);
+    assert_eq!(beyond_load, 0.0);
+}
+
+#[test]
+fn a_laid_knife_levels_to_the_mean_height_under_its_blade_not_to_its_centre() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.brush.tool = Tool::Knife;
+    s.clean_brush(&gpu);
+    drag(&gpu, &mut s, &line(152.0, 40.0, 470.0, 1.0, 60.0));
+    let overlap = cross_section(&gpu, &s, 134..142);
+    let mean = overlap.iter().sum::<f32>() / overlap.len() as f32;
+    let residual = s.engine.params().get("residual_um");
+    eprintln!("paint left under the blade overlap {overlap:?}");
+    assert!(mean > LEVELLED_ABOVE_RESIDUAL * residual, "{mean}");
 }
 
 #[test]
