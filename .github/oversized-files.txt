@@ -5,7 +5,6 @@
 479 crates/cadmium-app/src/lab_panel.rs
 786 crates/cadmium-app/src/new_painting_dialog.rs
 502 crates/cadmium-app/src/presenter.rs
-706 crates/cadmium-app/src/smoke.rs
 1003 crates/cadmium-app/src/state/gesture.rs
 1359 crates/cadmium-app/src/state.rs
 658 crates/cadmium-app/src/tray_view.rs

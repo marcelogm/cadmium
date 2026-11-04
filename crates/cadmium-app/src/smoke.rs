@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::ffi::OsString;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -11,24 +10,14 @@ use gtk::{glib, graphene, gsk};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::ModifierPolicy;
 use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
-use crate::presenter::PresentMode;
 use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
-const EXIT_AFTER_FRAMES: &str = "CADMIUM_SMOKE_EXIT_AFTER_FRAMES";
-const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
-const DIALOG: &str = "CADMIUM_SMOKE_DIALOG";
-const STROKE: &str = "CADMIUM_SMOKE_STROKE";
-const PAGE: &str = "CADMIUM_SMOKE_PAGE";
-const TRAY: &str = "CADMIUM_SMOKE_TRAY";
-const TOOL: &str = "CADMIUM_SMOKE_TOOL";
+mod config;
+#[cfg(test)]
+mod tests;
+
 const TOOL_ACTION: &str = "win.tool";
-const SAVE: &str = "CADMIUM_SMOKE_SAVE";
-const OPEN: &str = "CADMIUM_SMOKE_OPEN";
-const EXPORT: &str = "CADMIUM_SMOKE_EXPORT";
-const DMABUF_SELFTEST: &str = "CADMIUM_SMOKE_DMABUF_SELFTEST";
-const PRESENT_MODE: &str = "CADMIUM_PRESENT";
-const DEFAULT_EXIT_AFTER_FRAMES: u32 = 30;
 const STROKE_PIGMENT: &str = "ultramarine_blue";
 const STROKE_SAMPLES: usize = 60;
 const STROKE_START: f64 = 0.15;
@@ -81,17 +70,17 @@ impl SmokeDialog {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SmokeConfig {
-    pub exit_after_frames: u32,
-    pub screenshot: Option<PathBuf>,
-    pub dialog: Option<SmokeDialog>,
-    pub tool: Option<UiTool>,
-    pub stroke: bool,
-    pub page: Option<String>,
-    pub tray: bool,
-    pub save: Option<PathBuf>,
-    pub open: Option<PathBuf>,
-    pub export: Option<PathBuf>,
-    pub dmabuf_selftest: Option<ModifierPolicy>,
+    exit_after_frames: u32,
+    screenshot: Option<PathBuf>,
+    dialog: Option<SmokeDialog>,
+    tool: Option<UiTool>,
+    stroke: bool,
+    page: Option<String>,
+    tray: bool,
+    save: Option<PathBuf>,
+    open: Option<PathBuf>,
+    export: Option<PathBuf>,
+    dmabuf_selftest: Option<ModifierPolicy>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -222,80 +211,6 @@ impl std::fmt::Display for ScreenshotError {
 }
 
 impl SmokeConfig {
-    pub fn from_env() -> Option<SmokeConfig> {
-        SmokeConfig::from_lookup(|name| std::env::var_os(name))
-    }
-
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
-    fn from_lookup(lookup: impl Fn(&str) -> Option<OsString>) -> Option<SmokeConfig> {
-        let exit_after_frames = lookup(EXIT_AFTER_FRAMES);
-        let screenshot = lookup(SCREENSHOT)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from);
-        let dialog = lookup(DIALOG);
-        let tool = lookup(TOOL).filter(|value| !value.is_empty());
-        let stroke = lookup(STROKE).is_some_and(|value| !value.is_empty() && value != "0");
-        let page = lookup(PAGE)
-            .filter(|value| !value.is_empty())
-            .map(|value| value.to_string_lossy().into_owned());
-        let tray = lookup(TRAY).is_some_and(|value| !value.is_empty() && value != "0");
-        let save = lookup(SAVE)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from);
-        let open = lookup(OPEN)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from);
-        let export = lookup(EXPORT)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from);
-        let dmabuf_selftest = lookup(DMABUF_SELFTEST).map(|_| {
-            match lookup(PRESENT_MODE)
-                .and_then(|mode| mode.to_str().and_then(PresentMode::from_name))
-            {
-                Some(PresentMode::Dmabuf(policy)) => policy,
-                _ => ModifierPolicy::Any,
-            }
-        });
-        if exit_after_frames.is_none()
-            && screenshot.is_none()
-            && dialog.is_none()
-            && tool.is_none()
-            && !stroke
-            && page.is_none()
-            && !tray
-            && save.is_none()
-            && open.is_none()
-            && export.is_none()
-            && dmabuf_selftest.is_none()
-        {
-            return None;
-        }
-        let dialog = dialog.and_then(|value| parse_or_warn(DIALOG, &value));
-        let tool = tool.and_then(|value| {
-            let parsed = value.to_str().and_then(UiTool::from_name);
-            if parsed.is_none() {
-                glib::g_warning!(LOG_DOMAIN, "ignoring {TOOL}={value:?}: not a tool");
-            }
-            parsed
-        });
-        let exit_after_frames = exit_after_frames
-            .and_then(|value| parse_or_warn(EXIT_AFTER_FRAMES, &value))
-            .unwrap_or(DEFAULT_EXIT_AFTER_FRAMES);
-        Some(SmokeConfig {
-            exit_after_frames,
-            screenshot,
-            dialog,
-            tool,
-            stroke,
-            page,
-            tray,
-            save,
-            open,
-            export,
-            dmabuf_selftest,
-        })
-    }
-
     fn steps(&self) -> Vec<SmokeStep> {
         let mut steps = Vec::new();
         steps.extend(self.tool.map(SmokeStep::ChooseTool));
@@ -449,14 +364,6 @@ fn run_dmabuf_selftest(app: &adw::Application, window: &CadmiumWindow, policy: M
     });
 }
 
-fn parse_or_warn<T: std::str::FromStr>(name: &str, value: &OsString) -> Option<T> {
-    let parsed = value.to_str().and_then(|text| text.trim().parse().ok());
-    if parsed.is_none() {
-        glib::g_warning!(LOG_DOMAIN, "ignoring {name}={value:?}: not a valid value");
-    }
-    parsed
-}
-
 fn save_screenshot(window: &CadmiumWindow, path: &Path) -> Result<(), ScreenshotError> {
     let width = window.width() as f32;
     let height = window.height() as f32;
@@ -468,239 +375,4 @@ fn save_screenshot(window: &CadmiumWindow, path: &Path) -> Result<(), Screenshot
     let viewport = graphene::Rect::new(0.0, 0.0, width, height);
     let texture = gsk::prelude::GskRendererExt::render_texture(&renderer, &node, Some(&viewport));
     texture.save_to_png(path).map_err(ScreenshotError::Save)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn lookup<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
-        move |name| {
-            vars.iter()
-                .find(|(key, _)| *key == name)
-                .map(|(_, value)| OsString::from(value))
-        }
-    }
-
-    #[test]
-    fn no_smoke_variables_means_no_smoke_run() {
-        assert_eq!(SmokeConfig::from_lookup(lookup(&[])), None);
-    }
-
-    #[test]
-    fn screenshot_alone_exits_after_default_frame_count() {
-        let config = SmokeConfig::from_lookup(lookup(&[(SCREENSHOT, "/tmp/shot.png")])).unwrap();
-        assert_eq!(config.exit_after_frames, DEFAULT_EXIT_AFTER_FRAMES);
-        assert_eq!(config.screenshot, Some(PathBuf::from("/tmp/shot.png")));
-    }
-
-    #[test]
-    fn explicit_frame_count_is_honoured() {
-        let config = SmokeConfig::from_lookup(lookup(&[(EXIT_AFTER_FRAMES, "60")])).unwrap();
-        assert_eq!(config.exit_after_frames, 60);
-        assert_eq!(config.screenshot, None);
-    }
-
-    #[test]
-    fn unparsable_frame_count_falls_back_to_default() {
-        let config = SmokeConfig::from_lookup(lookup(&[(EXIT_AFTER_FRAMES, "soon")])).unwrap();
-        assert_eq!(config.exit_after_frames, DEFAULT_EXIT_AFTER_FRAMES);
-    }
-
-    #[test]
-    fn dialog_alone_starts_a_smoke_run_that_opens_it() {
-        let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "new")])).unwrap();
-        assert_eq!(config.dialog, Some(SmokeDialog::NewPainting));
-        assert_eq!(config.exit_after_frames, DEFAULT_EXIT_AFTER_FRAMES);
-    }
-
-    #[test]
-    fn about_and_shortcuts_dialogs_are_recognised() {
-        let about = SmokeConfig::from_lookup(lookup(&[(DIALOG, "about")])).unwrap();
-        let shortcuts = SmokeConfig::from_lookup(lookup(&[(DIALOG, "shortcuts")])).unwrap();
-        assert_eq!(about.dialog, Some(SmokeDialog::About));
-        assert_eq!(shortcuts.dialog, Some(SmokeDialog::Shortcuts));
-    }
-
-    #[test]
-    fn empty_screenshot_path_counts_as_unset() {
-        assert_eq!(SmokeConfig::from_lookup(lookup(&[(SCREENSHOT, "")])), None);
-    }
-
-    #[test]
-    fn stroke_runs_after_the_dialog_and_before_the_screenshot_and_quit() {
-        let config = SmokeConfig::from_lookup(lookup(&[
-            (STROKE, "1"),
-            (DIALOG, "about"),
-            (SCREENSHOT, "/tmp/shot.png"),
-        ]))
-        .unwrap();
-        assert_eq!(
-            config.steps(),
-            [
-                SmokeStep::OpenDialog(SmokeDialog::About),
-                SmokeStep::PaintStroke,
-                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-                SmokeStep::Quit,
-            ]
-        );
-    }
-
-    #[test]
-    fn page_is_shown_after_the_stroke_and_before_the_screenshot() {
-        let config = SmokeConfig::from_lookup(lookup(&[
-            (PAGE, "lab"),
-            (STROKE, "1"),
-            (SCREENSHOT, "/tmp/shot.png"),
-        ]))
-        .unwrap();
-        assert_eq!(
-            config.steps(),
-            [
-                SmokeStep::PaintStroke,
-                SmokeStep::ShowPage("lab".to_string()),
-                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-                SmokeStep::Quit,
-            ]
-        );
-    }
-
-    #[test]
-    fn file_steps_run_after_the_stroke_and_before_the_page_and_screenshot() {
-        let config = SmokeConfig::from_lookup(lookup(&[
-            (OPEN, "/tmp/a.cadmium"),
-            (EXPORT, "/tmp/a.png"),
-            (PAGE, "lab"),
-            (SAVE, "/tmp/a.cadmium"),
-            (STROKE, "1"),
-            (SCREENSHOT, "/tmp/shot.png"),
-        ]))
-        .unwrap();
-        assert_eq!(
-            config.steps(),
-            [
-                SmokeStep::PaintStroke,
-                SmokeStep::Save(PathBuf::from("/tmp/a.cadmium")),
-                SmokeStep::Open(PathBuf::from("/tmp/a.cadmium")),
-                SmokeStep::Export(PathBuf::from("/tmp/a.png")),
-                SmokeStep::ShowPage("lab".to_string()),
-                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-                SmokeStep::Quit,
-            ]
-        );
-    }
-
-    #[test]
-    fn tray_opens_after_the_page_and_before_the_screenshot() {
-        let config = SmokeConfig::from_lookup(lookup(&[
-            (TRAY, "1"),
-            (PAGE, "lab"),
-            (SCREENSHOT, "/tmp/shot.png"),
-        ]))
-        .unwrap();
-        assert_eq!(
-            config.steps(),
-            [
-                SmokeStep::ShowPage("lab".to_string()),
-                SmokeStep::ShowTray,
-                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-                SmokeStep::Quit,
-            ]
-        );
-    }
-
-    #[test]
-    fn tray_zero_does_not_open_the_tray() {
-        assert_eq!(SmokeConfig::from_lookup(lookup(&[(TRAY, "0")])), None);
-    }
-
-    #[test]
-    fn tool_is_chosen_before_anything_else() {
-        let config =
-            SmokeConfig::from_lookup(lookup(&[(STROKE, "1"), (TOOL, "knife"), (DIALOG, "about")]))
-                .unwrap();
-        assert_eq!(
-            config.steps(),
-            [
-                SmokeStep::ChooseTool(UiTool::Paint(cadmium_engine::stroke::Tool::Knife)),
-                SmokeStep::OpenDialog(SmokeDialog::About),
-                SmokeStep::PaintStroke,
-                SmokeStep::Quit,
-            ]
-        );
-    }
-
-    #[test]
-    fn unknown_tool_is_ignored() {
-        let config = SmokeConfig::from_lookup(lookup(&[(TOOL, "spray")])).unwrap();
-        assert_eq!(config.tool, None);
-    }
-
-    #[test]
-    fn open_alone_starts_a_smoke_run() {
-        let config = SmokeConfig::from_lookup(lookup(&[(OPEN, "/tmp/a.cadmium")])).unwrap();
-        assert_eq!(config.open, Some(PathBuf::from("/tmp/a.cadmium")));
-    }
-
-    #[test]
-    fn page_alone_starts_a_smoke_run() {
-        let config = SmokeConfig::from_lookup(lookup(&[(PAGE, "lab")])).unwrap();
-        assert_eq!(config.page.as_deref(), Some("lab"));
-    }
-
-    #[test]
-    fn stroke_zero_does_not_paint() {
-        assert_eq!(SmokeConfig::from_lookup(lookup(&[(STROKE, "0")])), None);
-    }
-
-    #[test]
-    fn smoke_stroke_crosses_the_canvas_middle_with_a_pressure_ramp() {
-        let samples = smoke_stroke(2048, 1536);
-        assert_eq!(samples.len(), STROKE_SAMPLES);
-        assert!((samples[0].pressure - STROKE_PRESSURE_START).abs() < 1e-6);
-        assert!((samples[STROKE_SAMPLES - 1].pressure - STROKE_PRESSURE_END).abs() < 1e-6);
-        let peak = samples.iter().map(|s| s.pressure).fold(0.0, f32::max);
-        assert!(peak > 0.95);
-        assert!(samples.iter().all(|s| s.x > 0.0 && s.x < 2048.0));
-        assert!(
-            samples
-                .iter()
-                .all(|s| s.y > 1536.0 * 0.3 && s.y < 1536.0 * 0.7)
-        );
-        assert!(
-            samples
-                .windows(2)
-                .all(|pair| pair[1].time_ms > pair[0].time_ms)
-        );
-    }
-
-    #[test]
-    fn dmabuf_selftest_alone_starts_a_smoke_run() {
-        let config = SmokeConfig::from_lookup(lookup(&[(DMABUF_SELFTEST, "1")])).unwrap();
-        assert_eq!(config.dmabuf_selftest, Some(ModifierPolicy::Any));
-    }
-
-    #[test]
-    fn linear_present_mode_restricts_the_dmabuf_selftest_to_linear() {
-        let config =
-            SmokeConfig::from_lookup(lookup(&[(DMABUF_SELFTEST, "1"), (PRESENT_MODE, "linear")]))
-                .unwrap();
-        assert_eq!(config.dmabuf_selftest, Some(ModifierPolicy::LinearOnly));
-    }
-
-    #[test]
-    fn nodcc_present_mode_keeps_the_dmabuf_selftest_off_compressed_modifiers() {
-        let config = SmokeConfig::from_lookup(lookup(&[
-            (DMABUF_SELFTEST, "1"),
-            (PRESENT_MODE, "dmabuf-nodcc"),
-        ]))
-        .unwrap();
-        assert_eq!(config.dmabuf_selftest, Some(ModifierPolicy::NoCompression));
-    }
-
-    #[test]
-    fn unknown_dialog_is_ignored() {
-        let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "preferences")])).unwrap();
-        assert_eq!(config.dialog, None);
-    }
 }
