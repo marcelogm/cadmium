@@ -41,9 +41,9 @@ fn surface_height(pixel: vec2<i32>) -> f32 {
     return textureLoad(dry_height, pixel).x + textureLoad(wet_vol, pixel).x;
 }
 
-fn contact(height: f32) -> f32 {
+fn contact(height: f32, hanging_film: f32) -> f32 {
     let depth = dab.penetration_um * dab.pressure;
-    let plane = contact_reference.height - depth;
+    let plane = contact_reference.height - depth - hanging_film;
     return clamp((height - plane) / max(depth, MIN_CONTACT_DEPTH_UM), 0.0, 1.0);
 }
 
@@ -58,7 +58,7 @@ struct Transfer {
 };
 
 fn bristle_transfer(mask: f32, volume: f32, height: f32, tip_volume: f32) -> Transfer {
-    let reference_rate = dab.transfer_fraction * mask * contact(height) * velocity_share();
+    let reference_rate = dab.transfer_fraction * mask * contact(height, tip_volume) * velocity_share();
     let rate = 1.0 - pow(max(1.0 - reference_rate, MIN_KEPT_SHARE), dab.step_ratio);
     let deposit = min(rate * tip_volume, MAX_DEPOSIT_SHARE * tip_volume);
     let pickup = rate * max(volume - dab.residual_um, 0.0);
