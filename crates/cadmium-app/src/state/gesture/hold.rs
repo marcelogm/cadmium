@@ -7,8 +7,17 @@ use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
 
-use super::{Contact, FULL_LEVEL, LoadRing, MAX_HOLD_STEP_SECONDS, STILL_TUBE_SCREEN_PX};
+use super::{Contact, LoadRing};
 use crate::state::{AppState, mean_mixture, recipe_from_fractions};
+
+pub(super) const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
+const STILL_TUBE_SCREEN_PX: f32 = 3.0;
+const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
+const FULL_LEVEL: f32 = 0.999;
+
+pub(super) fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
+    (current.0 - origin.0).hypot(current.1 - origin.1) > threshold_px
+}
 
 impl AppState {
     pub fn set_tray_zoom(&mut self, zoom: f32) {
@@ -181,3 +190,6 @@ impl AppState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

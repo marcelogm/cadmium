@@ -54,3 +54,6 @@ impl AppState {
         self.note_samples(std::slice::from_ref(&sample));
     }
 }
+
+#[cfg(test)]
+mod tests;

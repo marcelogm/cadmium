@@ -1,8 +1,10 @@
 use cadmium_engine::stroke::StrokeSample;
 use cadmium_engine::surface::Surface;
 
-use super::{Contact, LOAD_CANCEL_SCREEN_PX, load_cancelled};
-use crate::state::{AppState, StrokePreparation};
+use super::Contact;
+use super::hold::{LOAD_CANCEL_SCREEN_PX, load_cancelled};
+use super::stroke::StrokePreparation;
+use crate::state::AppState;
 
 impl AppState {
     pub fn is_stroking(&self) -> bool {
@@ -110,3 +112,6 @@ impl AppState {
         self.wake();
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -2,7 +2,26 @@ use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 
 use super::Contact;
-use crate::state::{AppState, StrokePreparation, stroke_preparation};
+use crate::state::AppState;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum StrokePreparation {
+    None,
+    TopUp,
+    CleanAndLoad,
+}
+
+pub(super) fn stroke_preparation(
+    tool: Tool,
+    reload_each_stroke: bool,
+    clean_each_stroke: bool,
+) -> StrokePreparation {
+    match tool.profile().holder {
+        Some(_) if clean_each_stroke => StrokePreparation::CleanAndLoad,
+        Some(_) if reload_each_stroke => StrokePreparation::TopUp,
+        _ => StrokePreparation::None,
+    }
+}
 
 impl AppState {
     pub fn begin_stroke(&mut self, tool: Tool, sample: StrokeSample) {
@@ -50,3 +69,6 @@ impl AppState {
         self.measure_brush();
     }
 }
+
+#[cfg(test)]
+mod tests;
