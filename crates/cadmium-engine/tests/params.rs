@@ -22,7 +22,7 @@ fn set_clamps_to_range() {
 #[test]
 fn specs_cover_every_lab_parameter_once() {
     let specs = SimParams::specs();
-    assert_eq!(specs.len(), 19);
+    assert_eq!(specs.len(), 21);
     for (i, spec) in specs.iter().enumerate() {
         assert!(spec.min <= spec.default && spec.default <= spec.max);
         assert!(specs[i + 1..].iter().all(|other| other.key != spec.key));

@@ -35,7 +35,7 @@ const fn spec(
     }
 }
 
-const PARAM_COUNT: usize = 19;
+const PARAM_COUNT: usize = 21;
 
 const SPECS: [ParamSpec; PARAM_COUNT] = [
     spec(
@@ -135,6 +135,22 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         0.0,
         1.0,
         0.5,
+    ),
+    spec(
+        "tube_flow_um_per_s",
+        "Vazão do tubo (µm/s)",
+        ParamGroup::Tools,
+        20.0,
+        2000.0,
+        300.0,
+    ),
+    spec(
+        "tube_max_um",
+        "Altura máxima do tubo (µm)",
+        ParamGroup::Tools,
+        50.0,
+        1500.0,
+        500.0,
     ),
     spec(
         "impasto_scale",

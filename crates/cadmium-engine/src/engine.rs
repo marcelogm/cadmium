@@ -51,7 +51,7 @@ const CAPILLARY_POOL_GROUPS: u32 = (CAPILLARY_POOLS as u32).div_ceil(CAPILLARY_P
 const SPREAD_APRON_PX: i32 = 1;
 const TIP_APRON_TEXELS: f32 = 1.0;
 const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
-const WORKGROUP_SIZE: u32 = 8;
+pub(crate) const WORKGROUP_SIZE: u32 = 8;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
 const KNIFE_DRAG: f32 = 0.15;
@@ -617,7 +617,7 @@ fn max_dab_region_side() -> u32 {
     2 * (half_extent + 1 + DAB_APRON_PX as u32) + 2 * MAX_SWEEP_PX as u32
 }
 
-fn clamped_region(
+pub(crate) fn clamped_region(
     first: [i32; 2],
     last: [i32; 2],
     apron: i32,
@@ -659,7 +659,7 @@ fn shader_source(snippets: &[&str], body: &str) -> String {
     source
 }
 
-fn compute_pipeline(
+pub(crate) fn compute_pipeline(
     gpu: &GpuContext,
     label: &str,
     module: &wgpu::ShaderModule,
@@ -677,7 +677,7 @@ fn compute_pipeline(
         })
 }
 
-fn shader_module(
+pub(crate) fn shader_module(
     gpu: &GpuContext,
     label: &str,
     snippets: &[&str],
@@ -690,7 +690,7 @@ fn shader_module(
         })
 }
 
-fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -703,7 +703,7 @@ fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayo
     }
 }
 
-fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -716,7 +716,7 @@ fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-fn texture_entry(
+pub(crate) fn texture_entry(
     binding: u32,
     access: wgpu::StorageTextureAccess,
     format: wgpu::TextureFormat,
@@ -733,7 +733,7 @@ fn texture_entry(
     }
 }
 
-fn layouts(
+pub(crate) fn layouts(
     gpu: &GpuContext,
     label: &str,
     entries: &[wgpu::BindGroupLayoutEntry],
@@ -754,7 +754,7 @@ fn layouts(
     (bind_group_layout, pipeline_layout)
 }
 
-fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
+pub(crate) fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
     gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size,
@@ -765,7 +765,7 @@ fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
     })
 }
 
-fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
+pub(crate) fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
     let staging = staging_buffer(gpu, "brush_readback", buffer.size());
     let mut encoder = gpu
         .device
@@ -1812,14 +1812,18 @@ fn dab_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> 
     }
 }
 
-fn buffer_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+pub(crate) fn buffer_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
     wgpu::BindGroupEntry {
         binding,
         resource: buffer.as_entire_binding(),
     }
 }
 
-fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::BindGroupEntry<'_> {
+pub(crate) fn texture_binding(
+    binding: u32,
+    canvas: &Canvas,
+    which: StateTexture,
+) -> wgpu::BindGroupEntry<'_> {
     wgpu::BindGroupEntry {
         binding,
         resource: wgpu::BindingResource::TextureView(canvas.view(which)),

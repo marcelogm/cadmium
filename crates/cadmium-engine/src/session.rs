@@ -12,6 +12,7 @@ use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
+use crate::tube::{Nozzle, Tube, region_rect, squeeze_region};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -43,6 +44,8 @@ pub struct PaintSession {
     queued: Vec<Dab>,
     step_open: bool,
     stroke_surface: Surface,
+    hold: Option<Surface>,
+    tube: Tube,
 }
 
 impl PaintSession {
@@ -66,6 +69,8 @@ impl PaintSession {
             queued: Vec::new(),
             step_open: false,
             stroke_surface: Surface::Painting,
+            hold: None,
+            tube: Tube::new(gpu),
         };
         session.reload_brush(gpu);
         Ok(session)
@@ -76,6 +81,7 @@ impl PaintSession {
         gpu: &GpuContext,
         spec: CanvasSpec,
     ) -> Result<(), CanvasError> {
+        self.end_hold();
         self.stroke = None;
         self.queued.clear();
         self.step_open = false;
@@ -150,6 +156,40 @@ impl PaintSession {
         let mut builder = StrokeBuilder::new(self.stroke_brush.stroke_geometry());
         self.queued.extend(builder.push(sample));
         self.stroke = Some(builder);
+    }
+
+    pub fn begin_hold(&mut self, gpu: &GpuContext, surface: Surface) {
+        self.settle_pending_step(gpu);
+        self.history.begin_step(surface);
+        self.hold = Some(surface);
+    }
+
+    pub fn end_hold(&mut self) {
+        if self.hold.take().is_some() {
+            self.history.commit_step();
+        }
+    }
+
+    pub fn is_holding(&self) -> bool {
+        self.hold.is_some()
+    }
+
+    pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) {
+        let Some(surface) = self.hold else {
+            return;
+        };
+        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
+        let Some((origin, size)) = squeeze_region(canvas, &nozzle) else {
+            return;
+        };
+        let [x0, y0, x1, y1] = region_rect(origin, size);
+        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+        let mut encoder = new_encoder(gpu, "squeeze");
+        self.history
+            .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
+        self.tube
+            .encode_squeeze(gpu, canvas, self.engine.params(), &nozzle, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
     }
 
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {
@@ -367,6 +407,7 @@ impl PaintSession {
     }
 
     fn settle_pending_step(&mut self, gpu: &GpuContext) {
+        self.end_hold();
         self.end_stroke();
         self.flush(gpu);
     }
