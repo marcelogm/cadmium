@@ -73,7 +73,7 @@ pub fn tray_screen_zoom(viewport_px: (u32, u32), device_scale: f64) -> f32 {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ShownRing {
+struct ShownRing {
     ring: LoadRing,
     centre: (f64, f64),
     released_at: Option<Instant>,
@@ -94,11 +94,12 @@ mod imp {
         pub tick: RefCell<Option<gtk::TickCallbackId>>,
         pub scale_watch: SurfaceScaleWatch,
         pub hover: Cell<Option<(f64, f64)>>,
-        pub shown_ring: Cell<Option<ShownRing>>,
+        pub(super) shown_ring: Cell<Option<ShownRing>>,
         pub released_handlers: RefCell<Vec<TrayHandler>>,
         pub colour_picked_handlers: RefCell<Vec<PickHandler>>,
         pub pen_observed_handlers: RefCell<Vec<TrayHandler>>,
         pub fallback_handlers: RefCell<Vec<TrayHandler>>,
+        pub presented_handlers: RefCell<Vec<TrayHandler>>,
     }
 
     #[glib::object_subclass]
@@ -119,7 +120,6 @@ mod imp {
             tray.set_overflow(gtk::Overflow::Hidden);
             tray.set_cursor_from_name(Some(TRAY_CURSOR));
             tray.set_size_request(-1, TRAY_MIN_HEIGHT);
-            tray.add_css_class("tray");
             tray.connect_scale_factor_notify(super::TrayView::follow_scale_change);
         }
     }
@@ -131,6 +131,11 @@ mod imp {
             self.scale_watch
                 .start(&*tray, super::TrayView::follow_scale_change);
             tray.queue_present();
+        }
+
+        fn map(&self) {
+            self.parent_map();
+            self.obj().queue_present();
         }
 
         fn unrealize(&self) {
@@ -219,7 +224,8 @@ impl TrayView {
         let weak = tray.downgrade();
         state.borrow_mut().add_waker(Rc::new(move || {
             if let Some(tray) = weak.upgrade() {
-                tray.queue_present();
+                tray.request_frame();
+                tray.queue_draw();
             }
         }));
         if tray.imp().state.set(state).is_err() {
@@ -254,6 +260,13 @@ impl TrayView {
     pub fn connect_pen_observed(&self, handler: impl Fn(&TrayView) + 'static) {
         self.imp()
             .pen_observed_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
+    pub fn connect_presented(&self, handler: impl Fn(&TrayView) + 'static) {
+        self.imp()
+            .presented_handlers
             .borrow_mut()
             .push(Box::new(handler));
     }
@@ -352,7 +365,7 @@ impl TrayView {
 
     fn frame_needed(&self, state: &AppState, presenter: &FramePresenter) -> bool {
         let (width_px, height_px) = viewport_px(self);
-        if width_px == 0 || height_px == 0 || state.gpu_is_lost() {
+        if !self.is_mapped() || width_px == 0 || height_px == 0 || state.gpu_is_lost() {
             return false;
         }
         self.imp().needs_present.get()
@@ -374,11 +387,17 @@ impl TrayView {
 
     fn present_frame(&self) {
         let imp = self.imp();
-        let fell_back = self.present_texture() && imp.presenter.borrow_mut().take_fallback_notice();
+        if !self.present_texture() {
+            return;
+        }
+        let fell_back = imp.presenter.borrow_mut().take_fallback_notice();
         if fell_back {
             for handler in imp.fallback_handlers.borrow().iter() {
                 handler(self);
             }
+        }
+        for handler in imp.presented_handlers.borrow().iter() {
+            handler(self);
         }
     }
 

@@ -412,11 +412,17 @@ impl PaintSession {
     }
 
     pub fn has_pending_work(&self) -> bool {
-        !self.queued.is_empty() || !self.canvas.dirty.is_empty() || self.step_awaits_commit()
+        self.has_pending_work_on(Surface::Painting)
     }
 
     pub fn tray_has_pending_work(&self) -> bool {
-        !self.queued.is_empty() || !self.tray.dirty.is_empty() || self.step_awaits_commit()
+        self.has_pending_work_on(Surface::Tray)
+    }
+
+    fn has_pending_work_on(&self, surface: Surface) -> bool {
+        let stroke_pending = !self.queued.is_empty() || self.step_awaits_commit();
+        (self.stroke_surface == surface && stroke_pending)
+            || !self.canvas_of(surface).dirty.is_empty()
     }
 
     fn step_awaits_commit(&self) -> bool {

@@ -229,6 +229,11 @@ impl CadmiumWindow {
             show_pen,
             move |_| show_pen()
         ));
+        tray.connect_presented(glib::clone!(
+            #[strong]
+            show_pen,
+            move |_| show_pen()
+        ));
         tray.connect_pen_observed(move |_| show_pen());
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
@@ -263,14 +268,25 @@ impl CadmiumWindow {
     }
 
     fn give_the_tray_its_first_height(&self) {
-        self.imp().sidebar_paned.add_tick_callback(|paned, _| {
-            let height = paned.height();
-            if height <= 0 {
-                return glib::ControlFlow::Continue;
-            }
-            paned.set_position((f64::from(height) * PANELS_SHARE_OF_SIDEBAR) as i32);
-            glib::ControlFlow::Break
-        });
+        let first_height: Rc<RefCell<Option<glib::SignalHandlerId>>> = Rc::default();
+        let handler = self.imp().sidebar_paned.connect_notify_local(
+            Some("max-position"),
+            glib::clone!(
+                #[strong]
+                first_height,
+                move |paned, _| {
+                    let height = paned.height();
+                    if height <= 0 {
+                        return;
+                    }
+                    paned.set_position((f64::from(height) * PANELS_SHARE_OF_SIDEBAR) as i32);
+                    if let Some(handler) = first_height.borrow_mut().take() {
+                        paned.disconnect(handler);
+                    }
+                }
+            ),
+        );
+        first_height.replace(Some(handler));
     }
 
     fn after_colour_pick(&self, found_paint: bool) {

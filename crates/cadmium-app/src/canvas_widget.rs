@@ -261,7 +261,8 @@ impl CadmiumCanvas {
         let weak = canvas.downgrade();
         state.borrow_mut().add_waker(Rc::new(move || {
             if let Some(canvas) = weak.upgrade() {
-                canvas.queue_present();
+                canvas.request_frame();
+                canvas.queue_draw();
             }
         }));
         if canvas.imp().state.set(state).is_err() {

@@ -659,6 +659,81 @@ mod tests {
         assert_eq!(state.session.brush.recipe, recipe);
     }
 
+    fn settle_both_surfaces(state: &mut AppState) {
+        present_one_frame(state);
+        present_one_tray_frame(state);
+        assert!(!state.session.has_pending_work());
+        assert!(!state.session.tray_has_pending_work());
+    }
+
+    #[test]
+    fn a_tray_stroke_leaves_the_painting_with_no_pending_work() {
+        let mut state = painting_state();
+        settle_both_surfaces(&mut state);
+        state.set_ui_tool(UiTool::Paint(Tool::Blender));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        state.motion(&[sample_at(340.0, 300.0, 0.9)]);
+        assert!(state.session.tray_has_pending_work());
+        assert!(!state.session.has_pending_work());
+        state.release();
+        assert!(state.session.tray_has_pending_work());
+        assert!(!state.session.has_pending_work());
+        present_one_tray_frame(&mut state);
+        assert!(!state.session.tray_has_pending_work());
+    }
+
+    #[test]
+    fn a_painting_stroke_leaves_the_tray_with_no_pending_work() {
+        let mut state = painting_state();
+        settle_both_surfaces(&mut state);
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Painting, sample_at(100.0, 100.0, 0.9), false);
+        state.motion(&[sample_at(140.0, 100.0, 0.9)]);
+        state.release();
+        assert!(state.session.has_pending_work());
+        assert!(!state.session.tray_has_pending_work());
+    }
+
+    #[test]
+    fn a_tray_hold_leaves_the_painting_with_no_pending_work() {
+        let mut state = painting_state();
+        settle_both_surfaces(&mut state);
+        state.set_ui_tool(UiTool::Tube);
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
+        state.advance_hold(MAX_HOLD_STEP_SECONDS);
+        assert!(state.session.tray_has_pending_work());
+        assert!(!state.session.has_pending_work());
+        state.release();
+        assert!(!state.session.has_pending_work());
+    }
+
+    #[test]
+    fn clearing_the_tray_gives_only_the_tray_pending_work() {
+        let mut state = painting_state();
+        squeeze_blob_on_tray(&mut state, 1);
+        settle_both_surfaces(&mut state);
+        state.clear_tray();
+        assert!(state.session.tray_has_pending_work());
+        assert!(!state.session.has_pending_work());
+    }
+
+    #[test]
+    fn a_render_param_reshades_both_surfaces() {
+        let mut state = painting_state();
+        settle_both_surfaces(&mut state);
+        let render = cadmium_engine::params::SimParams::specs()
+            .iter()
+            .find(|spec| spec.group == cadmium_engine::params::ParamGroup::Render)
+            .unwrap();
+        state.set_param(render.key, render.default);
+        assert!(state.session.has_pending_work());
+        assert!(state.session.tray_has_pending_work());
+        settle_both_surfaces(&mut state);
+        state.reset_params();
+        assert!(state.session.has_pending_work());
+        assert!(state.session.tray_has_pending_work());
+    }
+
     #[test]
     fn a_still_touch_on_a_clean_tray_shows_no_ring() {
         let mut state = painting_state();
