@@ -27,6 +27,41 @@ const CANNOT_SAVE: &str = "Não foi possível salvar";
 const CANNOT_EXPORT: &str = "Não foi possível exportar";
 const NOT_A_LOCAL_FILE: &str = "o arquivo escolhido não é local";
 const BACKGROUND_TASK_FAILED: &str = "a tarefa em segundo plano falhou";
+const FILE_NOT_FOUND: &str = "o arquivo não existe";
+const PERMISSION_DENIED: &str = "sem permissão para acessar o arquivo";
+const ALREADY_EXISTS: &str = "o arquivo já existe";
+const STORAGE_FULL: &str = "não há espaço livre no disco";
+const READ_ONLY: &str = "o local é somente leitura";
+const UNREADABLE_DATA: &str = "o arquivo está corrompido ou incompleto";
+const INPUT_OUTPUT_FAILED: &str = "falha de leitura ou gravação";
+const NOT_A_PAINTING: &str = "o arquivo não é uma pintura do Óleo válida";
+
+struct Failure {
+    shown: String,
+    detail: String,
+}
+
+pub fn describe_document_error(error: &DocumentError) -> String {
+    match error {
+        DocumentError::Io(error) => describe_io_error(error.kind()).to_string(),
+        DocumentError::Format(_) => NOT_A_PAINTING.to_string(),
+        DocumentError::UnsupportedVersion(version) => {
+            format!("a pintura usa o formato {version}, que esta versão do Óleo não sabe ler")
+        }
+    }
+}
+
+fn describe_io_error(kind: std::io::ErrorKind) -> &'static str {
+    match kind {
+        std::io::ErrorKind::NotFound => FILE_NOT_FOUND,
+        std::io::ErrorKind::PermissionDenied => PERMISSION_DENIED,
+        std::io::ErrorKind::AlreadyExists => ALREADY_EXISTS,
+        std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded => STORAGE_FULL,
+        std::io::ErrorKind::ReadOnlyFilesystem => READ_ONLY,
+        std::io::ErrorKind::InvalidData | std::io::ErrorKind::UnexpectedEof => UNREADABLE_DATA,
+        _ => INPUT_OUTPUT_FAILED,
+    }
+}
 
 pub fn document_name(file: Option<&Path>) -> String {
     file.and_then(Path::file_stem)
@@ -85,10 +120,16 @@ fn file_dialog(title: &str, filter: &gtk::FileFilter, current: Option<&Path>) ->
     dialog
 }
 
-fn finished<T>(outcome: std::thread::Result<Result<T, DocumentError>>) -> Result<T, String> {
+fn finished<T>(outcome: std::thread::Result<Result<T, DocumentError>>) -> Result<T, Failure> {
     match outcome {
-        Ok(result) => result.map_err(|error| error.to_string()),
-        Err(_) => Err(BACKGROUND_TASK_FAILED.to_string()),
+        Ok(result) => result.map_err(|error| Failure {
+            shown: describe_document_error(&error),
+            detail: error.to_string(),
+        }),
+        Err(_) => Err(Failure {
+            shown: BACKGROUND_TASK_FAILED.to_string(),
+            detail: BACKGROUND_TASK_FAILED.to_string(),
+        }),
     }
 }
 
@@ -176,12 +217,17 @@ impl OleoWindow {
                 self.show_toast(SAVED_TOAST);
                 true
             }
-            Err(reason) => {
+            Err(failure) => {
                 if same_document {
                     self.state().borrow_mut().dirty_since_save |= was_dirty;
                 }
-                glib::g_warning!(LOG_DOMAIN, "saving {} failed: {reason}", path.display());
-                self.show_toast(&format!("{CANNOT_SAVE}: {reason}"));
+                glib::g_warning!(
+                    LOG_DOMAIN,
+                    "saving {} failed: {}",
+                    path.display(),
+                    failure.detail
+                );
+                self.show_toast(&format!("{CANNOT_SAVE}: {}", failure.shown));
                 false
             }
         };
@@ -194,9 +240,14 @@ impl OleoWindow {
         let snapshot =
             match finished(gio::spawn_blocking(move || DocumentSnapshot::read(&source)).await) {
                 Ok(snapshot) => snapshot,
-                Err(reason) => {
-                    glib::g_warning!(LOG_DOMAIN, "opening {} failed: {reason}", path.display());
-                    self.show_toast(&format!("{CANNOT_OPEN}: {reason}"));
+                Err(failure) => {
+                    glib::g_warning!(
+                        LOG_DOMAIN,
+                        "opening {} failed: {}",
+                        path.display(),
+                        failure.detail
+                    );
+                    self.show_toast(&format!("{CANNOT_OPEN}: {}", failure.shown));
                     return false;
                 }
             };
@@ -218,9 +269,14 @@ impl OleoWindow {
                 self.show_toast(EXPORTED_TOAST);
                 true
             }
-            Err(reason) => {
-                glib::g_warning!(LOG_DOMAIN, "exporting {} failed: {reason}", path.display());
-                self.show_toast(&format!("{CANNOT_EXPORT}: {reason}"));
+            Err(failure) => {
+                glib::g_warning!(
+                    LOG_DOMAIN,
+                    "exporting {} failed: {}",
+                    path.display(),
+                    failure.detail
+                );
+                self.show_toast(&format!("{CANNOT_EXPORT}: {}", failure.shown));
                 false
             }
         }
@@ -312,6 +368,22 @@ mod tests {
             with_extension(PathBuf::from("/tmp/estudo.v2"), IMAGE_EXTENSION),
             PathBuf::from("/tmp/estudo.v2.png")
         );
+    }
+
+    #[test]
+    fn document_errors_read_in_portuguese() {
+        let missing = DocumentError::Io(std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert_eq!(describe_document_error(&missing), FILE_NOT_FOUND);
+        let full = DocumentError::Io(std::io::Error::from(std::io::ErrorKind::StorageFull));
+        assert_eq!(describe_document_error(&full), STORAGE_FULL);
+        let broken = DocumentError::Format("missing manifest.json".into());
+        assert_eq!(describe_document_error(&broken), NOT_A_PAINTING);
+        assert_eq!(
+            describe_document_error(&DocumentError::UnsupportedVersion(7)),
+            "a pintura usa o formato 7, que esta versão do Óleo não sabe ler"
+        );
+        let other = DocumentError::Io(std::io::Error::other("boom"));
+        assert_eq!(describe_document_error(&other), INPUT_OUTPUT_FAILED);
     }
 
     #[test]

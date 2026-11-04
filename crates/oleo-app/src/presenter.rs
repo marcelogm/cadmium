@@ -80,6 +80,13 @@ fn mode_reason(forced: bool, gpu_exports_dmabuf: bool, renderer_name: &str) -> S
     }
 }
 
+fn describe_modifier(modifier: Option<u64>) -> String {
+    modifier.map_or_else(
+        || "none".to_string(),
+        |modifier| format!("0x{modifier:016x}"),
+    )
+}
+
 #[derive(Debug, Default)]
 struct ResizeDebounce {
     pending: Option<((u32, u32), Instant)>,
@@ -182,6 +189,7 @@ pub struct FramePresenter {
     mode: Option<PresentMode>,
     readback: Option<ReadbackTarget>,
     pool: Option<DmabufPool>,
+    last_modifier: Option<u64>,
     resize: ResizeDebounce,
     mode_reason: String,
     pool_announced: bool,
@@ -196,6 +204,7 @@ impl Default for FramePresenter {
             mode: None,
             readback: None,
             pool: None,
+            last_modifier: None,
             resize: ResizeDebounce::default(),
             mode_reason: String::new(),
             pool_announced: false,
@@ -313,6 +322,7 @@ impl FramePresenter {
                 );
                 self.pool_announced = true;
             }
+            self.last_modifier = Some(pool.modifier());
             self.pool = Some(pool);
         }
         let Some(pool) = self.pool.as_mut() else {
@@ -332,10 +342,7 @@ impl FramePresenter {
     }
 
     fn fall_back(&mut self, policy: ModifierPolicy, error: &DmabufError) {
-        let modifier = self.pool.as_ref().map_or_else(
-            || "none".to_string(),
-            |pool| format!("0x{:016x}", pool.modifier()),
-        );
+        let modifier = describe_modifier(self.last_modifier);
         glib::g_warning!(
             LOG_DOMAIN,
             "dmabuf presentation ({}, modifier {modifier}) failed: {error}; presenting by readback",
@@ -440,6 +447,12 @@ mod tests {
     fn fallback_reason_names_the_gl_renderer() {
         assert!(mode_reason(false, true, GL_RENDERER).contains(GL_RENDERER));
         assert!(mode_reason(true, true, VULKAN_RENDERER).contains(PRESENT_MODE_VARIABLE));
+    }
+
+    #[test]
+    fn fallback_log_names_the_last_modifier_or_none() {
+        assert_eq!(describe_modifier(Some(0x20)), "0x0000000000000020");
+        assert_eq!(describe_modifier(None), "none");
     }
 
     #[test]
