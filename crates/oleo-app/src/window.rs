@@ -146,9 +146,11 @@ impl OleoWindow {
     }
 
     fn show_zoom(&self, zoom: f32) {
-        self.imp()
-            .zoom_label
-            .set_label(&format!("{:.0}%", zoom * ZOOM_PERCENT));
+        let text = format!("{:.0}%", zoom * ZOOM_PERCENT);
+        let label = &self.imp().zoom_label;
+        if label.label() != text {
+            label.set_label(&text);
+        }
     }
 
     fn state(&self) -> SharedState {

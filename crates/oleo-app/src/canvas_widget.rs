@@ -30,7 +30,8 @@ mod imp {
         pub texture: RefCell<Option<gdk::Texture>>,
         pub needs_present: Cell<bool>,
         pub hover: Cell<Option<(f64, f64)>>,
-        pub fitted: Cell<bool>,
+        pub user_moved_view: Cell<bool>,
+        pub allocated: Cell<(i32, i32)>,
         pub presented_frames: Cell<u64>,
         pub view_changed_handlers: RefCell<Vec<ViewChangedHandler>>,
     }
@@ -69,8 +70,8 @@ mod imp {
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
             let canvas = self.obj();
-            if !self.fitted.get() && width > 0 && height > 0 {
-                self.fitted.set(true);
+            let resized = self.allocated.replace((width, height)) != (width, height);
+            if resized && !self.user_moved_view.get() && width > 0 && height > 0 {
                 canvas.zoom_fit();
             }
             canvas.queue_present();
@@ -171,6 +172,7 @@ impl OleoCanvas {
             f64::from(self.height()) * scale,
         );
         self.set_view(view::fit_view(spec_size, viewport, FIT_MARGIN * scale));
+        self.imp().user_moved_view.set(false);
     }
 
     pub fn zoom_in(&self) {
@@ -184,6 +186,7 @@ impl OleoCanvas {
     pub fn set_zoom_around(&self, widget_x: f64, widget_y: f64, zoom: f32) {
         let scale = self.device_scale();
         let current = self.state().borrow().view;
+        self.imp().user_moved_view.set(true);
         self.set_view(view::zoom_around(
             current,
             widget_x * scale,
@@ -195,6 +198,7 @@ impl OleoCanvas {
     pub fn pan_by(&self, dx: f64, dy: f64) {
         let scale = self.device_scale();
         let current = self.state().borrow().view;
+        self.imp().user_moved_view.set(true);
         self.set_view(view::pan(current, dx * scale, dy * scale));
     }
 
