@@ -12,6 +12,8 @@ use oleo_engine::{
 const PREVIEW_WIDTH: u32 = 512;
 const PREVIEW_HEIGHT: u32 = 256;
 const CANVAS_WIDTH: usize = 512;
+const SECTION_COLUMNS: std::ops::Range<usize> = 150..350;
+const STROKE_EXTENT_SHARE: f32 = 0.05;
 
 fn session(gpu: &GpuContext) -> PaintSession {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -172,21 +174,43 @@ fn brush_and_knife_spreading_conserve_volume_and_each_pigment() {
     assert!(pigment.iter().all(|drift| drift.abs() < 5e-3));
 }
 
+fn cross_section(gpu: &GpuContext, s: &PaintSession, rows: std::ops::Range<usize>) -> Vec<f32> {
+    let vol = s.canvas.read_f32(gpu, StateTexture::WetVol);
+    rows.map(|y| {
+        let sum: f32 = SECTION_COLUMNS.map(|x| vol[y * CANVAS_WIDTH + x]).sum();
+        sum / SECTION_COLUMNS.len() as f32
+    })
+    .collect()
+}
+
+fn band_means(profile: &[f32]) -> (f32, f32) {
+    let peak = profile.iter().cloned().fold(0.0, f32::max);
+    let painted: Vec<usize> = (0..profile.len())
+        .filter(|&row| profile[row] > STROKE_EXTENT_SHARE * peak)
+        .collect();
+    let (first, last) = (painted[0], painted[painted.len() - 1]);
+    let band = (last - first + 1) / 4;
+    let mean =
+        |rows: Vec<usize>| rows.iter().map(|&row| profile[row]).sum::<f32>() / rows.len() as f32;
+    let outer = mean(
+        (first..first + band)
+            .chain(last + 1 - band..=last)
+            .collect(),
+    );
+    let central = mean((first + band..=last - band).collect());
+    (outer, central)
+}
+
 #[test]
-fn brush_stroke_builds_ridges_at_its_edges() {
+fn brush_stroke_piles_paint_at_its_edges() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    s.engine.params_mut().set("squeeze", 1.5);
+    s.engine.params_mut().set("bristle_contrast", 0.0);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let vol = s.canvas.read_f32(&gpu, StateTexture::WetVol);
-    let column: Vec<f32> = (100..156).map(|y| vol[y * CANVAS_WIDTH + 256]).collect();
-    let center = column[28];
-    let edge_max = column[..20]
-        .iter()
-        .chain(column[36..].iter())
-        .cloned()
-        .fold(0.0, f32::max);
-    assert!(edge_max > center, "edges {edge_max} center {center}");
+    let profile = cross_section(&gpu, &s, 96..161);
+    eprintln!("cross-section {profile:?}");
+    let (outer, central) = band_means(&profile);
+    assert!(outer > central, "outer band {outer} central band {central}");
 }
 
 #[test]

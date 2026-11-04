@@ -22,10 +22,6 @@ fn inside_canvas(pixel: vec2<i32>) -> bool {
     return all(pixel >= vec2<i32>(0)) && all(pixel < size);
 }
 
-fn mask_at(pixel: vec2<i32>) -> f32 {
-    return footprint(brush_space(pixel));
-}
-
 fn amounts_at(pixel: vec2<i32>) -> array<f32, 9> {
     let volume = textureLoad(scratch_vol, pixel).x;
     let low = textureLoad(scratch_pig0, pixel) * volume;
@@ -59,17 +55,15 @@ fn motion(pixel: vec2<i32>) -> Motion {
     if (!inside_canvas(pixel)) {
         return Motion(vec2<f32>(0.0), 0.0);
     }
-    let mask = mask_at(pixel);
-    if (mask <= 0.0) {
+    let position = brush_space(pixel);
+    let outline = outline_footprint(position);
+    let squeeze_gradient = pressure_envelope_gradient(position);
+    if (outline <= 0.0 && all(squeeze_gradient == vec2<f32>(0.0))) {
         return Motion(vec2<f32>(0.0), 0.0);
     }
-    let gradient = 0.5 * dab.pressure * vec2<f32>(
-        mask_at(pixel + vec2<i32>(1, 0)) - mask_at(pixel - vec2<i32>(1, 0)),
-        mask_at(pixel + vec2<i32>(0, 1)) - mask_at(pixel - vec2<i32>(0, 1)),
-    );
     let heading = vec2<f32>(cos(dab.direction), sin(dab.direction));
     let drag = dab.advection * min(dab.speed * DRAG_SPEED_GAIN, 1.0);
-    var velocity = kept_at_canvas_border(pixel, mask * (drag * heading - dab.squeeze * gradient));
+    var velocity = kept_at_canvas_border(pixel, outline * drag * heading - dab.squeeze * squeeze_gradient);
     let courant = outflow(velocity);
     if (courant > MAX_COURANT) {
         velocity *= MAX_COURANT / courant;
@@ -83,7 +77,7 @@ fn motion(pixel: vec2<i32>) -> Motion {
     if (leaving > movable_share) {
         velocity *= movable_share / leaving;
     }
-    let diffusion = min(dab.diffusion * mask, 1.0 - outflow(velocity));
+    let diffusion = min(dab.diffusion * outline, 1.0 - outflow(velocity));
     return Motion(velocity, diffusion);
 }
 

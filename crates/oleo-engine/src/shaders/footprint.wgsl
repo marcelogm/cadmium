@@ -17,19 +17,44 @@ fn blade_footprint(position: vec2<f32>) -> f32 {
     return edges.x * edges.y;
 }
 
-fn bristle_footprint(position: vec2<f32>) -> f32 {
+fn tuft_footprint(position: vec2<f32>) -> f32 {
     let normalized_distance = length(position / semi_axes());
-    let edge = smoothstep(0.0, EDGE_SOFTNESS_PX, (1.0 - normalized_distance) * dab.radius);
+    return smoothstep(0.0, EDGE_SOFTNESS_PX, (1.0 - normalized_distance) * dab.radius);
+}
+
+fn bristles(position: vec2<f32>) -> f32 {
     let phase = TAU * dab.bristle_count * position.y / (2.0 * dab.radius);
-    let bristles = 1.0 - dab.bristle_contrast * 0.5 * (1.0 + sin(phase));
-    return edge * bristles;
+    return 1.0 - dab.bristle_contrast * 0.5 * (1.0 + sin(phase));
+}
+
+fn outline_footprint(position: vec2<f32>) -> f32 {
+    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+        return blade_footprint(position);
+    }
+    return tuft_footprint(position);
 }
 
 fn footprint(position: vec2<f32>) -> f32 {
     if (dab.tool_mode == TOOL_MODE_KNIFE) {
         return blade_footprint(position);
     }
-    return bristle_footprint(position);
+    return tuft_footprint(position) * bristles(position);
+}
+
+fn pressure_envelope_gradient(position: vec2<f32>) -> vec2<f32> {
+    let semi = semi_axes();
+    let normalized = position / semi;
+    let slope = -2.0 * dab.pressure * dab.radius * normalized / semi;
+    var gradient = vec2<f32>(0.0);
+    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+        if (all(abs(normalized) < vec2<f32>(1.0))) {
+            gradient = slope * (vec2<f32>(1.0) - normalized * normalized).yx;
+        }
+    } else if (dot(normalized, normalized) < 1.0) {
+        gradient = slope;
+    }
+    let axis = dab.orientation;
+    return gradient.x * axis + gradient.y * vec2<f32>(-axis.y, axis.x);
 }
 
 fn inside_outline(offset: vec2<f32>) -> bool {
