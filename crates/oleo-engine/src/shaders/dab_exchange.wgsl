@@ -8,12 +8,6 @@ const MIN_VELOCITY_CUTOFF: f32 = 1e-6;
 const MIN_CONTACT_DEPTH_UM: f32 = 1.0;
 const EMPTY_VOLUME_UM: f32 = 1e-4;
 const QUANTIZE_LIMIT: f32 = 2.0e9;
-const KNIFE_LAID_ALTITUDE: f32 = radians(45.0);
-const KNIFE_UPRIGHT_ALTITUDE: f32 = radians(80.0);
-const REFERENCE_THREADS: u32 = 256u;
-
-var<workgroup> blade_heights: array<f32, REFERENCE_THREADS>;
-var<workgroup> blade_weights: array<f32, REFERENCE_THREADS>;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var wet_pig0: texture_storage_2d<rgba16float, read_write>;
@@ -63,15 +57,6 @@ fn bristle_transfer(mask: f32, volume: f32, height: f32, tip_volume: f32) -> Tra
     return Transfer(deposit, pickup);
 }
 
-fn blade_transfer(mask: f32, volume: f32, dry: f32, tip_volume: f32) -> Transfer {
-    let surface = dry + volume;
-    let scrape = smoothstep(KNIFE_LAID_ALTITUDE, KNIFE_UPRIGHT_ALTITUDE, dab.altitude);
-    let plane = mix(contact_reference.height, dry + dab.residual_um, scrape);
-    let pickup = mask * min(max(surface - plane, 0.0), max(volume - dab.residual_um, 0.0));
-    let deposit = min(dab.knife_flatten * mask * max(plane - surface, 0.0), MAX_DEPOSIT_SHARE * tip_volume);
-    return Transfer(deposit, pickup);
-}
-
 fn read_fractions(pixel: vec2<i32>) -> array<f32, 8> {
     let low = textureLoad(wet_pig0, pixel);
     let high = textureLoad(wet_pig1, pixel);
@@ -84,43 +69,9 @@ fn centre_height() -> f32 {
     return surface_height(pixel);
 }
 
-@compute @workgroup_size(REFERENCE_THREADS)
-fn reference(@builtin(local_invocation_index) thread: u32) {
-    if (dab.tool_mode != TOOL_MODE_KNIFE) {
-        if (thread == 0u) {
-            contact_reference.height = centre_height();
-        }
-        return;
-    }
-    var height_sum = 0.0;
-    var weight_sum = 0.0;
-    let width = dab.canvas_size.x;
-    let count = width * dab.canvas_size.y;
-    for (var index = thread; index < count; index += REFERENCE_THREADS) {
-        let pixel = dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
-        let weight = footprint(brush_space(pixel));
-        if (weight > 0.0) {
-            height_sum += weight * surface_height(pixel);
-            weight_sum += weight;
-        }
-    }
-    blade_heights[thread] = height_sum;
-    blade_weights[thread] = weight_sum;
-    workgroupBarrier();
-    for (var stride = REFERENCE_THREADS / 2u; stride > 0u; stride /= 2u) {
-        if (thread < stride) {
-            blade_heights[thread] += blade_heights[thread + stride];
-            blade_weights[thread] += blade_weights[thread + stride];
-        }
-        workgroupBarrier();
-    }
-    if (thread == 0u) {
-        if (blade_weights[0] > 0.0) {
-            contact_reference.height = blade_heights[0] / blade_weights[0];
-        } else {
-            contact_reference.height = centre_height();
-        }
-    }
+@compute @workgroup_size(1)
+fn reference() {
+    contact_reference.height = centre_height();
 }
 
 @compute @workgroup_size(8, 8)
@@ -144,12 +95,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let fractions = read_fractions(pixel);
     let dry = textureLoad(dry_height, pixel).x;
     let tip_volume = tip[base + VOLUME_CHANNEL];
-    var transfer: Transfer;
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
-        transfer = blade_transfer(mask, volume, dry, tip_volume);
-    } else {
-        transfer = bristle_transfer(mask, volume, dry + volume, tip_volume);
-    }
+    let transfer = bristle_transfer(mask, volume, dry + volume, tip_volume);
     let deposit = transfer.deposit;
     let pickup = transfer.pickup;
     let deposit_q = max(quantize(deposit), 0);

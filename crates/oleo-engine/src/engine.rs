@@ -37,8 +37,30 @@ const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
 const WORKGROUP_SIZE: u32 = 8;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
-const KNIFE_ADVECTION: f32 = 1.0;
-const KNIFE_SQUEEZE_GAIN: f32 = 2.0;
+const KNIFE_DRAG: f32 = 0.15;
+const KNIFE_LAID_ALTITUDE_RAD: f32 = std::f32::consts::FRAC_PI_4;
+const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
+const KNIFE_LAID_CAPACITY_UM: f32 = 24000.0;
+const KNIFE_UPRIGHT_CAPACITY_UM: f32 = 200.0;
+const KNIFE_DIP_LENGTH_PX: f32 = 120.0;
+const KNIFE_SPILL_SHARE: f32 = 0.5;
+const KNIFE_REST_FOLLOW: f32 = 0.25;
+const KNIFE_FIRST_REST_FOLLOW: f32 = 1.0;
+const BLADE_SPILL_BAND_PX: f32 = 2.0;
+const BLADE_COVERAGE_MARGIN_PX: f32 = 1.0;
+const BLADE_DELTA_SCALE: f32 = 4096.0;
+const BLADE_ENDS: usize = 2;
+const BLADE_CELLS: usize = TIP_SIZE as usize;
+const BLADE_DELTA_CHANNELS: usize = TIP_CHANNELS + 1;
+const BLADE_SPILL_VALUES: usize = BLADE_ENDS * TIP_CHANNELS;
+const BLADE_STATE_VALUES: usize = 2 + BLADE_ENDS + BLADE_SPILL_VALUES;
+const BLADE_LOAD_VALUES: usize = BLADE_CELLS * TIP_CHANNELS;
+const BLADE_LOAD_BYTES: u64 = (BLADE_LOAD_VALUES * std::mem::size_of::<f32>()) as u64;
+const BLADE_DELTA_BYTES: u64 =
+    (BLADE_CELLS * BLADE_DELTA_CHANNELS * std::mem::size_of::<i32>()) as u64;
+const BLADE_STATE_BYTES: u64 = (BLADE_STATE_VALUES * std::mem::size_of::<f32>()) as u64;
+const BLADE_CELL_GROUP_SIZE: u32 = 64;
+const BLADE_CELL_GROUPS: u32 = (BLADE_CELLS as u32).div_ceil(BLADE_CELL_GROUP_SIZE);
 const MAX_PICK_RADIUS_PX: f32 = 16.0;
 const MIN_PICK_RADIUS_PX: f32 = 0.5;
 const DRY_WORKGROUP_SIZE: u32 = 8;
@@ -118,15 +140,17 @@ struct DabRecord {
     advection: f32,
     squeeze: f32,
     diffusion: f32,
-    knife_flatten: f32,
+    blade_gap_um: f32,
     spread_origin: [i32; 2],
     spread_size: [u32; 2],
     rag_strength: f32,
-    _pad: f32,
+    blade_rest_follow: f32,
+    blade_capacity_um: f32,
+    blade_spill_share: f32,
 }
 
 const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 152 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+const _: () = assert!(DAB_RECORD_SIZE == 160 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -184,6 +208,7 @@ struct Placement {
     spreads: bool,
     refills: bool,
     wipes: bool,
+    blades: bool,
 }
 
 struct ScratchSurface {
@@ -248,6 +273,7 @@ struct Footprint {
     elongation: f32,
     orientation: f32,
     rectangular: bool,
+    lateral_reach: f32,
 }
 
 struct Spreading {
@@ -262,8 +288,8 @@ impl Spreading {
         let squeeze = params.get("squeeze");
         match tool {
             Tool::Knife => Spreading {
-                advection: KNIFE_ADVECTION,
-                squeeze: KNIFE_SQUEEZE_GAIN * squeeze,
+                advection: KNIFE_DRAG,
+                squeeze: 0.0,
                 diffusion: 0.0,
             },
             Tool::Blender => Spreading {
@@ -292,6 +318,37 @@ fn wipes(tool: Tool) -> bool {
     tool == Tool::Rag
 }
 
+fn blades(tool: Tool) -> bool {
+    tool == Tool::Knife
+}
+
+fn upright_share(altitude: f32) -> f32 {
+    let t = ((altitude - KNIFE_LAID_ALTITUDE_RAD)
+        / (KNIFE_UPRIGHT_ALTITUDE_RAD - KNIFE_LAID_ALTITUDE_RAD))
+        .clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+pub fn blade_gap_um(params: &SimParams, pressure: f32, altitude: f32) -> f32 {
+    let residual = params.get("residual_um");
+    let lift = (1.0 - pressure.clamp(0.0, 1.0)) * (1.0 - upright_share(altitude));
+    residual + (params.get("knife_gap_um") - residual).max(0.0) * lift
+}
+
+fn blade_capacity_um(altitude: f32) -> f32 {
+    KNIFE_LAID_CAPACITY_UM
+        + (KNIFE_UPRIGHT_CAPACITY_UM - KNIFE_LAID_CAPACITY_UM) * upright_share(altitude)
+}
+
+fn knife_half_width(radius: f32) -> f32 {
+    (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX)
+}
+
+fn blade_cell_cover(offset: i32, half_length: f32) -> f32 {
+    let centre = offset as f32 + 0.5;
+    (half_length - centre.abs() + 0.5).clamp(0.0, 1.0)
+}
+
 fn heading_known(dab: &Dab) -> bool {
     dab.speed > 0.0
 }
@@ -313,16 +370,18 @@ fn is_finite(dab: &Dab) -> bool {
 
 impl Footprint {
     fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
-        let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
         if brush.tool == Tool::Knife {
-            let half_width = (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX);
+            let radius =
+                (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
             return Footprint {
                 radius,
-                elongation: half_width / radius,
+                elongation: knife_half_width(radius) / radius,
                 orientation: dab.direction,
                 rectangular: true,
+                lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
             };
         }
+        let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
         let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
         let elongation = (1.0 + params.get("tilt_elongation") * tilt).min(MAX_TIP_RADIUS / radius);
         let follows_stroke = brush.shape == BrushShape::Flat;
@@ -336,6 +395,7 @@ impl Footprint {
             elongation,
             orientation,
             rectangular: false,
+            lateral_reach: 0.0,
         }
     }
 
@@ -347,6 +407,8 @@ impl Footprint {
         let [along, across] = self.semi_axes();
         let (sin, cos) = self.orientation.sin_cos();
         if self.rectangular {
+            let along = along + BLADE_COVERAGE_MARGIN_PX;
+            let across = across + self.lateral_reach;
             return [
                 along * cos.abs() + across * sin.abs(),
                 along * sin.abs() + across * cos.abs(),
@@ -439,11 +501,13 @@ fn place(
         advection: spreading.advection,
         squeeze: spreading.squeeze,
         diffusion: spreading.diffusion,
-        knife_flatten: params.get("knife_flatten"),
+        blade_gap_um: blade_gap_um(params, dab.pressure, dab.altitude),
         spread_origin,
         spread_size,
         rag_strength: params.get("rag_strength"),
-        _pad: 0.0,
+        blade_rest_follow: KNIFE_REST_FOLLOW,
+        blade_capacity_um: blade_capacity_um(dab.altitude),
+        blade_spill_share: KNIFE_SPILL_SHARE,
     };
     Some(Placement {
         record,
@@ -454,12 +518,14 @@ fn place(
         spreads: spreads(brush.tool),
         refills: refills(brush.tool),
         wipes: wipes(brush.tool),
+        blades: blades(brush.tool),
     })
 }
 
 fn max_dab_region_side() -> u32 {
-    let knife_half_width = (KNIFE_HALF_WIDTH_RATIO * MAX_TIP_RADIUS).max(KNIFE_MIN_HALF_WIDTH_PX);
-    let half_extent = MAX_TIP_RADIUS.hypot(knife_half_width).ceil() as u32;
+    let along = knife_half_width(MAX_TIP_RADIUS) + BLADE_COVERAGE_MARGIN_PX;
+    let across = MAX_TIP_RADIUS + BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX;
+    let half_extent = across.hypot(along).ceil() as u32;
     2 * (half_extent + 1 + DAB_APRON_PX as u32)
 }
 
@@ -490,7 +556,12 @@ fn shader_source(snippets: &[&str], body: &str) -> String {
          const DRY_WORKGROUP_SIZE: u32 = {DRY_WORKGROUP_SIZE}u;\n\
          const PICK_INVOCATIONS: u32 = {PICK_INVOCATIONS}u;\n\
          const TIP_SUM_INVOCATIONS: u32 = {TIP_SUM_INVOCATIONS}u;\n\
-         const MIN_TOP_LAYER_UM: f32 = {MIN_TOP_LAYER_UM:?};\n"
+         const MIN_TOP_LAYER_UM: f32 = {MIN_TOP_LAYER_UM:?};\n\
+         const BLADE_DELTA_SCALE: f32 = {BLADE_DELTA_SCALE:?};\n\
+         const BLADE_DELTA_CHANNELS: u32 = {BLADE_DELTA_CHANNELS}u;\n\
+         const BLADE_SPILL_VALUES: u32 = {BLADE_SPILL_VALUES}u;\n\
+         const BLADE_SPILL_BAND_PX: f32 = {BLADE_SPILL_BAND_PX:?};\n\
+         const BLADE_CELL_GROUP_SIZE: u32 = {BLADE_CELL_GROUP_SIZE}u;\n"
     );
     for snippet in snippets {
         source.push_str(snippet);
@@ -642,6 +713,36 @@ fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Vec<f32> {
     values
 }
 
+struct BladePipelines {
+    rest: wgpu::ComputePipeline,
+    want: wgpu::ComputePipeline,
+    grant: wgpu::ComputePipeline,
+    lay: wgpu::ComputePipeline,
+    settle: wgpu::ComputePipeline,
+    spill: wgpu::ComputePipeline,
+}
+
+impl BladePipelines {
+    fn new(gpu: &GpuContext, layout: &wgpu::PipelineLayout) -> BladePipelines {
+        let module = shader_module(
+            gpu,
+            "blade",
+            &DAB_SNIPPETS,
+            include_str!("shaders/blade.wgsl"),
+        );
+        let pipeline =
+            |entry: &str| compute_pipeline(gpu, &format!("blade_{entry}"), &module, layout, entry);
+        BladePipelines {
+            rest: pipeline("rest"),
+            want: pipeline("want"),
+            grant: pipeline("grant"),
+            lay: pipeline("lay"),
+            settle: pipeline("settle"),
+            spill: pipeline("spill"),
+        }
+    }
+}
+
 pub struct WetOilEngine {
     params: SimParams,
     tip_radius: f32,
@@ -653,6 +754,13 @@ pub struct WetOilEngine {
     contact_reference: wgpu::Buffer,
     paint_found: wgpu::Buffer,
     tip_sums: wgpu::Buffer,
+    blade_load: wgpu::Buffer,
+    blade_delta: wgpu::Buffer,
+    blade_grant: wgpu::Buffer,
+    blade_state: wgpu::Buffer,
+    blade_rest_pending: bool,
+    blade_layout: wgpu::BindGroupLayout,
+    blade_pipelines: BladePipelines,
     exchange_layout: wgpu::BindGroupLayout,
     apply_layout: wgpu::BindGroupLayout,
     refill_layout: wgpu::BindGroupLayout,
@@ -776,6 +884,22 @@ impl WetOilEngine {
             ],
         );
 
+        let (blade_layout, blade_pipeline_layout) = layouts(
+            gpu,
+            "blade",
+            &[
+                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                texture_entry(1, ReadWrite, Rgba16Float),
+                texture_entry(2, ReadWrite, Rgba16Float),
+                texture_entry(3, ReadWrite, R32Float),
+                texture_entry(4, ReadOnly, R32Float),
+                storage_entry(5, false),
+                storage_entry(6, false),
+                storage_entry(7, false),
+                storage_entry(8, false),
+            ],
+        );
+
         let (dip_layout, dip_pipeline_layout) = layouts(
             gpu,
             "brush_dip",
@@ -823,6 +947,13 @@ impl WetOilEngine {
             ),
             paint_found: storage_buffer(gpu, "eyedropper_paint_found", PAINT_FOUND_BYTES),
             tip_sums: storage_buffer(gpu, "brush_tip_sums", TIP_SUMS_BYTES),
+            blade_load: storage_buffer(gpu, "knife_blade_load", BLADE_LOAD_BYTES),
+            blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
+            blade_grant: storage_buffer(gpu, "knife_blade_grant", BLADE_LOAD_BYTES),
+            blade_state: storage_buffer(gpu, "knife_blade_state", BLADE_STATE_BYTES),
+            blade_rest_pending: true,
+            blade_pipelines: BladePipelines::new(gpu, &blade_pipeline_layout),
+            blade_layout,
             reference_pipeline: compute_pipeline(
                 gpu,
                 "dab_reference",
@@ -1072,6 +1203,76 @@ impl WetOilEngine {
         encoder.clear_buffer(&self.body, 0, None);
         encoder.clear_buffer(&self.wanted, 0, None);
         gpu.queue.submit([encoder.finish()]);
+    }
+
+    pub fn dip_knife(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
+        let Some(thickness) = dip_thickness(mixture) else {
+            return;
+        };
+        if !amount.is_finite() || amount <= 0.0 {
+            return;
+        }
+        let fractions = dip_fractions(mixture);
+        let mut load = read_buffer(gpu, &self.blade_load);
+        let reach = self.tip_radius.ceil() as i32 + 1;
+        for offset in -reach..=reach {
+            let cover = blade_cell_cover(offset, self.tip_radius);
+            let cell = (TIP_HALF as i32 + offset).clamp(0, BLADE_CELLS as i32 - 1) as usize;
+            let values = &mut load[cell * TIP_CHANNELS..(cell + 1) * TIP_CHANNELS];
+            let room = (KNIFE_LAID_CAPACITY_UM - values[VOLUME_CHANNEL]).max(0.0);
+            let added = (cover * amount * thickness * KNIFE_DIP_LENGTH_PX).min(room);
+            for (slot, fraction) in fractions.iter().enumerate() {
+                values[slot] += added * fraction;
+            }
+            values[VOLUME_CHANNEL] += added;
+        }
+        gpu.queue
+            .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
+    }
+
+    pub fn clean_knife(&mut self, gpu: &GpuContext) {
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("clean_knife"),
+            });
+        encoder.clear_buffer(&self.blade_load, 0, None);
+        encoder.clear_buffer(&self.blade_delta, 0, None);
+        gpu.queue.submit([encoder.finish()]);
+    }
+
+    pub fn knife_totals(&self, gpu: &GpuContext) -> PaintTotals {
+        let mut totals = PaintTotals::default();
+        for cell in read_buffer(gpu, &self.blade_load)
+            .as_chunks::<TIP_CHANNELS>()
+            .0
+        {
+            accumulate(&mut totals, cell);
+        }
+        totals
+    }
+
+    fn blade_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        dabs: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("blade"),
+            layout: &self.blade_layout,
+            entries: &[
+                dab_binding(0, dabs),
+                texture_binding(1, canvas, StateTexture::WetPig0),
+                texture_binding(2, canvas, StateTexture::WetPig1),
+                texture_binding(3, canvas, StateTexture::WetVol),
+                texture_binding(4, canvas, StateTexture::DryHeight),
+                buffer_binding(5, &self.blade_load),
+                buffer_binding(6, &self.blade_delta),
+                buffer_binding(7, &self.blade_grant),
+                buffer_binding(8, &self.blade_state),
+            ],
+        })
     }
 
     pub fn brush_totals(&self, gpu: &GpuContext) -> PaintTotals {
@@ -1408,7 +1609,9 @@ fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::
 }
 
 impl PaintEngine for WetOilEngine {
-    fn begin_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas, _brush: &BrushSettings) {}
+    fn begin_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas, _brush: &BrushSettings) {
+        self.blade_rest_pending = true;
+    }
 
     fn encode_dabs(
         &mut self,
@@ -1418,12 +1621,18 @@ impl PaintEngine for WetOilEngine {
         dabs: &[Dab],
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let placements: Vec<Placement> = dabs
+        let mut placements: Vec<Placement> = dabs
             .iter()
             .filter_map(|dab| place(dab, brush, &self.params, self.loaded_thickness_um, canvas))
             .collect();
         if placements.is_empty() {
             return;
+        }
+        if let Some(first_blade) = placements.iter_mut().find(|placement| placement.blades)
+            && self.blade_rest_pending
+        {
+            first_blade.record.blade_rest_follow = KNIFE_FIRST_REST_FOLLOW;
+            self.blade_rest_pending = false;
         }
         let mut records = vec![0u8; placements.len() * DAB_RECORD_STRIDE as usize];
         for (slot, placement) in records
@@ -1445,6 +1654,7 @@ impl PaintEngine for WetOilEngine {
         let apply_group = self.apply_bind_group(gpu, &dab_buffer);
         let refill_group = self.refill_bind_group(gpu, &dab_buffer);
         let rag_group = self.rag_bind_group(gpu, canvas, &dab_buffer);
+        let blade_group = self.blade_bind_group(gpu, canvas, &dab_buffer);
         self.fit_scratch(gpu, canvas);
         debug_assert!(placements.iter().all(|placement| {
             let scratch_size = self.scratch.as_ref().map_or([0; 2], |scratch| scratch.size);
@@ -1462,6 +1672,29 @@ impl PaintEngine for WetOilEngine {
                 pass.set_bind_group(0, &rag_group, &[offset]);
                 pass.set_pipeline(&self.rag_pipeline);
                 pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
+                continue;
+            }
+            if placement.blades {
+                pass.set_bind_group(0, &copy_group, &[offset]);
+                pass.set_pipeline(&self.copy_pipeline);
+                pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
+                pass.set_bind_group(0, &advect_group, &[offset]);
+                pass.set_pipeline(&self.advect_pipeline);
+                pass.dispatch_workgroups(placement.spread_groups[0], placement.spread_groups[1], 1);
+                let blade = &self.blade_pipelines;
+                let [width, height] = placement.canvas_groups;
+                pass.set_bind_group(0, &blade_group, &[offset]);
+                for (pipeline, groups) in [
+                    (&blade.rest, [1, 1]),
+                    (&blade.want, [width, height]),
+                    (&blade.grant, [BLADE_CELL_GROUPS, 1]),
+                    (&blade.lay, [width, height]),
+                    (&blade.settle, [1, 1]),
+                    (&blade.spill, [width, height]),
+                ] {
+                    pass.set_pipeline(pipeline);
+                    pass.dispatch_workgroups(groups[0], groups[1], 1);
+                }
                 continue;
             }
             pass.set_bind_group(0, &exchange_group, &[offset]);

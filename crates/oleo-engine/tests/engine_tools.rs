@@ -2,11 +2,12 @@ use std::path::PathBuf;
 
 use oleo_engine::{
     canvas::*,
-    engine::PaintEngine,
+    engine::{PaintEngine, blade_gap_um},
     gpu::GpuContext,
     present::{ViewTransform, readback_rgba8},
+    render::ViewMode,
     session::PaintSession,
-    stroke::{StrokeSample, Tool},
+    stroke::{StrokeSample, Tool, pen_angles},
 };
 
 const PREVIEW_WIDTH: u32 = 512;
@@ -15,8 +16,24 @@ const CANVAS_WIDTH: usize = 512;
 const SECTION_COLUMNS: std::ops::Range<usize> = 150..350;
 const STROKE_EXTENT_SHARE: f32 = 0.05;
 const CONSERVATION_TOLERANCE: f64 = 1e-6;
-const WIDE_KNIFE_DIAMETER_PX: f32 = 120.0;
-const LEVELLED_ABOVE_RESIDUAL: f32 = 2.0;
+const SLOT_COUNT: usize = 3;
+const FULL_DIP: f32 = 1.0;
+const LAID_TILT_DEG: f32 = 60.0;
+const UPRIGHT_TILT_DEG: f32 = 0.0;
+const PLATE_PRESSURE: f32 = 0.5;
+const LIGHT_PRESSURE: f32 = 0.3;
+const HEAVY_PRESSURE: f32 = 0.8;
+const FEATHER_PRESSURE: f32 = 0.1;
+const KNIFE_ROW: f64 = 128.0;
+const PLATE_INTERIOR: std::ops::Range<usize> = 112..145;
+const KNIFE_SECTION: std::ops::Range<usize> = 96..161;
+const LOWER_RIDGE: std::ops::Range<usize> = 103..109;
+const UPPER_RIDGE: std::ops::Range<usize> = 147..153;
+const GAP_TOLERANCE: f32 = 0.1;
+const EDGE_HIGH_SHARE: f32 = 0.9;
+const EDGE_LOW_SHARE: f32 = 0.1;
+const SHARP_EDGE_PX: usize = 2;
+const FURROW_SHARE: f32 = 0.6;
 
 fn session(gpu: &GpuContext) -> PaintSession {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -94,11 +111,12 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
 
 fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
     let c = s.canvas.wet_totals(gpu);
-    let b = s.engine.brush_totals(gpu);
     let mut t = c;
-    t.volume += b.volume;
-    for i in 0..8 {
-        t.pigment[i] += b.pigment[i];
+    for tool in [s.engine.brush_totals(gpu), s.engine.knife_totals(gpu)] {
+        t.volume += tool.volume;
+        for i in 0..8 {
+            t.pigment[i] += tool.pigment[i];
+        }
     }
     t
 }
@@ -256,37 +274,6 @@ fn brush_stroke_piles_paint_at_its_edges() {
     assert!(outer > central, "outer band {outer} central band {central}");
 }
 
-#[test]
-fn upright_knife_scrapes_wet_paint_down_to_the_residual() {
-    let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu);
-    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let before = s.canvas.wet_totals(&gpu).volume;
-    s.brush.tool = Tool::Knife;
-    s.clean_brush(&gpu);
-    for i in 0..=60 {
-        let x = 40.0 + 430.0 * i as f64 / 60.0;
-        let sample = StrokeSample {
-            x,
-            y: 128.0,
-            pressure: 1.0,
-            tilt_x_deg: 0.0,
-            tilt_y_deg: 0.0,
-            time_ms: i * 4,
-        };
-        if i == 0 {
-            s.begin_stroke(&gpu, sample)
-        } else {
-            s.add_samples(&[sample])
-        }
-    }
-    s.end_stroke(&gpu);
-    frame(&gpu, &mut s);
-    let after = s.canvas.wet_totals(&gpu).volume;
-    eprintln!("knife scrape {before} -> {after}");
-    assert!(after < before * 0.6);
-}
-
 fn band_volume(gpu: &GpuContext, s: &PaintSession, rows: std::ops::Range<usize>) -> f32 {
     cross_section(gpu, s, rows).iter().sum()
 }
@@ -302,35 +289,6 @@ fn a_knife_tap_without_motion_leaves_the_canvas_untouched() {
     drag(&gpu, &mut s, &line(128.0, 256.0, 256.0, 1.0, 0.0)[..1]);
     assert!(s.canvas.wet_tiles.is_empty());
     assert_eq!(s.canvas.read_f32(&gpu, StateTexture::WetVol), painted);
-}
-
-#[test]
-fn the_knife_lays_down_only_what_it_carries_and_never_draws_on_the_reservoir() {
-    let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu);
-    s.brush.tool = Tool::Knife;
-    s.brush.geometry.max_diameter_px = WIDE_KNIFE_DIAMETER_PX;
-    drag(&gpu, &mut s, &line(128.0, 40.0, 470.0, 1.0, 0.0));
-    let carried = band_volume(&gpu, &s, 118..139);
-    let beyond_load = band_volume(&gpu, &s, 158..179) + band_volume(&gpu, &s, 78..99);
-    eprintln!("knife carried band {carried}, beyond the loaded tip {beyond_load}");
-    assert!(carried > 0.0);
-    assert_eq!(beyond_load, 0.0);
-}
-
-#[test]
-fn a_laid_knife_levels_to_the_mean_height_under_its_blade_not_to_its_centre() {
-    let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu);
-    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    s.brush.tool = Tool::Knife;
-    s.clean_brush(&gpu);
-    drag(&gpu, &mut s, &line(152.0, 40.0, 470.0, 1.0, 60.0));
-    let overlap = cross_section(&gpu, &s, 134..142);
-    let mean = overlap.iter().sum::<f32>() / overlap.len() as f32;
-    let residual = s.engine.params().get("residual_um");
-    eprintln!("paint left under the blade overlap {overlap:?}");
-    assert!(mean > LEVELLED_ABOVE_RESIDUAL * residual, "{mean}");
 }
 
 #[test]
@@ -360,25 +318,6 @@ fn spread_mixtures_keep_their_fractions_within_the_volume() {
 }
 
 #[test]
-fn knife_previews_show_flattened_paint() {
-    let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu);
-    stroke(&gpu, &mut s, 70.0, 40.0, 470.0);
-    stroke(&gpu, &mut s, 90.0, 470.0, 40.0);
-    s.brush.recipe = vec![(1, 1.0)];
-    s.reload_brush(&gpu);
-    stroke(&gpu, &mut s, 170.0, 40.0, 470.0);
-    stroke(&gpu, &mut s, 190.0, 470.0, 40.0);
-    s.brush.tool = Tool::Knife;
-    s.clean_brush(&gpu);
-    drag(&gpu, &mut s, &line(80.0, 60.0, 300.0, 1.0, 60.0));
-    drag(&gpu, &mut s, &line(180.0, 200.0, 450.0, 1.0, 0.0));
-    drag(&gpu, &mut s, &column(380.0, 30.0, 230.0, 1.0, 60.0));
-    write_preview(&gpu, &s, "engine-knife.png");
-    assert!(s.canvas.wet_totals(&gpu).volume > 0.0);
-}
-
-#[test]
 fn blender_previews_show_smeared_colours() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -397,5 +336,215 @@ fn blender_previews_show_smeared_colours() {
         drag(&gpu, &mut s, &column(x, from, to, 1.0, 20.0));
     }
     write_preview(&gpu, &s, "engine-blend.png");
+    assert!(s.canvas.wet_totals(&gpu).volume > 0.0);
+}
+
+fn dip_knife(gpu: &GpuContext, s: &mut PaintSession) {
+    s.brush.tool = Tool::Knife;
+    let mixture = s.brush.reservoir_mixture(SLOT_COUNT);
+    s.dip(gpu, &mixture, FULL_DIP);
+}
+
+fn laid_knife(y: f64, pressure: f32) -> Vec<StrokeSample> {
+    line(y, 40.0, 470.0, pressure, LAID_TILT_DEG)
+}
+
+fn mean(values: &[f32]) -> f32 {
+    values.iter().sum::<f32>() / values.len() as f32
+}
+
+fn plate_height_above_weave_peaks(
+    gpu: &GpuContext,
+    s: &PaintSession,
+    rows: std::ops::Range<usize>,
+) -> f32 {
+    let dry = s.canvas.read_f32(gpu, StateTexture::DryHeight);
+    let wet = s.canvas.read_f32(gpu, StateTexture::WetVol);
+    let texels: Vec<usize> = rows
+        .flat_map(|y| SECTION_COLUMNS.map(move |x| y * CANVAS_WIDTH + x))
+        .collect();
+    let top = mean(&texels.iter().map(|&i| dry[i] + wet[i]).collect::<Vec<_>>());
+    let peaks = texels.iter().map(|&i| dry[i]).fold(f32::MIN, f32::max);
+    top - peaks
+}
+
+fn widest_edge_drop(profile: &[f32], interior: f32) -> usize {
+    let centre = profile.len() / 2;
+    let drop_from = |rows: Vec<usize>| {
+        let high = rows
+            .iter()
+            .position(|&row| profile[row] < EDGE_HIGH_SHARE * interior)
+            .unwrap();
+        let low = rows
+            .iter()
+            .position(|&row| profile[row] <= EDGE_LOW_SHARE * interior)
+            .unwrap();
+        low + 1 - high
+    };
+    drop_from((0..centre).rev().collect()).max(drop_from((centre..profile.len()).collect()))
+}
+
+#[test]
+fn a_dipped_laid_knife_builds_a_plate_as_thick_as_its_gap_over_bare_canvas() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    dip_knife(&gpu, &mut s);
+    drag(&gpu, &mut s, &laid_knife(KNIFE_ROW, PLATE_PRESSURE));
+    let altitude = pen_angles(LAID_TILT_DEG, 0.0).altitude_rad;
+    let gap = blade_gap_um(s.engine.params(), PLATE_PRESSURE, altitude);
+    let thickness = plate_height_above_weave_peaks(&gpu, &s, PLATE_INTERIOR);
+    eprintln!("plate {thickness} µm above the weave peaks for a {gap} µm gap");
+    assert!((thickness - gap).abs() <= GAP_TOLERANCE * gap);
+}
+
+#[test]
+fn a_knife_plate_ends_at_its_sides_in_a_sharp_edge() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    dip_knife(&gpu, &mut s);
+    drag(&gpu, &mut s, &laid_knife(KNIFE_ROW, PLATE_PRESSURE));
+    let profile = cross_section(&gpu, &s, KNIFE_SECTION);
+    let interior = mean(&cross_section(&gpu, &s, PLATE_INTERIOR));
+    let drop = widest_edge_drop(&profile, interior);
+    eprintln!("plate section {profile:?}, edge drop over {drop} px");
+    assert!(interior > 0.0);
+    assert!(drop <= SHARP_EDGE_PX);
+}
+
+#[test]
+fn an_upright_knife_ploughs_a_furrow_and_leaves_ridges_taller_than_the_paint_at_both_sides() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    for y in [116.0, 128.0, 140.0] {
+        s.reload_brush(&gpu);
+        stroke(&gpu, &mut s, y, 20.0, 490.0);
+    }
+    let before = cross_section(&gpu, &s, KNIFE_SECTION);
+    let furrow_before = mean(&cross_section(&gpu, &s, PLATE_INTERIOR));
+    s.brush.tool = Tool::Knife;
+    drag(
+        &gpu,
+        &mut s,
+        &line(KNIFE_ROW, 40.0, 470.0, 1.0, UPRIGHT_TILT_DEG),
+    );
+    let paint_peak = before.iter().cloned().fold(0.0, f32::max);
+    let ridge = |rows| {
+        cross_section(&gpu, &s, rows)
+            .into_iter()
+            .fold(0.0, f32::max)
+    };
+    let (lower, upper) = (ridge(LOWER_RIDGE), ridge(UPPER_RIDGE));
+    let furrow = mean(&cross_section(&gpu, &s, PLATE_INTERIOR));
+    eprintln!(
+        "paint peak {paint_peak}, ridges {lower} and {upper}, furrow {furrow_before} -> {furrow}"
+    );
+    assert!(lower > paint_peak && upper > paint_peak);
+    assert!(furrow < FURROW_SHARE * furrow_before);
+}
+
+#[test]
+fn scraping_then_laying_with_the_knife_conserves_volume() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 60.0, 40.0, 470.0);
+    stroke(&gpu, &mut s, 72.0, 470.0, 40.0);
+    s.brush.recipe = vec![(1, 1.0)];
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, 200.0, 40.0, 470.0);
+    let before = total(&gpu, &s);
+    s.brush.tool = Tool::Knife;
+    drag(&gpu, &mut s, &laid_knife(66.0, 1.0));
+    drag(&gpu, &mut s, &laid_knife(KNIFE_ROW, LIGHT_PRESSURE));
+    let laid = band_volume(&gpu, &s, PLATE_INTERIOR);
+    drag(
+        &gpu,
+        &mut s,
+        &line(200.0, 470.0, 40.0, 1.0, UPRIGHT_TILT_DEG),
+    );
+    let after = total(&gpu, &s);
+    let (volume, pigment) = relative_drift(&before, &after);
+    eprintln!("laid {laid}, scrape and lay volume drift {volume:e}, pigment drift {pigment:?}");
+    assert!(laid > 0.0);
+    assert!(volume.abs() <= CONSERVATION_TOLERANCE);
+    assert!(pigment.iter().all(|drift| drift.abs() < 5e-3));
+}
+
+#[test]
+fn light_knife_pressure_lays_a_thicker_plate_than_heavy_pressure() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    dip_knife(&gpu, &mut s);
+    drag(&gpu, &mut s, &laid_knife(70.0, LIGHT_PRESSURE));
+    dip_knife(&gpu, &mut s);
+    drag(&gpu, &mut s, &laid_knife(180.0, HEAVY_PRESSURE));
+    let light = mean(&cross_section(&gpu, &s, 54..87));
+    let heavy = mean(&cross_section(&gpu, &s, 164..197));
+    eprintln!("light plate {light} µm, heavy plate {heavy} µm");
+    assert!(light > heavy && heavy > 0.0);
+}
+
+#[test]
+fn an_undipped_knife_lays_none_of_the_brush_load_on_bare_canvas() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let brush = s.engine.brush_totals(&gpu);
+    s.brush.tool = Tool::Knife;
+    drag(&gpu, &mut s, &laid_knife(KNIFE_ROW, LIGHT_PRESSURE));
+    assert_eq!(s.canvas.wet_totals(&gpu).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu), brush);
+}
+
+#[test]
+fn dipping_with_the_knife_loads_the_knife_and_leaves_the_brush_as_it_was() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let brush = s.engine.brush_totals(&gpu);
+    dip_knife(&gpu, &mut s);
+    assert!(s.engine.knife_totals(&gpu).volume > 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu), brush);
+    s.clean_brush(&gpu);
+    assert_eq!(s.engine.knife_totals(&gpu).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu), brush);
+}
+
+#[test]
+fn knife_previews_show_raised_plates_and_ploughed_ridges() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 56.0, 30.0, 480.0);
+    stroke(&gpu, &mut s, 68.0, 480.0, 30.0);
+    stroke(&gpu, &mut s, 80.0, 30.0, 480.0);
+    s.brush.tool = Tool::Knife;
+    drag(
+        &gpu,
+        &mut s,
+        &line(68.0, 40.0, 330.0, 1.0, UPRIGHT_TILT_DEG),
+    );
+    s.brush.recipe = vec![(1, 1.0)];
+    dip_knife(&gpu, &mut s);
+    drag(
+        &gpu,
+        &mut s,
+        &line(150.0, 40.0, 360.0, FEATHER_PRESSURE, LAID_TILT_DEG),
+    );
+    s.brush.recipe = vec![(2, 1.0)];
+    dip_knife(&gpu, &mut s);
+    drag(
+        &gpu,
+        &mut s,
+        &line(200.0, 180.0, 470.0, PLATE_PRESSURE, LAID_TILT_DEG),
+    );
+    dip_knife(&gpu, &mut s);
+    drag(
+        &gpu,
+        &mut s,
+        &column(400.0, 20.0, 240.0, LIGHT_PRESSURE, LAID_TILT_DEG),
+    );
+    frame(&gpu, &mut s);
+    write_preview(&gpu, &s, "knife-depth.png");
+    s.view_mode = ViewMode::Height;
+    s.canvas.dirty.mark_all();
+    frame(&gpu, &mut s);
+    write_preview(&gpu, &s, "knife-depth-height.png");
     assert!(s.canvas.wet_totals(&gpu).volume > 0.0);
 }

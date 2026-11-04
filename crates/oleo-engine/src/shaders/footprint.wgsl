@@ -1,6 +1,7 @@
 const TAU: f32 = 6.283185307;
 const EDGE_SOFTNESS_PX: f32 = 1.5;
 const ALONG_HEADING_SOFTNESS_SHARE: f32 = 0.2;
+const BLADE_COVERAGE_HALF_PX: f32 = 0.5;
 
 fn brush_space(pixel: vec2<i32>) -> vec2<f32> {
     let offset = vec2<f32>(pixel) + vec2<f32>(0.5) - dab.center;
@@ -14,8 +15,8 @@ fn semi_axes() -> vec2<f32> {
 
 fn blade_footprint(position: vec2<f32>) -> f32 {
     let inset = semi_axes() - abs(position);
-    let edges = smoothstep(vec2<f32>(0.0), vec2<f32>(EDGE_SOFTNESS_PX), inset);
-    return edges.x * edges.y;
+    let covered = clamp(inset + vec2<f32>(BLADE_COVERAGE_HALF_PX), vec2<f32>(0.0), vec2<f32>(1.0));
+    return covered.x * covered.y;
 }
 
 fn canvas_offset(position: vec2<f32>) -> vec2<f32> {

@@ -113,12 +113,12 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         24.0,
     ),
     spec(
-        "knife_flatten",
-        "Achatar (espátula)",
+        "knife_gap_um",
+        "Espessura da placa (µm)",
         ParamGroup::Tools,
         0.0,
-        1.0,
-        0.8,
+        300.0,
+        80.0,
     ),
     spec(
         "blend_diffusion",

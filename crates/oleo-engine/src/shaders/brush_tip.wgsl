@@ -24,10 +24,13 @@ struct Dab {
     advection: f32,
     squeeze: f32,
     diffusion: f32,
-    knife_flatten: f32,
+    blade_gap_um: f32,
     spread_origin: vec2<i32>,
     spread_size: vec2<u32>,
     rag_strength: f32,
+    blade_rest_follow: f32,
+    blade_capacity_um: f32,
+    blade_spill_share: f32,
 };
 
 struct Body {

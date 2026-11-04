@@ -8,7 +8,7 @@ use crate::history::History;
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
-use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
+use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -148,7 +148,12 @@ impl PaintSession {
 
     pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
         self.flush(gpu);
-        self.engine.dip(gpu, mixture, amount);
+        if self.holds_knife() {
+            self.resize_tip();
+            self.engine.dip_knife(gpu, mixture, amount);
+        } else {
+            self.engine.dip(gpu, mixture, amount);
+        }
     }
 
     pub fn restore_reserve(&mut self, gpu: &GpuContext) {
@@ -166,7 +171,15 @@ impl PaintSession {
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
         self.flush(gpu);
-        self.engine.clean_brush(gpu);
+        if self.holds_knife() {
+            self.engine.clean_knife(gpu);
+        } else {
+            self.engine.clean_brush(gpu);
+        }
+    }
+
+    fn holds_knife(&self) -> bool {
+        self.brush.tool == Tool::Knife
     }
 
     pub fn has_pending_work(&self) -> bool {
