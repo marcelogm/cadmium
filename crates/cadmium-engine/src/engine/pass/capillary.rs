@@ -1,4 +1,4 @@
-use super::{PlacedDab, dispatch};
+use super::{PlacedDab, bind_at_dab, dispatch};
 use crate::compute::ComputeStage;
 use crate::engine::CAPILLARY_POOLS;
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
@@ -36,7 +36,7 @@ impl CapillaryPass {
         bind_group: &wgpu::BindGroup,
         dab: PlacedDab<'_>,
     ) {
-        pass.set_bind_group(0, bind_group, &[dab.offset]);
+        bind_at_dab(pass, bind_group, dab);
         for (pipeline, groups) in [
             (&self.gather, dab.placement.tip_groups),
             (&self.settle, [CAPILLARY_POOL_GROUPS, 1]),

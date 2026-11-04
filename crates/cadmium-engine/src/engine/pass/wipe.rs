@@ -1,7 +1,6 @@
-use super::{DabResources, PlacedDab, dab_binding, dispatch};
+use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::StateTexture;
-use crate::compute::{ComputeStage, texture_binding, texture_entry, uniform_entry};
-use crate::engine::dab_record::DAB_RECORD_SIZE;
+use crate::compute::{ComputeStage, texture_binding, texture_entry};
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
@@ -17,7 +16,7 @@ impl WipePass {
             "rag",
             &shader_source(&DAB_SNIPPETS, include_str!("../../shaders/rag.wgsl")),
             &[
-                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                dab_record_entry(),
                 texture_entry(
                     1,
                     wgpu::StorageTextureAccess::ReadWrite,
@@ -35,7 +34,7 @@ impl WipePass {
         self.compute.bind_group(
             resources.gpu,
             &[
-                dab_binding(0, resources.dab_records),
+                dab_record_binding(resources.dab_records),
                 texture_binding(1, resources.canvas, StateTexture::WetVol),
             ],
         )
@@ -47,7 +46,7 @@ impl WipePass {
         bind_group: &wgpu::BindGroup,
         dab: PlacedDab<'_>,
     ) {
-        pass.set_bind_group(0, bind_group, &[dab.offset]);
+        bind_at_dab(pass, bind_group, dab);
         dispatch(pass, &self.pipeline, dab.placement.canvas_groups);
     }
 }

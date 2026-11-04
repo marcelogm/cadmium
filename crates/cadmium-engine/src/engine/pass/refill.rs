@@ -1,6 +1,5 @@
-use super::{DabResources, PlacedDab, dab_binding, dispatch};
-use crate::compute::{ComputeStage, buffer_binding, storage_entry, uniform_entry};
-use crate::engine::dab_record::DAB_RECORD_SIZE;
+use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
+use crate::compute::{ComputeStage, buffer_binding, storage_entry};
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
@@ -18,7 +17,7 @@ impl RefillPass {
             "tip_refill",
             &shader_source(&DAB_SNIPPETS, include_str!("../../shaders/tip_refill.wgsl")),
             &[
-                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                dab_record_entry(),
                 storage_entry(1, false),
                 storage_entry(2, false),
                 storage_entry(3, false),
@@ -39,7 +38,7 @@ impl RefillPass {
         self.compute.bind_group(
             resources.gpu,
             &[
-                dab_binding(0, resources.dab_records),
+                dab_record_binding(resources.dab_records),
                 buffer_binding(1, &buffers.tip),
                 buffer_binding(2, &buffers.tip_delta),
                 buffer_binding(3, &buffers.body),
@@ -55,9 +54,13 @@ impl RefillPass {
         bind_group: &wgpu::BindGroup,
         dab: PlacedDab<'_>,
     ) {
-        pass.set_bind_group(0, bind_group, &[dab.offset]);
-        dispatch(pass, &self.gather, dab.placement.tip_groups);
-        dispatch(pass, &self.settle, [1, 1]);
-        dispatch(pass, &self.distribute, dab.placement.tip_groups);
+        bind_at_dab(pass, bind_group, dab);
+        for (pipeline, groups) in [
+            (&self.gather, dab.placement.tip_groups),
+            (&self.settle, [1, 1]),
+            (&self.distribute, dab.placement.tip_groups),
+        ] {
+            dispatch(pass, pipeline, groups);
+        }
     }
 }

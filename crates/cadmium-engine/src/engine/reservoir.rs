@@ -96,10 +96,11 @@ impl WetOilEngine {
         let held = self.reserve_totals(gpu)?.volume as f32;
         let capacity = self.full_reserve_volume();
         let taken = take(capacity - held)?;
-        if holds_paint(&taken) {
+        let drew_paint = holds_paint(&taken);
+        if drew_paint {
             self.add_to_reserve(gpu, &taken);
         }
-        if holds_paint(&taken) && held <= 0.0 {
+        if drew_paint && held <= 0.0 {
             self.loaded_thickness_um = self.loaded_thickness_um.max(DRAWN_LOADED_THICKNESS_UM);
         }
         Ok((taken, level_after(held, capacity, &taken)))

@@ -2,6 +2,7 @@ use super::Buffers;
 use super::dab_record::{DAB_RECORD_SIZE, DAB_RECORD_STRIDE};
 use super::placement::Placement;
 use crate::canvas::Canvas;
+use crate::compute::uniform_entry;
 use crate::gpu::GpuContext;
 use crate::tool::DabStage;
 use apply::ApplyPass;
@@ -139,15 +140,23 @@ impl DabPasses {
     }
 }
 
-fn dab_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+fn dab_record_entry() -> wgpu::BindGroupLayoutEntry {
+    uniform_entry(0, Some(DAB_RECORD_SIZE))
+}
+
+fn dab_record_binding(buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
     wgpu::BindGroupEntry {
-        binding,
+        binding: 0,
         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
             buffer,
             offset: 0,
             size: wgpu::BufferSize::new(DAB_RECORD_SIZE),
         }),
     }
+}
+
+fn bind_at_dab(pass: &mut wgpu::ComputePass<'_>, bind_group: &wgpu::BindGroup, dab: PlacedDab<'_>) {
+    pass.set_bind_group(0, bind_group, &[dab.offset]);
 }
 
 fn dispatch(pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, [x, y]: [u32; 2]) {

@@ -1,7 +1,6 @@
-use super::{DabResources, PlacedDab, dab_binding, dispatch};
+use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::{Canvas, StateTexture};
-use crate::compute::{ComputeStage, texture_entry, uniform_entry};
-use crate::engine::dab_record::DAB_RECORD_SIZE;
+use crate::compute::{ComputeStage, texture_entry};
 use crate::engine::placement::{Placement, max_dab_region_side};
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
@@ -83,7 +82,7 @@ impl SpreadPass {
 
         let spreading_entries = |motion_access| {
             [
-                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                dab_record_entry(),
                 texture_entry(1, ReadOnly, Rgba16Float),
                 texture_entry(2, ReadOnly, Rgba16Float),
                 texture_entry(3, ReadOnly, R32Float),
@@ -175,9 +174,9 @@ impl SpreadPass {
         bind_groups: &SpreadBindGroups,
         dab: PlacedDab<'_>,
     ) {
-        pass.set_bind_group(0, &bind_groups.copy, &[dab.offset]);
+        bind_at_dab(pass, &bind_groups.copy, dab);
         dispatch(pass, &self.copy, dab.placement.canvas_groups);
-        pass.set_bind_group(0, &bind_groups.advect, &[dab.offset]);
+        bind_at_dab(pass, &bind_groups.advect, dab);
         dispatch(pass, &self.advect, dab.placement.spread_groups);
     }
 }
@@ -190,15 +189,16 @@ fn spreading_bind_group(
     motion: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     let views = from.into_iter().chain(to).chain([motion]);
-    let entries: Vec<wgpu::BindGroupEntry> = std::iter::once(dab_binding(0, resources.dab_records))
-        .chain(
-            (1..)
-                .zip(views)
-                .map(|(binding, view)| wgpu::BindGroupEntry {
-                    binding,
-                    resource: wgpu::BindingResource::TextureView(view),
-                }),
-        )
-        .collect();
+    let entries: Vec<wgpu::BindGroupEntry> =
+        std::iter::once(dab_record_binding(resources.dab_records))
+            .chain(
+                (1..)
+                    .zip(views)
+                    .map(|(binding, view)| wgpu::BindGroupEntry {
+                        binding,
+                        resource: wgpu::BindingResource::TextureView(view),
+                    }),
+            )
+            .collect();
     compute.bind_group(resources.gpu, &entries)
 }

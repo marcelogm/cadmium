@@ -1,10 +1,8 @@
-use super::{DabResources, PlacedDab, dab_binding, dispatch};
+use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_buffer, storage_entry, texture_binding, texture_entry,
-    uniform_entry,
 };
-use crate::engine::dab_record::DAB_RECORD_SIZE;
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::engine::{
     BLADE_CELL_GROUP_SIZE, BLADE_CELLS, BLADE_ENDS, BLADE_LOAD_BYTES, BLADE_SPILL_VALUES,
@@ -55,7 +53,7 @@ impl BladePass {
             "blade",
             &shader_source(&DAB_SNIPPETS, include_str!("../../shaders/blade.wgsl")),
             &[
-                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                dab_record_entry(),
                 texture_entry(1, ReadWrite, Rgba16Float),
                 texture_entry(2, ReadWrite, Rgba16Float),
                 texture_entry(3, ReadWrite, R32Float),
@@ -79,7 +77,7 @@ impl BladePass {
         self.compute.bind_group(
             resources.gpu,
             &[
-                dab_binding(0, resources.dab_records),
+                dab_record_binding(resources.dab_records),
                 texture_binding(1, canvas, StateTexture::WetPig0),
                 texture_binding(2, canvas, StateTexture::WetPig1),
                 texture_binding(3, canvas, StateTexture::WetVol),
@@ -100,7 +98,7 @@ impl BladePass {
     ) {
         let blade = &self.pipelines;
         let [width, height] = dab.placement.canvas_groups;
-        pass.set_bind_group(0, bind_group, &[dab.offset]);
+        bind_at_dab(pass, bind_group, dab);
         for (pipeline, groups) in [
             (&blade.rest, [1, 1]),
             (&blade.want, [width, height]),

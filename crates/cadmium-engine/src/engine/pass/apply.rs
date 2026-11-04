@@ -1,6 +1,5 @@
-use super::{DabResources, PlacedDab, dab_binding, dispatch};
-use crate::compute::{ComputeStage, buffer_binding, storage_entry, uniform_entry};
-use crate::engine::dab_record::DAB_RECORD_SIZE;
+use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
+use crate::compute::{ComputeStage, buffer_binding, storage_entry};
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
@@ -16,7 +15,7 @@ impl ApplyPass {
             "tip_apply",
             &shader_source(&DAB_SNIPPETS, include_str!("../../shaders/tip_apply.wgsl")),
             &[
-                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                dab_record_entry(),
                 storage_entry(1, false),
                 storage_entry(2, false),
             ],
@@ -31,7 +30,7 @@ impl ApplyPass {
         self.compute.bind_group(
             resources.gpu,
             &[
-                dab_binding(0, resources.dab_records),
+                dab_record_binding(resources.dab_records),
                 buffer_binding(1, &resources.buffers.tip),
                 buffer_binding(2, &resources.buffers.tip_delta),
             ],
@@ -44,7 +43,7 @@ impl ApplyPass {
         bind_group: &wgpu::BindGroup,
         dab: PlacedDab<'_>,
     ) {
-        pass.set_bind_group(0, bind_group, &[dab.offset]);
+        bind_at_dab(pass, bind_group, dab);
         dispatch(pass, &self.pipeline, dab.placement.tip_groups);
     }
 }

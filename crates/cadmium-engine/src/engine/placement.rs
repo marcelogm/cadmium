@@ -23,7 +23,6 @@ const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
 const KNIFE_SPILL_SHARE: f32 = 0.5;
 const FIRST_REST_FOLLOW: f32 = 1.0;
 
-#[derive(Clone, Copy)]
 struct DabStep {
     px: f32,
     sweep: [f32; 2],
