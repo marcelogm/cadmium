@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.marcelogm.Cadmium</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Cadmium</name>
+  <summary>Paint with wet oil paint</summary>
+  <summary xml:lang="pt-BR">Pinte com tinta a óleo molhada</summary>
+  <developer id="io.github.marcelogm">
+    <name>Marcelo Martins</name>
+  </developer>
+  <description>
+    <p>
+      Cadmium is an oil painting simulator. Paint stays wet on the canvas and behaves like oil:
+      the brush deposits, drags and mixes the paint already there, the palette knife lays thick
+      slabs and carves grooves, and colours mix like pigments, not like light.
+    </p>
+    <p>
+      Each pigment is described by its absorption and scattering spectra (Kubelka-Munk), and the
+      whole simulation runs on the GPU. A pen tablet is recommended: pressure and tilt shape
+      every stroke.
+    </p>
+    <p xml:lang="pt-BR">
+      O Cadmium é um simulador de pintura a óleo. A tinta fica molhada na tela e se comporta
+      como óleo: o pincel deposita, arrasta e mistura a tinta que já está lá, a espátula assenta
+      placas grossas e abre sulcos, e as cores se misturam como pigmentos, não como luz.
+    </p>
+    <p xml:lang="pt-BR">
+      Cada pigmento é descrito por um espectro de absorção e espalhamento (Kubelka-Munk), e toda
+      a simulação roda na GPU. Uma mesa digitalizadora é o recomendado: pressão e inclinação
+      dão forma a cada pincelada.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.marcelogm.Cadmium.desktop</launchable>
+  <provides>
+    <binary>cadmium</binary>
+  </provides>
+  <url type="homepage">https://github.com/marcelogm/cadmium</url>
+  <url type="bugtracker">https://github.com/marcelogm/cadmium/issues</url>
+  <url type="vcs-browser">https://github.com/marcelogm/cadmium</url>
+  <categories>
+    <category>Graphics</category>
+  </categories>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <recommends>
+    <control>tablet</control>
+  </recommends>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-04"/>
+  </releases>
+</component>
