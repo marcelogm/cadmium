@@ -22,6 +22,12 @@ const HISTORY_TRAY_COPIES: u64 = 1;
 const PLACEHOLDER_SIZE_PX: u32 = 1;
 const SAVE_MARGIN_PX: f32 = 4.0;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClearOutcome {
+    NothingWet,
+    Cleared { undoable: bool },
+}
+
 pub struct PaintSession {
     pub canvas: Canvas,
     pub tray: Canvas,
@@ -190,7 +196,8 @@ impl PaintSession {
     pub fn dry(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
         let tiles = self.canvas.wet_tiles.take();
-        self.history.begin_drying_step(tiles.len());
+        self.history
+            .begin_removal_step(Surface::Painting, tiles.len());
         for chunk in tiles.chunks(DRY_TILES_PER_SUBMIT) {
             let mut encoder = new_encoder(gpu, "dry");
             self.history
@@ -202,13 +209,13 @@ impl PaintSession {
         self.history.commit_step()
     }
 
-    pub fn clear_tray(&mut self, gpu: &GpuContext) -> bool {
+    pub fn clear_tray(&mut self, gpu: &GpuContext) -> ClearOutcome {
         self.settle_pending_step(gpu);
         let tiles = self.tray.wet_tiles.take();
         if tiles.is_empty() {
-            return false;
+            return ClearOutcome::NothingWet;
         }
-        self.history.begin_step(Surface::Tray);
+        self.history.begin_removal_step(Surface::Tray, tiles.len());
         let mut encoder = new_encoder(gpu, "clear_tray");
         self.history
             .encode_save_tiles(gpu, &self.tray, &tiles, &mut encoder);
@@ -217,8 +224,9 @@ impl PaintSession {
         self.tray
             .write_f32(gpu, StateTexture::WetVol, &vec![0.0; texels]);
         self.tray.dirty.mark_all();
-        self.history.commit_step();
-        true
+        ClearOutcome::Cleared {
+            undoable: self.history.commit_step(),
+        }
     }
 
     pub fn undo(&mut self, gpu: &GpuContext) -> bool {
@@ -333,20 +341,19 @@ impl PaintSession {
     }
 
     pub fn has_pending_work(&self) -> bool {
-        !self.queued.is_empty()
-            || !self.canvas.dirty.is_empty()
-            || (self.step_open && self.stroke.is_none())
+        !self.queued.is_empty() || !self.canvas.dirty.is_empty() || self.step_awaits_commit()
     }
 
     pub fn tray_has_pending_work(&self) -> bool {
-        !self.queued.is_empty()
-            || !self.tray.dirty.is_empty()
-            || (self.step_open && self.stroke.is_none())
+        !self.queued.is_empty() || !self.tray.dirty.is_empty() || self.step_awaits_commit()
+    }
+
+    fn step_awaits_commit(&self) -> bool {
+        self.step_open && self.stroke.is_none()
     }
 
     pub fn flush(&mut self, gpu: &GpuContext) {
-        let step_awaits_commit = self.step_open && self.stroke.is_none();
-        if self.queued.is_empty() && !step_awaits_commit {
+        if self.queued.is_empty() && !self.step_awaits_commit() {
             return;
         }
         let mut encoder = new_encoder(gpu, "flush_queued_dabs");
