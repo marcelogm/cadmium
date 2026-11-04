@@ -10,6 +10,8 @@ use oleo_engine::spectral::{
     bands_to_linear_srgb, compress_gamut, linear_to_srgb8, saunderson_display,
 };
 
+use crate::LOG_DOMAIN;
+use crate::presets::PIGMENT_PRESETS;
 use crate::swatch::{Swatch, SwatchShape};
 
 pub const MIN_SIDE: u32 = 64;
@@ -20,59 +22,8 @@ const CHIP_SWATCH_SIZE: i32 = 16;
 const PRIMER_SWATCH_SIZE: (i32, i32) = (30, 16);
 const CHIPS_PER_LINE: u32 = 3;
 const CHIP_SPACING: u32 = 6;
-const STARTING_SIZE: (u32, u32) = (2048, 1536);
 const ACTION_GROUP: &str = "new-painting";
-const LOG_DOMAIN: &str = "oleo";
 const PRESET_ACTION: &str = "preset";
-
-pub const PRIMARIES: &[&str] = &[
-    "titanium_white",
-    "cadmium_yellow",
-    "cadmium_red",
-    "quinacridone_magenta",
-    "ultramarine_blue",
-    "phthalo_blue",
-    "burnt_umber",
-    "ivory_black",
-];
-pub const ZORN: &[&str] = &[
-    "titanium_white",
-    "yellow_ochre",
-    "cadmium_red",
-    "ivory_black",
-];
-pub const EARTHS: &[&str] = &[
-    "titanium_white",
-    "yellow_ochre",
-    "burnt_sienna",
-    "burnt_umber",
-    "ivory_black",
-    "ultramarine_blue",
-];
-
-pub struct PigmentPreset {
-    pub name: &'static str,
-    pub label: &'static str,
-    pub pigments: &'static [&'static str],
-}
-
-pub const PIGMENT_PRESETS: [PigmentPreset; 3] = [
-    PigmentPreset {
-        name: "zorn",
-        label: "Paleta limitada (Zorn)",
-        pigments: ZORN,
-    },
-    PigmentPreset {
-        name: "primaries",
-        label: "Primárias",
-        pigments: PRIMARIES,
-    },
-    PigmentPreset {
-        name: "earths",
-        label: "Terras",
-        pigments: EARTHS,
-    },
-];
 
 pub const PRIMERS: [(Primer, &str); 2] = [
     (Primer::WhiteGesso, "Gesso branco"),
@@ -84,16 +35,6 @@ pub const WEAVES: [(Weave, &str); 3] = [
     (Weave::Cotton, "Algodão"),
     (Weave::Smooth, "Lisa"),
 ];
-
-pub fn starting_canvas_spec() -> CanvasSpec {
-    CanvasSpec {
-        width: STARTING_SIZE.0,
-        height: STARTING_SIZE.1,
-        primer: Primer::WhiteGesso,
-        weave: Weave::Linen,
-        pigment_slots: PRIMARIES.iter().map(|id| id.to_string()).collect(),
-    }
-}
 
 pub fn primer_srgb8(db: &PigmentDb, primer: Primer) -> [u8; 3] {
     let shown = primer_reflectance(db, primer).map(saunderson_display);
@@ -231,7 +172,7 @@ pub fn counter_text(count: usize) -> String {
     format!("{count} de {MAX_SLOTS}")
 }
 
-pub struct Widgets {
+struct Widgets {
     format_row: adw::ComboRow,
     width_row: adw::SpinRow,
     height_row: adw::SpinRow,
@@ -244,14 +185,14 @@ pub struct Widgets {
     primer_colours: Vec<[u8; 3]>,
 }
 
-type CreateHandler = Box<dyn Fn(CanvasSpec)>;
+type CreateHandler = Box<dyn Fn(&NewPaintingDialog, CanvasSpec)>;
 
 mod imp {
     use super::*;
 
     #[derive(Default)]
     pub struct NewPaintingDialog {
-        pub widgets: OnceCell<Widgets>,
+        pub(super) widgets: OnceCell<Widgets>,
         pub selection: RefCell<Option<PigmentSelection>>,
         pub syncing_size: Cell<bool>,
         pub counter_flash: RefCell<Option<glib::SourceId>>,
@@ -298,7 +239,7 @@ impl NewPaintingDialog {
         dialog
     }
 
-    pub fn connect_create<F: Fn(CanvasSpec) + 'static>(&self, handler: F) {
+    pub fn connect_create<F: Fn(&NewPaintingDialog, CanvasSpec) + 'static>(&self, handler: F) {
         self.imp()
             .create_handlers
             .borrow_mut()
@@ -307,11 +248,17 @@ impl NewPaintingDialog {
 
     pub fn canvas_spec(&self) -> CanvasSpec {
         let widgets = self.widgets();
+        widgets.width_row.update();
+        widgets.height_row.update();
         CanvasSpec {
             width: widgets.width_row.value() as u32,
             height: widgets.height_row.value() as u32,
-            primer: PRIMERS[widgets.primer_row.selected() as usize].0,
-            weave: WEAVES[widgets.weave_row.selected() as usize].0,
+            primer: PRIMERS
+                .get(widgets.primer_row.selected() as usize)
+                .map_or(Primer::WhiteGesso, |(primer, _)| *primer),
+            weave: WEAVES
+                .get(widgets.weave_row.selected() as usize)
+                .map_or(Weave::Linen, |(weave, _)| *weave),
             pigment_slots: self.with_selection(PigmentSelection::slots),
         }
     }
@@ -528,9 +475,8 @@ impl NewPaintingDialog {
     fn create(&self) {
         let spec = self.canvas_spec();
         for handler in self.imp().create_handlers.borrow().iter() {
-            handler(spec.clone());
+            handler(self, spec.clone());
         }
-        self.close();
     }
 
     fn apply_format(&self) {
@@ -538,7 +484,10 @@ impl NewPaintingDialog {
             return;
         }
         let widgets = self.widgets();
-        let format = PaintingFormat::ALL[widgets.format_row.selected() as usize];
+        let format = PaintingFormat::ALL
+            .get(widgets.format_row.selected() as usize)
+            .copied()
+            .unwrap_or(PaintingFormat::Custom);
         let width = widgets.width_row.value() as u32;
         let height = widgets.height_row.value() as u32;
         if let Some((width, height)) = format.size_keeping_long_side(width, height) {
@@ -692,6 +641,7 @@ fn pigment_chip(name: &str, colour_index: &str, colour: [u8; 3]) -> gtk::ToggleB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::presets::{ZORN, starting_canvas_spec};
 
     #[test]
     fn landscape_format_keeps_the_long_side_of_a_portrait_size() {
@@ -752,14 +702,12 @@ mod tests {
     }
 
     #[test]
-    fn starting_painting_is_landscape_with_the_primaries() {
+    fn starting_painting_size_is_recognised_as_landscape() {
         let spec = starting_canvas_spec();
         assert_eq!(
             PaintingFormat::matching(spec.width, spec.height),
             PaintingFormat::Landscape4x3
         );
-        assert!(spec.validate(&PigmentDb::builtin()).is_ok());
-        assert_eq!(spec.pigment_slots.len(), MAX_SLOTS);
     }
 
     #[test]

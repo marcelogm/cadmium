@@ -6,10 +6,10 @@ use gtk::{gdk, gio, glib};
 
 use oleo_engine::pigments::PigmentDb;
 
-use crate::new_painting_dialog::{NewPaintingDialog, starting_canvas_spec};
+use crate::LOG_DOMAIN;
+use crate::new_painting_dialog::NewPaintingDialog;
+use crate::presets::starting_canvas_spec;
 use crate::tools::{Tool, UiTool};
-
-const LOG_DOMAIN: &str = "oleo";
 
 mod imp {
     use super::*;
@@ -142,9 +142,13 @@ impl OleoWindow {
     }
 
     fn open_new_painting_dialog(&self) {
+        if self.visible_dialog().is_some() {
+            return;
+        }
         let dialog = NewPaintingDialog::new(&PigmentDb::builtin(), &starting_canvas_spec());
-        dialog.connect_create(|spec| {
+        dialog.connect_create(|dialog, spec| {
             glib::g_message!(LOG_DOMAIN, "new painting requested: {spec:?}");
+            dialog.close();
         });
         dialog.present(Some(self));
     }

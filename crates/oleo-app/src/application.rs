@@ -62,16 +62,26 @@ fn register_icons() {
 fn setup_actions(app: &adw::Application) {
     let shortcuts = gio::ActionEntry::builder("shortcuts")
         .activate(|app: &adw::Application, _, _| {
-            dialogs::shortcuts_dialog().present(app.active_window().as_ref());
+            if !active_window_shows_a_dialog(app) {
+                dialogs::shortcuts_dialog().present(app.active_window().as_ref());
+            }
         })
         .build();
     let about = gio::ActionEntry::builder("about")
         .activate(|app: &adw::Application, _, _| {
-            dialogs::about_dialog().present(app.active_window().as_ref());
+            if !active_window_shows_a_dialog(app) {
+                dialogs::about_dialog().present(app.active_window().as_ref());
+            }
         })
         .build();
     let quit = gio::ActionEntry::builder("quit")
         .activate(|app: &adw::Application, _, _| app.quit())
         .build();
     app.add_action_entries([shortcuts, about, quit]);
+}
+
+fn active_window_shows_a_dialog(app: &adw::Application) -> bool {
+    app.active_window()
+        .and_downcast::<adw::ApplicationWindow>()
+        .is_some_and(|window| window.visible_dialog().is_some())
 }

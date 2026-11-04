@@ -92,7 +92,7 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
 }
 
 #[expect(dead_code)]
-pub fn confirm_discard(window: &impl IsA<gtk::Widget>, on_discard: impl FnOnce() + 'static) {
+pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + 'static) {
     let alert = adw::AlertDialog::builder()
         .heading("Descartar a pintura atual?")
         .body("As alterações que não foram salvas serão perdidas.")
@@ -102,7 +102,7 @@ pub fn confirm_discard(window: &impl IsA<gtk::Widget>, on_discard: impl FnOnce()
     alert.add_responses(&[("cancel", "Cancelar"), ("discard", "Descartar")]);
     alert.set_response_appearance("discard", adw::ResponseAppearance::Destructive);
     alert.choose(
-        Some(window),
+        Some(parent),
         None::<&gtk::gio::Cancellable>,
         move |response: glib::GString| {
             if response == "discard" {

@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 use adw::prelude::*;
 use gtk::{glib, graphene, gsk};
 
+use crate::LOG_DOMAIN;
 use crate::window::OleoWindow;
 
 const EXIT_AFTER_FRAMES: &str = "OLEO_SMOKE_EXIT_AFTER_FRAMES";
 const SCREENSHOT: &str = "OLEO_SMOKE_SCREENSHOT";
 const DIALOG: &str = "OLEO_SMOKE_DIALOG";
 const DEFAULT_EXIT_AFTER_FRAMES: u32 = 30;
-const LOG_DOMAIN: &str = "oleo";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SmokeDialog {
