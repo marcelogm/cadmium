@@ -3,6 +3,7 @@
 mod application;
 mod brush_panel;
 mod canvas_widget;
+mod cursor_outline;
 mod dialogs;
 #[cfg_attr(not(target_os = "linux"), path = "dmabuf_off.rs")]
 mod dmabuf;
@@ -20,6 +21,7 @@ mod presets;
 )]
 mod smoke;
 mod state;
+mod surface_scale;
 mod swatch;
 mod tools;
 mod tray_view;

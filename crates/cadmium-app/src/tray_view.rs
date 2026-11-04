@@ -8,12 +8,11 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
-use crate::canvas_widget::{
-    CursorOutline, SurfaceScaleWatch, append_ring, device_scale, viewport_px,
-};
+use crate::cursor_outline::{CursorOutline, append_ring};
 use crate::input::PaintSurfaceWidget;
 use crate::presenter::{FramePresenter, PresentSource, tray_view};
 use crate::state::{AppState, LoadRing, SharedState};
+use crate::surface_scale::{SurfaceScaleWatch, device_scale, viewport_px};
 use crate::view;
 
 pub const RING_START_GAP_PX: f32 = 30.0;
