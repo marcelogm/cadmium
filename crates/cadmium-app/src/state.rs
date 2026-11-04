@@ -1,12 +1,11 @@
 use std::cell::RefCell;
-use std::f32::consts::PI;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
 use cadmium_engine::canvas::{CanvasError, CanvasSpec, PaintTotals};
 use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
-use cadmium_engine::engine::{PaintEngine, TIP_MARGIN, TIP_SIZE};
+use cadmium_engine::engine::{FULL_DIP, PaintEngine};
 use cadmium_engine::gpu::{GpuContext, GpuLost};
 use cadmium_engine::params::{ParamGroup, SimParams};
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
@@ -22,10 +21,7 @@ use crate::writes::{EditCounter, EditMark};
 const RATE_SMOOTHING: f32 = 0.2;
 const MILLISECONDS_PER_SECOND: f32 = 1000.0;
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
-pub const FULL_DIP: f32 = 1.0;
 pub const PARTIAL_DIP: f32 = 0.25;
-const MIN_TIP_RADIUS_PX: f32 = 0.5;
-const RESERVE_FACTOR_KEY: &str = "reserve_factor";
 const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
@@ -71,16 +67,6 @@ pub fn is_render_param(key: &str) -> bool {
     SimParams::specs()
         .iter()
         .any(|spec| spec.key == key && spec.group == ParamGroup::Render)
-}
-
-pub fn mixture_is_empty(mixture: &Mixture) -> bool {
-    mixture.volume_um <= 0.0 || mixture.fractions.iter().all(|fraction| *fraction <= 0.0)
-}
-
-pub fn full_reserve_capacity(reserve_factor: f32, diameter_px: f32) -> f32 {
-    let max_radius = (TIP_SIZE - TIP_MARGIN) as f32 / 2.0;
-    let radius = (diameter_px / 2.0).clamp(MIN_TIP_RADIUS_PX, max_radius);
-    reserve_factor * FULL_RESERVOIR_VOLUME_UM * PI * radius * radius
 }
 
 pub fn reserve_level(volume: f32, capacity: f32) -> f32 {
@@ -361,15 +347,14 @@ impl AppState {
     }
 
     pub fn reserve_level(&self) -> f32 {
-        let capacity = full_reserve_capacity(
-            self.session.engine.params().get(RESERVE_FACTOR_KEY),
-            self.session.brush.geometry.max_diameter_px,
-        );
-        reserve_level(self.reserve_volume, capacity)
+        reserve_level(
+            self.reserve_volume,
+            self.session.engine.full_reserve_volume(),
+        )
     }
 
     pub fn brush_is_clean(&self) -> bool {
-        mixture_is_empty(&self.tip_mixture) && self.reserve_volume <= 0.0
+        self.tip_mixture.is_empty() && self.reserve_volume <= 0.0
     }
 
     pub fn knife_level(&self) -> f32 {
@@ -400,7 +385,7 @@ impl AppState {
         }
         self.session.clean_brush(&self.gpu);
         let mixture = self.palette_mixture();
-        if !mixture_is_empty(&mixture) {
+        if !mixture.is_empty() {
             self.dip(&mixture, FULL_DIP);
         }
     }
@@ -417,7 +402,7 @@ impl AppState {
             return;
         }
         let mixture = self.palette_mixture();
-        if mixture_is_empty(&mixture) {
+        if mixture.is_empty() {
             return;
         }
         self.session.flush(&self.gpu);
@@ -1009,7 +994,7 @@ mod tests {
     #[test]
     fn brush_readout_follows_loading_painting_and_cleaning() {
         let mut state = painting_state();
-        assert!(!mixture_is_empty(&state.tip_mixture));
+        assert!(!state.tip_mixture.is_empty());
         let loaded = state.reserve_level();
         assert!(loaded > 0.0);
         stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
@@ -1114,7 +1099,7 @@ mod tests {
         assert_eq!(mixture.volume_um, 100.0);
         assert!((mixture.fractions[1] - 0.3).abs() < 1e-6);
         assert!((mixture.fractions[3] - 0.6).abs() < 1e-6);
-        assert!(mixture_is_empty(&mean_mixture(&PaintTotals::default())));
+        assert!(mean_mixture(&PaintTotals::default()).is_empty());
     }
 
     const KNIFE_LEVEL_TOLERANCE: f32 = 0.01;
@@ -1218,27 +1203,10 @@ mod tests {
 
     #[test]
     fn reserve_level_is_a_share_of_the_full_reserve() {
-        let small = full_reserve_capacity(3.0, 10.0);
-        assert!(full_reserve_capacity(3.0, 20.0) > 3.9 * small);
-        assert!(full_reserve_capacity(6.0, 10.0) > 1.9 * small);
+        let small = 100.0;
         assert_eq!(reserve_level(small / 2.0, small), 0.5);
         assert_eq!(reserve_level(small * 2.0, small), 1.0);
         assert_eq!(reserve_level(1.0, 0.0), 0.0);
-    }
-
-    #[test]
-    fn a_film_without_volume_is_an_empty_brush() {
-        let mut fractions = [0.0; MAX_SLOTS];
-        fractions[1] = 0.9;
-        assert!(mixture_is_empty(&Mixture {
-            volume_um: 0.0,
-            fractions
-        }));
-        assert!(mixture_is_empty(&EMPTY_MIXTURE));
-        assert!(!mixture_is_empty(&Mixture {
-            volume_um: 10.0,
-            fractions
-        }));
     }
 
     fn sample_at(time_ms: u32) -> StrokeSample {

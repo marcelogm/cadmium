@@ -24,7 +24,7 @@ const TIP_CHANNELS: usize = PIGMENT_CHANNELS + 1;
 const TIP_TEXELS: usize = (TIP_SIZE * TIP_SIZE) as usize;
 const TIP_VALUES: usize = TIP_TEXELS * TIP_CHANNELS;
 const TIP_BYTES: u64 = (TIP_VALUES * std::mem::size_of::<f32>()) as u64;
-const FULL_DIP: f32 = 1.0;
+pub const FULL_DIP: f32 = 1.0;
 const TIP_SUM_INVOCATIONS: u32 = 256;
 const TIP_SUM_CHANNELS: usize = TIP_CHANNELS + 1;
 const TIP_TEXEL_COUNT_SUM: usize = TIP_CHANNELS;
@@ -1163,6 +1163,10 @@ impl WetOilEngine {
         pass.set_bind_group(0, &group, &[]);
         pass.set_pipeline(&self.sum_tip_pipeline);
         pass.dispatch_workgroups(1, 1, 1);
+    }
+
+    pub fn full_reserve_volume(&self) -> f32 {
+        self.reserve_volume(FULL_RESERVOIR_VOLUME_UM)
     }
 
     fn reserve_volume(&self, thickness_um: f32) -> f32 {

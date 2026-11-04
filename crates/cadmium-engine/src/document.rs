@@ -15,6 +15,7 @@ use crate::spectral::BANDS;
 const FORMAT_VERSION: u32 = 2;
 const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
 const OLDEST_READABLE_FORMAT: u32 = ABSOLUTE_DRY_HEIGHT_FORMAT;
+const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
 const MANIFEST_ENTRY: &str = "manifest.json";
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
@@ -466,17 +467,10 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
 }
 
 fn state_entry(which: StateTexture, format: u32) -> String {
-    let name = match which {
-        StateTexture::WetPig0 => "wet_pig0",
-        StateTexture::WetPig1 => "wet_pig1",
-        StateTexture::WetVol => "wet_vol",
-        StateTexture::DryRefl0 => "dry_refl0",
-        StateTexture::DryRefl1 => "dry_refl1",
-        StateTexture::DryHeight if format == ABSOLUTE_DRY_HEIGHT_FORMAT => "dry_height",
-        StateTexture::DryHeight => "dry_relief",
-        StateTexture::DryTopPig0 => "dry_top_pig0",
-        StateTexture::DryTopPig1 => "dry_top_pig1",
-        StateTexture::Display => "display",
+    let name = if which == StateTexture::DryHeight && format > ABSOLUTE_DRY_HEIGHT_FORMAT {
+        DRY_RELIEF_NAME
+    } else {
+        which.label()
     };
     format!("state/{name}.zst")
 }

@@ -143,7 +143,7 @@ impl StateTexture {
             .expect("state textures are uncompressed colour formats")
     }
 
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             StateTexture::WetPig0 => "wet_pig0",
             StateTexture::WetPig1 => "wet_pig1",

@@ -27,6 +27,12 @@ pub struct Mixture {
     pub fractions: [f32; MAX_SLOTS],
 }
 
+impl Mixture {
+    pub fn is_empty(&self) -> bool {
+        self.volume_um <= 0.0 || self.fractions.iter().all(|fraction| *fraction <= 0.0)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PigmentDb {
     pigments: Vec<Pigment>,

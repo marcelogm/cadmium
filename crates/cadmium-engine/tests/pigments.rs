@@ -107,3 +107,24 @@ fn empty_mixture_swatch_is_black() {
     let slots = vec!["titanium_white".to_string()];
     assert_eq!(mixture_srgb8(&db, &slots, &[0.0; MAX_SLOTS]), [0, 0, 0]);
 }
+
+#[test]
+fn a_film_without_volume_or_without_pigment_is_empty() {
+    let mut fractions = [0.0; MAX_SLOTS];
+    fractions[1] = 0.9;
+    let without_volume = Mixture {
+        volume_um: 0.0,
+        fractions,
+    };
+    let without_pigment = Mixture {
+        volume_um: 10.0,
+        fractions: [0.0; MAX_SLOTS],
+    };
+    let loaded = Mixture {
+        volume_um: 10.0,
+        fractions,
+    };
+    assert!(without_volume.is_empty());
+    assert!(without_pigment.is_empty());
+    assert!(!loaded.is_empty());
+}

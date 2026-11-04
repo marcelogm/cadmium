@@ -183,7 +183,7 @@ impl PaintSession {
         self.flush(gpu);
         self.resize_tip();
         let mixture = self.recipe_mixture();
-        if is_pigment_free(&mixture) {
+        if mixture.is_empty() {
             self.engine.clean_brush(gpu);
         } else {
             self.engine.load_reservoir(gpu, &mixture);
@@ -204,7 +204,7 @@ impl PaintSession {
     pub fn restore_reserve(&mut self, gpu: &GpuContext) {
         self.flush(gpu);
         let mixture = self.recipe_mixture();
-        if !is_pigment_free(&mixture) {
+        if !mixture.is_empty() {
             self.engine.restore_reserve(gpu, &mixture);
         }
     }
@@ -312,10 +312,6 @@ fn history_budget(spec: &CanvasSpec) -> u64 {
     let tiles =
         u64::from(spec.width.div_ceil(TILE_SIZE)) * u64::from(spec.height.div_ceil(TILE_SIZE));
     HISTORY_BUDGET_BYTES.min(tiles * HISTORY_CANVAS_COPIES * bytes_per_tile_all_textures())
-}
-
-fn is_pigment_free(mixture: &Mixture) -> bool {
-    mixture.fractions.iter().all(|fraction| *fraction <= 0.0)
 }
 
 fn new_encoder(gpu: &GpuContext, label: &str) -> wgpu::CommandEncoder {

@@ -377,3 +377,26 @@ fn one_brush_readout_matches_reading_tip_reserve_and_knife_apart() {
     assert_eq!(readout.knife, s.engine.knife_totals(&gpu).unwrap());
     assert!(readout.reserve.volume > 0.0);
 }
+
+#[test]
+fn the_full_reserve_grows_with_the_tip_area_and_the_reserve_factor() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.engine.resize_tip(SMALL_TIP_RADIUS_PX);
+    let small = s.engine.full_reserve_volume();
+    s.engine.resize_tip(2.0 * SMALL_TIP_RADIUS_PX);
+    assert!(s.engine.full_reserve_volume() > 3.5 * small);
+    s.engine.resize_tip(SMALL_TIP_RADIUS_PX);
+    let factor = s.engine.params().get("reserve_factor");
+    s.engine.params_mut().set("reserve_factor", 2.0 * factor);
+    assert!((s.engine.full_reserve_volume() - 2.0 * small).abs() < 1e-3 * small);
+}
+
+#[test]
+fn a_freshly_loaded_brush_holds_its_load_share_of_the_full_reserve() {
+    let gpu = GpuContext::new().unwrap();
+    let s = session(&gpu);
+    let level =
+        s.engine.reserve_totals(&gpu).unwrap().volume as f32 / s.engine.full_reserve_volume();
+    assert!((level - s.brush.load).abs() < FRACTION_TOLERANCE, "{level}");
+}

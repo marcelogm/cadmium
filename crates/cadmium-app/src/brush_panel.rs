@@ -12,7 +12,7 @@ use gtk::{gdk, glib};
 
 use crate::LOG_DOMAIN;
 use crate::lab_panel::{format_param, param_row};
-use crate::state::{AppState, PigmentClick, SharedState, mixture_is_empty};
+use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::tools::{KNIFE_HANDLING, UiTool};
 use crate::window::CadmiumWindow;
@@ -520,7 +520,7 @@ impl BrushPanel {
         };
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| {
-            if mixture_is_empty(mixture) {
+            if mixture.is_empty() {
                 primer
             } else {
                 mixture_srgb8(db, &slots, &mixture.fractions)
