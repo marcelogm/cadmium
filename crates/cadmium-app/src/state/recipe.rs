@@ -41,12 +41,12 @@ pub(super) enum PigmentDip {
     AddOnTop(usize),
 }
 
-pub(super) fn is_only_pigment(recipe: &[(usize, f32)], slot: usize) -> bool {
+fn is_only_pigment(recipe: &[(usize, f32)], slot: usize) -> bool {
     let mut present = recipe.iter().filter(|(_, parts)| *parts > 0.0).peekable();
     present.peek().is_some() && present.all(|(chosen, _)| *chosen == slot)
 }
 
-pub(super) fn recipe_after_mixing(recipe: &[(usize, f32)], slot: usize) -> Vec<(usize, f32)> {
+fn recipe_after_mixing(recipe: &[(usize, f32)], slot: usize) -> Vec<(usize, f32)> {
     let total: f32 = recipe.iter().map(|(_, parts)| parts.max(0.0)).sum();
     if total <= 0.0 {
         return vec![(slot, 1.0)];

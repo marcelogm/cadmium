@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use cadmium_engine::canvas::PaintTotals;
 use cadmium_engine::draw_up::DrawUpRequest;
-use cadmium_engine::pigments::mixture_srgb8;
+use cadmium_engine::pigments::{MAX_SLOTS, mixture_srgb8};
 use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
@@ -20,6 +20,14 @@ const FULL_LEVEL: f32 = 0.999;
 
 fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
     (current.0 - origin.0).hypot(current.1 - origin.1) > threshold_px
+}
+
+fn held_on<T>(tool: Tool, on_knife: T, in_reserve: T) -> T {
+    if tool.profile().holds_on_blade() {
+        on_knife
+    } else {
+        in_reserve
+    }
 }
 
 impl AppState {
@@ -157,35 +165,25 @@ impl AppState {
         self.advance_hold(seconds);
     }
 
-    fn colour_of(&self, totals: &PaintTotals) -> [u8; 3] {
+    fn srgb8_of(&self, fractions: &[f32; MAX_SLOTS]) -> [u8; 3] {
         mixture_srgb8(
             &self.session.db,
             &self.session.canvas.spec.pigment_slots,
-            &mean_mixture(totals).fractions,
+            fractions,
         )
     }
 
+    fn colour_of(&self, totals: &PaintTotals) -> [u8; 3] {
+        self.srgb8_of(&mean_mixture(totals).fractions)
+    }
+
     fn held_level(&self, tool: Tool) -> f32 {
-        if tool.profile().holds_on_blade() {
-            self.knife_level()
-        } else {
-            self.reserve_level()
-        }
+        held_on(tool, self.knife_level(), self.reserve_level())
     }
 
     fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
-        let held = if tool.profile().holds_on_blade() {
-            &self.knife_mixture
-        } else {
-            &self.reserve_mixture
-        };
-        (!held.is_empty()).then(|| {
-            mixture_srgb8(
-                &self.session.db,
-                &self.session.canvas.spec.pigment_slots,
-                &held.fractions,
-            )
-        })
+        let held = held_on(tool, &self.knife_mixture, &self.reserve_mixture);
+        (!held.is_empty()).then(|| self.srgb8_of(&held.fractions))
     }
 
     pub fn load_ring(&self) -> Option<LoadRing> {
@@ -229,11 +227,7 @@ impl AppState {
         let Some(readout) = readout else {
             return;
         };
-        let held = if tool.profile().holds_on_blade() {
-            readout.knife
-        } else {
-            readout.reserve
-        };
+        let held = held_on(tool, readout.knife, readout.reserve);
         let recipe = recipe_from_fractions(&mean_mixture(&held).fractions);
         if !recipe.is_empty() {
             self.session.brush.recipe = recipe;

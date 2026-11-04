@@ -15,11 +15,11 @@ pub struct PenReadout {
 }
 
 impl PenReadout {
-    pub fn observe_hover(&mut self, sample: &StrokeSample) {
+    fn observe_hover(&mut self, sample: &StrokeSample) {
         self.record(sample, None);
     }
 
-    pub fn record(&mut self, sample: &StrokeSample, previous_time_ms: Option<u32>) {
+    fn record(&mut self, sample: &StrokeSample, previous_time_ms: Option<u32>) {
         self.pressure = sample.pressure;
         self.tilt_x = sample.tilt_x_deg;
         self.tilt_y = sample.tilt_y_deg;

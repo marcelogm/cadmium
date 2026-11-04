@@ -11,7 +11,7 @@ pub(super) enum StrokePreparation {
     CleanAndLoad,
 }
 
-pub(super) fn stroke_preparation(
+fn stroke_preparation(
     tool: Tool,
     reload_each_stroke: bool,
     clean_each_stroke: bool,

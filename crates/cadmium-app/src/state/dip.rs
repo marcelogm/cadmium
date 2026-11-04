@@ -11,7 +11,7 @@ use super::{AppState, EMPTY_MIXTURE};
 
 const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
 
-pub(super) fn reserve_level(volume: f32, capacity: f32) -> f32 {
+fn reserve_level(volume: f32, capacity: f32) -> f32 {
     if capacity > 0.0 && volume.is_finite() {
         (volume / capacity).clamp(0.0, 1.0)
     } else {
@@ -19,7 +19,7 @@ pub(super) fn reserve_level(volume: f32, capacity: f32) -> f32 {
     }
 }
 
-pub(super) fn knife_top_up(volume: f32, target: f32) -> Option<f32> {
+fn knife_top_up(volume: f32, target: f32) -> Option<f32> {
     if !target.is_finite() || target <= 0.0 || !volume.is_finite() {
         return None;
     }
