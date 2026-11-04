@@ -137,27 +137,33 @@ fn register_icons() {
 
 fn setup_actions(app: &adw::Application) {
     let shortcuts = gio::ActionEntry::builder("shortcuts")
-        .activate(|app: &adw::Application, _, _| {
-            if !active_window_shows_a_dialog(app) {
-                dialogs::shortcuts_dialog().present(app.active_window().as_ref());
-            }
-        })
+        .activate(|app: &adw::Application, _, _| present_shortcuts(app))
         .build();
     let about = gio::ActionEntry::builder("about")
-        .activate(|app: &adw::Application, _, _| {
-            if !active_window_shows_a_dialog(app) {
-                dialogs::about_dialog().present(app.active_window().as_ref());
-            }
-        })
+        .activate(|app: &adw::Application, _, _| present_about(app))
         .build();
     let quit = gio::ActionEntry::builder("quit")
-        .activate(|app: &adw::Application, _, _| {
-            for window in app.windows() {
-                window.close();
-            }
-        })
+        .activate(|app: &adw::Application, _, _| close_every_window(app))
         .build();
     app.add_action_entries([shortcuts, about, quit]);
+}
+
+fn present_shortcuts(app: &adw::Application) {
+    if !active_window_shows_a_dialog(app) {
+        dialogs::shortcuts_dialog().present(app.active_window().as_ref());
+    }
+}
+
+fn present_about(app: &adw::Application) {
+    if !active_window_shows_a_dialog(app) {
+        dialogs::about_dialog().present(app.active_window().as_ref());
+    }
+}
+
+fn close_every_window(app: &adw::Application) {
+    for window in app.windows() {
+        window.close();
+    }
 }
 
 fn active_window_shows_a_dialog(app: &adw::Application) -> bool {
