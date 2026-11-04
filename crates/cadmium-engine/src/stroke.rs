@@ -147,6 +147,15 @@ impl PenPoint {
     }
 }
 
+struct Segment {
+    start: PenPoint,
+    end: PenPoint,
+    length: f64,
+    shortest_step: f64,
+    direction: f32,
+    speed: f32,
+}
+
 impl StrokeBuilder {
     pub fn new(geometry: BrushGeometry) -> Self {
         StrokeBuilder {
@@ -181,7 +190,6 @@ impl StrokeBuilder {
         Vec::new()
     }
 
-    #[expect(clippy::excessive_nesting)]
     fn walk_segment(&mut self, from: &StrokeSample, to: &StrokeSample) -> Option<Vec<Dab>> {
         let dx = to.x - from.x;
         let dy = to.y - from.y;
@@ -194,28 +202,35 @@ impl StrokeBuilder {
         }
         let elapsed_ms =
             f64::from(to.time_ms.saturating_sub(from.time_ms)).max(MIN_SPEED_INTERVAL_MS);
-        let direction = dy.atan2(dx) as f32;
-        let speed = (length / elapsed_ms) as f32;
-        let shortest_step = length / (MAX_DABS_PER_SEGMENT - 1) as f64;
-        let start = PenPoint::of(from);
-        let end = PenPoint::of(to);
-
-        let mut dabs = Vec::new();
+        let segment = Segment {
+            start: PenPoint::of(from),
+            end: PenPoint::of(to),
+            length,
+            shortest_step: length / (MAX_DABS_PER_SEGMENT - 1) as f64,
+            direction: dy.atan2(dx) as f32,
+            speed: (length / elapsed_ms) as f32,
+        };
         let mut travelled = 0.0;
-        loop {
-            let pressure_here = lerp_f32(from.pressure, to.pressure, travelled / length);
-            let step = self.geometry.step(pressure_here).max(shortest_step);
-            let needed = (step - self.distance_since_dab).max(0.0);
-            if travelled + needed > length + ARC_LENGTH_TOLERANCE_PX {
-                self.distance_since_dab += length - travelled;
-                break;
-            }
-            travelled = (travelled + needed).min(length);
-            self.distance_since_dab = 0.0;
-            let at = start.towards(&end, travelled / length);
-            dabs.push(self.dab_at(&at, direction, speed));
+        Some(std::iter::from_fn(|| self.next_dab(&segment, &mut travelled)).collect())
+    }
+
+    fn next_dab(&mut self, segment: &Segment, travelled: &mut f64) -> Option<Dab> {
+        let length = segment.length;
+        let pressure_here = lerp_f32(
+            segment.start.pressure,
+            segment.end.pressure,
+            *travelled / length,
+        );
+        let step = self.geometry.step(pressure_here).max(segment.shortest_step);
+        let needed = (step - self.distance_since_dab).max(0.0);
+        if *travelled + needed > length + ARC_LENGTH_TOLERANCE_PX {
+            self.distance_since_dab += length - *travelled;
+            return None;
         }
-        Some(dabs)
+        *travelled = (*travelled + needed).min(length);
+        self.distance_since_dab = 0.0;
+        let at = segment.start.towards(&segment.end, *travelled / length);
+        Some(self.dab_at(&at, segment.direction, segment.speed))
     }
 
     fn dab_at(&self, point: &PenPoint, direction: f32, speed: f32) -> Dab {
