@@ -1,4 +1,6 @@
 use std::cell::{Cell, OnceCell, RefCell};
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -51,6 +53,11 @@ mod imp {
         pub tool: Cell<UiTool>,
         pub canvas: OnceCell<OleoCanvas>,
         pub panel_refreshers: RefCell<Vec<PanelRefresher>>,
+        pub saves_in_flight: RefCell<HashSet<PathBuf>>,
+        pub document_generation: Cell<u64>,
+        pub close_after_saves: Cell<bool>,
+        pub close_confirmed: Cell<bool>,
+        pub asking_to_close: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -82,7 +89,15 @@ mod imp {
     }
 
     impl WidgetImpl for OleoWindow {}
-    impl WindowImpl for OleoWindow {}
+    impl WindowImpl for OleoWindow {
+        fn close_request(&self) -> glib::Propagation {
+            if self.obj().may_close() {
+                self.parent_close_request()
+            } else {
+                glib::Propagation::Stop
+            }
+        }
+    }
     impl ApplicationWindowImpl for OleoWindow {}
     impl AdwApplicationWindowImpl for OleoWindow {}
 }
@@ -93,8 +108,6 @@ glib::wrapper! {
         @implements gio::ActionGroup, gio::ActionMap, gtk::Accessible, gtk::Buildable,
             gtk::ConstraintTarget, gtk::Native, gtk::Root, gtk::ShortcutManager;
 }
-
-const PENDING_ACTIONS: [&str; 4] = ["open", "save", "save-as", "export"];
 
 const ZOOM_PERCENT: f32 = 100.0;
 const DRIED_TOAST: &str = "Tela seca";
@@ -241,8 +254,12 @@ impl OleoWindow {
         }
     }
 
-    fn state(&self) -> SharedState {
+    pub fn state(&self) -> SharedState {
         self.canvas().state()
+    }
+
+    pub fn show_toast(&self, title: &str) {
+        self.imp().toast_overlay.add_toast(adw::Toast::new(title));
     }
 
     fn setup_actions(&self) {
@@ -294,29 +311,34 @@ impl OleoWindow {
         let zoom_fit = gio::ActionEntry::builder("zoom-fit")
             .activate(|window: &Self, _, _| window.canvas().zoom_fit())
             .build();
-        let pending = PENDING_ACTIONS.into_iter().map(|name| {
-            gio::ActionEntry::builder(name)
-                .activate(move |_: &Self, _, _| {
-                    glib::g_debug!(LOG_DOMAIN, "win.{name} is not wired yet");
-                })
-                .build()
-        });
-        self.add_action_entries(
-            [
-                tool,
-                toggle_sidebar,
-                new,
-                clean_brush,
-                undo,
-                redo,
-                dry,
-                zoom_in,
-                zoom_out,
-                zoom_fit,
-            ]
-            .into_iter()
-            .chain(pending),
-        );
+        let open = gio::ActionEntry::builder("open")
+            .activate(|window: &Self, _, _| window.open())
+            .build();
+        let save = gio::ActionEntry::builder("save")
+            .activate(|window: &Self, _, _| window.save())
+            .build();
+        let save_as = gio::ActionEntry::builder("save-as")
+            .activate(|window: &Self, _, _| window.save_as())
+            .build();
+        let export = gio::ActionEntry::builder("export")
+            .activate(|window: &Self, _, _| window.export())
+            .build();
+        self.add_action_entries([
+            tool,
+            toggle_sidebar,
+            new,
+            clean_brush,
+            undo,
+            redo,
+            dry,
+            zoom_in,
+            zoom_out,
+            zoom_fit,
+            open,
+            save,
+            save_as,
+            export,
+        ]);
     }
 
     fn open_new_painting_dialog(&self) {
@@ -357,11 +379,18 @@ impl OleoWindow {
 
     fn start_painting(&self, spec: CanvasSpec) {
         self.state().borrow_mut().start_painting(spec);
+        self.after_document_replaced();
+    }
+
+    pub fn after_document_replaced(&self) {
+        let generation = &self.imp().document_generation;
+        generation.set(generation.get() + 1);
         let canvas = self.canvas();
         canvas.zoom_fit();
         canvas.queue_present();
         self.sync_history_actions();
         self.refresh_panels();
+        self.show_document_title();
     }
 
     fn select_tool(&self, action: &gio::SimpleAction, name: &str) {

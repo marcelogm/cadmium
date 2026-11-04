@@ -130,7 +130,11 @@ fn setup_actions(app: &adw::Application) {
         })
         .build();
     let quit = gio::ActionEntry::builder("quit")
-        .activate(|app: &adw::Application, _, _| app.quit())
+        .activate(|app: &adw::Application, _, _| {
+            for window in app.windows() {
+                window.close();
+            }
+        })
         .build();
     app.add_action_entries([shortcuts, about, quit]);
 }

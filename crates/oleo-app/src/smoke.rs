@@ -1,6 +1,8 @@
 use std::cell::{Cell, RefCell};
 use std::ffi::OsString;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{glib, graphene, gsk};
@@ -17,6 +19,9 @@ const SCREENSHOT: &str = "OLEO_SMOKE_SCREENSHOT";
 const DIALOG: &str = "OLEO_SMOKE_DIALOG";
 const STROKE: &str = "OLEO_SMOKE_STROKE";
 const PAGE: &str = "OLEO_SMOKE_PAGE";
+const SAVE: &str = "OLEO_SMOKE_SAVE";
+const OPEN: &str = "OLEO_SMOKE_OPEN";
+const EXPORT: &str = "OLEO_SMOKE_EXPORT";
 const DMABUF_SELFTEST: &str = "OLEO_SMOKE_DMABUF_SELFTEST";
 const PRESENT_MODE: &str = "OLEO_PRESENT";
 const DEFAULT_EXIT_AFTER_FRAMES: u32 = 30;
@@ -32,6 +37,7 @@ const STROKE_PRESSURE_END: f32 = 0.4;
 const STROKE_TILT_DEG: f32 = 25.0;
 const STROKE_SAMPLE_INTERVAL_MS: u32 = 8;
 const SCREENSHOT_RETRY_FRAMES: u32 = 120;
+const SETTLE_FRAMES_AFTER_FILE_WORK: u32 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SmokeDialog {
@@ -76,6 +82,9 @@ pub struct SmokeConfig {
     pub dialog: Option<SmokeDialog>,
     pub stroke: bool,
     pub page: Option<String>,
+    pub save: Option<PathBuf>,
+    pub open: Option<PathBuf>,
+    pub export: Option<PathBuf>,
     pub dmabuf_selftest: Option<ModifierPolicy>,
 }
 
@@ -83,17 +92,21 @@ pub struct SmokeConfig {
 enum SmokeStep {
     OpenDialog(SmokeDialog),
     PaintStroke,
+    Save(PathBuf),
+    Open(PathBuf),
+    Export(PathBuf),
     ShowPage(String),
     Screenshot(PathBuf),
     Quit,
 }
 
 impl SmokeStep {
-    fn is_ready(&self, frame: u32, exit_after_frames: u32, window: &OleoWindow) -> bool {
+    fn is_ready(&self, frame: u32, earliest_end_frame: u32, window: &OleoWindow) -> bool {
         match self {
             SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
+            SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
-            SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= exit_after_frames,
+            SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= earliest_end_frame,
         }
     }
 
@@ -102,10 +115,20 @@ impl SmokeStep {
         app: &glib::WeakRef<adw::Application>,
         window: &OleoWindow,
         frames_late: u32,
+        file_work: &FileWork,
     ) -> bool {
         match self {
             SmokeStep::OpenDialog(dialog) => dialog.open(window),
             SmokeStep::PaintStroke => paint_stroke(window),
+            SmokeStep::Save(path) => {
+                return file_work.advance(|| window.clone().save_to(path.clone()), path);
+            }
+            SmokeStep::Open(path) => {
+                return file_work.advance(|| window.clone().open_path(path.clone()), path);
+            }
+            SmokeStep::Export(path) => {
+                return file_work.advance(|| window.clone().export_to(path.clone()), path);
+            }
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
@@ -125,6 +148,44 @@ impl SmokeStep {
             }
         }
         true
+    }
+}
+
+#[derive(Default)]
+struct FileWork {
+    started: Cell<bool>,
+    finished: Rc<Cell<bool>>,
+}
+
+impl FileWork {
+    fn advance<F: Future<Output = bool> + 'static>(
+        &self,
+        start: impl FnOnce() -> F,
+        path: &Path,
+    ) -> bool {
+        if !self.started.replace(true) {
+            let finished = self.finished.clone();
+            let work = start();
+            let path = path.to_path_buf();
+            glib::spawn_future_local(async move {
+                if !work.await {
+                    glib::g_warning!(LOG_DOMAIN, "smoke file step on {} failed", path.display());
+                }
+                finished.set(true);
+            });
+        }
+        if !self.finished.replace(false) {
+            return false;
+        }
+        self.started.set(false);
+        true
+    }
+
+    fn is_file_step(step: &SmokeStep) -> bool {
+        matches!(
+            step,
+            SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_)
+        )
     }
 }
 
@@ -160,6 +221,15 @@ impl SmokeConfig {
         let page = lookup(PAGE)
             .filter(|value| !value.is_empty())
             .map(|value| value.to_string_lossy().into_owned());
+        let save = lookup(SAVE)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        let open = lookup(OPEN)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        let export = lookup(EXPORT)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
         let dmabuf_selftest = lookup(DMABUF_SELFTEST).map(|_| {
             match lookup(PRESENT_MODE)
                 .and_then(|mode| mode.to_str().and_then(PresentMode::from_name))
@@ -173,6 +243,9 @@ impl SmokeConfig {
             && dialog.is_none()
             && !stroke
             && page.is_none()
+            && save.is_none()
+            && open.is_none()
+            && export.is_none()
             && dmabuf_selftest.is_none()
         {
             return None;
@@ -187,6 +260,9 @@ impl SmokeConfig {
             dialog,
             stroke,
             page,
+            save,
+            open,
+            export,
             dmabuf_selftest,
         })
     }
@@ -197,6 +273,9 @@ impl SmokeConfig {
         if self.stroke {
             steps.push(SmokeStep::PaintStroke);
         }
+        steps.extend(self.save.clone().map(SmokeStep::Save));
+        steps.extend(self.open.clone().map(SmokeStep::Open));
+        steps.extend(self.export.clone().map(SmokeStep::Export));
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));
         steps.push(SmokeStep::Quit);
@@ -212,15 +291,24 @@ impl SmokeConfig {
         let steps = self.steps();
         let drawn = Cell::new(0u32);
         let next_step = Cell::new(0usize);
+        let earliest_end_frame = Cell::new(self.exit_after_frames);
+        let file_work = FileWork::default();
         window.add_tick_callback(move |window, _| {
             drawn.set(drawn.get() + 1);
             while let Some(step) = steps.get(next_step.get()) {
-                if !step.is_ready(drawn.get(), self.exit_after_frames, window) {
+                if !step.is_ready(drawn.get(), earliest_end_frame.get(), window) {
                     return glib::ControlFlow::Continue;
                 }
-                let frames_late = drawn.get().saturating_sub(self.exit_after_frames);
-                if !step.run(&app, window, frames_late) {
+                let frames_late = drawn.get().saturating_sub(earliest_end_frame.get());
+                if !step.run(&app, window, frames_late, &file_work) {
                     return glib::ControlFlow::Continue;
+                }
+                if FileWork::is_file_step(step) {
+                    earliest_end_frame.set(
+                        earliest_end_frame
+                            .get()
+                            .max(drawn.get() + SETTLE_FRAMES_AFTER_FILE_WORK),
+                    );
                 }
                 next_step.set(next_step.get() + 1);
             }
@@ -432,6 +520,37 @@ mod tests {
                 SmokeStep::Quit,
             ]
         );
+    }
+
+    #[test]
+    fn file_steps_run_after_the_stroke_and_before_the_page_and_screenshot() {
+        let config = SmokeConfig::from_lookup(lookup(&[
+            (OPEN, "/tmp/a.oleo"),
+            (EXPORT, "/tmp/a.png"),
+            (PAGE, "lab"),
+            (SAVE, "/tmp/a.oleo"),
+            (STROKE, "1"),
+            (SCREENSHOT, "/tmp/shot.png"),
+        ]))
+        .unwrap();
+        assert_eq!(
+            config.steps(),
+            [
+                SmokeStep::PaintStroke,
+                SmokeStep::Save(PathBuf::from("/tmp/a.oleo")),
+                SmokeStep::Open(PathBuf::from("/tmp/a.oleo")),
+                SmokeStep::Export(PathBuf::from("/tmp/a.png")),
+                SmokeStep::ShowPage("lab".to_string()),
+                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+                SmokeStep::Quit,
+            ]
+        );
+    }
+
+    #[test]
+    fn open_alone_starts_a_smoke_run() {
+        let config = SmokeConfig::from_lookup(lookup(&[(OPEN, "/tmp/a.oleo")])).unwrap();
+        assert_eq!(config.open, Some(PathBuf::from("/tmp/a.oleo")));
     }
 
     #[test]

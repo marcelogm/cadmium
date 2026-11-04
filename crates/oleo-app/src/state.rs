@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use oleo_engine::canvas::CanvasSpec;
+use oleo_engine::document::{DocumentSnapshot, ExportedImage};
 use oleo_engine::engine::PaintEngine;
 use oleo_engine::gpu::GpuContext;
 use oleo_engine::params::{ParamGroup, SimParams};
@@ -158,11 +159,30 @@ impl AppState {
 
     pub fn start_painting(&mut self, spec: CanvasSpec) {
         self.end_stroke();
+        let session = PaintSession::new(&self.gpu, spec);
+        self.adopt_session(session, None);
+    }
+
+    pub fn open_painting(&mut self, snapshot: DocumentSnapshot, path: PathBuf) {
+        self.end_stroke();
+        let session = snapshot.into_session(&self.gpu);
+        self.adopt_session(session, Some(path));
+    }
+
+    pub fn capture_document(&mut self) -> DocumentSnapshot {
+        DocumentSnapshot::capture(&self.gpu, &mut self.session)
+    }
+
+    pub fn render_export(&mut self) -> ExportedImage {
+        ExportedImage::render(&self.gpu, &mut self.session)
+    }
+
+    fn adopt_session(&mut self, session: PaintSession, file: Option<PathBuf>) {
         let mut brush = self.session.brush.clone();
         brush.tool = self.resting_tool;
         let params = self.session.engine.params().clone();
         let old_palette = self.session.canvas.spec.pigment_slots.clone();
-        self.session = PaintSession::new(&self.gpu, spec);
+        self.session = session;
         brush.recipe = recipe_for_palette(
             &brush.recipe,
             &old_palette,
@@ -175,7 +195,7 @@ impl AppState {
         *self.session.engine.params_mut() = params;
         self.reload_brush();
         self.dirty_since_save = false;
-        self.file = None;
+        self.file = file;
         self.wake();
     }
 
@@ -432,6 +452,47 @@ mod tests {
             recipe_for_palette(&[(0, 0.5), (1, 0.2), (2, 0.3)], &old, &new),
             [(1, 0.5), (0, 0.3)]
         );
+    }
+
+    #[test]
+    fn opened_painting_keeps_the_brush_and_lab_and_remembers_its_file() {
+        const PIGMENT: &str = "ultramarine_blue";
+        const TUNED_PARAM_VALUE_SHARE: f32 = 0.25;
+        let mut current = painting_state();
+        let slot = current
+            .session
+            .canvas
+            .spec
+            .pigment_slots
+            .iter()
+            .position(|id| id == PIGMENT)
+            .unwrap();
+        current.session.brush.recipe = vec![(slot, 1.0)];
+        let spec = &SimParams::specs()[0];
+        let tuned = spec.min + (spec.max - spec.min) * TUNED_PARAM_VALUE_SHARE;
+        current.set_param(spec.key, tuned);
+        current.dirty_since_save = true;
+
+        let mut saved = painting_state();
+        saved.session.canvas.spec.pigment_slots.reverse();
+        let reversed_palette = saved.session.canvas.spec.pigment_slots.clone();
+        let snapshot = saved.capture_document();
+        let path = PathBuf::from("opened.oleo");
+        current.open_painting(snapshot, path.clone());
+
+        assert_eq!(current.session.canvas.spec.pigment_slots, reversed_palette);
+        let new_slot = reversed_palette
+            .iter()
+            .position(|id| id == PIGMENT)
+            .unwrap();
+        assert_eq!(current.session.brush.recipe, [(new_slot, 1.0)]);
+        assert_eq!(
+            current.session.brush.geometry.max_diameter_px,
+            TEST_BRUSH_DIAMETER_PX
+        );
+        assert_eq!(current.session.engine.params().get(spec.key), tuned);
+        assert_eq!(current.file, Some(path));
+        assert!(!current.dirty_since_save);
     }
 
     fn sample_at(time_ms: u32) -> StrokeSample {

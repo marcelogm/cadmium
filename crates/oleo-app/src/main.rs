@@ -4,6 +4,7 @@ mod canvas_widget;
 mod dialogs;
 mod dmabuf;
 mod dmabuf_selftest;
+mod files;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;

@@ -91,24 +91,50 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     dialog
 }
 
-pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + 'static) {
+const DISCARD_RESPONSE: &str = "discard";
+const CANCEL_RESPONSE: &str = "cancel";
+const DISCARD_PAINTING_HEADING: &str = "Descartar a pintura atual?";
+const DISCARD_UNSAVED_HEADING: &str = "Descartar alterações não salvas?";
+
+fn discard_alert(heading: &str) -> adw::AlertDialog {
     let alert = adw::AlertDialog::builder()
-        .heading("Descartar a pintura atual?")
+        .heading(heading)
         .body("As alterações que não foram salvas serão perdidas.")
-        .default_response("cancel")
-        .close_response("cancel")
+        .default_response(CANCEL_RESPONSE)
+        .close_response(CANCEL_RESPONSE)
         .build();
-    alert.add_responses(&[("cancel", "Cancelar"), ("discard", "Descartar")]);
-    alert.set_response_appearance("discard", adw::ResponseAppearance::Destructive);
-    alert.choose(
+    alert.add_responses(&[
+        (CANCEL_RESPONSE, "Cancelar"),
+        (DISCARD_RESPONSE, "Descartar"),
+    ]);
+    alert.set_response_appearance(DISCARD_RESPONSE, adw::ResponseAppearance::Destructive);
+    alert
+}
+
+pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + 'static) {
+    discard_alert(DISCARD_PAINTING_HEADING).choose(
         Some(parent),
         None::<&gtk::gio::Cancellable>,
         move |response: glib::GString| {
-            if response == "discard" {
+            if response == DISCARD_RESPONSE {
                 on_discard();
             }
         },
     );
+}
+
+pub async fn painting_discard_confirmed(parent: &impl IsA<gtk::Widget>) -> bool {
+    discard_alert(DISCARD_PAINTING_HEADING)
+        .choose_future(Some(parent))
+        .await
+        == DISCARD_RESPONSE
+}
+
+pub async fn unsaved_changes_discard_confirmed(parent: &impl IsA<gtk::Widget>) -> bool {
+    discard_alert(DISCARD_UNSAVED_HEADING)
+        .choose_future(Some(parent))
+        .await
+        == DISCARD_RESPONSE
 }
 
 #[cfg(test)]
