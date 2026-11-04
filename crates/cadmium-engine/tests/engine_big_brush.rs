@@ -75,7 +75,7 @@ fn paint_light_stroke(gpu: &GpuContext, s: &mut PaintSession) {
         } else {
             s.add_samples(&[sample])
         }
-        if i as usize % FRAME_EVERY_SAMPLES == 0 {
+        if (i as usize).is_multiple_of(FRAME_EVERY_SAMPLES) {
             frame(gpu, s);
         }
     }
