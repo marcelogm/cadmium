@@ -13,13 +13,18 @@ use cadmium_engine::stroke::StrokeSample;
 const BLANK_WIDTH: u32 = 64;
 const BLANK_HEIGHT: u32 = 32;
 const MAX_MANIFEST_BYTES: usize = 1 << 20;
-const STATE_ENTRIES: [(&str, StateTexture); 8] = [
+const LARGE_WIDTH: u32 = 2048;
+const LARGE_HEIGHT: u32 = 1536;
+const MAX_ONE_STROKE_PAINTING_BYTES: u64 = 1 << 20;
+const FORMAT_1_DRY_HEIGHT: &str = "state/dry_height.zst";
+const DRY_RELIEF: &str = "state/dry_relief.zst";
+const FORMAT_1_STATE_ENTRIES: [(&str, StateTexture); 8] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),
     ("state/wet_pig1.zst", StateTexture::WetPig1),
     ("state/wet_vol.zst", StateTexture::WetVol),
     ("state/dry_refl0.zst", StateTexture::DryRefl0),
     ("state/dry_refl1.zst", StateTexture::DryRefl1),
-    ("state/dry_height.zst", StateTexture::DryHeight),
+    (FORMAT_1_DRY_HEIGHT, StateTexture::DryHeight),
     ("state/dry_top_pig0.zst", StateTexture::DryTopPig0),
     ("state/dry_top_pig1.zst", StateTexture::DryTopPig1),
 ];
@@ -114,7 +119,7 @@ impl Entries {
             "manifest.json".to_string(),
             serde_json::to_vec(&manifest).unwrap(),
         )];
-        for (name, which) in STATE_ENTRIES {
+        for (name, which) in FORMAT_1_STATE_ENTRIES {
             let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * which.bytes_per_texel()) as usize];
             entries.push((
                 name.to_string(),
@@ -147,6 +152,15 @@ impl Entries {
         edit(&mut raw);
         *bytes = zstd::encode_all(raw.as_slice(), 3).unwrap();
         self
+    }
+
+    fn in_format_2(mut self) -> Entries {
+        for (entry, _) in &mut self.0 {
+            if entry == FORMAT_1_DRY_HEIGHT {
+                *entry = DRY_RELIEF.to_string();
+            }
+        }
+        self.edit_manifest(|m| m["format"] = 2.into())
     }
 
     fn without(mut self, name: &str) -> Entries {
@@ -213,12 +227,12 @@ fn reading_a_missing_file_is_an_io_error() {
 #[test]
 fn future_format_version_is_unsupported() {
     let entries = Entries::blank().edit_manifest(|m| {
-        m["format"] = 2.into();
+        m["format"] = 3.into();
         m["spec"] = serde_json::json!({ "something": "new" });
     });
     assert!(matches!(
         read_entries(entries),
-        Err(DocumentError::UnsupportedVersion(2))
+        Err(DocumentError::UnsupportedVersion(3))
     ));
 }
 
@@ -295,6 +309,21 @@ fn non_finite_or_negative_dry_height_is_a_format_error() {
 }
 
 #[test]
+fn a_dry_relief_that_sinks_below_the_bare_canvas_is_a_format_error() {
+    for value in [f32::NAN, f32::NEG_INFINITY, -0.5] {
+        let entries = Entries::blank()
+            .in_format_2()
+            .edit_state(DRY_RELIEF, set_first_thickness(value));
+        format_reason(read_entries(entries));
+    }
+}
+
+#[test]
+fn a_well_formed_format_2_document_reads() {
+    assert!(read_entries(Entries::blank().in_format_2()).is_ok());
+}
+
+#[test]
 fn save_then_open_restores_every_state_texture() {
     let gpu = GpuContext::new().unwrap();
     let mut s = painted_session(&gpu);
@@ -310,6 +339,90 @@ fn save_then_open_restores_every_state_texture() {
             "{t:?}"
         );
     }
+}
+
+fn dried_session(gpu: &GpuContext) -> PaintSession {
+    let mut s = painted_session(gpu);
+    s.dry(gpu);
+    s
+}
+
+#[test]
+fn a_dried_stroke_survives_save_and_open_bit_for_bit() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = dried_session(&gpu);
+    let dir = TempDir::new("dried");
+    let path = dir.file("dried.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let opened = document::open(&gpu, &path).unwrap();
+    for t in StateTexture::PAINT_STATE {
+        assert_eq!(
+            opened.canvas.read_bytes(&gpu, t),
+            s.canvas.read_bytes(&gpu, t),
+            "{t:?}"
+        );
+    }
+}
+
+#[test]
+fn a_format_1_painting_opens_with_the_dry_height_it_stored() {
+    let gpu = GpuContext::new().unwrap();
+    let s = dried_session(&gpu);
+    let manifest = serde_json::json!({
+        "format": 1,
+        "pigment_db": PigmentDb::VERSION,
+        "spec": s.canvas.spec,
+        "bands": 8,
+        "units": "um",
+    });
+    let mut entries = vec![(
+        "manifest.json".to_string(),
+        serde_json::to_vec(&manifest).unwrap(),
+    )];
+    for (name, which) in FORMAT_1_STATE_ENTRIES {
+        let raw = s.canvas.read_bytes(&gpu, which);
+        entries.push((
+            name.to_string(),
+            zstd::encode_all(raw.as_slice(), 3).unwrap(),
+        ));
+    }
+    let opened = read_entries(Entries(entries)).unwrap().into_session(&gpu);
+    for t in StateTexture::PAINT_STATE {
+        assert_eq!(
+            opened.canvas.read_bytes(&gpu, t),
+            s.canvas.read_bytes(&gpu, t),
+            "{t:?}"
+        );
+    }
+}
+
+#[test]
+fn a_large_painting_with_one_stroke_saves_without_its_weave() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = PaintSession::new(
+        &gpu,
+        CanvasSpec {
+            width: LARGE_WIDTH,
+            height: LARGE_HEIGHT,
+            primer: Primer::WhiteGesso,
+            weave: Weave::Linen,
+            pigment_slots: vec!["ultramarine_blue".into()],
+        },
+    );
+    s.begin_stroke(&gpu, sample(300.0, 700.0, 0));
+    s.add_samples(&[sample(1700.0, 800.0, 400)]);
+    s.end_stroke(&gpu);
+    let dir = TempDir::new("large");
+    let path = dir.file("large.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let size = std::fs::metadata(&path).unwrap().len();
+    eprintln!("a {LARGE_WIDTH}×{LARGE_HEIGHT} painting with one stroke saves in {size} bytes");
+    assert!(size <= MAX_ONE_STROKE_PAINTING_BYTES, "{size}");
+    let opened = document::open(&gpu, &path).unwrap();
+    assert_eq!(
+        opened.canvas.read_bytes(&gpu, StateTexture::DryHeight),
+        s.canvas.read_bytes(&gpu, StateTexture::DryHeight)
+    );
 }
 
 #[test]
@@ -396,7 +509,14 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
         names.push(entry.name().to_string());
     }
-    for expected in std::iter::once("manifest.json").chain(STATE_ENTRIES.map(|(name, _)| name)) {
+    let saved_entries = FORMAT_1_STATE_ENTRIES.map(|(name, _)| {
+        if name == FORMAT_1_DRY_HEIGHT {
+            DRY_RELIEF
+        } else {
+            name
+        }
+    });
+    for expected in std::iter::once("manifest.json").chain(saved_entries) {
         assert!(names.iter().any(|n| n == expected), "{expected} missing");
     }
     let mut manifest = String::new();
@@ -406,7 +526,7 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         .read_to_string(&mut manifest)
         .unwrap();
     let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
-    assert_eq!(manifest["format"], 1);
+    assert_eq!(manifest["format"], 2);
     assert_eq!(manifest["bands"], 8);
     assert_eq!(manifest["units"], "um");
     drop(archive);

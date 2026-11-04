@@ -1,9 +1,10 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE};
+use crate::canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE, weave_heights};
 use crate::gpu::GpuContext;
 use crate::pigments::PigmentDb;
 use crate::present::{ViewTransform, readback_rgba8};
@@ -11,7 +12,9 @@ use crate::render::ViewMode;
 use crate::session::PaintSession;
 use crate::spectral::BANDS;
 
-const FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
+const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
+const OLDEST_READABLE_FORMAT: u32 = ABSOLUTE_DRY_HEIGHT_FORMAT;
 const THICKNESS_UNITS: &str = "um";
 const MANIFEST_ENTRY: &str = "manifest.json";
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
@@ -41,7 +44,7 @@ impl fmt::Display for DocumentError {
             DocumentError::Format(reason) => write!(f, "not a valid Cadmium painting: {reason}"),
             DocumentError::UnsupportedVersion(version) => write!(
                 f,
-                "painting uses file format {version}, this version of Cadmium reads format {FORMAT_VERSION}"
+                "painting uses file format {version}, this version of Cadmium reads formats up to {FORMAT_VERSION}"
             ),
         }
     }
@@ -113,10 +116,10 @@ impl DocumentSnapshot {
 
     pub fn read(path: &Path) -> Result<DocumentSnapshot, DocumentError> {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
-        let spec = read_manifest(&mut archive)?;
+        let (format, spec) = read_manifest(&mut archive)?;
         let states = StateTexture::PAINT_STATE
             .iter()
-            .map(|which| Ok((*which, read_state(&mut archive, &spec, *which)?)))
+            .map(|which| Ok((*which, read_state(&mut archive, format, &spec, *which)?)))
             .collect::<Result<_, DocumentError>>()?;
         Ok(DocumentSnapshot { spec, states })
     }
@@ -154,8 +157,13 @@ impl DocumentSnapshot {
             archive.start_file(MANIFEST_ENTRY, options)?;
             archive.write_all(&manifest)?;
             for (which, raw) in &self.states {
-                let compressed = zstd::encode_all(raw.as_slice(), ZSTD_LEVEL)?;
-                archive.start_file(state_entry(*which), options)?;
+                let stored = if *which == StateTexture::DryHeight {
+                    Cow::Owned(dry_relief(&self.spec, raw))
+                } else {
+                    Cow::Borrowed(raw.as_slice())
+                };
+                let compressed = zstd::encode_all(stored.as_ref(), ZSTD_LEVEL)?;
+                archive.start_file(state_entry(*which, FORMAT_VERSION), options)?;
                 archive.write_all(&compressed)?;
             }
             archive.finish()?;
@@ -242,7 +250,7 @@ pub fn export_png(
 
 fn read_manifest<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-) -> Result<CanvasSpec, DocumentError> {
+) -> Result<(u32, CanvasSpec), DocumentError> {
     let mut bytes = Vec::new();
     entry(archive, MANIFEST_ENTRY)?
         .take(MAX_MANIFEST_BYTES + 1)
@@ -253,7 +261,7 @@ fn read_manifest<R: Read + std::io::Seek>(
         )));
     }
     let probe: FormatProbe = serde_json::from_slice(&bytes).map_err(manifest_error)?;
-    if probe.format != FORMAT_VERSION {
+    if !(OLDEST_READABLE_FORMAT..=FORMAT_VERSION).contains(&probe.format) {
         return Err(DocumentError::UnsupportedVersion(probe.format));
     }
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(manifest_error)?;
@@ -280,15 +288,16 @@ fn read_manifest<R: Read + std::io::Seek>(
         .spec
         .validate(&PigmentDb::builtin())
         .map_err(DocumentError::Format)?;
-    Ok(manifest.spec)
+    Ok((manifest.format, manifest.spec))
 }
 
 fn read_state<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
+    format: u32,
     spec: &CanvasSpec,
     which: StateTexture,
 ) -> Result<Vec<u8>, DocumentError> {
-    let name = state_entry(which);
+    let name = state_entry(which, format);
     let expected = spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize;
     let entry = entry(archive, &name)?;
     let corrupt = |error: std::io::Error| DocumentError::Format(format!("{name}: {error}"));
@@ -304,12 +313,36 @@ fn read_state<R: Read + std::io::Seek>(
             raw.len()
         )));
     }
+    let raw = if which == StateTexture::DryHeight && format > ABSOLUTE_DRY_HEIGHT_FORMAT {
+        dry_height_over_weave(spec, &raw)
+    } else {
+        raw
+    };
     if holds_thickness(which) && !thicknesses_are_valid(&raw) {
         return Err(DocumentError::Format(format!(
             "{name} holds a negative or non-finite thickness"
         )));
     }
     Ok(raw)
+}
+
+fn dry_relief(spec: &CanvasSpec, dry_height: &[u8]) -> Vec<u8> {
+    let weave = weave_heights(spec.weave, spec.width, spec.height);
+    combine_thicknesses(dry_height, &weave, |height, weave| height - weave)
+}
+
+fn dry_height_over_weave(spec: &CanvasSpec, relief: &[u8]) -> Vec<u8> {
+    let weave = weave_heights(spec.weave, spec.width, spec.height);
+    combine_thicknesses(relief, &weave, |relief, weave| relief + weave)
+}
+
+fn combine_thicknesses(raw: &[u8], weave: &[f32], combine: impl Fn(f32, f32) -> f32) -> Vec<u8> {
+    raw.as_chunks::<THICKNESS_BYTES>()
+        .0
+        .iter()
+        .zip(weave)
+        .flat_map(|(texel, weave)| combine(f32::from_le_bytes(*texel), *weave).to_le_bytes())
+        .collect()
 }
 
 fn holds_thickness(which: StateTexture) -> bool {
@@ -348,14 +381,15 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
     }
 }
 
-fn state_entry(which: StateTexture) -> String {
+fn state_entry(which: StateTexture, format: u32) -> String {
     let name = match which {
         StateTexture::WetPig0 => "wet_pig0",
         StateTexture::WetPig1 => "wet_pig1",
         StateTexture::WetVol => "wet_vol",
         StateTexture::DryRefl0 => "dry_refl0",
         StateTexture::DryRefl1 => "dry_refl1",
-        StateTexture::DryHeight => "dry_height",
+        StateTexture::DryHeight if format == ABSOLUTE_DRY_HEIGHT_FORMAT => "dry_height",
+        StateTexture::DryHeight => "dry_relief",
         StateTexture::DryTopPig0 => "dry_top_pig0",
         StateTexture::DryTopPig1 => "dry_top_pig1",
         StateTexture::Display => "display",
