@@ -3,20 +3,260 @@
   <requires lib="gtk" version="4.0"/>
   <requires lib="Adw" version="1.0"/>
   <template class="OleoWindow" parent="AdwApplicationWindow">
-    <property name="default-width">1280</property>
-    <property name="default-height">800</property>
+    <property name="default-width">1400</property>
+    <property name="default-height">900</property>
+    <property name="width-request">600</property>
+    <property name="height-request">400</property>
     <property name="title">Óleo</property>
+    <child>
+      <object class="AdwBreakpoint">
+        <condition>max-width: 860sp</condition>
+        <setter object="split_view" property="collapsed">True</setter>
+      </object>
+    </child>
     <property name="content">
-      <object class="AdwToolbarView">
-        <child type="top">
-          <object class="AdwHeaderBar"/>
-        </child>
+      <object class="AdwOverlaySplitView" id="split_view">
+        <property name="sidebar-position">end</property>
+        <property name="min-sidebar-width">300</property>
+        <property name="max-sidebar-width">380</property>
         <property name="content">
-          <object class="GtkLabel">
-            <property name="label">Óleo</property>
+          <object class="AdwToolbarView">
+            <child type="top">
+              <object class="AdwHeaderBar" id="content_header">
+                <property name="show-end-title-buttons">False</property>
+                <child type="start">
+                  <object class="GtkButton">
+                    <property name="icon-name">edit-undo-symbolic</property>
+                    <property name="tooltip-text">Desfazer (Ctrl+Z)</property>
+                    <property name="action-name">win.undo</property>
+                  </object>
+                </child>
+                <child type="start">
+                  <object class="GtkButton">
+                    <property name="icon-name">edit-redo-symbolic</property>
+                    <property name="tooltip-text">Refazer (Ctrl+Shift+Z)</property>
+                    <property name="action-name">win.redo</property>
+                  </object>
+                </child>
+                <property name="title-widget">
+                  <object class="AdwToggleGroup" id="tool_group">
+                    <property name="active-name">brush</property>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">move</property>
+                        <property name="icon-name">oleo-move-symbolic</property>
+                        <property name="tooltip">Mover (H)</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">brush</property>
+                        <property name="icon-name">oleo-brush-symbolic</property>
+                        <property name="tooltip">Pincel (1)</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">knife</property>
+                        <property name="icon-name">oleo-knife-symbolic</property>
+                        <property name="tooltip">Espátula (2)</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">blender</property>
+                        <property name="icon-name">oleo-blender-symbolic</property>
+                        <property name="tooltip">Misturador (3)</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">rag</property>
+                        <property name="icon-name">oleo-rag-symbolic</property>
+                        <property name="tooltip">Pano (4 ou R)</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">eyedropper</property>
+                        <property name="icon-name">color-select-symbolic</property>
+                        <property name="tooltip">Conta-gotas (5)</property>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+                <child type="end">
+                  <object class="GtkToggleButton">
+                    <property name="icon-name">sidebar-show-right-symbolic</property>
+                    <property name="tooltip-text">Painel lateral (F9)</property>
+                    <property name="active" bind-source="split_view" bind-property="show-sidebar" bind-flags="sync-create|bidirectional"/>
+                  </object>
+                </child>
+                <child type="end">
+                  <object class="GtkButton">
+                    <property name="icon-name">weather-clear-symbolic</property>
+                    <property name="tooltip-text">Secar (Ctrl+D)</property>
+                    <property name="action-name">win.dry</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <property name="content">
+              <object class="AdwToastOverlay" id="toast_overlay">
+                <property name="child">
+                  <object class="GtkOverlay" id="canvas_overlay">
+                    <property name="child">
+                      <object class="GtkBox" id="canvas_slot">
+                        <property name="hexpand">True</property>
+                        <property name="vexpand">True</property>
+                      </object>
+                    </property>
+                    <child type="overlay">
+                      <object class="GtkBox" id="zoom_osd">
+                        <property name="halign">start</property>
+                        <property name="valign">end</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                        <style>
+                          <class name="osd"/>
+                          <class name="toolbar"/>
+                        </style>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="icon-name">zoom-out-symbolic</property>
+                            <property name="tooltip-text">Afastar (Ctrl+−)</property>
+                            <property name="action-name">win.zoom-out</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="zoom_label">
+                            <property name="label">100%</property>
+                            <property name="width-chars">5</property>
+                            <style>
+                              <class name="numeric"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="icon-name">zoom-in-symbolic</property>
+                            <property name="tooltip-text">Aproximar (Ctrl++)</property>
+                            <property name="action-name">win.zoom-in</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton">
+                            <property name="icon-name">zoom-fit-best-symbolic</property>
+                            <property name="tooltip-text">Ajustar à janela (Ctrl+0)</property>
+                            <property name="action-name">win.zoom-fit</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+              </object>
+            </property>
+          </object>
+        </property>
+        <property name="sidebar">
+          <object class="AdwToolbarView">
+            <child type="top">
+              <object class="AdwHeaderBar">
+                <property name="show-start-title-buttons">False</property>
+                <property name="title-widget">
+                  <object class="AdwInlineViewSwitcher">
+                    <property name="stack">sidebar_stack</property>
+                    <property name="homogeneous">True</property>
+                  </object>
+                </property>
+                <child type="end">
+                  <object class="GtkMenuButton" id="primary_menu">
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="tooltip-text">Menu principal</property>
+                    <property name="menu-model">primary_menu_model</property>
+                    <property name="primary">True</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <property name="content">
+              <object class="AdwViewStack" id="sidebar_stack">
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">brush</property>
+                    <property name="title">Pincel</property>
+                    <property name="icon-name">oleo-brush-symbolic</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="child">
+                          <object class="GtkBox" id="brush_panel_slot">
+                            <property name="orientation">vertical</property>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">lab</property>
+                    <property name="title">Lab</property>
+                    <property name="icon-name">applications-science-symbolic</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="child">
+                          <object class="GtkBox" id="lab_panel_slot">
+                            <property name="orientation">vertical</property>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </property>
           </object>
         </property>
       </object>
     </property>
   </template>
+  <menu id="primary_menu_model">
+    <section>
+      <item>
+        <attribute name="label">Nova pintura</attribute>
+        <attribute name="action">win.new</attribute>
+      </item>
+      <item>
+        <attribute name="label">Abrir…</attribute>
+        <attribute name="action">win.open</attribute>
+      </item>
+      <item>
+        <attribute name="label">Salvar</attribute>
+        <attribute name="action">win.save</attribute>
+      </item>
+      <item>
+        <attribute name="label">Salvar como…</attribute>
+        <attribute name="action">win.save-as</attribute>
+      </item>
+      <item>
+        <attribute name="label">Exportar PNG…</attribute>
+        <attribute name="action">win.export</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label">Atalhos de teclado</attribute>
+        <attribute name="action">app.shortcuts</attribute>
+      </item>
+      <item>
+        <attribute name="label">Sobre o Óleo</attribute>
+        <attribute name="action">app.about</attribute>
+      </item>
+    </section>
+  </menu>
 </interface>

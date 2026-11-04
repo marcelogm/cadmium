@@ -2,5 +2,10 @@
 <gresources>
   <gresource prefix="/io/github/marcelo/Oleo">
     <file preprocess="xml-stripblanks">window.ui</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/oleo-move-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/oleo-brush-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/oleo-knife-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/oleo-blender-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/oleo-rag-symbolic.svg</file>
   </gresource>
 </gresources>
