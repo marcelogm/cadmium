@@ -4,4 +4,8 @@ pub(super) const BLENDER: ToolProfile = ToolProfile {
     shader_mode: TOOL_MODE_BLENDER,
     spreading: Spreading::AdvectAndDiffuse,
     rest_follow: CONTACT_REST_FOLLOW,
+    spreads: true,
+    refills: false,
+    wipes: false,
+    blades: false,
 };

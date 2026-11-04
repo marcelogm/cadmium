@@ -9,7 +9,7 @@ use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::{Dab, StrokeSample, Tool, pen_angles};
-use crate::tool::TOOL_MODE_KNIFE;
+use crate::tool::{TOOL_MODE_KNIFE, ToolProfile};
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -217,10 +217,7 @@ struct Placement {
     canvas_groups: [u32; 2],
     tip_groups: [u32; 2],
     spread_groups: [u32; 2],
-    spreads: bool,
-    refills: bool,
-    wipes: bool,
-    blades: bool,
+    profile: &'static ToolProfile,
 }
 
 struct ScratchSurface {
@@ -292,22 +289,6 @@ struct Footprint {
     orientation: f32,
     rectangular: bool,
     lateral_reach: f32,
-}
-
-fn spreads(tool: Tool) -> bool {
-    matches!(tool, Tool::Brush | Tool::Knife | Tool::Blender)
-}
-
-fn refills(tool: Tool) -> bool {
-    matches!(tool, Tool::Brush)
-}
-
-fn wipes(tool: Tool) -> bool {
-    tool == Tool::Rag
-}
-
-fn blades(tool: Tool) -> bool {
-    tool == Tool::Knife
 }
 
 fn upright_share(altitude: f32) -> f32 {
@@ -521,11 +502,7 @@ fn place(
         velocity_cutoff: params.get("velocity_cutoff"),
         residual_um: params.get("residual_um"),
         penetration_um: params.get("penetration_um"),
-        bristle_contrast: if wipes(brush.tool) {
-            0.0
-        } else {
-            bristle_contrast
-        },
+        bristle_contrast: if profile.wipes { 0.0 } else { bristle_contrast },
         bristle_count: bristle_count.min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
         refill_rate: rate_over_step(params.get("refill_rate"), step_ratio),
         loaded_thickness_um,
@@ -552,10 +529,7 @@ fn place(
         canvas_groups: canvas_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
         tip_groups: tip_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
         spread_groups: spread_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
-        spreads: spreads(brush.tool),
-        refills: refills(brush.tool),
-        wipes: wipes(brush.tool),
-        blades: blades(brush.tool),
+        profile,
     })
 }
 
@@ -1939,7 +1913,9 @@ impl PaintEngine for WetOilEngine {
         if placements.is_empty() {
             return;
         }
-        if let Some(first_resting) = placements.iter_mut().find(|placement| !placement.wipes)
+        if let Some(first_resting) = placements
+            .iter_mut()
+            .find(|placement| !placement.profile.wipes)
             && self.rest_pending
         {
             first_resting.record.rest_follow = FIRST_REST_FOLLOW;
@@ -1979,13 +1955,13 @@ impl PaintEngine for WetOilEngine {
         });
         for (index, placement) in placements.iter().enumerate() {
             let offset = (index as u64 * DAB_RECORD_STRIDE) as wgpu::DynamicOffset;
-            if placement.wipes {
+            if placement.profile.wipes {
                 pass.set_bind_group(0, &rag_group, &[offset]);
                 pass.set_pipeline(&self.rag_pipeline);
                 pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
                 continue;
             }
-            if placement.blades {
+            if placement.profile.blades {
                 pass.set_bind_group(0, &copy_group, &[offset]);
                 pass.set_pipeline(&self.copy_pipeline);
                 pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
@@ -2026,7 +2002,7 @@ impl PaintEngine for WetOilEngine {
                 pass.set_pipeline(pipeline);
                 pass.dispatch_workgroups(groups[0], groups[1], 1);
             }
-            if placement.refills {
+            if placement.profile.refills {
                 pass.set_pipeline(&self.gather_pipeline);
                 pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
                 pass.set_pipeline(&self.settle_pipeline);
@@ -2034,7 +2010,7 @@ impl PaintEngine for WetOilEngine {
                 pass.set_pipeline(&self.distribute_pipeline);
                 pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
             }
-            if placement.spreads {
+            if placement.profile.spreads {
                 pass.set_bind_group(0, &copy_group, &[offset]);
                 pass.set_pipeline(&self.copy_pipeline);
                 pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);

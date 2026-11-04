@@ -7,4 +7,8 @@ pub(super) const KNIFE: ToolProfile = ToolProfile {
     shader_mode: TOOL_MODE_KNIFE,
     spreading: Spreading::Drag(KNIFE_DRAG),
     rest_follow: KNIFE_REST_FOLLOW,
+    spreads: true,
+    refills: false,
+    wipes: false,
+    blades: true,
 };

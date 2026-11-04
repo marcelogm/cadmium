@@ -19,6 +19,10 @@ pub struct ToolProfile {
     pub(crate) shader_mode: u32,
     pub(crate) spreading: Spreading,
     pub(crate) rest_follow: f32,
+    pub(crate) spreads: bool,
+    pub(crate) refills: bool,
+    pub(crate) wipes: bool,
+    pub(crate) blades: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
