@@ -121,22 +121,24 @@ const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
 const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
 
-pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
+pub const TOOL_KEYS: [(gdk::Key, UiTool); 8] = [
     (gdk::Key::h, UiTool::Move),
     (gdk::Key::_1, UiTool::Paint(Tool::Brush)),
     (gdk::Key::_2, UiTool::Paint(Tool::Knife)),
     (gdk::Key::_3, UiTool::Paint(Tool::Blender)),
     (gdk::Key::_4, UiTool::Paint(Tool::Rag)),
     (gdk::Key::_5, UiTool::Paint(Tool::Eyedropper)),
+    (gdk::Key::_6, UiTool::Tube),
     (gdk::Key::r, UiTool::Paint(Tool::Rag)),
 ];
 
-const KEYPAD_TOOL_KEYS: [(gdk::Key, UiTool); 5] = [
+const KEYPAD_TOOL_KEYS: [(gdk::Key, UiTool); 6] = [
     (gdk::Key::KP_1, UiTool::Paint(Tool::Brush)),
     (gdk::Key::KP_2, UiTool::Paint(Tool::Knife)),
     (gdk::Key::KP_3, UiTool::Paint(Tool::Blender)),
     (gdk::Key::KP_4, UiTool::Paint(Tool::Rag)),
     (gdk::Key::KP_5, UiTool::Paint(Tool::Eyedropper)),
+    (gdk::Key::KP_6, UiTool::Tube),
 ];
 
 impl CadmiumWindow {

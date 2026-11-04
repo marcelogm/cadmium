@@ -7,6 +7,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use crate::canvas_widget::CadmiumCanvas;
+use crate::state::Surface;
 use crate::tools::UiTool;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
@@ -211,16 +212,18 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
             }
             let state = canvas.state();
             let active = state.borrow().ui_tool;
-            let UiTool::Paint(tool) = active else {
+            let eraser = is_eraser(&event);
+            if active == UiTool::Move {
                 return;
-            };
-            let tool = if is_eraser(&event) { Tool::Rag } else { tool };
-            if tool == Tool::Eyedropper {
+            }
+            if !eraser && active == UiTool::Paint(Tool::Eyedropper) {
                 canvas.pick_colour_at(x, y);
                 return;
             }
             let sample = event_sample(&canvas, &event, x, y);
-            state.borrow_mut().begin_stroke(tool, sample);
+            if !state.borrow_mut().press(Surface::Painting, sample, eraser) {
+                return;
+            }
             contact
                 .stroking_device
                 .replace(stylus.current_event_device());
@@ -248,7 +251,7 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
                 return;
             }
             let samples = motion_samples(&canvas, stylus, &event, x, y);
-            state.borrow_mut().add_samples(&samples);
+            state.borrow_mut().motion(&samples);
         }
     ));
     stylus.connect_up(glib::clone!(
@@ -299,7 +302,7 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
 
 fn end_stroke(canvas: &CadmiumCanvas, contact: &Contact) {
     contact.stroking_device.replace(None);
-    canvas.state().borrow_mut().end_stroke();
+    canvas.state().borrow_mut().release();
 }
 
 fn pan_gesture(

@@ -516,7 +516,7 @@ impl BrushPanel {
         let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
         let tool = match state.ui_tool {
             UiTool::Paint(tool) => tool,
-            UiTool::Move => session.brush.tool,
+            UiTool::Move | UiTool::Tube => session.brush.tool,
         };
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| {

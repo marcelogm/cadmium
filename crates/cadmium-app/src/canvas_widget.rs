@@ -178,7 +178,7 @@ impl CadmiumCanvas {
     pub fn new(state: SharedState) -> Self {
         let canvas: CadmiumCanvas = glib::Object::new();
         let weak = canvas.downgrade();
-        state.borrow_mut().set_waker(Rc::new(move || {
+        state.borrow_mut().add_waker(Rc::new(move || {
             if let Some(canvas) = weak.upgrade() {
                 canvas.queue_present();
             }
@@ -446,6 +446,7 @@ impl CadmiumCanvas {
         }
         self.imp().needs_present.get()
             || state.session.has_pending_work()
+            || state.is_holding()
             || !presenter.matches_size(width_px, height_px)
     }
 
