@@ -35,20 +35,27 @@ Se a apresentação direta pela GPU (dmabuf) não estiver disponível, o Cadmium
 cada quadro pela memória e avisa com "Apresentação por cópia". Para forçar esse modo:
 `CADMIUM_PRESENT=readback cargo run --release -p cadmium-app`.
 
-## Windows
+## Instalação
 
-Há uma versão portátil para Windows (64 bits), sem instalador:
+Baixe o pacote na página de [Releases](https://github.com/marcelogm/cadmium/releases). Há
+versões para x86_64 (Intel/AMD) e arm64. A versão mais recente da `main` fica nos *Artifacts*
+do último build do workflow
+[Release](https://github.com/marcelogm/cadmium/actions/workflows/release.yml) (é preciso estar
+logado no GitHub).
 
-1. Baixe `Cadmium-windows-x86_64.zip` na página de
-   [Releases](https://github.com/marcelogm/cadmium/releases) ou, para a versão mais recente,
-   no último build do workflow **Windows** na aba
-   [Actions](https://github.com/marcelogm/cadmium/actions/workflows/windows.yml) (seção
-   *Artifacts*, é preciso estar logado no GitHub).
-2. Descompacte a pasta inteira em qualquer lugar.
-3. Abra `cadmium.exe`.
+| Sistema | Pacote | Como instalar |
+|---|---|---|
+| Linux | `Cadmium-<arch>.flatpak` | `flatpak install --user Cadmium-x86_64.flatpak` (o runtime GNOME 51 vem do Flathub) |
+| Linux | `Cadmium-<arch>.AppImage` | `chmod +x Cadmium-x86_64.AppImage` e abra; roda em qualquer distribuição |
+| Windows | `Cadmium-windows-<arch>-setup.exe` | Execute o instalador; o Cadmium aparece no menu Iniciar |
+| Windows | `Cadmium-windows-<arch>.zip` | Descompacte a pasta inteira e abra `cadmium.exe` |
 
-É preciso uma placa de vídeo com Vulkan e com o driver atualizado (NVIDIA, AMD ou Intel). A
-mesa digitalizadora funciona pelo Windows Ink.
+Todos precisam de uma placa de vídeo com Vulkan e com o driver atualizado. O AppImage já traz
+os drivers Vulkan do Mesa (AMD e Intel); com NVIDIA, usa o driver proprietário instalado no
+sistema. No Windows, a mesa digitalizadora funciona pelo Windows Ink.
+
+Para publicar uma versão, atualize `version` no `Cargo.toml` e a lista `<releases>` do
+metainfo, e crie a tag `v<versão>`. O workflow **Release** gera todos os pacotes e o Release.
 
 ## Pintando com a caneta
 

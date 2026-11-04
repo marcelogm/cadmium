@@ -15,7 +15,7 @@ jobs:
     container: registry.fedoraproject.org/fedora:44
     steps:
       - name: Install toolchain and GTK
-        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo clippy rustfmt
+        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo clippy rustfmt python3 desktop-file-utils appstream
 
       - uses: actions/checkout@v7
 
@@ -40,6 +40,14 @@ jobs:
 
       - name: File sizes
         run: .github/check-file-sizes.sh
+
+      - name: Flatpak cargo sources match Cargo.lock
+        run: python3 packaging/flatpak/cargo-sources.py Cargo.lock | diff -u packaging/flatpak/cargo-sources.json -
+
+      - name: Desktop entry and metainfo
+        run: |
+          desktop-file-validate crates/cadmium-app/data/io.github.marcelogm.Cadmium.desktop
+          appstreamcli validate --no-net crates/cadmium-app/data/io.github.marcelogm.Cadmium.metainfo.xml
 
   test:
     runs-on: ubuntu-latest

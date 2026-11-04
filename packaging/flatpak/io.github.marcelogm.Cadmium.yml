@@ -1,0 +1,37 @@
+id: io.github.marcelogm.Cadmium
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: cadmium
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+modules:
+  - name: cadmium
+    buildsystem: simple
+    build-options:
+      env:
+        CARGO_HOME: /run/build/cadmium/cargo
+    build-commands:
+      - cargo --offline build --release --locked -p cadmium-app
+      - install -Dm755 target/release/cadmium -t /app/bin
+      - install -Dm644 crates/cadmium-app/data/io.github.marcelogm.Cadmium.desktop -t /app/share/applications
+      - install -Dm644 crates/cadmium-app/data/io.github.marcelogm.Cadmium.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 crates/cadmium-app/data/app-icons/io.github.marcelogm.Cadmium.svg -t /app/share/icons/hicolor/scalable/apps
+      - install -Dm644 crates/cadmium-app/data/app-icons/io.github.marcelogm.Cadmium-symbolic.svg -t /app/share/icons/hicolor/symbolic/apps
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - target
+          - dist
+          - flatpak_app
+          - .flatpak-builder
+          - .superpowers
+      - cargo-sources.json
