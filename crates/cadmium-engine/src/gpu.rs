@@ -270,9 +270,17 @@ impl TexelRows {
     }
 }
 
-fn is_hardware_vulkan(adapter: &wgpu::Adapter) -> bool {
+/// Set to `1` to accept a software Vulkan device such as lavapipe, so the tests run on CI.
+const SOFTWARE_VARIABLE: &str = "CADMIUM_SOFTWARE_GPU";
+
+fn software_allowed() -> bool {
+    std::env::var(SOFTWARE_VARIABLE).is_ok_and(|value| value == "1")
+}
+
+fn is_usable_vulkan(adapter: &wgpu::Adapter) -> bool {
     let info = adapter.get_info();
-    info.backend == wgpu::Backend::Vulkan && info.device_type != wgpu::DeviceType::Cpu
+    info.backend == wgpu::Backend::Vulkan
+        && (info.device_type != wgpu::DeviceType::Cpu || software_allowed())
 }
 
 fn device_type_preference(device_type: wgpu::DeviceType) -> u8 {
@@ -293,7 +301,7 @@ async fn select_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, GpuE
         })
         .await;
     if let Ok(adapter) = preferred
-        && is_hardware_vulkan(&adapter)
+        && is_usable_vulkan(&adapter)
     {
         return Ok(adapter);
     }
@@ -301,7 +309,7 @@ async fn select_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, GpuE
         .enumerate_adapters(wgpu::Backends::VULKAN)
         .await
         .into_iter()
-        .filter(is_hardware_vulkan)
+        .filter(is_usable_vulkan)
         .min_by_key(|adapter| device_type_preference(adapter.get_info().device_type))
         .ok_or(GpuError::NoVulkanAdapter)
 }

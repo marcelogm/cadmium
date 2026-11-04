@@ -40,3 +40,29 @@ jobs:
 
       - name: File sizes
         run: .github/check-file-sizes.sh
+
+  test:
+    runs-on: ubuntu-latest
+    container: registry.fedoraproject.org/fedora:44
+    env:
+      # No GPU on the runner: run the GPU tests on lavapipe, Mesa's software Vulkan.
+      CADMIUM_SOFTWARE_GPU: "1"
+      VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+    steps:
+      - name: Install toolchain, GTK, lavapipe and Xvfb
+        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo mesa-vulkan-drivers xorg-x11-server-Xvfb
+
+      - uses: actions/checkout@v7
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: test-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Test
+        run: xvfb-run -a cargo test --workspace --release --locked --features cadmium-app/smoke
