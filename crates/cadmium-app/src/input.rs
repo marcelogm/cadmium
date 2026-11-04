@@ -72,6 +72,9 @@ pub trait PaintSurfaceWidget:
     fn accepts_point(&self, _widget_x: f64, _widget_y: f64) -> bool {
         true
     }
+    fn claims_strokes(&self) -> bool {
+        false
+    }
     fn contact_released(&self) {}
 }
 
@@ -255,6 +258,9 @@ fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> g
             let sample = event_sample(&widget, &event, x, y);
             if !state.borrow_mut().press(widget.surface(), sample, eraser) {
                 return;
+            }
+            if widget.claims_strokes() {
+                stylus.set_state(gtk::EventSequenceState::Claimed);
             }
             contact
                 .stroking_device

@@ -24,9 +24,7 @@ pub const RING_ALPHA_RANGE: f32 = 0.6;
 pub const RING_FADE_SECONDS: f32 = 0.4;
 const TRAY_CURSOR: &str = "crosshair";
 const TRAY_FRAME_CLASS: &str = "card";
-const TRAY_CORNER_RADIUS: f32 = 12.0;
 const TRAY_MIN_WIDTH: i32 = 180;
-const TRAY_MIN_HEIGHT: i32 = 120;
 const CHANNEL_MAX: f32 = 255.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -144,8 +142,12 @@ mod imp {
             } else {
                 for_size
             };
-            let height = tray_height_for_width(width);
-            (TRAY_MIN_HEIGHT.min(height), height, -1, -1)
+            (
+                tray_height_for_width(TRAY_MIN_WIDTH.min(width)),
+                tray_height_for_width(width),
+                -1,
+                -1,
+            )
         }
 
         fn realize(&self) {
@@ -191,7 +193,7 @@ mod imp {
                     TRAY_WIDTH as f32 * to_widget,
                     TRAY_HEIGHT as f32 * to_widget,
                 );
-                snapshot.push_rounded_clip(&gsk::RoundedRect::from_rect(image, TRAY_CORNER_RADIUS));
+                snapshot.push_clip(&image);
                 snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Linear, &bounds);
                 snapshot.pop();
             }
@@ -468,6 +470,10 @@ impl PaintSurfaceWidget for TrayView {
         is_on_tray(self.surface_point(widget_x, widget_y))
     }
 
+    fn claims_strokes(&self) -> bool {
+        true
+    }
+
     fn set_hover(&self, position: Option<(f64, f64)>) {
         let position = position.filter(|&(x, y)| self.accepts_point(x, y));
         if self.imp().hover.replace(position) != position {
@@ -588,6 +594,13 @@ mod tests {
         ] {
             assert!(!is_on_tray(outside), "{outside:?}");
         }
+    }
+
+    #[test]
+    fn a_short_widget_leaves_room_beside_the_tray() {
+        let viewport = (384, 200);
+        assert!(is_on_tray(tray_point(viewport, 1.0, 100.0, 100.0)));
+        assert!(!is_on_tray(tray_point(viewport, 1.0, 383.0, 100.0)));
     }
 
     #[test]

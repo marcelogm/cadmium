@@ -259,7 +259,8 @@
                         </child>
                         <child type="end">
                           <object class="GtkButton">
-                            <property name="label">Limpar bandeja</property>
+                            <property name="icon-name">edit-clear-all-symbolic</property>
+                            <property name="tooltip-text">Limpar bandeja</property>
                             <property name="action-name">win.clear-tray</property>
                             <style>
                               <class name="flat"/>
