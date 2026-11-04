@@ -1,5 +1,6 @@
 use cadmium_engine::{
     canvas::*,
+    engine::PaintEngine,
     gpu::GpuContext,
     pigments::{Mixture, PigmentDb},
     session::{ClearOutcome, PaintSession},
@@ -362,4 +363,86 @@ fn undoing_while_squeezing_ends_the_hold_and_takes_the_squeeze_back() {
     assert!(s.undo(&gpu));
     assert!(!s.is_holding());
     assert!((s.tray.wet_totals(&gpu).unwrap().volume - painted).abs() < 1e-6 * painted);
+}
+
+#[test]
+fn squeezing_onto_wet_paint_keeps_the_fractions_whole() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.begin_hold(&gpu, Surface::Tray);
+    s.squeeze(&gpu, still_nozzle(1, 7.0 / 30.0));
+    s.squeeze(&gpu, still_nozzle(0, 0.1));
+    s.end_hold();
+    let low = s.tray.read_f32(&gpu, StateTexture::WetPig0).unwrap();
+    let high = s.tray.read_f32(&gpu, StateTexture::WetPig1).unwrap();
+    let worst = low
+        .chunks(4)
+        .zip(high.chunks(4))
+        .map(|(low, high)| low.iter().chain(high).sum::<f32>())
+        .fold(0.0, f32::max);
+    assert!(worst <= 1.0, "fractions sum to {worst}");
+}
+
+#[test]
+fn a_tube_of_a_missing_slot_squeezes_nothing() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.begin_hold(&gpu, Surface::Tray);
+    s.squeeze(&gpu, still_nozzle(2, 0.2));
+    s.end_hold();
+    assert_eq!(s.tray.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert!(!s.history.can_undo());
+}
+
+#[test]
+fn a_motionless_instant_squeezes_no_undo_step() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.begin_hold(&gpu, Surface::Tray);
+    s.squeeze(&gpu, still_nozzle(0, 0.0));
+    s.end_hold();
+    assert!(!s.history.can_undo());
+}
+
+#[test]
+fn a_long_still_squeeze_stops_at_the_tube_height() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.begin_hold(&gpu, Surface::Tray);
+    s.squeeze(&gpu, still_nozzle(0, 10.0));
+    s.squeeze(&gpu, still_nozzle(0, 10.0));
+    s.end_hold();
+    let tallest = s
+        .tray
+        .read_f32(&gpu, StateTexture::WetVol)
+        .unwrap()
+        .into_iter()
+        .fold(0.0, f32::max);
+    assert_eq!(tallest, s.engine.params().get("tube_max_um"));
+}
+
+#[test]
+fn a_stroke_during_a_hold_leaves_the_squeeze_its_own_undo_step() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.begin_hold(&gpu, Surface::Painting);
+    s.squeeze(
+        &gpu,
+        Nozzle {
+            from: [300.0, 200.0],
+            to: [300.0, 200.0],
+            radius: 12.0,
+            slot: 0,
+            pressure: 1.0,
+            seconds: 0.2,
+        },
+    );
+    let squeezed = s.canvas.wet_totals(&gpu).unwrap().volume;
+    stroke_on(&gpu, &mut s, Surface::Painting, 60.0);
+    assert!(!s.is_holding());
+    assert!(s.canvas.wet_totals(&gpu).unwrap().volume > squeezed);
+    assert!(s.undo(&gpu));
+    assert!((s.canvas.wet_totals(&gpu).unwrap().volume - squeezed).abs() < 1e-6 * squeezed);
+    assert!(s.undo(&gpu));
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
 }

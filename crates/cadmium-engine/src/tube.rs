@@ -8,6 +8,10 @@ use crate::engine::{
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
 
+const SQUEEZE_SNIPPETS: [&str; 2] = [
+    include_str!("shaders/nearest_half.wgsl"),
+    include_str!("shaders/slot_lane.wgsl"),
+];
 const NOZZLE_APRON_PX: i32 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,18 +37,44 @@ struct SqueezeRecord {
     size: [u32; 2],
 }
 
-pub fn squeezed_thickness_um(nozzle: &Nozzle, flow_um_per_s: f32) -> f32 {
+pub(crate) fn squeezed_thickness_um(nozzle: &Nozzle, flow_um_per_s: f32) -> f32 {
     let length = (nozzle.to[0] - nozzle.from[0]).hypot(nozzle.to[1] - nozzle.from[1]);
     let disc = std::f32::consts::PI * nozzle.radius * nozzle.radius;
     let capsule = disc + 2.0 * nozzle.radius * length;
     flow_um_per_s * nozzle.pressure.clamp(0.0, 1.0) * nozzle.seconds.max(0.0) * disc / capsule
 }
 
-pub fn squeeze_region(canvas: &Canvas, nozzle: &Nozzle) -> Option<([i32; 2], [u32; 2])> {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SqueezeRegion {
+    pub origin: [i32; 2],
+    pub size: [u32; 2],
+    pub thickness_um: f32,
+}
+
+impl SqueezeRegion {
+    pub fn rect(&self) -> [f32; 4] {
+        [
+            self.origin[0] as f32,
+            self.origin[1] as f32,
+            (self.origin[0] + self.size[0] as i32 - 1) as f32,
+            (self.origin[1] + self.size[1] as i32 - 1) as f32,
+        ]
+    }
+}
+
+pub(crate) fn squeeze_region(
+    canvas: &Canvas,
+    params: &SimParams,
+    nozzle: &Nozzle,
+) -> Option<SqueezeRegion> {
     let finite =
         nozzle.from.iter().chain(&nozzle.to).all(|v| v.is_finite()) && nozzle.radius.is_finite();
-    let squeezing = nozzle.radius > 0.0 && nozzle.pressure > 0.0 && nozzle.seconds > 0.0;
-    if !finite || !squeezing {
+    let on_a_slot = nozzle.slot < canvas.spec.pigment_slots.len();
+    if !finite || !on_a_slot || nozzle.radius <= 0.0 {
+        return None;
+    }
+    let thickness_um = squeezed_thickness_um(nozzle, params.get("tube_flow_um_per_s"));
+    if thickness_um.is_nan() || thickness_um <= 0.0 {
         return None;
     }
     let first =
@@ -52,16 +82,21 @@ pub fn squeeze_region(canvas: &Canvas, nozzle: &Nozzle) -> Option<([i32; 2], [u3
     let last =
         [0, 1].map(|axis| (nozzle.from[axis].max(nozzle.to[axis]) + nozzle.radius).ceil() as i32);
     let limits = [canvas.spec.width as i32, canvas.spec.height as i32];
-    clamped_region(first, last, NOZZLE_APRON_PX, limits)
+    let (origin, size) = clamped_region(first, last, NOZZLE_APRON_PX, limits)?;
+    Some(SqueezeRegion {
+        origin,
+        size,
+        thickness_um,
+    })
 }
 
-pub struct Tube {
+pub(crate) struct Tube {
     layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
 }
 
 impl Tube {
-    pub fn new(gpu: &GpuContext) -> Tube {
+    pub(crate) fn new(gpu: &GpuContext) -> Tube {
         use wgpu::StorageTextureAccess::ReadWrite;
         use wgpu::TextureFormat::{R32Float, Rgba16Float};
         let (layout, pipeline_layout) = layouts(
@@ -74,33 +109,34 @@ impl Tube {
                 texture_entry(3, ReadWrite, R32Float),
             ],
         );
-        let module = shader_module(gpu, "squeeze", &[], include_str!("shaders/squeeze.wgsl"));
+        let module = shader_module(
+            gpu,
+            "squeeze",
+            &SQUEEZE_SNIPPETS,
+            include_str!("shaders/squeeze.wgsl"),
+        );
         let pipeline = compute_pipeline(gpu, "squeeze", &module, &pipeline_layout, "main");
         Tube { layout, pipeline }
     }
 
-    pub fn encode_squeeze(
+    pub(crate) fn encode_squeeze(
         &self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
         params: &SimParams,
         nozzle: &Nozzle,
+        region: &SqueezeRegion,
         encoder: &mut wgpu::CommandEncoder,
-    ) -> Option<[f32; 4]> {
-        let (origin, size) = squeeze_region(canvas, nozzle)?;
-        let thickness_um = squeezed_thickness_um(nozzle, params.get("tube_flow_um_per_s"));
-        if thickness_um.is_nan() || thickness_um <= 0.0 {
-            return None;
-        }
+    ) {
         let record = SqueezeRecord {
             segment_start: nozzle.from,
             segment_end: nozzle.to,
             radius: nozzle.radius,
-            thickness_um,
+            thickness_um: region.thickness_um,
             max_um: params.get("tube_max_um"),
             slot: nozzle.slot as u32,
-            origin,
-            size,
+            origin: region.origin,
+            size: region.size,
         };
         let uniform = gpu
             .device
@@ -126,27 +162,15 @@ impl Tube {
         pass.set_bind_group(0, &group, &[]);
         pass.set_pipeline(&self.pipeline);
         pass.dispatch_workgroups(
-            size[0].div_ceil(WORKGROUP_SIZE),
-            size[1].div_ceil(WORKGROUP_SIZE),
+            region.size[0].div_ceil(WORKGROUP_SIZE),
+            region.size[1].div_ceil(WORKGROUP_SIZE),
             1,
         );
         drop(pass);
-        let rect = region_rect(origin, size);
-        canvas.dirty.mark_rect(rect[0], rect[1], rect[2], rect[3]);
-        canvas
-            .wet_tiles
-            .mark_rect(rect[0], rect[1], rect[2], rect[3]);
-        Some(rect)
+        let [x0, y0, x1, y1] = region.rect();
+        canvas.dirty.mark_rect(x0, y0, x1, y1);
+        canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
     }
-}
-
-pub(crate) fn region_rect(origin: [i32; 2], size: [u32; 2]) -> [f32; 4] {
-    [
-        origin[0] as f32,
-        origin[1] as f32,
-        (origin[0] + size[0] as i32 - 1) as f32,
-        (origin[1] + size[1] as i32 - 1) as f32,
-    ]
 }
 
 #[cfg(test)]

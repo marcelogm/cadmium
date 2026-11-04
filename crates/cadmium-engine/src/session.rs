@@ -12,7 +12,7 @@ use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::{Nozzle, Tube, region_rect, squeeze_region};
+use crate::tube::{Nozzle, Tube, squeeze_region};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -179,16 +179,17 @@ impl PaintSession {
             return;
         };
         let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
-        let Some((origin, size)) = squeeze_region(canvas, &nozzle) else {
+        let params = self.engine.params();
+        let Some(region) = squeeze_region(canvas, params, &nozzle) else {
             return;
         };
-        let [x0, y0, x1, y1] = region_rect(origin, size);
+        let [x0, y0, x1, y1] = region.rect();
         let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
         let mut encoder = new_encoder(gpu, "squeeze");
         self.history
             .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
         self.tube
-            .encode_squeeze(gpu, canvas, self.engine.params(), &nozzle, &mut encoder);
+            .encode_squeeze(gpu, canvas, params, &nozzle, &region, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
     }
 
