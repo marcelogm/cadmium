@@ -16,7 +16,7 @@ impl WetOilEngine {
         gpu: &GpuContext,
         take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
     ) -> Result<(PaintTotals, f32), GpuLost> {
-        let mut load = read_buffer(gpu, &self.blade_load)?;
+        let mut load = read_buffer(gpu, &self.buffers.blade_load)?;
         let shares = blade_shares(self.tip_radius);
         let held = knife_from_load(&load).volume as f32;
         let full_dip = self.knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
@@ -25,7 +25,7 @@ impl WetOilEngine {
         if holds_paint(&taken) {
             add_to_blade(&mut load, &shares, &taken);
             gpu.queue
-                .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
+                .write_buffer(&self.buffers.blade_load, 0, bytemuck::cast_slice(&load));
         }
         Ok((taken, level_after(held, held + room, &taken)))
     }
@@ -44,7 +44,7 @@ impl WetOilEngine {
             return Ok(());
         }
         let fractions = dip_fractions(mixture);
-        let mut load = read_buffer(gpu, &self.blade_load)?;
+        let mut load = read_buffer(gpu, &self.buffers.blade_load)?;
         let reach = self.tip_radius.ceil() as i32 + 1;
         for offset in -reach..=reach {
             let cover = blade_cell_cover(offset, self.tip_radius);
@@ -58,7 +58,7 @@ impl WetOilEngine {
             values[VOLUME_CHANNEL] += added;
         }
         gpu.queue
-            .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
+            .write_buffer(&self.buffers.blade_load, 0, bytemuck::cast_slice(&load));
         Ok(())
     }
 
@@ -82,13 +82,16 @@ impl WetOilEngine {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("clean_knife"),
             });
-        encoder.clear_buffer(&self.blade_load, 0, None);
-        encoder.clear_buffer(&self.blade_delta, 0, None);
+        encoder.clear_buffer(&self.buffers.blade_load, 0, None);
+        encoder.clear_buffer(&self.buffers.blade_delta, 0, None);
         gpu.queue.submit([encoder.finish()]);
     }
 
     pub fn knife_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
-        Ok(knife_from_load(&read_buffer(gpu, &self.blade_load)?))
+        Ok(knife_from_load(&read_buffer(
+            gpu,
+            &self.buffers.blade_load,
+        )?))
     }
 }
 

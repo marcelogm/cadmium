@@ -5,7 +5,7 @@ use crate::canvas::{
     Canvas, CanvasError, CanvasSpec, PaintTotals, StateTexture, TILE_SIZE, TileCoord, tiles_in_rect,
 };
 use crate::draw_up::{DrawUp, DrawUpRegion, DrawUpRequest, DrawnUp, draw_up_region};
-use crate::engine::{BrushOutline, BrushReadout, PaintEngine, WetOilEngine};
+use crate::engine::{BrushOutline, BrushReadout, PaintEngine, PickRequest, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
@@ -353,14 +353,12 @@ impl PaintSession {
     ) -> Result<Option<Mixture>, GpuLost> {
         let mut encoder = new_encoder(gpu, "pick_colour");
         self.encode_queued_dabs(gpu, &mut encoder);
-        self.engine.encode_eyedropper(
-            gpu,
-            self.canvas_of(surface),
-            x,
-            y,
-            PICK_RADIUS_PX,
-            &mut encoder,
-        );
+        let request = PickRequest {
+            center: [x, y],
+            radius: PICK_RADIUS_PX,
+        };
+        self.engine
+            .encode_eyedropper(gpu, self.canvas_of(surface), request, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         self.engine.picked_mixture(gpu)
     }

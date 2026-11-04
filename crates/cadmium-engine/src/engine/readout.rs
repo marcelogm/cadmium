@@ -26,15 +26,22 @@ impl WetOilEngine {
             });
         self.encode_sum_tip(gpu, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        Ok(tip_mean_from_sums(&read_buffer(gpu, &self.tip_sums)?))
+        Ok(tip_mean_from_sums(&read_buffer(
+            gpu,
+            &self.buffers.tip_sums,
+        )?))
     }
 
     pub fn reserve_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
-        Ok(reserve_from_body(&read_buffer(gpu, &self.body)?))
+        Ok(reserve_from_body(&read_buffer(gpu, &self.buffers.body)?))
     }
 
     pub fn read_brush(&self, gpu: &GpuContext) -> Result<BrushReadout, GpuLost> {
-        let sources = [&self.tip_sums, &self.body, &self.blade_load];
+        let sources = [
+            &self.buffers.tip_sums,
+            &self.buffers.body,
+            &self.buffers.blade_load,
+        ];
         let staging = staging_buffer(
             gpu,
             "brush_readout",
@@ -66,11 +73,22 @@ impl WetOilEngine {
 
     pub fn brush_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         let mut totals = PaintTotals::default();
-        for texel in read_buffer(gpu, &self.tip)?.as_chunks::<TIP_CHANNELS>().0 {
+        for texel in read_buffer(gpu, &self.buffers.tip)?
+            .as_chunks::<TIP_CHANNELS>()
+            .0
+        {
             accumulate(&mut totals, texel);
         }
-        accumulate(&mut totals, &read_buffer(gpu, &self.body)?[..TIP_CHANNELS]);
+        accumulate(
+            &mut totals,
+            &read_buffer(gpu, &self.buffers.body)?[..TIP_CHANNELS],
+        );
         Ok(totals)
+    }
+
+    fn encode_sum_tip(&self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
+        self.dip_pass
+            .encode_sum_tip(gpu, self.tip_radius, &self.buffers, encoder);
     }
 }
 

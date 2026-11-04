@@ -119,6 +119,11 @@ impl WetOilEngine {
         self.submit_fill(gpu, &record, false);
     }
 
+    fn submit_fill(&self, gpu: &GpuContext, record: &DipRecord, fills_tip: bool) {
+        self.dip_pass
+            .submit_fill(gpu, record, &self.buffers, fills_tip);
+    }
+
     pub fn full_reserve_volume(&self) -> f32 {
         self.reserve_volume(FULL_RESERVOIR_VOLUME_UM)
     }
@@ -133,17 +138,17 @@ impl WetOilEngine {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("clean_brush"),
             });
-        encoder.clear_buffer(&self.tip, 0, None);
-        encoder.clear_buffer(&self.tip_delta, 0, None);
-        encoder.clear_buffer(&self.body, 0, None);
-        encoder.clear_buffer(&self.wanted, 0, None);
-        encoder.clear_buffer(&self.capillary_rows, 0, None);
+        encoder.clear_buffer(&self.buffers.tip, 0, None);
+        encoder.clear_buffer(&self.buffers.tip_delta, 0, None);
+        encoder.clear_buffer(&self.buffers.body, 0, None);
+        encoder.clear_buffer(&self.buffers.wanted, 0, None);
+        encoder.clear_buffer(&self.buffers.capillary_rows, 0, None);
         gpu.queue.submit([encoder.finish()]);
     }
 
     #[expect(clippy::excessive_nesting)]
     pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
-        let body = read_buffer(gpu, &self.body)?;
+        let body = read_buffer(gpu, &self.buffers.body)?;
         let volume = body[VOLUME_CHANNEL];
         let fractions = std::array::from_fn(|slot| {
             if volume > 0.0 {
