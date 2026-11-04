@@ -1,8 +1,17 @@
 use std::collections::{HashSet, VecDeque};
 
-use crate::canvas::{Canvas, StateTexture, TILE_SIZE, TileCoord};
+use crate::canvas::{Canvas, TileCoord};
 use crate::gpu::GpuContext;
 use crate::surface::Surface;
+
+mod atlas;
+mod slots;
+mod tiles;
+
+pub use atlas::bytes_per_tile_all_textures;
+
+use atlas::{Atlas, CopyDirection, slots_for_budget};
+use tiles::{forget_wet, mark_restored, mark_wet, tile_extent};
 
 pub const ATLAS_TILES_PER_SIDE: u32 = 48;
 pub const ATLAS_SLOTS: u32 = ATLAS_TILES_PER_SIDE * ATLAS_TILES_PER_SIDE;
@@ -40,76 +49,6 @@ impl Step {
             .iter()
             .flat_map(|saved| std::iter::once(saved.before).chain(saved.after))
     }
-}
-
-struct Atlas {
-    textures: Vec<wgpu::Texture>,
-}
-
-impl Atlas {
-    #[expect(clippy::excessive_nesting)]
-    fn allocate_largest(gpu: &GpuContext, wanted_slots: u32) -> Option<(Atlas, u32)> {
-        let mut slot_capacity = wanted_slots;
-        while slot_capacity > 0 {
-            if let Some(atlas) = Atlas::try_new(gpu, slot_capacity) {
-                return Some((atlas, slot_capacity));
-            }
-            slot_capacity = if slot_capacity > MIN_SLOTS_AFTER_OUT_OF_MEMORY {
-                (slot_capacity / 2).max(MIN_SLOTS_AFTER_OUT_OF_MEMORY)
-            } else {
-                0
-            };
-        }
-        None
-    }
-
-    fn try_new(gpu: &GpuContext, slot_capacity: u32) -> Option<Atlas> {
-        let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        let atlas = Atlas::new(gpu, slot_capacity);
-        pollster::block_on(scope.pop()).is_none().then_some(atlas)
-    }
-
-    fn new(gpu: &GpuContext, slot_capacity: u32) -> Atlas {
-        let columns = slot_capacity.min(ATLAS_TILES_PER_SIDE);
-        let rows = slot_capacity.div_ceil(ATLAS_TILES_PER_SIDE);
-        let textures = StateTexture::PAINT_STATE
-            .iter()
-            .map(|which| {
-                gpu.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("undo_atlas"),
-                    size: wgpu::Extent3d {
-                        width: columns * TILE_SIZE,
-                        height: rows * TILE_SIZE,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: which.format(),
-                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
-                })
-            })
-            .collect();
-        Atlas { textures }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum CopyDirection {
-    CanvasToSlot,
-    SlotToCanvas,
-}
-
-fn slots_for_budget(budget_bytes: u64) -> u32 {
-    (budget_bytes / bytes_per_tile_all_textures()).min(u64::from(ATLAS_SLOTS)) as u32
-}
-
-pub fn bytes_per_tile_all_textures() -> u64 {
-    StateTexture::PAINT_STATE
-        .iter()
-        .map(|which| u64::from(TILE_SIZE * TILE_SIZE * which.bytes_per_texel()))
-        .sum()
 }
 
 pub struct History {
@@ -346,174 +285,5 @@ impl History {
 
     pub fn can_redo(&self) -> bool {
         !self.redo_steps.is_empty()
-    }
-
-    #[expect(clippy::excessive_nesting)]
-    fn allocate(&mut self) -> Option<Slot> {
-        loop {
-            if let Some(slot) = self.free_slots.pop() {
-                return Some(slot);
-            }
-            let oldest = self.undo_steps.pop_front()?;
-            self.release(oldest);
-        }
-    }
-
-    #[expect(clippy::excessive_nesting)]
-    fn reserve_after_slots(&mut self, step: &mut Step) -> bool {
-        for saved in step.tiles.iter_mut().filter(|saved| saved.after.is_none()) {
-            let Some(slot) = self.allocate() else {
-                return false;
-            };
-            saved.after = Some(slot);
-        }
-        true
-    }
-
-    pub fn clear(&mut self) {
-        if let Some(step) = self.current.take() {
-            self.release(step);
-        }
-        self.drop_undo_steps();
-        self.drop_redo_steps();
-    }
-
-    fn abandon(&mut self, step: &mut Step) {
-        step.complete = false;
-        self.free_slots.extend(
-            std::mem::take(&mut step.tiles)
-                .iter()
-                .map(|saved| saved.before),
-        );
-        self.drop_undo_steps();
-        self.drop_redo_steps();
-    }
-
-    fn drop_undo_steps(&mut self) {
-        while let Some(step) = self.undo_steps.pop_front() {
-            self.release(step);
-        }
-    }
-
-    fn release(&mut self, step: Step) {
-        self.free_slots.extend(step.slots());
-    }
-
-    fn drop_redo_steps(&mut self) {
-        while let Some(step) = self.redo_steps.pop() {
-            self.release(step);
-        }
-    }
-
-    #[expect(clippy::excessive_nesting)]
-    fn trim_to_max_steps(&mut self) {
-        while self.undo_steps.len() > self.max_steps {
-            if let Some(oldest) = self.undo_steps.pop_front() {
-                self.release(oldest);
-            }
-        }
-    }
-
-    #[expect(clippy::excessive_nesting, clippy::too_many_arguments)]
-    fn copy_tile(
-        &self,
-        canvas: &Canvas,
-        tile: TileCoord,
-        slot: Slot,
-        direction: CopyDirection,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        let Some(extent) = tile_extent(canvas, tile) else {
-            return;
-        };
-        let Some(atlas) = self.atlas.as_ref() else {
-            return;
-        };
-        let canvas_origin = wgpu::Origin3d {
-            x: tile.x * TILE_SIZE,
-            y: tile.y * TILE_SIZE,
-            z: 0,
-        };
-        let slot_origin = wgpu::Origin3d {
-            x: (slot % ATLAS_TILES_PER_SIDE) * TILE_SIZE,
-            y: (slot / ATLAS_TILES_PER_SIDE) * TILE_SIZE,
-            z: 0,
-        };
-        for (which, atlas_texture) in StateTexture::PAINT_STATE.iter().zip(&atlas.textures) {
-            let canvas_copy = wgpu::TexelCopyTextureInfo {
-                texture: canvas.texture(*which),
-                mip_level: 0,
-                origin: canvas_origin,
-                aspect: wgpu::TextureAspect::All,
-            };
-            let slot_copy = wgpu::TexelCopyTextureInfo {
-                texture: atlas_texture,
-                mip_level: 0,
-                origin: slot_origin,
-                aspect: wgpu::TextureAspect::All,
-            };
-            match direction {
-                CopyDirection::CanvasToSlot => {
-                    encoder.copy_texture_to_texture(canvas_copy, slot_copy, extent)
-                }
-                CopyDirection::SlotToCanvas => {
-                    encoder.copy_texture_to_texture(slot_copy, canvas_copy, extent)
-                }
-            }
-        }
-    }
-}
-
-fn tile_extent(canvas: &Canvas, tile: TileCoord) -> Option<wgpu::Extent3d> {
-    let width = canvas
-        .spec
-        .width
-        .saturating_sub(tile.x * TILE_SIZE)
-        .min(TILE_SIZE);
-    let height = canvas
-        .spec
-        .height
-        .saturating_sub(tile.y * TILE_SIZE)
-        .min(TILE_SIZE);
-    (width > 0 && height > 0).then_some(wgpu::Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
-    })
-}
-
-fn tile_rect(canvas: &Canvas, tile: TileCoord) -> Option<[f32; 4]> {
-    let extent = tile_extent(canvas, tile)?;
-    let x0 = (tile.x * TILE_SIZE) as f32;
-    let y0 = (tile.y * TILE_SIZE) as f32;
-    Some([
-        x0,
-        y0,
-        x0 + (extent.width - 1) as f32,
-        y0 + (extent.height - 1) as f32,
-    ])
-}
-
-fn mark_restored(canvas: &mut Canvas, tile: TileCoord) {
-    if let Some([x0, y0, x1, y1]) = tile_rect(canvas, tile) {
-        canvas.dirty.mark_rect(x0, y0, x1, y1);
-    }
-}
-
-fn mark_wet(canvas: &mut Canvas, tile: TileCoord) {
-    if let Some([x0, y0, x1, y1]) = tile_rect(canvas, tile) {
-        canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
-    }
-}
-
-fn forget_wet(canvas: &mut Canvas, dried: &HashSet<TileCoord>) {
-    let still_wet: Vec<TileCoord> = canvas
-        .wet_tiles
-        .take()
-        .into_iter()
-        .filter(|tile| !dried.contains(tile))
-        .collect();
-    for tile in still_wet {
-        mark_wet(canvas, tile);
     }
 }
