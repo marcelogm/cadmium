@@ -44,8 +44,7 @@ impl PaintSession {
             return false;
         };
         hold.dwell = Some(dwell);
-        let [x0, y0, x1, y1] = region.rect();
-        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, region.rect());
         let mut encoder = new_encoder(gpu, "squeeze");
         self.history
             .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
@@ -106,8 +105,7 @@ impl DrawUpSource<'_> {
         if room_um.is_nan() || room_um <= 0.0 {
             return Ok(nothing);
         }
-        let [x0, y0, x1, y1] = region.rect();
-        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, region.rect());
         if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
             return Ok(nothing);
         }

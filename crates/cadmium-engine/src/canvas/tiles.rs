@@ -29,7 +29,7 @@ impl DirtyTiles {
     }
 
     pub fn mark_rect(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
-        for tile in tiles_in_rect(self.width, self.height, x0, y0, x1, y1) {
+        for tile in tiles_in_rect(self.width, self.height, [x0, y0, x1, y1]) {
             let index = self.index(tile);
             self.marked[index] = true;
         }
@@ -68,15 +68,7 @@ impl DirtyTiles {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
-pub fn tiles_in_rect(
-    width: u32,
-    height: u32,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-) -> Vec<TileCoord> {
+pub fn tiles_in_rect(width: u32, height: u32, [x0, y0, x1, y1]: [f32; 4]) -> Vec<TileCoord> {
     let (Some(columns), Some(rows)) = (tile_span(width, x0, x1), tile_span(height, y0, y1)) else {
         return Vec::new();
     };

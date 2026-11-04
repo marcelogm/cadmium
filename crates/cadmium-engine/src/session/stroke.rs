@@ -120,10 +120,12 @@ impl PaintSession {
                 tiles_in_rect(
                     width,
                     height,
-                    x0 - SAVE_MARGIN_PX,
-                    y0 - SAVE_MARGIN_PX,
-                    x1 + SAVE_MARGIN_PX,
-                    y1 + SAVE_MARGIN_PX,
+                    [
+                        x0 - SAVE_MARGIN_PX,
+                        y0 - SAVE_MARGIN_PX,
+                        x1 + SAVE_MARGIN_PX,
+                        y1 + SAVE_MARGIN_PX,
+                    ],
                 )
             })
             .collect();

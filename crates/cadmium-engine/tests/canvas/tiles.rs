@@ -31,7 +31,7 @@ fn dirty_rect_is_clamped_to_the_canvas() {
 #[test]
 fn rect_ending_on_a_tile_boundary_marks_the_next_tile() {
     assert_eq!(
-        tiles_in_rect(256, 128, 0.0, 0.0, 64.0, 64.0),
+        tiles_in_rect(256, 128, [0.0, 0.0, 64.0, 64.0]),
         vec![
             TileCoord { x: 0, y: 0 },
             TileCoord { x: 0, y: 1 },
@@ -44,16 +44,16 @@ fn rect_ending_on_a_tile_boundary_marks_the_next_tile() {
 #[test]
 fn rect_ending_inside_the_last_pixel_of_a_tile_stays_in_that_tile() {
     assert_eq!(
-        tiles_in_rect(256, 128, 0.0, 0.0, 63.9, 63.9),
+        tiles_in_rect(256, 128, [0.0, 0.0, 63.9, 63.9]),
         vec![TileCoord { x: 0, y: 0 }]
     );
 }
 
 #[test]
 fn rect_starting_past_the_last_pixel_marks_nothing() {
-    assert!(tiles_in_rect(100, 100, 100.0, 0.0, 120.0, 10.0).is_empty());
+    assert!(tiles_in_rect(100, 100, [100.0, 0.0, 120.0, 10.0]).is_empty());
     assert_eq!(
-        tiles_in_rect(100, 100, 99.5, 0.0, 120.0, 10.0),
+        tiles_in_rect(100, 100, [99.5, 0.0, 120.0, 10.0]),
         vec![TileCoord { x: 1, y: 0 }]
     );
 }
@@ -61,7 +61,7 @@ fn rect_starting_past_the_last_pixel_marks_nothing() {
 #[test]
 fn point_rect_marks_its_tile() {
     assert_eq!(
-        tiles_in_rect(256, 128, 100.0, 100.0, 100.0, 100.0),
+        tiles_in_rect(256, 128, [100.0, 100.0, 100.0, 100.0]),
         vec![TileCoord { x: 1, y: 1 }]
     );
 }
