@@ -1,6 +1,7 @@
 use gtk::gdk;
 
 pub use cadmium_engine::stroke::Tool;
+use cadmium_engine::surface::Surface;
 
 mod blender;
 mod brush;
@@ -21,12 +22,32 @@ pub enum UiTool {
     Tube,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Press {
+    Pan,
+    PickColour,
+    Stroke(Tool),
+    LoadFromPile(Tool),
+    Squeeze,
+}
+
 pub(crate) struct UiToolProfile {
     name: &'static str,
     label: &'static str,
     pub(crate) keys: &'static [gdk::Key],
     keypad_keys: &'static [gdk::Key],
+    on_tray: Press,
+    on_painting: Press,
     handling: Option<&'static str>,
+}
+
+impl UiToolProfile {
+    pub(crate) fn press_on(&self, surface: Surface) -> Press {
+        match surface {
+            Surface::Tray => self.on_tray,
+            Surface::Painting => self.on_painting,
+        }
+    }
 }
 
 impl Default for UiTool {

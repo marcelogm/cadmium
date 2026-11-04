@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use cadmium_engine::stroke::{StrokeSample, Tool};
+use cadmium_engine::stroke::StrokeSample;
 use cadmium_engine::surface::Surface;
 use gtk::glib::translate::IntoGlib;
 use gtk::prelude::*;
@@ -9,7 +9,7 @@ use gtk::{gdk, glib};
 
 use crate::canvas_widget::CadmiumCanvas;
 use crate::state::SharedState;
-use crate::tools::UiTool;
+use crate::tools::Press;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
 const MOUSE_PRESSURE: f32 = 1.0;
@@ -247,12 +247,12 @@ fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> g
                 return;
             }
             let state = widget.state();
-            let active = state.borrow().ui_tool;
+            let press = state.borrow().ui_tool.profile().press_on(widget.surface());
             let eraser = is_eraser(&event);
-            if active == UiTool::Move {
+            if press == Press::Pan {
                 return;
             }
-            if !eraser && active == UiTool::Paint(Tool::Eyedropper) {
+            if !eraser && press == Press::PickColour {
                 widget.pick_colour_at(x, y);
                 return;
             }
@@ -366,12 +366,10 @@ fn pan_gesture(
         #[strong]
         last_offset,
         move |drag, _, _| {
-            let (ui_tool, stroking) = {
-                let state = canvas.state();
-                let state = state.borrow();
-                (state.ui_tool, state.is_stroking())
-            };
-            let wants_pan = gesture != PanGesture::Primary || ui_tool == UiTool::Move;
+            let state = canvas.state();
+            let press = state.borrow().ui_tool.profile().press_on(canvas.surface());
+            let stroking = state.borrow().is_stroking();
+            let wants_pan = gesture != PanGesture::Primary || press == Press::Pan;
             let pans = wants_pan && side_button_may_act(stroking);
             contact.pans.set(gesture, pans);
             last_offset.set((0.0, 0.0));

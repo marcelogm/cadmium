@@ -49,3 +49,36 @@ fn only_the_knife_explains_how_it_is_held() {
 fn app_starts_with_the_brush() {
     assert_eq!(UiTool::default(), UiTool::Paint(Tool::Brush));
 }
+
+#[test]
+fn a_paint_tool_strokes_and_loads_as_itself() {
+    let presses = UiTool::ALL.into_iter().flat_map(|tool| {
+        let profile = tool.profile();
+        [(tool, profile.on_tray), (tool, profile.on_painting)]
+    });
+    for (tool, press) in presses {
+        if let Press::Stroke(pressed) | Press::LoadFromPile(pressed) = press {
+            assert_eq!(UiTool::Paint(pressed), tool);
+        }
+    }
+}
+
+#[test]
+fn only_tools_that_hold_paint_load_and_only_from_the_tray() {
+    for tool in UiTool::ALL {
+        let holds_paint = match tool {
+            UiTool::Paint(painted) => painted.profile().holder.is_some(),
+            UiTool::Move | UiTool::Tube => false,
+        };
+        let profile = tool.profile();
+        assert_eq!(
+            matches!(profile.on_tray, Press::LoadFromPile(_)),
+            holds_paint,
+            "{tool:?}"
+        );
+        assert!(
+            !matches!(profile.on_painting, Press::LoadFromPile(_)),
+            "{tool:?}"
+        );
+    }
+}

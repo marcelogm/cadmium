@@ -8,7 +8,7 @@ use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
 
 use super::{AppState, StrokePreparation, mean_mixture, recipe_from_fractions, stroke_preparation};
-use crate::tools::UiTool;
+use crate::tools::Press;
 
 pub const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
 const STILL_TUBE_SCREEN_PX: f32 = 3.0;
@@ -93,13 +93,14 @@ impl AppState {
     }
 
     pub fn press(&mut self, surface: Surface, sample: StrokeSample, eraser: bool) -> bool {
-        let began = match (eraser, self.ui_tool) {
-            (true, _) => {
-                self.begin_stroke_on(surface, Tool::Rag, sample);
-                true
-            }
-            (false, UiTool::Move | UiTool::Paint(Tool::Eyedropper)) => false,
-            (false, UiTool::Tube) => {
+        let press = if eraser {
+            Press::Stroke(Tool::Rag)
+        } else {
+            self.ui_tool.profile().press_on(surface)
+        };
+        let began = match press {
+            Press::Pan | Press::PickColour => false,
+            Press::Squeeze => {
                 let squeezing = Contact::Squeezing {
                     surface,
                     pen: sample,
@@ -109,9 +110,7 @@ impl AppState {
                 self.begin_hold(surface, sample, squeezing);
                 true
             }
-            (false, UiTool::Paint(tool @ (Tool::Brush | Tool::Knife)))
-                if surface == Surface::Tray =>
-            {
+            Press::LoadFromPile(tool) => {
                 let loading = Contact::Loading {
                     tool,
                     origin: (sample.x, sample.y),
@@ -123,7 +122,7 @@ impl AppState {
                 self.session.brush.tool = tool;
                 true
             }
-            (false, UiTool::Paint(tool)) => {
+            Press::Stroke(tool) => {
                 self.begin_stroke_on(surface, tool, sample);
                 true
             }
@@ -427,6 +426,7 @@ mod tests {
     use crate::state::tests::{
         WHITE_SLOT, brush_totals, painting_state, present_one_frame, wet_volume,
     };
+    use crate::tools::UiTool;
 
     fn sample_at(x: f64, y: f64, pressure: f32) -> StrokeSample {
         StrokeSample {
