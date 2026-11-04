@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
+use cadmium_engine::document::{DocumentError, DocumentSnapshot, ExportedImage};
 use cadmium_engine::gpu::GpuLost;
 use gtk::{gio, glib};
 
@@ -102,24 +102,12 @@ async fn write_painting(
     let Some((snapshot, mark)) = captured else {
         return false;
     };
-    let target = path.clone();
-    let written = finished(gio::spawn_blocking(move || snapshot.write(&target)).await);
-    let Some(window) = window.upgrade() else {
-        return written.is_ok();
+    let write = move |target: &Path| snapshot.write(target);
+    let saved = move |window: &CadmiumWindow, path: &Path| {
+        let same_document = generation == window.imp().document_generation.get();
+        window.painting_saved(path, mark, same_document);
     };
-    let same_document = generation == window.imp().document_generation.get();
-    let saved = match written {
-        Ok(()) => {
-            window.painting_saved(&path, mark, same_document);
-            true
-        }
-        Err(failure) => {
-            window.report_failure("saving", &path, CANNOT_SAVE, &failure);
-            false
-        }
-    };
-    window.finish_write(&path);
-    saved
+    write_in_background(window, path, WriteKind::Painting, write, saved).await
 }
 
 async fn write_image(
@@ -130,21 +118,41 @@ async fn write_image(
     let Some(image) = image else {
         return false;
     };
+    let write = move |target: &Path| image.write_png(target);
+    let exported = |window: &CadmiumWindow, _: &Path| window.show_toast(EXPORTED_TOAST);
+    write_in_background(window, path, WriteKind::Image, write, exported).await
+}
+
+async fn write_in_background(
+    window: glib::WeakRef<CadmiumWindow>,
+    path: PathBuf,
+    kind: WriteKind,
+    write: impl FnOnce(&Path) -> Result<(), DocumentError> + Send + 'static,
+    on_written: impl FnOnce(&CadmiumWindow, &Path),
+) -> bool {
     let target = path.clone();
-    let written = finished(gio::spawn_blocking(move || image.write_png(&target)).await);
+    let written = finished(gio::spawn_blocking(move || write(&target)).await);
     let Some(window) = window.upgrade() else {
         return written.is_ok();
     };
-    let exported = match written {
+    let succeeded = match written {
         Ok(()) => {
-            window.show_toast(EXPORTED_TOAST);
+            on_written(&window, &path);
             true
         }
         Err(failure) => {
-            window.report_failure("exporting", &path, CANNOT_EXPORT, &failure);
+            let (action, cannot) = failure_wording(kind);
+            window.report_failure(action, &path, cannot, &failure);
             false
         }
     };
     window.finish_write(&path);
-    exported
+    succeeded
+}
+
+fn failure_wording(kind: WriteKind) -> (&'static str, &'static str) {
+    match kind {
+        WriteKind::Painting => ("saving", CANNOT_SAVE),
+        WriteKind::Image => ("exporting", CANNOT_EXPORT),
+    }
 }
