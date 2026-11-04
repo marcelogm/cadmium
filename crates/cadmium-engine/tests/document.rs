@@ -18,6 +18,7 @@ const LARGE_HEIGHT: u32 = 1536;
 const MAX_ONE_STROKE_PAINTING_BYTES: u64 = 1 << 20;
 const FORMAT_1_DRY_HEIGHT: &str = "state/dry_height.zst";
 const DRY_RELIEF: &str = "state/dry_relief.zst";
+const INVALID_THICKNESS: &str = "holds a negative or non-finite thickness";
 const FORMAT_1_STATE_ENTRIES: [(&str, StateTexture); 8] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),
     ("state/wet_pig1.zst", StateTexture::WetPig1),
@@ -241,7 +242,11 @@ fn unknown_pigment_in_manifest_is_a_format_error() {
     let entries = Entries::blank().edit_manifest(|m| {
         m["spec"]["pigment_slots"][0] = "unobtainium".into();
     });
-    format_reason(read_entries(entries));
+    let reason = format_reason(read_entries(entries));
+    assert!(
+        reason.contains("unknown pigment \"unobtainium\""),
+        "{reason}"
+    );
 }
 
 #[test]
@@ -249,7 +254,9 @@ fn oversized_canvas_in_manifest_is_a_format_error() {
     let entries = Entries::blank().edit_manifest(|m| {
         m["spec"]["width"] = (MAX_CANVAS_SIZE + 1).into();
     });
-    format_reason(read_entries(entries));
+    let reason = format_reason(read_entries(entries));
+    assert!(reason.contains("canvas size"), "{reason}");
+    assert!(reason.contains(&MAX_CANVAS_SIZE.to_string()), "{reason}");
 }
 
 #[test]
@@ -280,7 +287,8 @@ fn state_entry_shorter_than_the_canvas_is_a_format_error() {
     let entries = Entries::blank().edit_state("state/wet_vol.zst", |raw| {
         raw.truncate(raw.len() - 4);
     });
-    format_reason(read_entries(entries));
+    let reason = format_reason(read_entries(entries));
+    assert!(reason.contains("state/wet_vol.zst holds"), "{reason}");
 }
 
 #[test]
@@ -288,23 +296,31 @@ fn state_entry_decompressing_past_the_canvas_is_a_format_error() {
     let entries = Entries::blank().edit_state("state/wet_pig0.zst", |raw| {
         raw.extend(std::iter::repeat_n(0, 1 << 16));
     });
-    format_reason(read_entries(entries));
+    let reason = format_reason(read_entries(entries));
+    assert!(reason.contains("state/wet_pig0.zst holds"), "{reason}");
 }
 
 #[test]
 fn non_finite_or_negative_wet_volume_is_a_format_error() {
     for value in [f32::NAN, f32::INFINITY, -1.0] {
         let entries = Entries::blank().edit_state("state/wet_vol.zst", set_first_thickness(value));
-        format_reason(read_entries(entries));
+        let reason = format_reason(read_entries(entries));
+        assert!(
+            reason.contains(&format!("state/wet_vol.zst {INVALID_THICKNESS}")),
+            "{reason}"
+        );
     }
 }
 
 #[test]
 fn non_finite_or_negative_dry_height_is_a_format_error() {
     for value in [f32::NAN, f32::NEG_INFINITY, -0.5] {
-        let entries =
-            Entries::blank().edit_state("state/dry_height.zst", set_first_thickness(value));
-        format_reason(read_entries(entries));
+        let entries = Entries::blank().edit_state(FORMAT_1_DRY_HEIGHT, set_first_thickness(value));
+        let reason = format_reason(read_entries(entries));
+        assert!(
+            reason.contains(&format!("{FORMAT_1_DRY_HEIGHT} {INVALID_THICKNESS}")),
+            "{reason}"
+        );
     }
 }
 
@@ -314,7 +330,11 @@ fn a_dry_relief_that_sinks_below_the_bare_canvas_is_a_format_error() {
         let entries = Entries::blank()
             .in_format_2()
             .edit_state(DRY_RELIEF, set_first_thickness(value));
-        format_reason(read_entries(entries));
+        let reason = format_reason(read_entries(entries));
+        assert!(
+            reason.contains(&format!("{DRY_RELIEF} {INVALID_THICKNESS}")),
+            "{reason}"
+        );
     }
 }
 
