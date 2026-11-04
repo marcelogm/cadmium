@@ -34,6 +34,7 @@ const EDGE_HIGH_SHARE: f32 = 0.9;
 const EDGE_LOW_SHARE: f32 = 0.1;
 const SHARP_EDGE_PX: usize = 2;
 const FURROW_SHARE: f32 = 0.6;
+const PREDICTION_TOLERANCE: f64 = 1e-4;
 
 fn session(gpu: &GpuContext) -> PaintSession {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -505,6 +506,24 @@ fn dipping_with_the_knife_loads_the_knife_and_leaves_the_brush_as_it_was() {
     s.clean_brush(&gpu);
     assert_eq!(s.engine.knife_totals(&gpu).volume, 0.0);
     assert_eq!(s.engine.brush_totals(&gpu), brush);
+}
+
+#[test]
+fn a_full_dip_lays_on_a_clean_knife_the_volume_the_engine_predicts() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let mixture = s.brush.reservoir_mixture(SLOT_COUNT);
+    s.brush.tool = Tool::Knife;
+    s.resize_tip();
+    let predicted = f64::from(s.engine.knife_full_dip_volume(mixture.volume_um));
+    assert!(predicted > 0.0);
+    dip_knife(&gpu, &mut s);
+    let loaded = s.engine.knife_totals(&gpu).volume;
+    assert!(
+        (loaded - predicted).abs() <= predicted * PREDICTION_TOLERANCE,
+        "{loaded} {predicted}"
+    );
+    assert!(s.engine.knife_full_dip_volume(2.0 * mixture.volume_um) > predicted as f32);
 }
 
 #[test]

@@ -1,5 +1,8 @@
 pub use oleo_engine::stroke::Tool;
 
+pub const KNIFE_HANDLING: &str = "Deitada (caneta inclinada) assenta placas; em pé raspa e abre sulco; \
+pressão leve deixa a placa mais grossa";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
     Move,
@@ -47,6 +50,13 @@ impl UiTool {
             UiTool::Paint(Tool::Eyedropper) => "Conta-gotas",
         }
     }
+
+    pub fn handling(self) -> Option<&'static str> {
+        match self {
+            UiTool::Paint(Tool::Knife) => Some(KNIFE_HANDLING),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -72,6 +82,16 @@ mod tests {
     #[test]
     fn unknown_toggle_name_is_not_a_tool() {
         assert_eq!(UiTool::from_name("spray"), None);
+    }
+
+    #[test]
+    fn only_the_knife_explains_how_it_is_held() {
+        for tool in UiTool::ALL {
+            assert_eq!(
+                tool.handling().is_some(),
+                tool == UiTool::Paint(Tool::Knife)
+            );
+        }
     }
 
     #[test]

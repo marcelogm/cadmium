@@ -12,6 +12,7 @@ use crate::LOG_DOMAIN;
 use crate::dmabuf::ModifierPolicy;
 use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
 use crate::presenter::PresentMode;
+use crate::tools::UiTool;
 use crate::window::OleoWindow;
 
 const EXIT_AFTER_FRAMES: &str = "OLEO_SMOKE_EXIT_AFTER_FRAMES";
@@ -19,6 +20,8 @@ const SCREENSHOT: &str = "OLEO_SMOKE_SCREENSHOT";
 const DIALOG: &str = "OLEO_SMOKE_DIALOG";
 const STROKE: &str = "OLEO_SMOKE_STROKE";
 const PAGE: &str = "OLEO_SMOKE_PAGE";
+const TOOL: &str = "OLEO_SMOKE_TOOL";
+const TOOL_ACTION: &str = "win.tool";
 const SAVE: &str = "OLEO_SMOKE_SAVE";
 const OPEN: &str = "OLEO_SMOKE_OPEN";
 const EXPORT: &str = "OLEO_SMOKE_EXPORT";
@@ -80,6 +83,7 @@ pub struct SmokeConfig {
     pub exit_after_frames: u32,
     pub screenshot: Option<PathBuf>,
     pub dialog: Option<SmokeDialog>,
+    pub tool: Option<UiTool>,
     pub stroke: bool,
     pub page: Option<String>,
     pub save: Option<PathBuf>,
@@ -90,6 +94,7 @@ pub struct SmokeConfig {
 
 #[derive(Clone, Debug, PartialEq)]
 enum SmokeStep {
+    ChooseTool(UiTool),
     OpenDialog(SmokeDialog),
     PaintStroke,
     Save(PathBuf),
@@ -103,7 +108,7 @@ enum SmokeStep {
 impl SmokeStep {
     fn is_ready(&self, frame: u32, earliest_end_frame: u32, window: &OleoWindow) -> bool {
         match self {
-            SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
+            SmokeStep::ChooseTool(_) | SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
             SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= earliest_end_frame,
@@ -118,6 +123,7 @@ impl SmokeStep {
         file_work: &FileWork,
     ) -> bool {
         match self {
+            SmokeStep::ChooseTool(tool) => choose_tool(window, *tool),
             SmokeStep::OpenDialog(dialog) => dialog.open(window),
             SmokeStep::PaintStroke => paint_stroke(window),
             SmokeStep::Save(path) => {
@@ -217,6 +223,7 @@ impl SmokeConfig {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
         let dialog = lookup(DIALOG);
+        let tool = lookup(TOOL).filter(|value| !value.is_empty());
         let stroke = lookup(STROKE).is_some_and(|value| !value.is_empty() && value != "0");
         let page = lookup(PAGE)
             .filter(|value| !value.is_empty())
@@ -241,6 +248,7 @@ impl SmokeConfig {
         if exit_after_frames.is_none()
             && screenshot.is_none()
             && dialog.is_none()
+            && tool.is_none()
             && !stroke
             && page.is_none()
             && save.is_none()
@@ -251,6 +259,13 @@ impl SmokeConfig {
             return None;
         }
         let dialog = dialog.and_then(|value| parse_or_warn(DIALOG, &value));
+        let tool = tool.and_then(|value| {
+            let parsed = value.to_str().and_then(UiTool::from_name);
+            if parsed.is_none() {
+                glib::g_warning!(LOG_DOMAIN, "ignoring {TOOL}={value:?}: not a tool");
+            }
+            parsed
+        });
         let exit_after_frames = exit_after_frames
             .and_then(|value| parse_or_warn(EXIT_AFTER_FRAMES, &value))
             .unwrap_or(DEFAULT_EXIT_AFTER_FRAMES);
@@ -258,6 +273,7 @@ impl SmokeConfig {
             exit_after_frames,
             screenshot,
             dialog,
+            tool,
             stroke,
             page,
             save,
@@ -269,6 +285,7 @@ impl SmokeConfig {
 
     fn steps(&self) -> Vec<SmokeStep> {
         let mut steps = Vec::new();
+        steps.extend(self.tool.map(SmokeStep::ChooseTool));
         steps.extend(self.dialog.map(SmokeStep::OpenDialog));
         if self.stroke {
             steps.push(SmokeStep::PaintStroke);
@@ -371,6 +388,14 @@ fn paint_stroke(window: &OleoWindow) {
     drop(state);
     canvas.queue_present();
     window.refresh_panels();
+}
+
+fn choose_tool(window: &OleoWindow, tool: UiTool) {
+    if let Err(error) =
+        WidgetExt::activate_action(window, TOOL_ACTION, Some(&tool.name().to_variant()))
+    {
+        glib::g_warning!(LOG_DOMAIN, "smoke could not choose {tool:?}: {error}");
+    }
 }
 
 fn run_dmabuf_selftest(app: &adw::Application, window: &OleoWindow, policy: ModifierPolicy) {
@@ -545,6 +570,28 @@ mod tests {
                 SmokeStep::Quit,
             ]
         );
+    }
+
+    #[test]
+    fn tool_is_chosen_before_anything_else() {
+        let config =
+            SmokeConfig::from_lookup(lookup(&[(STROKE, "1"), (TOOL, "knife"), (DIALOG, "about")]))
+                .unwrap();
+        assert_eq!(
+            config.steps(),
+            [
+                SmokeStep::ChooseTool(UiTool::Paint(oleo_engine::stroke::Tool::Knife)),
+                SmokeStep::OpenDialog(SmokeDialog::About),
+                SmokeStep::PaintStroke,
+                SmokeStep::Quit,
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_tool_is_ignored() {
+        let config = SmokeConfig::from_lookup(lookup(&[(TOOL, "spray")])).unwrap();
+        assert_eq!(config.tool, None);
     }
 
     #[test]

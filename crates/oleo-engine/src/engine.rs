@@ -1230,6 +1230,20 @@ impl WetOilEngine {
             .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
     }
 
+    pub fn knife_full_dip_volume(&self, thickness_um: f32) -> f32 {
+        if !thickness_um.is_finite() || thickness_um <= 0.0 {
+            return 0.0;
+        }
+        let thickness = thickness_um.min(MAX_TIP_THICKNESS_UM);
+        let reach = self.tip_radius.ceil() as i32 + 1;
+        (-reach..=reach)
+            .map(|offset| {
+                (blade_cell_cover(offset, self.tip_radius) * thickness * KNIFE_DIP_LENGTH_PX)
+                    .min(KNIFE_LAID_CAPACITY_UM)
+            })
+            .sum()
+    }
+
     pub fn clean_knife(&mut self, gpu: &GpuContext) {
         let mut encoder = gpu
             .device

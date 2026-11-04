@@ -73,10 +73,11 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     let dialog = adw::ShortcutsDialog::new();
     let tools = adw::ShortcutsSection::new(Some("Ferramentas"));
     for tool in UiTool::ALL {
-        tools.add(adw::ShortcutsItem::new(
-            tool.label(),
-            &tool_accelerator(tool),
-        ));
+        let item = adw::ShortcutsItem::new(tool.label(), &tool_accelerator(tool));
+        if let Some(handling) = tool.handling() {
+            item.set_subtitle(handling);
+        }
+        tools.add(item);
     }
     dialog.add(tools);
     for (title, entries) in ACTION_SHORTCUTS {

@@ -87,6 +87,21 @@ pub fn format_param(spec: &ParamSpec, value: f32) -> String {
     format!("{value:.decimals$}")
 }
 
+pub fn param_row(spec: &ParamSpec) -> (adw::ActionRow, gtk::Scale, gtk::Label) {
+    let range = f64::from(spec.max - spec.min);
+    let (row, scale, label) = slider_row(
+        spec.label,
+        f64::from(spec.min),
+        f64::from(spec.max),
+        param_step(spec),
+        range / PARAM_PAGES,
+    );
+    if is_whole_number_param(spec) {
+        scale.set_round_digits(0);
+    }
+    (row, scale, label)
+}
+
 pub fn pen_texts(pen: &PenReadout) -> [String; 4] {
     [
         format!("{:.2}", pen.pressure),
@@ -163,17 +178,7 @@ impl LabPanel {
         for (group, title) in PARAM_GROUPS {
             let preferences = adw::PreferencesGroup::builder().title(title).build();
             for spec in SimParams::specs().iter().filter(|spec| spec.group == group) {
-                let range = f64::from(spec.max - spec.min);
-                let (row, scale, label) = slider_row(
-                    spec.label,
-                    f64::from(spec.min),
-                    f64::from(spec.max),
-                    param_step(spec),
-                    range / PARAM_PAGES,
-                );
-                if is_whole_number_param(spec) {
-                    scale.set_round_digits(0);
-                }
+                let (row, scale, label) = param_row(spec);
                 preferences.add(&row);
                 params.push(ParamControl { spec, scale, label });
             }

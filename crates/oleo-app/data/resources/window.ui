@@ -59,7 +59,7 @@
                       <object class="AdwToggle">
                         <property name="name">knife</property>
                         <property name="icon-name">oleo-knife-symbolic</property>
-                        <property name="tooltip">Espátula (2)</property>
+                        <property name="tooltip">Espátula (2): deitada assenta placas, em pé raspa e abre sulco; pressão leve deixa a placa mais grossa</property>
                       </object>
                     </child>
                     <child>

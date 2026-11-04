@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use oleo_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
-use oleo_engine::canvas::CanvasSpec;
+use oleo_engine::canvas::{CanvasSpec, PaintTotals};
 use oleo_engine::document::{DocumentSnapshot, ExportedImage};
 use oleo_engine::engine::{PaintEngine, TIP_MARGIN, TIP_SIZE};
 use oleo_engine::gpu::GpuContext;
@@ -26,6 +26,7 @@ pub const FULL_DIP: f32 = 1.0;
 pub const PARTIAL_DIP: f32 = 0.25;
 const MIN_TIP_RADIUS_PX: f32 = 0.5;
 const RESERVE_FACTOR_KEY: &str = "reserve_factor";
+const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
     volume_um: 0.0,
@@ -142,6 +143,24 @@ pub fn plan_pigment_dip(
     }
 }
 
+pub fn knife_top_up(volume: f32, target: f32) -> Option<f32> {
+    if !target.is_finite() || target <= 0.0 || !volume.is_finite() {
+        return None;
+    }
+    let missing = target - volume.max(0.0);
+    (missing > target * KNIFE_TOP_UP_TOLERANCE).then(|| (missing / target).min(FULL_DIP))
+}
+
+pub fn mean_mixture(totals: &PaintTotals) -> Mixture {
+    if !totals.volume.is_finite() || totals.volume <= 0.0 {
+        return EMPTY_MIXTURE;
+    }
+    Mixture {
+        volume_um: totals.volume as f32,
+        fractions: std::array::from_fn(|slot| (totals.pigment[slot] / totals.volume) as f32),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DryOutcome {
     NothingWet,
@@ -151,7 +170,7 @@ pub enum DryOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StrokePreparation {
     None,
-    RestoreReserve,
+    TopUp,
     CleanAndLoad,
 }
 
@@ -161,8 +180,8 @@ pub fn stroke_preparation(
     clean_each_stroke: bool,
 ) -> StrokePreparation {
     match tool {
-        Tool::Brush if clean_each_stroke => StrokePreparation::CleanAndLoad,
-        Tool::Brush if reload_each_stroke => StrokePreparation::RestoreReserve,
+        Tool::Brush | Tool::Knife if clean_each_stroke => StrokePreparation::CleanAndLoad,
+        Tool::Brush | Tool::Knife if reload_each_stroke => StrokePreparation::TopUp,
         _ => StrokePreparation::None,
     }
 }
@@ -216,6 +235,8 @@ pub struct AppState {
     pub reload_each_stroke: bool,
     pub clean_each_stroke: bool,
     reserve_volume: f32,
+    pub knife_mixture: Mixture,
+    knife_volume: f32,
     stroking: bool,
     resting_tool: Tool,
     samples_since_frame: u32,
@@ -245,6 +266,8 @@ impl AppState {
             reload_each_stroke: true,
             clean_each_stroke: false,
             reserve_volume: 0.0,
+            knife_mixture: EMPTY_MIXTURE,
+            knife_volume: 0.0,
             stroking: false,
             resting_tool,
             samples_since_frame: 0,
@@ -340,6 +363,57 @@ impl AppState {
         mixture_is_empty(&self.tip_mixture) && self.reserve_volume <= 0.0
     }
 
+    pub fn knife_level(&self) -> f32 {
+        let capacity = self
+            .session
+            .engine
+            .knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
+        reserve_level(self.knife_volume, capacity)
+    }
+
+    pub fn knife_is_clean(&self) -> bool {
+        self.knife_volume <= 0.0
+    }
+
+    pub fn holds_knife(&self) -> bool {
+        self.session.brush.tool == Tool::Knife
+    }
+
+    fn put_down_stroke_tool(&mut self) {
+        self.end_stroke();
+        self.session.brush.tool = self.resting_tool;
+    }
+
+    fn clean_and_load(&mut self) {
+        if !self.holds_knife() {
+            self.session.reload_brush(&self.gpu);
+            return;
+        }
+        self.session.clean_brush(&self.gpu);
+        let mixture = self.palette_mixture();
+        if !mixture_is_empty(&mixture) {
+            self.session.dip(&self.gpu, &mixture, FULL_DIP);
+        }
+    }
+
+    fn top_up(&mut self) {
+        if !self.holds_knife() {
+            self.session.restore_reserve(&self.gpu);
+            return;
+        }
+        let mixture = self.palette_mixture();
+        if mixture_is_empty(&mixture) {
+            return;
+        }
+        self.session.flush(&self.gpu);
+        self.session.resize_tip();
+        let volume = self.session.engine.knife_totals(&self.gpu).volume as f32;
+        let target = self.session.engine.knife_full_dip_volume(mixture.volume_um);
+        if let Some(amount) = knife_top_up(volume, target) {
+            self.session.dip(&self.gpu, &mixture, amount);
+        }
+    }
+
     pub fn reload_brush(&mut self) {
         self.end_stroke();
         self.session.reload_brush(&self.gpu);
@@ -347,18 +421,18 @@ impl AppState {
     }
 
     pub fn clean_brush(&mut self) {
-        self.end_stroke();
+        self.put_down_stroke_tool();
         self.session.clean_brush(&self.gpu);
         self.measure_brush();
         self.wake();
     }
 
     pub fn choose_pigment(&mut self, slot: usize, click: PigmentClick) {
-        self.end_stroke();
+        self.put_down_stroke_tool();
         let (recipe, dip) = plan_pigment_dip(&self.session.brush.recipe, slot, click);
         self.session.brush.recipe = recipe;
         match dip {
-            PigmentDip::CleanAndLoad => self.session.reload_brush(&self.gpu),
+            PigmentDip::CleanAndLoad => self.clean_and_load(),
             PigmentDip::DipAgain => {
                 let mixture = self.palette_mixture();
                 self.session.dip(&self.gpu, &mixture, FULL_DIP);
@@ -395,7 +469,7 @@ impl AppState {
     }
 
     pub fn pick_colour(&mut self, x: f32, y: f32) -> bool {
-        self.end_stroke();
+        self.put_down_stroke_tool();
         self.session.flush(&self.gpu);
         let before = self.session.engine.reservoir_mixture(&self.gpu);
         let picked = self.session.pick_color(&self.gpu, x, y);
@@ -404,6 +478,9 @@ impl AppState {
         }
         self.session.brush.recipe = recipe_from_fractions(&picked.fractions);
         self.session.reload_brush(&self.gpu);
+        if self.holds_knife() {
+            self.clean_and_load();
+        }
         self.measure_brush();
         self.wake();
         true
@@ -501,12 +578,12 @@ impl AppState {
 
     pub fn begin_stroke(&mut self, tool: Tool, sample: StrokeSample) {
         self.end_stroke();
+        self.session.brush.tool = tool;
         match stroke_preparation(tool, self.reload_each_stroke, self.clean_each_stroke) {
             StrokePreparation::None => {}
-            StrokePreparation::RestoreReserve => self.session.restore_reserve(&self.gpu),
-            StrokePreparation::CleanAndLoad => self.session.reload_brush(&self.gpu),
+            StrokePreparation::TopUp => self.top_up(),
+            StrokePreparation::CleanAndLoad => self.clean_and_load(),
         }
-        self.session.brush.tool = tool;
         self.session.begin_stroke(&self.gpu, sample);
         self.stroking = true;
         self.last_sample_time_ms = None;
@@ -545,6 +622,9 @@ impl AppState {
     fn measure_brush(&mut self) {
         self.tip_mixture = self.session.tip_mean_mixture(&self.gpu);
         self.reserve_volume = self.session.engine.reserve_totals(&self.gpu).volume as f32;
+        let knife = self.session.engine.knife_totals(&self.gpu);
+        self.knife_mixture = mean_mixture(&knife);
+        self.knife_volume = knife.volume as f32;
     }
 
     fn note_samples(&mut self, samples: &[StrokeSample]) {
@@ -558,7 +638,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use oleo_engine::canvas::{PaintTotals, StateTexture};
+    use oleo_engine::canvas::StateTexture;
 
     use super::*;
     use crate::presets::starting_canvas_spec;
@@ -917,25 +997,152 @@ mod tests {
     }
 
     #[test]
-    fn only_the_brush_reloads_or_cleans_at_pen_down() {
-        assert_eq!(
-            stroke_preparation(Tool::Brush, true, false),
-            StrokePreparation::RestoreReserve
-        );
-        assert_eq!(
-            stroke_preparation(Tool::Brush, true, true),
-            StrokePreparation::CleanAndLoad
-        );
-        assert_eq!(
-            stroke_preparation(Tool::Brush, false, false),
-            StrokePreparation::None
-        );
-        for tool in [Tool::Knife, Tool::Blender, Tool::Rag] {
+    fn brush_and_knife_reload_or_clean_at_pen_down_and_other_tools_do_not() {
+        for tool in [Tool::Brush, Tool::Knife] {
+            assert_eq!(
+                stroke_preparation(tool, true, false),
+                StrokePreparation::TopUp
+            );
+            assert_eq!(
+                stroke_preparation(tool, true, true),
+                StrokePreparation::CleanAndLoad
+            );
+            assert_eq!(
+                stroke_preparation(tool, false, false),
+                StrokePreparation::None
+            );
+        }
+        for tool in [Tool::Blender, Tool::Rag, Tool::Eyedropper] {
             assert_eq!(
                 stroke_preparation(tool, true, true),
                 StrokePreparation::None
             );
         }
+    }
+
+    #[test]
+    fn knife_tops_up_only_the_share_it_is_missing() {
+        assert_eq!(knife_top_up(0.0, 400.0), Some(1.0));
+        assert_eq!(knife_top_up(300.0, 400.0), Some(0.25));
+        assert_eq!(knife_top_up(400.0, 400.0), None);
+        assert_eq!(knife_top_up(500.0, 400.0), None);
+        assert_eq!(knife_top_up(-5.0, 400.0), Some(1.0));
+        assert_eq!(knife_top_up(0.0, 0.0), None);
+        assert_eq!(knife_top_up(f32::NAN, 400.0), None);
+    }
+
+    #[test]
+    fn knife_colour_is_the_mean_of_what_it_carries() {
+        let mut pigment = [0.0; MAX_SLOTS];
+        pigment[1] = 30.0;
+        pigment[3] = 60.0;
+        let mixture = mean_mixture(&PaintTotals {
+            volume: 100.0,
+            pigment,
+        });
+        assert_eq!(mixture.volume_um, 100.0);
+        assert!((mixture.fractions[1] - 0.3).abs() < 1e-6);
+        assert!((mixture.fractions[3] - 0.6).abs() < 1e-6);
+        assert!(mixture_is_empty(&mean_mixture(&PaintTotals::default())));
+    }
+
+    const KNIFE_LEVEL_TOLERANCE: f32 = 0.01;
+
+    fn knife_totals(state: &AppState) -> PaintTotals {
+        state.session.engine.knife_totals(&state.gpu)
+    }
+
+    fn holding_the_knife() -> AppState {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Paint(Tool::Knife));
+        state
+    }
+
+    #[test]
+    fn a_swatch_click_with_the_knife_loads_the_knife_and_leaves_the_brush_alone() {
+        let mut state = holding_the_knife();
+        let brush = brush_totals(&state);
+        state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
+        let knife = knife_totals(&state);
+        assert!(knife.pigment[WHITE_SLOT] > 0.0);
+        assert_eq!(knife.pigment[ULTRAMARINE_SLOT], 0.0);
+        assert_eq!(brush_totals(&state), brush);
+        let level = state.knife_level();
+        assert!(
+            (level - state.session.brush.load).abs() < KNIFE_LEVEL_TOLERANCE,
+            "{level}"
+        );
+        assert!(!state.knife_is_clean());
+        assert!(state.knife_mixture.fractions[WHITE_SLOT] > 0.0);
+    }
+
+    #[test]
+    fn another_pigment_on_the_knife_cleans_it_first_and_ctrl_click_adds_a_little() {
+        let mut state = holding_the_knife();
+        state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
+        state.choose_pigment(ULTRAMARINE_SLOT, PigmentClick::Choose);
+        let full = knife_totals(&state);
+        assert_eq!(full.pigment[WHITE_SLOT], 0.0);
+        state.choose_pigment(WHITE_SLOT, PigmentClick::Mix);
+        let mixed = knife_totals(&state);
+        assert!(mixed.pigment[WHITE_SLOT] > 0.0);
+        assert!(mixed.pigment[WHITE_SLOT] < mixed.pigment[ULTRAMARINE_SLOT]);
+        assert_eq!(
+            state.session.brush.recipe,
+            [(ULTRAMARINE_SLOT, 1.0), (WHITE_SLOT, PARTIAL_DIP)]
+        );
+    }
+
+    #[test]
+    fn cleaning_the_knife_keeps_the_palette_pile_and_the_brush() {
+        let mut state = holding_the_knife();
+        state.choose_pigment(ULTRAMARINE_SLOT, PigmentClick::Choose);
+        let brush = brush_totals(&state);
+        let recipe = state.session.brush.recipe.clone();
+        state.clean_brush();
+        assert_eq!(knife_totals(&state).volume, 0.0);
+        assert!(state.knife_is_clean());
+        assert_eq!(state.knife_level(), 0.0);
+        assert_eq!(state.session.brush.recipe, recipe);
+        assert_eq!(brush_totals(&state), brush);
+    }
+
+    #[test]
+    fn knife_comes_down_loaded_to_the_palette_load_and_no_further() {
+        let mut state = holding_the_knife();
+        assert_eq!(knife_totals(&state).volume, 0.0);
+        let samples = row_samples(PAINT_ROW_Y);
+        state.begin_stroke(Tool::Knife, samples[0]);
+        let mixture = state.palette_mixture();
+        let target = f64::from(
+            state
+                .session
+                .engine
+                .knife_full_dip_volume(mixture.volume_um),
+        );
+        let loaded = knife_totals(&state).volume;
+        assert!(
+            (loaded - target).abs() <= target * RESERVE_TOLERANCE,
+            "{loaded} {target}"
+        );
+        state.end_stroke();
+        state.begin_stroke(Tool::Knife, samples[0]);
+        let again = knife_totals(&state).volume;
+        assert!(
+            again <= target * (1.0 + RESERVE_TOLERANCE),
+            "{again} {target}"
+        );
+        state.end_stroke();
+    }
+
+    #[test]
+    fn without_reloading_the_knife_stays_as_empty_as_it_is() {
+        let mut state = holding_the_knife();
+        state.reload_each_stroke = false;
+        let samples = row_samples(PAINT_ROW_Y);
+        state.begin_stroke(Tool::Knife, samples[0]);
+        assert_eq!(knife_totals(&state).volume, 0.0);
+        state.end_stroke();
     }
 
     #[test]

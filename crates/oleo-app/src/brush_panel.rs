@@ -5,13 +5,16 @@ use adw::prelude::*;
 use gtk::{gdk, glib};
 use oleo_engine::brush::BrushShape;
 use oleo_engine::canvas::primer_srgb8;
+use oleo_engine::engine::PaintEngine;
+use oleo_engine::params::{ParamSpec, SimParams};
 use oleo_engine::pigments::{MAX_SLOTS, Mixture, mixture_srgb8};
 use oleo_engine::stroke::Tool;
 
 use crate::LOG_DOMAIN;
+use crate::lab_panel::{format_param, param_row};
 use crate::state::{AppState, PigmentClick, SharedState, mixture_is_empty};
 use crate::swatch::{Swatch, SwatchShape};
-use crate::tools::UiTool;
+use crate::tools::{KNIFE_HANDLING, UiTool};
 use crate::window::OleoWindow;
 
 const PANEL_MARGIN: i32 = 12;
@@ -38,16 +41,78 @@ const MEDIUM_SLIDER_MAX: f64 = 0.9;
 const PERCENT: f64 = 100.0;
 const MIN_LISTED_SHARE: f32 = 0.01;
 const CLEAN_LABEL: &str = "Limpo";
-const PIGMENTS_DESCRIPTION: &str =
-    "Clique carrega o pincel limpo, de novo mergulha mais; Ctrl+clique mistura um pouco";
-const LOADED_TOOLTIP: &str = "Esquerda: mistura na paleta · direita: ponta do pincel";
-const RESERVE_TOOLTIP: &str = "Tinta na reserva do pincel";
+const PLATE_GAP_KEY: &str = "knife_gap_um";
+const PLATE_GAP_TITLE: &str = "Espessura da placa";
+const PLATE_GAP_UNIT: &str = "µm";
 const RELOAD_EACH_STROKE: &str = "Recarregar a cada traço";
-const RELOAD_EACH_STROKE_HINT: &str = "Repõe a reserva com a mistura da paleta";
 const CLEAN_EACH_STROKE: &str = "Limpar a cada traço";
-const CLEAN_EACH_STROKE_HINT: &str = "Começa cada traço com o pincel limpo e recarregado";
 const EYEDROPPER_HINT: &str = "Clique na tela para pegar a tinta que está nela. \
 O botão direito do mouse e o botão inferior da caneta pegam a cor com qualquer ferramenta.";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ToolWording {
+    pub pigments: &'static str,
+    pub loaded_title: &'static str,
+    pub loaded_tooltip: &'static str,
+    pub level_tooltip: &'static str,
+    pub clean: &'static str,
+    pub clean_button: &'static str,
+    pub size_subtitle: Option<&'static str>,
+    pub reload_hint: &'static str,
+    pub clean_each_hint: &'static str,
+}
+
+const BRUSH_WORDING: ToolWording = ToolWording {
+    pigments: "Clique carrega o pincel limpo, de novo mergulha mais; Ctrl+clique mistura um pouco",
+    loaded_title: "No pincel",
+    loaded_tooltip: "Esquerda: mistura na paleta · direita: ponta do pincel",
+    level_tooltip: "Tinta na reserva do pincel",
+    clean: CLEAN_LABEL,
+    clean_button: "Limpar pincel",
+    size_subtitle: None,
+    reload_hint: "Repõe a reserva com a mistura da paleta",
+    clean_each_hint: "Começa cada traço com o pincel limpo e recarregado",
+};
+
+const KNIFE_WORDING: ToolWording = ToolWording {
+    pigments: "Clique carrega a espátula limpa, de novo pega mais; Ctrl+clique mistura um pouco",
+    loaded_title: "Na espátula",
+    loaded_tooltip: "Esquerda: mistura na paleta · direita: tinta na espátula",
+    level_tooltip: "Tinta na espátula",
+    clean: "Limpa",
+    clean_button: "Limpar espátula",
+    size_subtitle: Some("Comprimento da lâmina"),
+    reload_hint: "Repõe a tinta da espátula até a carga",
+    clean_each_hint: "Começa cada traço com a espátula limpa e recarregada",
+};
+
+pub fn tool_wording(tool: Tool) -> ToolWording {
+    match tool {
+        Tool::Knife => KNIFE_WORDING,
+        _ => BRUSH_WORDING,
+    }
+}
+
+pub fn tool_hint(tool: Tool) -> &'static str {
+    match tool {
+        Tool::Knife => KNIFE_HANDLING,
+        _ => EYEDROPPER_HINT,
+    }
+}
+
+fn plate_gap_spec() -> &'static ParamSpec {
+    SimParams::specs()
+        .iter()
+        .find(|spec| spec.key == PLATE_GAP_KEY)
+        .expect("the knife plate gap is a simulation parameter")
+}
+
+pub fn plate_gap_text(gap_um: f32) -> String {
+    format!(
+        "{} {PLATE_GAP_UNIT}",
+        format_param(plate_gap_spec(), gap_um)
+    )
+}
 
 pub const SHAPES: [(BrushShape, &str); 3] = [
     (BrushShape::Round, "Redondo"),
@@ -60,7 +125,9 @@ pub struct VisibleControls {
     pub pigments: bool,
     pub loaded: bool,
     pub size: bool,
-    pub load_and_medium: bool,
+    pub load: bool,
+    pub medium: bool,
+    pub plate_gap: bool,
     pub shape: bool,
     pub stroke_loading: bool,
     pub clean: bool,
@@ -72,7 +139,9 @@ pub fn visible_controls(tool: Tool) -> VisibleControls {
         pigments: false,
         loaded: false,
         size: false,
-        load_and_medium: false,
+        load: false,
+        medium: false,
+        plate_gap: false,
         shape: false,
         stroke_loading: false,
         clean: false,
@@ -83,18 +152,31 @@ pub fn visible_controls(tool: Tool) -> VisibleControls {
             pigments: true,
             loaded: true,
             size: true,
-            load_and_medium: true,
+            load: true,
+            medium: true,
+            plate_gap: false,
             shape: true,
             stroke_loading: true,
             clean: true,
             hint: false,
+        },
+        Tool::Knife => VisibleControls {
+            pigments: true,
+            loaded: true,
+            size: true,
+            load: true,
+            plate_gap: true,
+            stroke_loading: true,
+            clean: true,
+            hint: true,
+            ..nothing
         },
         Tool::Blender => VisibleControls {
             size: true,
             shape: true,
             ..nothing
         },
-        Tool::Knife | Tool::Rag => VisibleControls {
+        Tool::Rag => VisibleControls {
             size: true,
             ..nothing
         },
@@ -199,12 +281,13 @@ struct Snapshot {
     tooltips: Vec<String>,
     addable: Vec<PigmentChoice>,
     recipe: Vec<(usize, f32)>,
-    brush_is_clean: bool,
+    held_is_clean: bool,
     palette_colour: [u8; 3],
-    tip_colour: [u8; 3],
-    reserve_level: f32,
+    held_colour: [u8; 3],
+    held_level: f32,
     diameter_px: f32,
     load: f32,
+    plate_gap: f32,
     medium: f32,
     shape: BrushShape,
     reload_each_stroke: bool,
@@ -225,6 +308,7 @@ pub struct BrushPanel {
     reserve_bar: gtk::LevelBar,
     size: (adw::ActionRow, gtk::Scale, gtk::Label),
     load: (adw::ActionRow, gtk::Scale, gtk::Label),
+    plate_gap: (adw::ActionRow, gtk::Scale, gtk::Label),
     medium: (adw::ActionRow, gtk::Scale, gtk::Label),
     shape_row: adw::ComboRow,
     reload_row: adw::SwitchRow,
@@ -261,7 +345,7 @@ impl BrushPanel {
         pigment_card.append(&pigment_box);
         let pigments_group = adw::PreferencesGroup::builder()
             .title("Pigmentos")
-            .description(PIGMENTS_DESCRIPTION)
+            .description(BRUSH_WORDING.pigments)
             .build();
         pigments_group.add(&pigment_card);
 
@@ -271,14 +355,11 @@ impl BrushPanel {
             LOADED_SWATCH_SIZE.0,
             LOADED_SWATCH_SIZE.1,
         );
-        loaded_swatch.set_tooltip_text(Some(LOADED_TOOLTIP));
         let reserve_bar = gtk::LevelBar::builder()
             .min_value(0.0)
             .max_value(1.0)
             .width_request(LOADED_SWATCH_SIZE.0)
-            .tooltip_text(RESERVE_TOOLTIP)
             .build();
-        reserve_bar.update_property(&[gtk::accessible::Property::Label(RESERVE_TOOLTIP)]);
         let loaded = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(LOADED_SPACING)
@@ -286,10 +367,7 @@ impl BrushPanel {
             .build();
         loaded.append(&loaded_swatch);
         loaded.append(&reserve_bar);
-        let loaded_row = adw::ActionRow::builder()
-            .title("No pincel")
-            .subtitle_lines(2)
-            .build();
+        let loaded_row = adw::ActionRow::builder().subtitle_lines(2).build();
         loaded_row.add_suffix(&loaded);
         let size = slider_row(
             "Tamanho",
@@ -299,30 +377,29 @@ impl BrushPanel {
             SIZE_PAGE,
         );
         let load = slider_row("Carga", 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
+        let plate_gap = param_row(plate_gap_spec());
+        plate_gap.0.set_title(PLATE_GAP_TITLE);
+        plate_gap
+            .1
+            .update_property(&[gtk::accessible::Property::Label(PLATE_GAP_TITLE)]);
         let medium = slider_row("Médium", 0.0, MEDIUM_SLIDER_MAX, UNIT_STEP, UNIT_PAGE);
         let shape_row = adw::ComboRow::builder()
             .title("Formato")
             .model(&gtk::StringList::new(&SHAPES.map(|(_, label)| label)))
             .build();
-        let reload_row = adw::SwitchRow::builder()
-            .title(RELOAD_EACH_STROKE)
-            .subtitle(RELOAD_EACH_STROKE_HINT)
-            .build();
-        let clean_each_row = adw::SwitchRow::builder()
-            .title(CLEAN_EACH_STROKE)
-            .subtitle(CLEAN_EACH_STROKE_HINT)
-            .build();
+        let reload_row = adw::SwitchRow::builder().title(RELOAD_EACH_STROKE).build();
+        let clean_each_row = adw::SwitchRow::builder().title(CLEAN_EACH_STROKE).build();
         let brush_group = adw::PreferencesGroup::builder().title("Pincel").build();
         brush_group.add(&loaded_row);
         brush_group.add(&size.0);
         brush_group.add(&load.0);
+        brush_group.add(&plate_gap.0);
         brush_group.add(&medium.0);
         brush_group.add(&shape_row);
         brush_group.add(&reload_row);
         brush_group.add(&clean_each_row);
 
         let clean_button = gtk::Button::builder()
-            .label("Limpar pincel")
             .action_name("win.clean-brush")
             .halign(gtk::Align::Center)
             .css_classes(["pill"])
@@ -353,6 +430,7 @@ impl BrushPanel {
             reserve_bar,
             size,
             load,
+            plate_gap,
             medium,
             shape_row,
             reload_row,
@@ -362,6 +440,12 @@ impl BrushPanel {
             syncing: Cell::new(false),
         });
         panel.connect_controls();
+        let shown = Rc::downgrade(&panel);
+        panel.root.connect_map(move |_| {
+            if let Some(panel) = shown.upgrade() {
+                panel.refresh();
+            }
+        });
         panel.refresh();
         panel
     }
@@ -384,13 +468,13 @@ impl BrushPanel {
                     .any(|(chosen, parts)| *chosen == slot && *parts > 0.0),
             );
         }
+        let wording = tool_wording(snapshot.tool);
         self.loaded_swatch.set_colour(snapshot.palette_colour);
         self.loaded_swatch
-            .set_right_half_colour(Some(snapshot.tip_colour));
-        self.reserve_bar
-            .set_value(f64::from(snapshot.reserve_level));
-        let loaded_text = if snapshot.brush_is_clean {
-            CLEAN_LABEL.to_string()
+            .set_right_half_colour(Some(snapshot.held_colour));
+        self.reserve_bar.set_value(f64::from(snapshot.held_level));
+        let loaded_text = if snapshot.held_is_clean {
+            wording.clean.to_string()
         } else {
             describe_recipe(&snapshot.slot_names, &snapshot.recipe)
         };
@@ -405,6 +489,10 @@ impl BrushPanel {
         self.load
             .2
             .set_label(&percent_text(f64::from(snapshot.load)));
+        self.plate_gap.1.set_value(f64::from(snapshot.plate_gap));
+        self.plate_gap
+            .2
+            .set_label(&plate_gap_text(snapshot.plate_gap));
         self.medium.1.set_value(f64::from(snapshot.medium));
         self.medium
             .2
@@ -439,7 +527,19 @@ impl BrushPanel {
             }
         };
         let palette_colour = colour_of(&state.palette_mixture());
-        let tip_colour = colour_of(&state.tip_mixture);
+        let (held_colour, held_level, held_is_clean) = if tool == Tool::Knife {
+            (
+                colour_of(&state.knife_mixture),
+                state.knife_level(),
+                state.knife_is_clean(),
+            )
+        } else {
+            (
+                colour_of(&state.tip_mixture),
+                state.reserve_level(),
+                state.brush_is_clean(),
+            )
+        };
         Snapshot {
             tool,
             slot_names: pigments.iter().map(|pigment| pigment.name).collect(),
@@ -461,12 +561,13 @@ impl BrushPanel {
                 .collect(),
             slots,
             recipe: session.brush.recipe.clone(),
-            brush_is_clean: state.brush_is_clean(),
+            held_is_clean,
             palette_colour,
-            tip_colour,
-            reserve_level: state.reserve_level(),
+            held_colour,
+            held_level,
             diameter_px: session.brush.geometry.max_diameter_px,
             load: session.brush.load,
+            plate_gap: session.engine.params().get(PLATE_GAP_KEY),
             medium: session.brush.medium,
             shape: session.brush.shape,
             reload_each_stroke: state.reload_each_stroke,
@@ -571,14 +672,31 @@ impl BrushPanel {
 
     fn show_controls_for(&self, tool: Tool) {
         let shown = visible_controls(tool);
+        let wording = tool_wording(tool);
+        self.pigments_group.set_description(Some(wording.pigments));
+        self.loaded_row.set_title(wording.loaded_title);
+        self.loaded_swatch
+            .set_tooltip_text(Some(wording.loaded_tooltip));
+        self.reserve_bar
+            .set_tooltip_text(Some(wording.level_tooltip));
+        self.reserve_bar
+            .update_property(&[gtk::accessible::Property::Label(wording.level_tooltip)]);
+        self.size
+            .0
+            .set_subtitle(wording.size_subtitle.unwrap_or_default());
+        self.reload_row.set_subtitle(wording.reload_hint);
+        self.clean_each_row.set_subtitle(wording.clean_each_hint);
+        self.clean_button.set_label(wording.clean_button);
+        self.hint.set_label(tool_hint(tool));
         self.pigments_group.set_visible(shown.pigments);
         self.brush_group
             .set_visible(shown.size || shown.loaded || shown.shape);
         self.brush_group.set_title(UiTool::Paint(tool).label());
         self.loaded_row.set_visible(shown.loaded);
         self.size.0.set_visible(shown.size);
-        self.load.0.set_visible(shown.load_and_medium);
-        self.medium.0.set_visible(shown.load_and_medium);
+        self.load.0.set_visible(shown.load);
+        self.medium.0.set_visible(shown.medium);
+        self.plate_gap.0.set_visible(shown.plate_gap);
         self.shape_row.set_visible(shown.shape);
         self.reload_row.set_visible(shown.stroke_loading);
         self.clean_each_row.set_visible(shown.stroke_loading);
@@ -599,6 +717,13 @@ impl BrushPanel {
             with_panel(&panel, |panel| {
                 let load = scale.value() as f32;
                 panel.change_brush(|state| state.set_load(load));
+            });
+        });
+        let panel = Rc::downgrade(self);
+        self.plate_gap.1.connect_value_changed(move |scale| {
+            with_panel(&panel, |panel| {
+                let gap = scale.value() as f32;
+                panel.change_brush(|state| state.set_param(PLATE_GAP_KEY, gap));
             });
         });
         let panel = Rc::downgrade(self);
@@ -739,22 +864,47 @@ mod tests {
     #[test]
     fn brush_shows_every_control_and_eyedropper_only_the_hint() {
         let brush = visible_controls(Tool::Brush);
-        assert!(brush.pigments && brush.loaded && brush.size && brush.load_and_medium);
+        assert!(brush.pigments && brush.loaded && brush.size && brush.load && brush.medium);
         assert!(brush.shape && brush.stroke_loading && brush.clean && !brush.hint);
+        assert!(!brush.plate_gap);
         let eyedropper = visible_controls(Tool::Eyedropper);
         assert!(eyedropper.hint);
         assert!(!eyedropper.pigments && !eyedropper.loaded && !eyedropper.size);
-        assert!(!eyedropper.load_and_medium && !eyedropper.shape && !eyedropper.clean);
+        assert!(!eyedropper.load && !eyedropper.medium && !eyedropper.plate_gap);
+        assert!(!eyedropper.shape && !eyedropper.clean);
         assert!(!eyedropper.stroke_loading);
     }
 
     #[test]
-    fn knife_and_rag_show_only_the_size() {
-        for tool in [Tool::Knife, Tool::Rag] {
-            let shown = visible_controls(tool);
-            assert!(shown.size);
-            assert!(!shown.pigments && !shown.loaded && !shown.load_and_medium);
-            assert!(!shown.shape && !shown.stroke_loading && !shown.clean && !shown.hint);
-        }
+    fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() {
+        let knife = visible_controls(Tool::Knife);
+        assert!(knife.pigments && knife.loaded && knife.size && knife.load);
+        assert!(knife.plate_gap && knife.stroke_loading && knife.clean && knife.hint);
+        assert!(!knife.medium && !knife.shape);
+    }
+
+    #[test]
+    fn rag_shows_only_the_size() {
+        let shown = visible_controls(Tool::Rag);
+        assert!(shown.size);
+        assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
+        assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
+        assert!(!shown.clean && !shown.hint);
+    }
+
+    #[test]
+    fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
+        let knife = tool_wording(Tool::Knife);
+        assert_eq!(knife.clean_button, "Limpar espátula");
+        assert_eq!(knife.loaded_title, "Na espátula");
+        assert_eq!(tool_hint(Tool::Knife), KNIFE_HANDLING);
+        assert_eq!(tool_wording(Tool::Brush).clean_button, "Limpar pincel");
+        assert_eq!(tool_hint(Tool::Eyedropper), EYEDROPPER_HINT);
+    }
+
+    #[test]
+    fn plate_gap_control_drives_the_knife_gap_parameter() {
+        assert_eq!(plate_gap_spec().key, PLATE_GAP_KEY);
+        assert_eq!(plate_gap_text(80.0), "80 µm");
     }
 }
