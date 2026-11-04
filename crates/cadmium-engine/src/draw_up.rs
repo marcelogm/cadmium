@@ -3,14 +3,16 @@ use wgpu::util::DeviceExt;
 use crate::canvas::{Canvas, PaintTotals, StateTexture};
 use crate::engine::{
     WORKGROUP_SIZE, buffer_binding, clamped_region, compute_pipeline, layouts, read_buffer,
-    shader_module, storage_buffer, storage_entry, texture_binding, texture_entry, uniform_entry,
+    region_rect, shader_module, storage_buffer, storage_entry, texture_binding, texture_entry,
+    uniform_entry,
 };
 use crate::gpu::{GpuContext, GpuLost};
 use crate::params::SimParams;
 use crate::pigments::MAX_SLOTS;
 
 const DRAW_UP_INVOCATIONS: u32 = 256;
-const DRAWN_VOLUME: usize = 1;
+const DRAWN_GRANTED_SHARE: usize = 0;
+const DRAWN_VOLUME: usize = DRAWN_GRANTED_SHARE + 1;
 const DRAWN_PIGMENT: usize = DRAWN_VOLUME + 1;
 const DRAWN_BYTES: u64 = ((DRAWN_PIGMENT + MAX_SLOTS) * std::mem::size_of::<f32>()) as u64;
 const FOOTPRINT_APRON_PX: i32 = 0;
@@ -21,6 +23,23 @@ pub struct DrawUpRequest {
     pub radius: f32,
     pub pressure: f32,
     pub seconds: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DrawnUp {
+    pub taken: PaintTotals,
+    pub level: f32,
+}
+
+impl DrawnUp {
+    pub(crate) fn after(held_um: f32, capacity_um: f32, taken: PaintTotals) -> DrawnUp {
+        let level = if capacity_um > 0.0 {
+            ((held_um + taken.volume as f32) / capacity_um).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        DrawnUp { taken, level }
+    }
 }
 
 #[repr(C)]
@@ -49,12 +68,7 @@ pub(crate) struct DrawUpRegion {
 
 impl DrawUpRegion {
     pub fn rect(&self) -> [f32; 4] {
-        [
-            self.origin[0] as f32,
-            self.origin[1] as f32,
-            (self.origin[0] + self.size[0] as i32 - 1) as f32,
-            (self.origin[1] + self.size[1] as i32 - 1) as f32,
-        ]
+        region_rect(self.origin, self.size)
     }
 }
 

@@ -2,8 +2,8 @@ use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture};
 use crate::engine::{
-    WORKGROUP_SIZE, buffer_binding, clamped_region, compute_pipeline, layouts, shader_module,
-    texture_binding, texture_entry, uniform_entry,
+    WORKGROUP_SIZE, buffer_binding, clamped_region, compute_pipeline, layouts, region_rect,
+    shader_module, texture_binding, texture_entry, uniform_entry,
 };
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
@@ -53,12 +53,7 @@ pub(crate) struct SqueezeRegion {
 
 impl SqueezeRegion {
     pub fn rect(&self) -> [f32; 4] {
-        [
-            self.origin[0] as f32,
-            self.origin[1] as f32,
-            (self.origin[0] + self.size[0] as i32 - 1) as f32,
-            (self.origin[1] + self.size[1] as i32 - 1) as f32,
-        ]
+        region_rect(self.origin, self.size)
     }
 }
 
