@@ -190,12 +190,12 @@ impl PaintSession {
             return false;
         };
         let dwell = dwell_after(hold.dwell, &nozzle);
-        hold.dwell = Some(dwell);
         let canvas = surface_canvas(hold.surface, &mut self.canvas, &mut self.tray);
         let params = self.engine.params();
         let Some(region) = squeeze_region(canvas, params, &nozzle, dwell) else {
             return false;
         };
+        hold.dwell = Some(dwell);
         let [x0, y0, x1, y1] = region.rect();
         let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
         let mut encoder = new_encoder(gpu, "squeeze");

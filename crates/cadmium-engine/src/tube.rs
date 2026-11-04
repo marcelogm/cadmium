@@ -22,6 +22,7 @@ pub struct Nozzle {
     pub slot: usize,
     pub pressure: f32,
     pub seconds: f32,
+    pub still_reach_px: f32,
 }
 
 const STILL_REACH_OF_RADIUS: f32 = 0.25;
@@ -46,11 +47,20 @@ pub(crate) struct Dwell {
     seconds: f32,
 }
 
+pub(crate) fn still_reach_px(nozzle: &Nozzle) -> f32 {
+    let of_radius = STILL_REACH_OF_RADIUS * nozzle.radius;
+    if nozzle.still_reach_px.is_finite() && nozzle.still_reach_px > 0.0 {
+        of_radius.max(nozzle.still_reach_px)
+    } else {
+        of_radius
+    }
+}
+
 pub(crate) fn dwell_after(previous: Option<Dwell>, nozzle: &Nozzle) -> Dwell {
     let anchor = previous.map_or(nozzle.from, |dwell| dwell.anchor);
     let seconds = previous.map_or(0.0, |dwell| dwell.seconds);
     let away = (nozzle.to[0] - anchor[0]).hypot(nozzle.to[1] - anchor[1]);
-    if away < STILL_REACH_OF_RADIUS * nozzle.radius {
+    if away < still_reach_px(nozzle) {
         Dwell {
             anchor,
             seconds: seconds + nozzle.seconds.max(0.0),
@@ -212,6 +222,7 @@ mod tests {
             slot: 0,
             pressure: 1.0,
             seconds,
+            still_reach_px: 0.0,
         }
     }
 
@@ -234,6 +245,21 @@ mod tests {
         let dwell = dwell_after(Some(held_for(0.5)), &nozzle([2.1, 0.0], 0.1));
         assert_eq!(dwell.anchor, [2.1, 0.0]);
         assert_eq!(dwell.seconds, 0.0);
+    }
+
+    #[test]
+    fn the_still_reach_is_the_wider_of_a_quarter_radius_and_the_screen_reach() {
+        let reach = |screen_reach: f32| {
+            still_reach_px(&Nozzle {
+                still_reach_px: screen_reach,
+                ..nozzle([0.0, 0.0], 0.1)
+            })
+        };
+        assert_eq!(reach(12.0), 12.0);
+        assert_eq!(reach(0.5), 2.0);
+        for unknown in [0.0, -3.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(reach(unknown), 2.0);
+        }
     }
 
     #[test]

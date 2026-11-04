@@ -707,6 +707,7 @@ fn squeeze_on_the_tray(gpu: &GpuContext, s: &mut PaintSession) {
             slot: 1,
             pressure: 1.0,
             seconds: 0.2,
+            still_reach_px: 0.0,
         },
     );
     s.end_hold();

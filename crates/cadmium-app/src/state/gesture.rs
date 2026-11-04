@@ -11,6 +11,7 @@ use super::{AppState, StrokePreparation, mean_mixture, recipe_from_fractions, st
 use crate::tools::UiTool;
 
 pub const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
+const STILL_TUBE_SCREEN_PX: f32 = 3.0;
 const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
 const FULL_LEVEL: f32 = 0.999;
 
@@ -53,6 +54,19 @@ impl AppState {
     pub fn set_tray_zoom(&mut self, zoom: f32) {
         if zoom.is_finite() && zoom > 0.0 {
             self.tray_zoom = zoom;
+        }
+    }
+
+    pub fn set_painting_device_scale(&mut self, scale: f32) {
+        if scale.is_finite() && scale > 0.0 {
+            self.painting_device_scale = scale;
+        }
+    }
+
+    fn screen_zoom(&self, surface: Surface) -> f32 {
+        match surface {
+            Surface::Tray => self.tray_zoom,
+            Surface::Painting => self.view.zoom / self.painting_device_scale,
         }
     }
 
@@ -245,6 +259,7 @@ impl AppState {
                         slot: self.tube_slot,
                         pressure: pen.pressure,
                         seconds,
+                        still_reach_px: STILL_TUBE_SCREEN_PX / self.screen_zoom(surface),
                     },
                 );
                 self.contact = Some(Contact::Squeezing {
@@ -845,6 +860,45 @@ mod tests {
         assert!(totals.pigment[1] > 0.0 && totals.pigment[0] == 0.0);
         assert!(state.brush_is_clean());
         assert!(state.has_unsaved_edits());
+    }
+
+    fn painting_height_at(state: &AppState, x: usize, y: usize) -> f32 {
+        let volume = state
+            .session
+            .canvas
+            .read_f32(&state.gpu, cadmium_engine::canvas::StateTexture::WetVol)
+            .unwrap();
+        volume[y * state.session.canvas.spec.width as usize + x]
+    }
+
+    #[test]
+    fn a_tube_on_a_zoomed_out_painting_keeps_growing_through_a_trembling_hand() {
+        let mut state = painting_state();
+        state.set_brush_size(10.0);
+        state.view.zoom = 0.25;
+        state.set_ui_tool(UiTool::Tube);
+        let one_screen_px = 1.0 / f64::from(state.view.zoom);
+        let shaken = |frame: usize| {
+            let shake = if frame.is_multiple_of(2) {
+                one_screen_px
+            } else {
+                -one_screen_px
+            };
+            sample_at(200.5 + shake, 200.5, 0.5)
+        };
+        let tremble = |state: &mut AppState, frames: std::ops::Range<usize>| {
+            for frame in frames {
+                state.motion(&[shaken(frame)]);
+                state.advance_hold(0.05);
+            }
+        };
+        state.press(Surface::Painting, sample_at(200.5, 200.5, 0.5), false);
+        tremble(&mut state, 0..10);
+        let early = painting_height_at(&state, 200, 200);
+        tremble(&mut state, 10..30);
+        let later = painting_height_at(&state, 200, 200);
+        state.release();
+        assert!(later > early, "{early} -> {later}");
     }
 
     #[test]

@@ -259,6 +259,7 @@ fn still_nozzle(slot: usize, seconds: f32) -> Nozzle {
         slot,
         pressure: 1.0,
         seconds,
+        still_reach_px: 0.0,
     }
 }
 
@@ -308,6 +309,24 @@ fn a_still_tube_grows_its_blob() {
 }
 
 #[test]
+fn a_frame_that_squeezes_nothing_leaves_the_blob_dwelling() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.begin_hold(&gpu, Surface::Tray);
+    s.squeeze(&gpu, still_nozzle(0, 0.4));
+    let once = tray_heights(&gpu, &s)(300, 300);
+    let lifted = Nozzle {
+        to: [600.5, 300.5],
+        pressure: 0.0,
+        ..still_nozzle(0, 0.05)
+    };
+    assert!(!s.squeeze(&gpu, lifted));
+    s.squeeze(&gpu, still_nozzle(0, 0.2));
+    s.end_hold();
+    assert!(tray_heights(&gpu, &s)(300, 300) > once);
+}
+
+#[test]
 fn a_held_tube_keeps_growing_through_a_trembling_hand() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -326,6 +345,7 @@ fn a_held_tube_keeps_growing_through_a_trembling_hand() {
                     slot: 0,
                     pressure: 0.5,
                     seconds: FRAME_SECONDS,
+                    still_reach_px: 0.0,
                 },
             );
         }
@@ -384,6 +404,7 @@ fn drag_tube_of(
                 slot,
                 pressure,
                 seconds: FRAME_SECONDS,
+                still_reach_px: 0.0,
             },
         );
     }
@@ -513,6 +534,7 @@ fn squeezing_on_the_painting_is_one_undo_step() {
             slot: 0,
             pressure: 0.5,
             seconds: 0.05,
+            still_reach_px: 0.0,
         },
     );
     s.squeeze(
@@ -524,6 +546,7 @@ fn squeezing_on_the_painting_is_one_undo_step() {
             slot: 0,
             pressure: 0.5,
             seconds: 0.05,
+            still_reach_px: 0.0,
         },
     );
     s.end_hold();
@@ -627,6 +650,7 @@ fn a_stroke_during_a_hold_leaves_the_squeeze_its_own_undo_step() {
             slot: 0,
             pressure: 1.0,
             seconds: 0.2,
+            still_reach_px: 0.0,
         },
     );
     let squeezed = s.canvas.wet_totals(&gpu).unwrap().volume;
@@ -698,6 +722,7 @@ fn drawing_up_stops_when_the_reservoir_is_full() {
         slot: 0,
         pressure: 1.0,
         seconds,
+        still_reach_px: 0.0,
     };
     s.begin_hold(&gpu, Surface::Tray);
     for _ in 0..20 {
