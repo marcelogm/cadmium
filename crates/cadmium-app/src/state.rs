@@ -20,6 +20,7 @@ use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
 use crate::writes::{EditCounter, EditMark};
 use gesture::Contact;
+pub use gesture::LoadRing;
 
 mod gesture;
 

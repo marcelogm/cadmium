@@ -16,6 +16,7 @@ use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::{DryOutcome, SharedState};
 use crate::tools::{Tool, UiTool};
+use crate::tray_view::TrayView;
 use crate::writes::WritesInFlight;
 
 pub type PanelRefresher = Rc<dyn Fn()>;
@@ -46,6 +47,10 @@ mod imp {
         pub primary_menu: TemplateChild<gtk::MenuButton>,
         #[template_child]
         pub sidebar_stack: TemplateChild<adw::ViewStack>,
+        #[template_child]
+        pub sidebar_paned: TemplateChild<gtk::Paned>,
+        #[template_child]
+        pub tray_slot: TemplateChild<gtk::Box>,
         #[template_child]
         pub brush_panel_slot: TemplateChild<gtk::Box>,
         #[template_child]
@@ -87,6 +92,7 @@ mod imp {
             window.setup_tool_shortcuts();
             window.follow_tool_group();
             window.keep_window_buttons_reachable();
+            window.give_the_tray_its_first_height();
             self.tool_group
                 .set_active_name(Some(UiTool::default().name()));
         }
@@ -120,6 +126,7 @@ const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indispo
 const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
 const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
+const PANELS_SHARE_OF_SIDEBAR: f64 = 0.6;
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 8] = [
     (gdk::Key::h, UiTool::Move),
@@ -171,13 +178,12 @@ impl CadmiumWindow {
         canvas.connect_colour_picked(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |_, found_paint| {
-                if found_paint {
-                    window.refresh_panels();
-                } else {
-                    window.show_toast(NOTHING_TO_PICK_TOAST);
-                }
-            }
+            move |_, found_paint| window.after_colour_pick(found_paint)
+        ));
+        canvas.connect_released(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.after_contact()
         ));
         canvas.connect_presented(glib::clone!(
             #[weak(rename_to = window)]
@@ -204,6 +210,7 @@ impl CadmiumWindow {
         if self.imp().canvas.set(canvas).is_err() {
             unreachable!("the canvas is attached once");
         }
+        self.attach_tray(state.clone());
         let brush_panel = BrushPanel::new(self, state.clone());
         self.imp().brush_panel_slot.append(brush_panel.widget());
         self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
@@ -225,6 +232,45 @@ impl CadmiumWindow {
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
         self.announce_if_history_disabled();
+    }
+
+    fn attach_tray(&self, state: SharedState) {
+        let tray = TrayView::new(state);
+        tray.connect_colour_picked(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_, found_paint| window.after_colour_pick(found_paint)
+        ));
+        tray.connect_released(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.after_contact()
+        ));
+        self.imp().tray_slot.append(&tray);
+    }
+
+    fn give_the_tray_its_first_height(&self) {
+        self.imp().sidebar_paned.add_tick_callback(|paned, _| {
+            let height = paned.height();
+            if height <= 0 {
+                return glib::ControlFlow::Continue;
+            }
+            paned.set_position((f64::from(height) * PANELS_SHARE_OF_SIDEBAR) as i32);
+            glib::ControlFlow::Break
+        });
+    }
+
+    fn after_colour_pick(&self, found_paint: bool) {
+        if found_paint {
+            self.refresh_panels();
+        } else {
+            self.show_toast(NOTHING_TO_PICK_TOAST);
+        }
+    }
+
+    fn after_contact(&self) {
+        self.refresh_panels();
+        self.sync_history_actions();
     }
 
     fn announce_if_history_disabled(&self) {
@@ -360,6 +406,12 @@ impl CadmiumWindow {
         let dry = gio::ActionEntry::builder("dry")
             .activate(|window: &Self, _, _| window.dry())
             .build();
+        let clear_tray = gio::ActionEntry::builder("clear-tray")
+            .activate(|window: &Self, _, _| {
+                window.state().borrow_mut().clear_tray();
+                window.after_contact();
+            })
+            .build();
         let zoom_in = gio::ActionEntry::builder("zoom-in")
             .activate(|window: &Self, _, _| window.canvas().zoom_in())
             .build();
@@ -389,6 +441,7 @@ impl CadmiumWindow {
             undo,
             redo,
             dry,
+            clear_tray,
             zoom_in,
             zoom_out,
             zoom_fit,

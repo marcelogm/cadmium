@@ -90,6 +90,10 @@ fn attach_stylus_sharing<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact
     widget.add_controller(hover_controller(widget, contact));
 }
 
+pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) {
+    attach_stylus_sharing(widget, &Rc::new(Contact::default()));
+}
+
 pub fn attach(canvas: &CadmiumCanvas) {
     let contact = Rc::new(Contact::default());
     attach_stylus_sharing(canvas, &contact);

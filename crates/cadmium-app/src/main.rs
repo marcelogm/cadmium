@@ -16,6 +16,7 @@ mod smoke;
 mod state;
 mod swatch;
 mod tools;
+mod tray_view;
 mod view;
 mod window;
 mod writes;

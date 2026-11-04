@@ -35,7 +35,7 @@ mod imp {
         pub texture: RefCell<Option<gdk::Texture>>,
         pub needs_present: Cell<bool>,
         pub tick: RefCell<Option<gtk::TickCallbackId>>,
-        pub scale_watch: RefCell<Option<(glib::WeakRef<gdk::Surface>, glib::SignalHandlerId)>>,
+        pub scale_watch: SurfaceScaleWatch,
         pub hover: Cell<Option<(f64, f64)>>,
         pub user_moved_view: Cell<bool>,
         pub fit_after_stroke: Cell<bool>,
@@ -47,6 +47,7 @@ mod imp {
         pub presented_handlers: RefCell<Vec<CanvasHandler>>,
         pub fallback_handlers: RefCell<Vec<CanvasHandler>>,
         pub gpu_lost_handlers: RefCell<Vec<CanvasHandler>>,
+        pub released_handlers: RefCell<Vec<CanvasHandler>>,
         pub gpu_lost_announced: Cell<bool>,
     }
 
@@ -75,24 +76,13 @@ mod imp {
         fn realize(&self) {
             self.parent_realize();
             let canvas = self.obj();
-            if let Some(surface) = canvas.native().and_then(|native| native.surface()) {
-                let handler = surface.connect_scale_notify(glib::clone!(
-                    #[weak]
-                    canvas,
-                    move |_| canvas.follow_scale_change()
-                ));
-                self.scale_watch
-                    .replace(Some((surface.downgrade(), handler)));
-            }
+            self.scale_watch
+                .start(&*canvas, super::CadmiumCanvas::follow_scale_change);
             canvas.queue_present();
         }
 
         fn unrealize(&self) {
-            if let Some((surface, handler)) = self.scale_watch.take()
-                && let Some(surface) = surface.upgrade()
-            {
-                surface.disconnect(handler);
-            }
+            self.scale_watch.stop();
             self.texture.replace(None);
             self.presenter.borrow_mut().release();
             self.parent_unrealize();
@@ -127,22 +117,9 @@ mod imp {
             }
             if let Some((x, y)) = self.hover.get()
                 && let Some(outline) = canvas.cursor_outline()
+                && outline.is_visible()
             {
-                let [along, across] = outline.semi_axes;
-                append_ring(
-                    snapshot,
-                    (x as f32, y as f32),
-                    [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
-                    outline.rotation_deg,
-                    OUTLINE_DARK,
-                );
-                append_ring(
-                    snapshot,
-                    (x as f32, y as f32),
-                    outline.semi_axes,
-                    outline.rotation_deg,
-                    OUTLINE_LIGHT,
-                );
+                outline.append_to(snapshot, (x as f32, y as f32));
             }
         }
     }
@@ -154,26 +131,128 @@ glib::wrapper! {
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
-struct CursorOutline {
-    semi_axes: [f32; 2],
-    rotation_deg: f32,
+pub(crate) struct CursorOutline {
+    pub semi_axes: [f32; 2],
+    pub rotation_deg: f32,
 }
 
-fn append_ring(
+impl CursorOutline {
+    pub(crate) fn of_brush(state: &AppState, to_widget: f32) -> CursorOutline {
+        let mut brush = state.session.brush.clone();
+        if let UiTool::Paint(tool) = state.ui_tool {
+            brush.tool = tool;
+        }
+        let pen = StrokeSample {
+            x: 0.0,
+            y: 0.0,
+            pressure: state.pen.pressure,
+            tilt_x_deg: state.pen.tilt_x,
+            tilt_y_deg: state.pen.tilt_y,
+            time_ms: 0,
+        };
+        let canvas_radius = brush.geometry.max_diameter_px / 2.0;
+        let (semi_axes, rotation_deg) = match state.session.engine.brush_outline(&brush, &pen) {
+            Some(outline) => (outline.semi_axes, outline.orientation.to_degrees()),
+            None => ([canvas_radius; 2], 0.0),
+        };
+        CursorOutline {
+            semi_axes: semi_axes.map(|semi| semi * to_widget),
+            rotation_deg,
+        }
+    }
+
+    pub(crate) fn radius(&self) -> f32 {
+        self.semi_axes[0].max(self.semi_axes[1])
+    }
+
+    pub(crate) fn is_visible(&self) -> bool {
+        self.radius() >= OUTLINE_MIN_RADIUS
+    }
+
+    pub(crate) fn append_to(&self, snapshot: &gtk::Snapshot, centre: (f32, f32)) {
+        let [along, across] = self.semi_axes;
+        append_ring(
+            snapshot,
+            centre,
+            [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
+            self.rotation_deg,
+            OUTLINE_DARK,
+            OUTLINE_WIDTH,
+        );
+        append_ring(
+            snapshot,
+            centre,
+            self.semi_axes,
+            self.rotation_deg,
+            OUTLINE_LIGHT,
+            OUTLINE_WIDTH,
+        );
+    }
+}
+
+pub(crate) fn append_ring(
     snapshot: &gtk::Snapshot,
     (x, y): (f32, f32),
     [along, across]: [f32; 2],
     rotation_deg: f32,
     colour: gdk::RGBA,
+    width: f32,
 ) {
     snapshot.save();
     snapshot.translate(&graphene::Point::new(x, y));
     snapshot.rotate(rotation_deg);
     let bounds = graphene::Rect::new(-along, -across, 2.0 * along, 2.0 * across);
     let corner = graphene::Size::new(along, across);
-    let outline = gsk::RoundedRect::new(bounds, corner, corner, corner, corner);
-    snapshot.append_border(&outline, &[OUTLINE_WIDTH; 4], &[colour; 4]);
+    let ring = gsk::PathBuilder::new();
+    ring.add_rounded_rect(&gsk::RoundedRect::new(
+        bounds, corner, corner, corner, corner,
+    ));
+    snapshot.append_stroke(&ring.to_path(), &gsk::Stroke::new(width), &colour);
     snapshot.restore();
+}
+
+pub(crate) fn device_scale(widget: &impl IsA<gtk::Widget>) -> f64 {
+    widget
+        .native()
+        .and_then(|native| native.surface())
+        .map_or(f64::from(widget.scale_factor()), |surface| surface.scale())
+}
+
+pub(crate) fn viewport_px(widget: &impl IsA<gtk::Widget>) -> (u32, u32) {
+    let scale = device_scale(widget);
+    (
+        (f64::from(widget.width()) * scale).ceil() as u32,
+        (f64::from(widget.height()) * scale).ceil() as u32,
+    )
+}
+
+#[derive(Default)]
+pub struct SurfaceScaleWatch {
+    watched: RefCell<Option<(glib::WeakRef<gdk::Surface>, glib::SignalHandlerId)>>,
+}
+
+impl SurfaceScaleWatch {
+    pub(crate) fn start<W: IsA<gtk::Widget>>(&self, widget: &W, on_change: fn(&W)) {
+        self.stop();
+        let Some(surface) = widget.native().and_then(|native| native.surface()) else {
+            return;
+        };
+        let widget = widget.downgrade();
+        let handler = surface.connect_scale_notify(move |_| {
+            if let Some(widget) = widget.upgrade() {
+                on_change(&widget);
+            }
+        });
+        self.watched.replace(Some((surface.downgrade(), handler)));
+    }
+
+    pub(crate) fn stop(&self) {
+        if let Some((surface, handler)) = self.watched.take()
+            && let Some(surface) = surface.upgrade()
+        {
+            surface.disconnect(handler);
+        }
+    }
 }
 
 impl CadmiumCanvas {
@@ -226,9 +305,7 @@ impl CadmiumCanvas {
     }
 
     pub fn device_scale(&self) -> f64 {
-        self.native()
-            .and_then(|native| native.surface())
-            .map_or(f64::from(self.scale_factor()), |surface| surface.scale())
+        device_scale(self)
     }
 
     pub fn zoom(&self) -> f32 {
@@ -335,6 +412,13 @@ impl CadmiumCanvas {
             .push(Box::new(handler));
     }
 
+    pub fn connect_released(&self, handler: impl Fn(&CadmiumCanvas) + 'static) {
+        self.imp()
+            .released_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     fn zoom_around_center(&self, zoom: f32) {
         self.set_zoom_around(
             f64::from(self.width()) / 2.0,
@@ -358,37 +442,12 @@ impl CadmiumCanvas {
 
     fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
-        let mut brush = state.session.brush.clone();
-        if let UiTool::Paint(tool) = state.ui_tool {
-            brush.tool = tool;
-        }
-        let pen = StrokeSample {
-            x: 0.0,
-            y: 0.0,
-            pressure: state.pen.pressure,
-            tilt_x_deg: state.pen.tilt_x,
-            tilt_y_deg: state.pen.tilt_y,
-            time_ms: 0,
-        };
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        let canvas_radius = brush.geometry.max_diameter_px / 2.0;
-        let (semi_axes, rotation_deg) = match state.session.engine.brush_outline(&brush, &pen) {
-            Some(outline) => (outline.semi_axes, outline.orientation.to_degrees()),
-            None => ([canvas_radius; 2], 0.0),
-        };
-        let semi_axes = semi_axes.map(|semi| semi * to_widget);
-        (semi_axes[0].max(semi_axes[1]) >= OUTLINE_MIN_RADIUS).then_some(CursorOutline {
-            semi_axes,
-            rotation_deg,
-        })
+        Some(CursorOutline::of_brush(&state, to_widget))
     }
 
     fn viewport_px(&self) -> (u32, u32) {
-        let scale = self.device_scale();
-        (
-            (f64::from(self.width()) * scale).ceil() as u32,
-            (f64::from(self.height()) * scale).ceil() as u32,
-        )
+        viewport_px(self)
     }
 
     fn follow_scale_change(&self) {
@@ -535,6 +594,12 @@ impl PaintSurfaceWidget for CadmiumCanvas {
     fn observe_hover_pen(&self, sample: &StrokeSample) {
         self.state().borrow_mut().observe_hover_pen(sample);
         for handler in self.imp().pen_observed_handlers.borrow().iter() {
+            handler(self);
+        }
+    }
+
+    fn contact_released(&self) {
+        for handler in self.imp().released_handlers.borrow().iter() {
             handler(self);
         }
     }
