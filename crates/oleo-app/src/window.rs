@@ -1,4 +1,5 @@
-use std::cell::{Cell, OnceCell};
+use std::cell::{Cell, OnceCell, RefCell};
+use std::rc::Rc;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -7,11 +8,15 @@ use gtk::{gdk, gio, glib};
 use oleo_engine::canvas::CanvasSpec;
 
 use crate::LOG_DOMAIN;
+use crate::brush_panel::BrushPanel;
 use crate::canvas_widget::OleoCanvas;
 use crate::dialogs::confirm_discard;
+use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::SharedState;
 use crate::tools::{Tool, UiTool};
+
+pub type PanelRefresher = Rc<dyn Fn()>;
 
 mod imp {
     use super::*;
@@ -45,6 +50,7 @@ mod imp {
         pub lab_panel_slot: TemplateChild<gtk::Box>,
         pub tool: Cell<UiTool>,
         pub canvas: OnceCell<OleoCanvas>,
+        pub panel_refreshers: RefCell<Vec<PanelRefresher>>,
     }
 
     #[glib::object_subclass]
@@ -90,9 +96,9 @@ glib::wrapper! {
 
 const PENDING_ACTIONS: [&str; 4] = ["open", "save", "save-as", "export"];
 
-const ENGINE_PENDING_ACTIONS: [&str; 3] = ["undo", "redo", "dry"];
-
 const ZOOM_PERCENT: f32 = 100.0;
+const DRIED_TOAST: &str = "Tela seca";
+const UNDO_LABEL: &str = "Desfazer";
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
@@ -139,10 +145,81 @@ impl OleoWindow {
             self,
             move |canvas| window.show_zoom(canvas.zoom())
         ));
+        canvas.connect_brush_changed(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.refresh_panels()
+        ));
+        canvas.connect_presented(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.sync_history_actions()
+        ));
         self.imp().canvas_slot.append(&canvas);
+        let state = canvas.state();
         if self.imp().canvas.set(canvas).is_err() {
             unreachable!("the canvas is attached once");
         }
+        let brush_panel = BrushPanel::new(self, state.clone());
+        self.imp().brush_panel_slot.append(brush_panel.widget());
+        self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
+        let lab_panel = LabPanel::new(state);
+        self.imp().lab_panel_slot.append(lab_panel.widget());
+        self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
+        self.sync_history_actions();
+    }
+
+    pub fn connect_refresh_panels(&self, refresher: PanelRefresher) {
+        self.imp().panel_refreshers.borrow_mut().push(refresher);
+    }
+
+    pub fn refresh_panels(&self) {
+        let refreshers = self.imp().panel_refreshers.borrow().clone();
+        for refresh in refreshers {
+            refresh();
+        }
+    }
+
+    pub fn show_sidebar_page(&self, name: &str) {
+        let imp = self.imp();
+        imp.split_view.set_show_sidebar(true);
+        if imp.sidebar_stack.child_by_name(name).is_some() {
+            imp.sidebar_stack.set_visible_child_name(name);
+        } else {
+            glib::g_warning!(LOG_DOMAIN, "no sidebar page named {name:?}");
+        }
+    }
+
+    fn sync_history_actions(&self) {
+        let state = self.state();
+        let Ok(state) = state.try_borrow() else {
+            return;
+        };
+        let (can_undo, can_redo) = (state.can_undo(), state.can_redo());
+        drop(state);
+        for (name, enabled) in [("undo", can_undo), ("redo", can_redo)] {
+            if let Some(action) = self.lookup_action(name).and_downcast::<gio::SimpleAction>()
+                && action.is_enabled() != enabled
+            {
+                action.set_enabled(enabled);
+            }
+        }
+    }
+
+    fn after_history_change(&self) {
+        self.canvas().queue_present();
+        self.sync_history_actions();
+    }
+
+    fn dry(&self) {
+        self.state().borrow_mut().dry();
+        self.after_history_change();
+        let toast = adw::Toast::builder()
+            .title(DRIED_TOAST)
+            .button_label(UNDO_LABEL)
+            .action_name("win.undo")
+            .build();
+        self.imp().toast_overlay.add_toast(toast);
     }
 
     fn show_zoom(&self, zoom: f32) {
@@ -178,11 +255,24 @@ impl OleoWindow {
             .build();
         let clean_brush = gio::ActionEntry::builder("clean-brush")
             .activate(|window: &Self, _, _| {
-                let state = window.state();
-                let mut state = state.borrow_mut();
-                let gpu = state.gpu.clone();
-                state.session.clean_brush(&gpu);
+                window.state().borrow_mut().clean_brush();
+                window.refresh_panels();
             })
+            .build();
+        let undo = gio::ActionEntry::builder("undo")
+            .activate(|window: &Self, _, _| {
+                window.state().borrow_mut().undo();
+                window.after_history_change();
+            })
+            .build();
+        let redo = gio::ActionEntry::builder("redo")
+            .activate(|window: &Self, _, _| {
+                window.state().borrow_mut().redo();
+                window.after_history_change();
+            })
+            .build();
+        let dry = gio::ActionEntry::builder("dry")
+            .activate(|window: &Self, _, _| window.dry())
             .build();
         let zoom_in = gio::ActionEntry::builder("zoom-in")
             .activate(|window: &Self, _, _| window.canvas().zoom_in())
@@ -193,13 +283,6 @@ impl OleoWindow {
         let zoom_fit = gio::ActionEntry::builder("zoom-fit")
             .activate(|window: &Self, _, _| window.canvas().zoom_fit())
             .build();
-        let engine_pending = ENGINE_PENDING_ACTIONS.into_iter().map(|name| {
-            gio::ActionEntry::builder(name)
-                .activate(move |_: &Self, _, _| {
-                    glib::g_message!(LOG_DOMAIN, "win.{name}: não implementado ainda");
-                })
-                .build()
-        });
         let pending = PENDING_ACTIONS.into_iter().map(|name| {
             gio::ActionEntry::builder(name)
                 .activate(move |_: &Self, _, _| {
@@ -213,12 +296,14 @@ impl OleoWindow {
                 toggle_sidebar,
                 new,
                 clean_brush,
+                undo,
+                redo,
+                dry,
                 zoom_in,
                 zoom_out,
                 zoom_fit,
             ]
             .into_iter()
-            .chain(engine_pending)
             .chain(pending),
         );
     }
@@ -264,6 +349,8 @@ impl OleoWindow {
         let canvas = self.canvas();
         canvas.zoom_fit();
         canvas.queue_present();
+        self.sync_history_actions();
+        self.refresh_panels();
     }
 
     fn select_tool(&self, action: &gio::SimpleAction, name: &str) {
@@ -275,6 +362,7 @@ impl OleoWindow {
         self.imp().tool.set(tool);
         if let Some(canvas) = self.imp().canvas.get() {
             canvas.state().borrow_mut().set_ui_tool(tool);
+            self.refresh_panels();
         }
         let tool_group = &self.imp().tool_group;
         if tool_group.active_name().as_deref() != Some(name) {

@@ -10,6 +10,7 @@ const BORDER_ALPHA: f32 = 0.18;
 const RING_WIDTH: f64 = 2.0;
 const RING_GAP: f64 = 1.5;
 const CORNER_RADIUS: f64 = 4.0;
+const CHANNEL_MAX: f64 = 255.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SwatchShape {
@@ -24,6 +25,7 @@ mod imp {
     #[derive(Default)]
     pub struct Swatch {
         pub colour: Cell<[u8; 3]>,
+        pub right_half_colour: Cell<Option<[u8; 3]>>,
         pub selected: Cell<bool>,
         pub shape: Cell<SwatchShape>,
         pub accent_colour_handler: RefCell<Option<glib::SignalHandlerId>>,
@@ -93,6 +95,12 @@ impl Swatch {
         }
     }
 
+    pub fn set_right_half_colour(&self, colour: Option<[u8; 3]>) {
+        if self.imp().right_half_colour.replace(colour) != colour {
+            self.queue_draw();
+        }
+    }
+
     pub fn is_selected(&self) -> bool {
         self.imp().selected.get()
     }
@@ -114,15 +122,29 @@ impl Swatch {
             context.set_line_width(RING_WIDTH);
             let _ = context.stroke();
         }
-        let [red, green, blue] = self.colour().map(|channel| channel as f64 / 255.0);
+        let [red, green, blue] = self.colour().map(channel_fraction);
         trace_shape(context, shape, width, height, inset + BORDER_WIDTH / 2.0);
         context.set_source_rgb(red, green, blue);
         let _ = context.fill_preserve();
+        if let Some(right) = self.imp().right_half_colour.get() {
+            let [red, green, blue] = right.map(channel_fraction);
+            let _ = context.save();
+            context.clip();
+            context.rectangle(width / 2.0, 0.0, width / 2.0, height);
+            context.set_source_rgb(red, green, blue);
+            let _ = context.fill();
+            let _ = context.restore();
+            trace_shape(context, shape, width, height, inset + BORDER_WIDTH / 2.0);
+        }
         let border = self.color().with_alpha(BORDER_ALPHA);
         set_source(context, &border);
         context.set_line_width(BORDER_WIDTH);
         let _ = context.stroke();
     }
+}
+
+fn channel_fraction(channel: u8) -> f64 {
+    f64::from(channel) / CHANNEL_MAX
 }
 
 fn set_source(context: &cairo::Context, colour: &gdk::RGBA) {

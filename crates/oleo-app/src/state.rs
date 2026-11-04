@@ -3,15 +3,51 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use oleo_engine::canvas::CanvasSpec;
+use oleo_engine::engine::PaintEngine;
 use oleo_engine::gpu::GpuContext;
+use oleo_engine::params::{ParamGroup, SimParams};
+use oleo_engine::pigments::{MAX_SLOTS, Mixture};
 use oleo_engine::present::ViewTransform;
+use oleo_engine::render::ViewMode;
 use oleo_engine::session::PaintSession;
 use oleo_engine::stroke::{StrokeSample, Tool};
 
+use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
 
 const RATE_SMOOTHING: f32 = 0.2;
 const MILLISECONDS_PER_SECOND: f32 = 1000.0;
+const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
+
+const EMPTY_MIXTURE: Mixture = Mixture {
+    volume_um: 0.0,
+    fractions: [0.0; MAX_SLOTS],
+};
+
+pub fn clamp_view_mode(mode: ViewMode, slot_count: usize) -> ViewMode {
+    match mode {
+        ViewMode::Pigment(slot) if usize::from(slot) >= slot_count => match slot_count {
+            0 => ViewMode::Color,
+            count => ViewMode::Pigment((count.min(MAX_SLOTS) - 1) as u8),
+        },
+        other => other,
+    }
+}
+
+pub fn recipe_from_fractions(fractions: &[f32; MAX_SLOTS]) -> Vec<(usize, f32)> {
+    fractions
+        .iter()
+        .enumerate()
+        .filter(|(_, fraction)| **fraction > NEGLIGIBLE_PICKED_FRACTION)
+        .map(|(slot, fraction)| (slot, *fraction))
+        .collect()
+}
+
+pub fn is_render_param(key: &str) -> bool {
+    SimParams::specs()
+        .iter()
+        .any(|spec| spec.key == key && spec.group == ParamGroup::Render)
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PenReadout {
@@ -53,6 +89,7 @@ pub struct AppState {
     pub dirty_since_save: bool,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
+    pub loaded_mixture: Mixture,
     stroking: bool,
     tool_after_stroke: Option<Tool>,
     samples_since_frame: u32,
@@ -61,8 +98,10 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(gpu: Rc<GpuContext>, spec: CanvasSpec) -> AppState {
-        let session = PaintSession::new(&gpu, spec);
-        AppState {
+        let mut session = PaintSession::new(&gpu, spec);
+        session.brush.recipe = starting_recipe(&session.canvas.spec.pigment_slots);
+        session.brush.load = STARTING_LOAD;
+        let mut state = AppState {
             gpu,
             session,
             view: ViewTransform {
@@ -74,21 +113,116 @@ impl AppState {
             dirty_since_save: false,
             file: None,
             pen: PenReadout::default(),
+            loaded_mixture: EMPTY_MIXTURE,
             stroking: false,
             tool_after_stroke: None,
             samples_since_frame: 0,
             last_sample_time_ms: None,
-        }
+        };
+        state.reload_brush();
+        state
     }
 
     pub fn start_painting(&mut self, spec: CanvasSpec) {
         self.end_stroke();
-        let brush = self.session.brush.clone();
+        let mut brush = self.session.brush.clone();
+        let params = self.session.engine.params().clone();
         self.session = PaintSession::new(&self.gpu, spec);
+        let slot_count = self.slot_count();
+        brush.recipe.retain(|(slot, _)| *slot < slot_count);
+        if brush.recipe.is_empty() {
+            brush.recipe = starting_recipe(&self.session.canvas.spec.pigment_slots);
+        }
         self.session.brush = brush;
-        self.session.reload_brush(&self.gpu);
+        *self.session.engine.params_mut() = params;
+        self.reload_brush();
         self.dirty_since_save = false;
         self.file = None;
+    }
+
+    pub fn slot_count(&self) -> usize {
+        self.session.canvas.spec.pigment_slots.len()
+    }
+
+    pub fn reload_brush(&mut self) {
+        self.session.reload_brush(&self.gpu);
+        self.loaded_mixture = self.session.brush.reservoir_mixture(self.slot_count());
+    }
+
+    pub fn clean_brush(&mut self) {
+        self.end_stroke();
+        self.session.clean_brush(&self.gpu);
+        self.session.brush.recipe.clear();
+        self.loaded_mixture = EMPTY_MIXTURE;
+    }
+
+    pub fn pick_colour(&mut self, x: f32, y: f32) {
+        self.end_stroke();
+        let mixture = self.session.pick_color(&self.gpu, x, y);
+        self.session.brush.recipe = recipe_from_fractions(&mixture.fractions);
+        self.loaded_mixture = mixture;
+    }
+
+    pub fn brush_is_empty(&self) -> bool {
+        self.loaded_mixture
+            .fractions
+            .iter()
+            .all(|fraction| *fraction <= 0.0)
+    }
+
+    pub fn add_pigment(&mut self, id: &str) -> Result<usize, String> {
+        let session = &mut self.session;
+        let slot = session.canvas.add_slot(&self.gpu, &session.db, id)?;
+        self.dirty_since_save = true;
+        Ok(slot)
+    }
+
+    pub fn dry(&mut self) {
+        self.end_stroke();
+        self.session.dry(&self.gpu);
+        self.dirty_since_save = true;
+    }
+
+    pub fn undo(&mut self) -> bool {
+        self.end_stroke();
+        let undone = self.session.undo(&self.gpu);
+        self.dirty_since_save |= undone;
+        undone
+    }
+
+    pub fn redo(&mut self) -> bool {
+        self.end_stroke();
+        let redone = self.session.redo(&self.gpu);
+        self.dirty_since_save |= redone;
+        redone
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.session.history.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.session.history.can_redo()
+    }
+
+    pub fn set_view_mode(&mut self, mode: ViewMode) {
+        let mode = clamp_view_mode(mode, self.slot_count());
+        if self.session.view_mode != mode {
+            self.session.view_mode = mode;
+            self.session.canvas.dirty.mark_all();
+        }
+    }
+
+    pub fn set_param(&mut self, key: &str, value: f32) {
+        self.session.engine.params_mut().set(key, value);
+        if is_render_param(key) {
+            self.session.canvas.dirty.mark_all();
+        }
+    }
+
+    pub fn reset_params(&mut self) {
+        *self.session.engine.params_mut() = SimParams::default();
+        self.session.canvas.dirty.mark_all();
     }
 
     pub fn set_ui_tool(&mut self, tool: UiTool) {
@@ -168,6 +302,45 @@ mod tests {
             tilt_y_deg: -20.0,
             time_ms,
         }
+    }
+
+    #[test]
+    fn pigment_view_beyond_the_palette_shows_the_last_slot() {
+        assert_eq!(
+            clamp_view_mode(ViewMode::Pigment(6), 4),
+            ViewMode::Pigment(3)
+        );
+        assert_eq!(
+            clamp_view_mode(ViewMode::Pigment(2), 4),
+            ViewMode::Pigment(2)
+        );
+        assert_eq!(clamp_view_mode(ViewMode::Pigment(0), 0), ViewMode::Color);
+        assert_eq!(clamp_view_mode(ViewMode::Height, 0), ViewMode::Height);
+    }
+
+    #[test]
+    fn picked_paint_becomes_a_recipe_of_the_pigments_present() {
+        let mut fractions = [0.0; MAX_SLOTS];
+        fractions[1] = 0.6;
+        fractions[4] = 0.3;
+        fractions[5] = 1e-5;
+        assert_eq!(recipe_from_fractions(&fractions), [(1, 0.6), (4, 0.3)]);
+        assert!(recipe_from_fractions(&[0.0; MAX_SLOTS]).is_empty());
+    }
+
+    #[test]
+    fn only_render_params_repaint_the_whole_canvas() {
+        let render = SimParams::specs()
+            .iter()
+            .find(|spec| spec.group == ParamGroup::Render)
+            .unwrap();
+        let transfer = SimParams::specs()
+            .iter()
+            .find(|spec| spec.group == ParamGroup::Transfer)
+            .unwrap();
+        assert!(is_render_param(render.key));
+        assert!(!is_render_param(transfer.key));
+        assert!(!is_render_param("no_such_param"));
     }
 
     #[test]

@@ -14,6 +14,7 @@ const EXIT_AFTER_FRAMES: &str = "OLEO_SMOKE_EXIT_AFTER_FRAMES";
 const SCREENSHOT: &str = "OLEO_SMOKE_SCREENSHOT";
 const DIALOG: &str = "OLEO_SMOKE_DIALOG";
 const STROKE: &str = "OLEO_SMOKE_STROKE";
+const PAGE: &str = "OLEO_SMOKE_PAGE";
 const DMABUF_SELFTEST: &str = "OLEO_SMOKE_DMABUF_SELFTEST";
 const PRESENT_MODE: &str = "OLEO_PRESENT";
 const LINEAR_PRESENT_MODE: &str = "linear";
@@ -73,6 +74,7 @@ pub struct SmokeConfig {
     pub screenshot: Option<PathBuf>,
     pub dialog: Option<SmokeDialog>,
     pub stroke: bool,
+    pub page: Option<String>,
     pub dmabuf_selftest: Option<DmabufSelftestMode>,
 }
 
@@ -86,6 +88,7 @@ pub enum DmabufSelftestMode {
 enum SmokeStep {
     OpenDialog(SmokeDialog),
     PaintStroke,
+    ShowPage(String),
     Screenshot(PathBuf),
     Quit,
 }
@@ -93,7 +96,7 @@ enum SmokeStep {
 impl SmokeStep {
     fn is_ready(&self, frame: u32, exit_after_frames: u32, window: &OleoWindow) -> bool {
         match self {
-            SmokeStep::OpenDialog(_) => true,
+            SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
             SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= exit_after_frames,
         }
@@ -108,6 +111,7 @@ impl SmokeStep {
         match self {
             SmokeStep::OpenDialog(dialog) => dialog.open(window),
             SmokeStep::PaintStroke => paint_stroke(window),
+            SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
                     return false;
@@ -158,6 +162,9 @@ impl SmokeConfig {
             .map(PathBuf::from);
         let dialog = lookup(DIALOG);
         let stroke = lookup(STROKE).is_some_and(|value| !value.is_empty() && value != "0");
+        let page = lookup(PAGE)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string_lossy().into_owned());
         let dmabuf_selftest = lookup(DMABUF_SELFTEST).map(|_| {
             if lookup(PRESENT_MODE).is_some_and(|mode| mode == LINEAR_PRESENT_MODE) {
                 DmabufSelftestMode::OnlyLinear
@@ -169,6 +176,7 @@ impl SmokeConfig {
             && screenshot.is_none()
             && dialog.is_none()
             && !stroke
+            && page.is_none()
             && dmabuf_selftest.is_none()
         {
             return None;
@@ -182,6 +190,7 @@ impl SmokeConfig {
             screenshot,
             dialog,
             stroke,
+            page,
             dmabuf_selftest,
         })
     }
@@ -192,6 +201,7 @@ impl SmokeConfig {
         if self.stroke {
             steps.push(SmokeStep::PaintStroke);
         }
+        steps.extend(self.page.clone().map(SmokeStep::ShowPage));
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));
         steps.push(SmokeStep::Quit);
         steps
@@ -274,7 +284,9 @@ fn paint_stroke(window: &OleoWindow) {
     state.begin_stroke(tool, samples[0]);
     state.add_samples(&samples[1..]);
     state.end_stroke();
+    drop(state);
     canvas.queue_present();
+    window.refresh_panels();
 }
 
 fn run_dmabuf_selftest(app: &adw::Application, window: &OleoWindow, mode: DmabufSelftestMode) {
@@ -405,6 +417,31 @@ mod tests {
                 SmokeStep::Quit,
             ]
         );
+    }
+
+    #[test]
+    fn page_is_shown_after_the_stroke_and_before_the_screenshot() {
+        let config = SmokeConfig::from_lookup(lookup(&[
+            (PAGE, "lab"),
+            (STROKE, "1"),
+            (SCREENSHOT, "/tmp/shot.png"),
+        ]))
+        .unwrap();
+        assert_eq!(
+            config.steps(),
+            [
+                SmokeStep::PaintStroke,
+                SmokeStep::ShowPage("lab".to_string()),
+                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+                SmokeStep::Quit,
+            ]
+        );
+    }
+
+    #[test]
+    fn page_alone_starts_a_smoke_run() {
+        let config = SmokeConfig::from_lookup(lookup(&[(PAGE, "lab")])).unwrap();
+        assert_eq!(config.page.as_deref(), Some("lab"));
     }
 
     #[test]

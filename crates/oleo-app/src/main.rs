@@ -1,9 +1,11 @@
 mod application;
+mod brush_panel;
 mod canvas_widget;
 mod dialogs;
 mod dmabuf;
 mod dmabuf_selftest;
 mod input;
+mod lab_panel;
 mod new_painting_dialog;
 mod presenter;
 mod presets;

@@ -5,7 +5,6 @@ use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 use oleo_engine::present::ViewTransform;
 
-use crate::LOG_DOMAIN;
 use crate::presenter::FramePresenter;
 use crate::state::SharedState;
 use crate::view;
@@ -18,7 +17,7 @@ const OUTLINE_LIGHT: gdk::RGBA = gdk::RGBA::new(1.0, 1.0, 1.0, 0.9);
 const OUTLINE_DARK: gdk::RGBA = gdk::RGBA::new(0.0, 0.0, 0.0, 0.7);
 const CANVAS_CURSOR: &str = "crosshair";
 
-type ViewChangedHandler = Box<dyn Fn(&OleoCanvas)>;
+type CanvasHandler = Box<dyn Fn(&OleoCanvas)>;
 
 mod imp {
     use super::*;
@@ -33,7 +32,9 @@ mod imp {
         pub user_moved_view: Cell<bool>,
         pub allocated: Cell<(i32, i32)>,
         pub presented_frames: Cell<u64>,
-        pub view_changed_handlers: RefCell<Vec<ViewChangedHandler>>,
+        pub view_changed_handlers: RefCell<Vec<CanvasHandler>>,
+        pub brush_changed_handlers: RefCell<Vec<CanvasHandler>>,
+        pub presented_handlers: RefCell<Vec<CanvasHandler>>,
     }
 
     #[glib::object_subclass]
@@ -219,12 +220,26 @@ impl OleoCanvas {
             .push(Box::new(handler));
     }
 
+    pub fn connect_brush_changed(&self, handler: impl Fn(&OleoCanvas) + 'static) {
+        self.imp()
+            .brush_changed_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
+    pub fn connect_presented(&self, handler: impl Fn(&OleoCanvas) + 'static) {
+        self.imp()
+            .presented_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     pub fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
-        glib::g_message!(
-            LOG_DOMAIN,
-            "conta-gotas em ({x:.0}, {y:.0}): não implementado ainda"
-        );
+        self.state().borrow_mut().pick_colour(x as f32, y as f32);
+        for handler in self.imp().brush_changed_handlers.borrow().iter() {
+            handler(self);
+        }
     }
 
     fn zoom_around_center(&self, zoom: f32) {
@@ -264,28 +279,38 @@ impl OleoCanvas {
     }
 
     fn present_if_needed(&self) {
+        if !self.present_frame() {
+            return;
+        }
+        for handler in self.imp().presented_handlers.borrow().iter() {
+            handler(self);
+        }
+    }
+
+    fn present_frame(&self) -> bool {
         let imp = self.imp();
         let Some(state) = imp.state.get() else {
-            return;
+            return false;
         };
         let (width_px, height_px) = self.viewport_px();
         if width_px == 0 || height_px == 0 {
-            return;
+            return false;
         }
         let Ok(mut state) = state.try_borrow_mut() else {
-            return;
+            return false;
         };
         let mut presenter = imp.presenter.borrow_mut();
         let needed = imp.needs_present.get()
             || state.session.has_pending_work()
             || !presenter.matches_size(width_px, height_px);
         if !needed {
-            return;
+            return false;
         }
         imp.needs_present.set(false);
         let texture = presenter.present(&mut state, width_px, height_px);
         imp.texture.replace(Some(texture));
         imp.presented_frames.set(imp.presented_frames.get() + 1);
         self.queue_draw();
+        true
     }
 }
