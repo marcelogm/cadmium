@@ -21,9 +21,11 @@ use crate::tools::UiTool;
 use crate::writes::{EditCounter, EditMark};
 use gesture::Contact;
 pub use gesture::LoadRing;
+pub use history::DryOutcome;
 pub use pen::PenReadout;
 
 mod gesture;
+mod history;
 mod pen;
 
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
@@ -151,12 +153,6 @@ pub fn mean_mixture(totals: &PaintTotals) -> Mixture {
         volume_um: totals.volume as f32,
         fractions: std::array::from_fn(|slot| (totals.pigment[slot] / totals.volume) as f32),
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DryOutcome {
-    NothingWet,
-    Dried { undoable: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -478,50 +474,6 @@ impl AppState {
         self.click_pile(slot, PigmentClick::CleanAndLoad);
         self.wake();
         Ok(slot)
-    }
-
-    pub fn dry(&mut self) -> DryOutcome {
-        self.release();
-        self.session.flush(&self.gpu);
-        if self.session.canvas.wet_tiles.is_empty() {
-            return DryOutcome::NothingWet;
-        }
-        let undoable = self.session.dry(&self.gpu);
-        self.edits.record();
-        self.wake();
-        DryOutcome::Dried { undoable }
-    }
-
-    pub fn undo(&mut self) -> bool {
-        self.release();
-        let undone = self.session.undo(&self.gpu);
-        if undone {
-            self.edits.record();
-        }
-        self.wake();
-        undone
-    }
-
-    pub fn redo(&mut self) -> bool {
-        self.release();
-        let redone = self.session.redo(&self.gpu);
-        if redone {
-            self.edits.record();
-        }
-        self.wake();
-        redone
-    }
-
-    pub fn can_undo(&self) -> bool {
-        self.session.history.can_undo()
-    }
-
-    pub fn can_redo(&self) -> bool {
-        self.session.history.can_redo()
-    }
-
-    pub fn history_is_enabled(&self) -> bool {
-        self.session.history.is_enabled()
     }
 
     pub fn set_view_mode(&mut self, mode: ViewMode) {
@@ -929,24 +881,6 @@ mod tests {
         assert!((reserve_volume(&state) - full).abs() <= full * RESERVE_TOLERANCE);
         assert_eq!(state.session.brush.recipe.len(), 1);
         assert_eq!(state.session.brush.recipe[0].0, ULTRAMARINE_SLOT);
-    }
-
-    #[test]
-    fn drying_a_canvas_without_wet_paint_does_nothing() {
-        let mut state = painting_state();
-        assert_eq!(state.dry(), DryOutcome::NothingWet);
-        assert!(!state.has_unsaved_edits());
-        assert!(!state.can_undo());
-    }
-
-    #[test]
-    fn drying_wet_paint_can_be_undone() {
-        let mut state = painting_state();
-        stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
-        let mark = state.edit_mark();
-        state.saved_to(PathBuf::from("seca.cadmium"), mark);
-        assert_eq!(state.dry(), DryOutcome::Dried { undoable: true });
-        assert!(state.has_unsaved_edits());
     }
 
     #[test]

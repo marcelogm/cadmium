@@ -927,17 +927,6 @@ mod tests {
     }
 
     #[test]
-    fn undo_lifts_a_hold_that_is_still_down() {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Tube);
-        state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
-        state.advance_hold(0.1);
-        assert!(state.undo());
-        assert!(!state.holds_on(Surface::Painting));
-        assert_eq!(wet_volume(&state), 0.0);
-    }
-
-    #[test]
     fn clearing_the_tray_is_an_edit() {
         let mut state = painting_state();
         squeeze_blob_on_tray(&mut state, 0);
