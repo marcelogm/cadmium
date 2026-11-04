@@ -67,6 +67,7 @@ mod imp {
         pub close_confirmed: Cell<bool>,
         pub asking_to_close: Cell<bool>,
         pub history_disabled_announced: Cell<bool>,
+        pub copy_presentation_announced: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -198,19 +199,14 @@ impl CadmiumWindow {
         canvas.connect_presentation_fallback(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |_| {
-                window
-                    .imp()
-                    .toast_overlay
-                    .add_toast(adw::Toast::new(COPY_PRESENTATION_TOAST));
-            }
+            move |_| window.announce_copy_presentation()
         ));
         self.imp().canvas_slot.append(&canvas);
         let state = canvas.state();
         if self.imp().canvas.set(canvas).is_err() {
             unreachable!("the canvas is attached once");
         }
-        self.attach_tray(state.clone());
+        let tray = self.attach_tray(state.clone());
         let brush_panel = BrushPanel::new(self, state.clone());
         self.imp().brush_panel_slot.append(brush_panel.widget());
         self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
@@ -218,24 +214,34 @@ impl CadmiumWindow {
         self.imp().lab_panel_slot.append(lab_panel.widget());
         let canvas = self.canvas();
         let pen_panel = Rc::downgrade(&lab_panel);
-        canvas.connect_presented(move |_| {
+        let show_pen: Rc<dyn Fn()> = Rc::new(move || {
             if let Some(panel) = pen_panel.upgrade() {
                 panel.show_pen();
             }
         });
-        let pen_panel = Rc::downgrade(&lab_panel);
-        canvas.connect_pen_observed(move |_| {
-            if let Some(panel) = pen_panel.upgrade() {
-                panel.show_pen();
-            }
-        });
+        canvas.connect_presented(glib::clone!(
+            #[strong]
+            show_pen,
+            move |_| show_pen()
+        ));
+        canvas.connect_pen_observed(glib::clone!(
+            #[strong]
+            show_pen,
+            move |_| show_pen()
+        ));
+        tray.connect_pen_observed(move |_| show_pen());
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
         self.announce_if_history_disabled();
     }
 
-    fn attach_tray(&self, state: SharedState) {
+    fn attach_tray(&self, state: SharedState) -> TrayView {
         let tray = TrayView::new(state);
+        tray.connect_presentation_fallback(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.announce_copy_presentation()
+        ));
         tray.connect_colour_picked(glib::clone!(
             #[weak(rename_to = window)]
             self,
@@ -247,6 +253,13 @@ impl CadmiumWindow {
             move |_| window.after_contact()
         ));
         self.imp().tray_slot.append(&tray);
+        tray
+    }
+
+    fn announce_copy_presentation(&self) {
+        if !self.imp().copy_presentation_announced.replace(true) {
+            self.show_toast(COPY_PRESENTATION_TOAST);
+        }
     }
 
     fn give_the_tray_its_first_height(&self) {

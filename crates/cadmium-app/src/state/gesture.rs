@@ -12,7 +12,6 @@ use crate::tools::UiTool;
 
 pub const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
 const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
-const LOAD_RING_EMPTY_COLOUR: [u8; 3] = [128, 128, 128];
 
 pub fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
     (current.0 - origin.0).hypot(current.1 - origin.1) > threshold_px
@@ -305,29 +304,17 @@ impl AppState {
         )
     }
 
-    fn held_level(&self, tool: Tool) -> f32 {
-        if tool == Tool::Knife {
-            self.knife_level()
-        } else {
-            self.reserve_level()
-        }
-    }
-
     pub fn load_ring(&self) -> Option<LoadRing> {
         let Some(Contact::Loading {
-            tool,
-            pen,
-            colour,
-            level,
-            ..
+            pen, colour, level, ..
         }) = self.contact
         else {
             return None;
         };
         Some(LoadRing {
-            level: level.unwrap_or_else(|| self.held_level(tool)),
+            level: level?,
             pressure: pen.pressure,
-            colour: colour.unwrap_or(LOAD_RING_EMPTY_COLOUR),
+            colour: colour?,
         })
     }
 
@@ -432,7 +419,7 @@ mod tests {
             state.set_ui_tool(UiTool::Paint(Tool::Brush));
             state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
             state.motion(&[sample_at(300.0 + drag, 300.0, 0.9)]);
-            assert_eq!(state.load_ring().is_none(), cancels, "{drag}");
+            assert_eq!(!state.holds_on(Surface::Tray), cancels, "{drag}");
             state.release();
         }
     }
@@ -446,7 +433,7 @@ mod tests {
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         state.motion(&[sample_at(305.0, 300.0, 0.9)]);
-        assert!(state.load_ring().is_none());
+        assert!(!state.holds_on(Surface::Tray));
         state.release();
     }
 
@@ -633,10 +620,35 @@ mod tests {
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         state.advance_hold(0.2);
-        assert_eq!(state.load_ring().unwrap().colour, LOAD_RING_EMPTY_COLOUR);
         state.release();
         assert!(!state.has_unsaved_edits());
         assert_eq!(state.session.brush.recipe, recipe);
+    }
+
+    #[test]
+    fn a_still_touch_on_a_clean_tray_shows_no_ring() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        assert_eq!(state.load_ring(), None);
+        state.advance_hold(0.2);
+        assert_eq!(state.load_ring(), None);
+        state.release();
+    }
+
+    #[test]
+    fn the_ring_appears_once_paint_is_drawn_up() {
+        let mut state = painting_state();
+        squeeze_blob_on_tray(&mut state, 1);
+        state.clean_brush();
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        assert_eq!(state.load_ring(), None);
+        state.advance_hold(0.2);
+        let ring = state.load_ring().expect("paint was drawn up");
+        assert!(ring.level > 0.0);
+        assert_eq!(ring.pressure, 0.9);
+        state.release();
     }
 
     #[test]
@@ -646,9 +658,9 @@ mod tests {
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         state.motion(&[sample_at(303.0, 300.0, 0.9)]);
-        assert!(state.load_ring().is_some());
+        assert!(state.holds_on(Surface::Tray));
         state.motion(&[sample_at(310.0, 300.0, 0.9)]);
-        assert!(state.load_ring().is_none());
+        assert!(!state.holds_on(Surface::Tray));
         assert!(state.is_stroking());
         state.release();
         assert!(!state.is_stroking());

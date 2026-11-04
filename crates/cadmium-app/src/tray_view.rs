@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use cadmium_engine::stroke::StrokeSample;
-use cadmium_engine::surface::Surface;
+use cadmium_engine::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH};
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
@@ -64,6 +64,10 @@ pub fn tray_point(
     )
 }
 
+pub fn is_on_tray((x, y): (f64, f64)) -> bool {
+    (0.0..f64::from(TRAY_WIDTH)).contains(&x) && (0.0..f64::from(TRAY_HEIGHT)).contains(&y)
+}
+
 pub fn tray_screen_zoom(viewport_px: (u32, u32), device_scale: f64) -> f32 {
     tray_view(viewport_px).zoom / device_scale as f32
 }
@@ -93,6 +97,8 @@ mod imp {
         pub shown_ring: Cell<Option<ShownRing>>,
         pub released_handlers: RefCell<Vec<TrayHandler>>,
         pub colour_picked_handlers: RefCell<Vec<PickHandler>>,
+        pub pen_observed_handlers: RefCell<Vec<TrayHandler>>,
+        pub fallback_handlers: RefCell<Vec<TrayHandler>>,
     }
 
     #[glib::object_subclass]
@@ -143,13 +149,23 @@ mod imp {
             let tray = self.obj();
             let scale = tray.device_scale();
             if let Some(texture) = self.texture.borrow().as_ref() {
+                let size = (texture.width() as u32, texture.height() as u32);
+                let to_widget = tray_screen_zoom(size, scale);
                 let bounds = graphene::Rect::new(
                     0.0,
                     0.0,
-                    texture.width() as f32 / scale as f32,
-                    texture.height() as f32 / scale as f32,
+                    size.0 as f32 / scale as f32,
+                    size.1 as f32 / scale as f32,
                 );
+                let image = graphene::Rect::new(
+                    0.0,
+                    0.0,
+                    TRAY_WIDTH as f32 * to_widget,
+                    TRAY_HEIGHT as f32 * to_widget,
+                );
+                snapshot.push_clip(&image);
                 snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Linear, &bounds);
+                snapshot.pop();
             }
             let outline = tray.cursor_outline();
             if let Some((x, y)) = self.hover.get()
@@ -235,6 +251,20 @@ impl TrayView {
             .push(Box::new(handler));
     }
 
+    pub fn connect_pen_observed(&self, handler: impl Fn(&TrayView) + 'static) {
+        self.imp()
+            .pen_observed_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
+    pub fn connect_presentation_fallback(&self, handler: impl Fn(&TrayView) + 'static) {
+        self.imp()
+            .fallback_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     pub fn queue_present(&self) {
         self.imp().needs_present.set(true);
         self.request_frame();
@@ -292,15 +322,15 @@ impl TrayView {
         };
         let shown = imp.shown_ring.get();
         let next = match (ring, shown) {
-            (Some(ring), _) => Some(ShownRing {
-                ring,
-                centre: imp
-                    .hover
-                    .get()
-                    .or(shown.map(|shown| shown.centre))
-                    .unwrap_or_default(),
-                released_at: None,
-            }),
+            (Some(ring), _) => imp
+                .hover
+                .get()
+                .or(shown.map(|shown| shown.centre))
+                .map(|centre| ShownRing {
+                    ring,
+                    centre,
+                    released_at: None,
+                }),
             (None, Some(shown)) => match shown.released_at {
                 None => Some(ShownRing {
                     released_at: Some(Instant::now()),
@@ -344,28 +374,38 @@ impl TrayView {
 
     fn present_frame(&self) {
         let imp = self.imp();
+        let fell_back = self.present_texture() && imp.presenter.borrow_mut().take_fallback_notice();
+        if fell_back {
+            for handler in imp.fallback_handlers.borrow().iter() {
+                handler(self);
+            }
+        }
+    }
+
+    fn present_texture(&self) -> bool {
+        let imp = self.imp();
         let Some(state) = imp.state.get() else {
-            return;
+            return false;
         };
         let Some(native) = self.native() else {
-            return;
+            return false;
         };
         let Ok(mut state) = state.try_borrow_mut() else {
-            return;
+            return false;
         };
         let mut presenter = imp.presenter.borrow_mut();
         if !self.frame_needed(&state, &presenter) {
-            return;
+            return false;
         }
         let (width_px, height_px) = viewport_px(self);
         state.set_tray_zoom(tray_screen_zoom((width_px, height_px), self.device_scale()));
         let Some(texture) = presenter.present(&mut state, &native, width_px, height_px) else {
-            return;
+            return false;
         };
-        presenter.take_fallback_notice();
         imp.needs_present.set(false);
         imp.texture.replace(Some(texture));
         self.queue_draw();
+        true
     }
 }
 
@@ -382,7 +422,12 @@ impl PaintSurfaceWidget for TrayView {
         tray_point(viewport_px(self), self.device_scale(), widget_x, widget_y)
     }
 
+    fn accepts_point(&self, widget_x: f64, widget_y: f64) -> bool {
+        is_on_tray(self.surface_point(widget_x, widget_y))
+    }
+
     fn set_hover(&self, position: Option<(f64, f64)>) {
+        let position = position.filter(|&(x, y)| self.accepts_point(x, y));
         if self.imp().hover.replace(position) != position {
             self.queue_draw();
         }
@@ -401,6 +446,9 @@ impl PaintSurfaceWidget for TrayView {
 
     fn observe_hover_pen(&self, sample: &StrokeSample) {
         self.state().borrow_mut().observe_hover_pen(sample);
+        for handler in self.imp().pen_observed_handlers.borrow().iter() {
+            handler(self);
+        }
     }
 
     fn contact_released(&self) {
@@ -477,6 +525,30 @@ mod tests {
     fn a_ring_is_gone_once_its_fade_ends() {
         let shape = ring_shape(OUTLINE, &ring(0.5, 0.5));
         assert_eq!(fading_ring(shape, RING_FADE_SECONDS), None);
+    }
+
+    #[test]
+    fn only_points_on_the_tray_image_are_on_the_tray() {
+        let (width, height) = (f64::from(TRAY_WIDTH), f64::from(TRAY_HEIGHT));
+        for inside in [(0.0, 0.0), (width - 0.5, height - 0.5), (700.0, 300.0)] {
+            assert!(is_on_tray(inside), "{inside:?}");
+        }
+        for outside in [
+            (-0.5, 10.0),
+            (10.0, -0.5),
+            (width, 10.0),
+            (10.0, height),
+            (f64::NAN, 10.0),
+        ] {
+            assert!(!is_on_tray(outside), "{outside:?}");
+        }
+    }
+
+    #[test]
+    fn a_tall_widget_leaves_room_below_the_tray() {
+        let viewport = (384, 400);
+        assert!(is_on_tray(tray_point(viewport, 1.0, 383.0, 255.0)));
+        assert!(!is_on_tray(tray_point(viewport, 1.0, 100.0, 300.0)));
     }
 
     #[test]

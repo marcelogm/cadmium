@@ -69,6 +69,9 @@ pub trait PaintSurfaceWidget:
     fn set_hover(&self, position: Option<(f64, f64)>);
     fn pick_colour_at(&self, widget_x: f64, widget_y: f64);
     fn observe_hover_pen(&self, sample: &StrokeSample);
+    fn accepts_point(&self, _widget_x: f64, _widget_y: f64) -> bool {
+        true
+    }
     fn contact_released(&self) {}
 }
 
@@ -233,7 +236,10 @@ fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> g
             let Some(event) = stylus.current_event() else {
                 return;
             };
-            if !is_primary_contact(&event) || !stroke_may_begin(contact.pans.any()) {
+            if !is_primary_contact(&event)
+                || !stroke_may_begin(contact.pans.any())
+                || !widget.accepts_point(x, y)
+            {
                 return;
             }
             let state = widget.state();
@@ -394,7 +400,9 @@ fn eyedropper_click<W: PaintSurfaceWidget>(widget: &W) -> gtk::GestureClick {
         #[weak]
         widget,
         move |_, _, x, y| {
-            if side_button_may_act(widget.state().borrow().is_stroking()) {
+            if side_button_may_act(widget.state().borrow().is_stroking())
+                && widget.accepts_point(x, y)
+            {
                 widget.pick_colour_at(x, y);
             }
         }
