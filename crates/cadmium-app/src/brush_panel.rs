@@ -2,26 +2,26 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
-use cadmium_engine::brush::BrushShape;
-use cadmium_engine::canvas::primer_srgb8;
-use cadmium_engine::engine::PaintEngine;
-use cadmium_engine::params::{ParamSpec, SimParams};
-use cadmium_engine::pigments::{MAX_SLOTS, Mixture, mixture_srgb8};
+use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 use gtk::{gdk, glib};
 
 use crate::LOG_DOMAIN;
-use crate::sliders::{SliderRow, format_param, param_row, slider_row};
+use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::window::CadmiumWindow;
 
 mod presentation;
+mod snapshot;
 
 use presentation::{
-    EYEDROPPER_HINT, PanelTool, describe_recipe, panel_tool, pile_is_highlighted,
-    tool_group_description, tool_hint, tool_wording, visible_controls,
+    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, PLATE_GAP_KEY, PanelTool, SHAPES, SIZE_STEP,
+    describe_recipe, percent_text, pigment_click, pile_is_highlighted, plate_gap_spec,
+    plate_gap_text, size_to_slider, slider_needs_sync, slider_to_size, tool_group_description,
+    tool_hint, tool_wording, visible_controls,
 };
+use snapshot::{PigmentChoice, Snapshot};
 
 const PANEL_MARGIN: i32 = 12;
 const GROUP_SPACING: i32 = 18;
@@ -35,94 +35,13 @@ const LOADED_SPACING: i32 = 4;
 const ADD_LIST_SWATCH_SIZE: i32 = 18;
 const ADD_LIST_SPACING: i32 = 10;
 const ADD_LIST_ROW_MARGIN: i32 = 6;
-const MIN_SIZE_PX: f64 = 4.0;
-const MAX_SIZE_PX: f64 = 500.0;
-const SIZE_STEP: f64 = 0.01;
 const SIZE_PAGE: f64 = 0.1;
 const UNIT_STEP: f64 = 0.01;
 const UNIT_PAGE: f64 = 0.1;
 const MEDIUM_SLIDER_MAX: f64 = 0.9;
-const PERCENT: f64 = 100.0;
-const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_TITLE: &str = "Espessura da placa";
-const PLATE_GAP_UNIT: &str = "µm";
 const RELOAD_EACH_STROKE: &str = "Recarregar a cada traço";
 const CLEAN_EACH_STROKE: &str = "Limpar a cada traço";
-
-fn plate_gap_spec() -> &'static ParamSpec {
-    SimParams::specs()
-        .iter()
-        .find(|spec| spec.key == PLATE_GAP_KEY)
-        .expect("the knife plate gap is a simulation parameter")
-}
-
-pub fn plate_gap_text(gap_um: f32) -> String {
-    format!(
-        "{} {PLATE_GAP_UNIT}",
-        format_param(plate_gap_spec(), gap_um)
-    )
-}
-
-pub const SHAPES: [(BrushShape, &str); 3] = [
-    (BrushShape::Round, "Redondo"),
-    (BrushShape::Flat, "Chato"),
-    (BrushShape::Fan, "Leque"),
-];
-
-pub fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
-    if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-        PigmentClick::Mix
-    } else if modifiers.contains(gdk::ModifierType::SHIFT_MASK) {
-        PigmentClick::CleanAndLoad
-    } else {
-        PigmentClick::Choose
-    }
-}
-
-pub fn slider_needs_sync(slider_value: f64, diameter_px: f32) -> bool {
-    slider_to_size(slider_value) != diameter_px
-}
-
-pub fn size_to_slider(diameter_px: f32) -> f64 {
-    f64::from(diameter_px).clamp(MIN_SIZE_PX, MAX_SIZE_PX).ln()
-}
-
-pub fn slider_to_size(value: f64) -> f32 {
-    value.exp().clamp(MIN_SIZE_PX, MAX_SIZE_PX).round() as f32
-}
-
-fn percent_text(value: f64) -> String {
-    format!("{:.0}%", value * PERCENT)
-}
-
-struct PigmentChoice {
-    id: &'static str,
-    name: &'static str,
-    colour_index: &'static str,
-    colour: [u8; 3],
-}
-
-struct Snapshot {
-    tool: PanelTool,
-    tube_slot: usize,
-    slots: Vec<String>,
-    slot_names: Vec<&'static str>,
-    slot_colours: Vec<[u8; 3]>,
-    tooltips: Vec<String>,
-    addable: Vec<PigmentChoice>,
-    recipe: Vec<(usize, f32)>,
-    held_is_clean: bool,
-    palette_colour: [u8; 3],
-    held_colour: [u8; 3],
-    held_level: f32,
-    diameter_px: f32,
-    load: f32,
-    plate_gap: f32,
-    medium: f32,
-    shape: BrushShape,
-    reload_each_stroke: bool,
-    clean_each_stroke: bool,
-}
 
 pub struct BrushPanel {
     root: gtk::Box,
@@ -287,7 +206,7 @@ impl BrushPanel {
 
     #[expect(clippy::too_many_lines)]
     pub fn refresh(self: &Rc<Self>) {
-        let snapshot = self.snapshot();
+        let snapshot = Snapshot::of(&self.state.borrow());
         self.syncing.set(true);
         if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {
             self.rebuild_pigments(&snapshot);
@@ -341,72 +260,6 @@ impl BrushPanel {
             tool_group_description(snapshot.tool, &snapshot.slot_names, snapshot.tube_slot),
         );
         self.syncing.set(false);
-    }
-
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
-    fn snapshot(&self) -> Snapshot {
-        let state = self.state.borrow();
-        let session = &state.session;
-        let db = &session.db;
-        let slots = session.canvas.spec.pigment_slots.clone();
-        let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
-        let tool = panel_tool(state.ui_tool, session.brush.tool);
-        let primer = primer_srgb8(db, session.canvas.spec.primer);
-        let colour_of = |mixture: &Mixture| {
-            if mixture.is_empty() {
-                primer
-            } else {
-                mixture_srgb8(db, &slots, &mixture.fractions)
-            }
-        };
-        let palette_colour = colour_of(&state.palette_mixture());
-        let (held_colour, held_level, held_is_clean) = if tool.holds_knife() {
-            (
-                colour_of(&state.knife_mixture),
-                state.knife_level(),
-                state.knife_is_clean(),
-            )
-        } else {
-            (
-                colour_of(&state.tip_mixture),
-                state.reserve_level(),
-                state.brush_is_clean(),
-            )
-        };
-        Snapshot {
-            tool,
-            tube_slot: state.tube_slot,
-            slot_names: pigments.iter().map(|pigment| pigment.name).collect(),
-            slot_colours: slots.iter().map(|id| db.masstone_srgb8(id)).collect(),
-            tooltips: pigments
-                .iter()
-                .map(|pigment| format!("{} ({})", pigment.name, pigment.colour_index))
-                .collect(),
-            addable: db
-                .all()
-                .iter()
-                .filter(|pigment| !slots.iter().any(|id| id == pigment.id))
-                .map(|pigment| PigmentChoice {
-                    id: pigment.id,
-                    name: pigment.name,
-                    colour_index: pigment.colour_index,
-                    colour: db.masstone_srgb8(pigment.id),
-                })
-                .collect(),
-            slots,
-            recipe: session.brush.recipe.clone(),
-            held_is_clean,
-            palette_colour,
-            held_colour,
-            held_level,
-            diameter_px: session.brush.geometry.max_diameter_px,
-            load: session.brush.load,
-            plate_gap: session.engine.params().get(PLATE_GAP_KEY),
-            medium: session.brush.medium,
-            shape: session.brush.shape,
-            reload_each_stroke: state.reload_each_stroke,
-            clean_each_stroke: state.clean_each_stroke,
-        }
     }
 
     #[expect(clippy::excessive_nesting)]
@@ -640,52 +493,5 @@ fn with_panel(panel: &Weak<BrushPanel>, action: impl FnOnce(&Rc<BrushPanel>)) {
         && !panel.syncing.get()
     {
         action(&panel);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn modifiers_choose_how_a_swatch_click_loads_the_brush() {
-        assert_eq!(
-            pigment_click(gdk::ModifierType::empty()),
-            PigmentClick::Choose
-        );
-        assert_eq!(
-            pigment_click(gdk::ModifierType::CONTROL_MASK),
-            PigmentClick::Mix
-        );
-        assert_eq!(
-            pigment_click(gdk::ModifierType::SHIFT_MASK),
-            PigmentClick::CleanAndLoad
-        );
-        assert_eq!(
-            pigment_click(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK),
-            PigmentClick::Mix
-        );
-    }
-
-    #[test]
-    fn size_slider_is_left_alone_while_its_value_rounds_to_the_brush_size() {
-        let dragged = size_to_slider(40.0) + SIZE_STEP / 10.0;
-        assert!(!slider_needs_sync(dragged, 40.0));
-        assert!(slider_needs_sync(size_to_slider(80.0), 40.0));
-    }
-
-    #[test]
-    fn size_slider_is_logarithmic_and_clamped() {
-        assert_eq!(slider_to_size(size_to_slider(40.0)), 40.0);
-        assert_eq!(slider_to_size(size_to_slider(1.0)), MIN_SIZE_PX as f32);
-        assert_eq!(slider_to_size(size_to_slider(9000.0)), MAX_SIZE_PX as f32);
-        let middle = slider_to_size((size_to_slider(4.0) + size_to_slider(500.0)) / 2.0);
-        assert!(middle > 40.0 && middle < 50.0, "{middle}");
-    }
-
-    #[test]
-    fn plate_gap_control_drives_the_knife_gap_parameter() {
-        assert_eq!(plate_gap_spec().key, PLATE_GAP_KEY);
-        assert_eq!(plate_gap_text(80.0), "80 µm");
     }
 }

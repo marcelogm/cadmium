@@ -1,4 +1,4 @@
-691 crates/cadmium-app/src/brush_panel.rs
+497 crates/cadmium-app/src/brush_panel.rs
 786 crates/cadmium-app/src/new_painting_dialog.rs
 774 crates/cadmium-engine/src/canvas.rs
 613 crates/cadmium-engine/src/document.rs
