@@ -36,6 +36,8 @@ const KNIFE_SQUEEZE_GAIN: f32 = 2.0;
 const MAX_PICK_RADIUS_PX: f32 = 16.0;
 const MIN_PICK_RADIUS_PX: f32 = 0.5;
 const DRY_WORKGROUP_SIZE: u32 = 8;
+const MIN_TOP_LAYER_UM: f32 = 0.01;
+const PICK_INVOCATIONS: u32 = 256;
 const DRY_WORKGROUPS_PER_TILE_SIDE: u32 = TILE_SIZE / DRY_WORKGROUP_SIZE;
 const TIP_GROUPS: u32 = TIP_SIZE.div_ceil(WORKGROUP_SIZE);
 
@@ -44,9 +46,13 @@ const DAB_SNIPPETS: [&str; 3] = [
     include_str!("shaders/nearest_half.wgsl"),
     include_str!("shaders/footprint.wgsl"),
 ];
-const EYEDROPPER_SNIPPETS: [&str; 1] = [include_str!("shaders/brush_tip.wgsl")];
-const DRY_SNIPPETS: [&str; 3] = [
+const EYEDROPPER_SNIPPETS: [&str; 2] = [
+    include_str!("shaders/brush_tip.wgsl"),
+    include_str!("shaders/slot_lane.wgsl"),
+];
+const DRY_SNIPPETS: [&str; 4] = [
     include_str!("shaders/pigment_slots.wgsl"),
+    include_str!("shaders/slot_lane.wgsl"),
     include_str!("shaders/kubelka_munk.wgsl"),
     include_str!("shaders/nearest_half.wgsl"),
 ];
@@ -109,10 +115,12 @@ struct DabRecord {
     knife_flatten: f32,
     spread_origin: [i32; 2],
     spread_size: [u32; 2],
+    rag_strength: f32,
+    _pad: f32,
 }
 
 const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 144 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+const _: () = assert!(DAB_RECORD_SIZE == 152 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -137,6 +145,7 @@ struct PickRecord {
 }
 const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
 const CONTACT_REFERENCE_BYTES: u64 = std::mem::size_of::<f32>() as u64;
+const PAINT_FOUND_BYTES: u64 = std::mem::size_of::<u32>() as u64;
 
 #[derive(Clone, Copy, Debug)]
 struct Placement {
@@ -386,11 +395,7 @@ fn place(
         canvas_size,
         tip_origin,
         tip_size,
-        transfer_fraction: if wipes(brush.tool) {
-            params.get("rag_strength")
-        } else {
-            params.get("transfer_fraction")
-        },
+        transfer_fraction: params.get("transfer_fraction"),
         velocity_cutoff: params.get("velocity_cutoff"),
         residual_um: params.get("residual_um"),
         penetration_um: params.get("penetration_um"),
@@ -410,6 +415,8 @@ fn place(
         knife_flatten: params.get("knife_flatten"),
         spread_origin,
         spread_size,
+        rag_strength: params.get("rag_strength"),
+        _pad: 0.0,
     };
     Some(Placement {
         record,
@@ -452,7 +459,10 @@ fn shader_source(snippets: &[&str], body: &str) -> String {
          const VOLUME_CHANNEL: u32 = {VOLUME_CHANNEL}u;\n\
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
          const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
-         const TILE_SIZE: u32 = {TILE_SIZE}u;\n"
+         const TILE_SIZE: u32 = {TILE_SIZE}u;\n\
+         const DRY_WORKGROUP_SIZE: u32 = {DRY_WORKGROUP_SIZE}u;\n\
+         const PICK_INVOCATIONS: u32 = {PICK_INVOCATIONS}u;\n\
+         const MIN_TOP_LAYER_UM: f32 = {MIN_TOP_LAYER_UM:?};\n"
     );
     for snippet in snippets {
         source.push_str(snippet);
@@ -613,6 +623,7 @@ pub struct WetOilEngine {
     body: wgpu::Buffer,
     wanted: wgpu::Buffer,
     contact_reference: wgpu::Buffer,
+    paint_found: wgpu::Buffer,
     exchange_layout: wgpu::BindGroupLayout,
     apply_layout: wgpu::BindGroupLayout,
     refill_layout: wgpu::BindGroupLayout,
@@ -712,6 +723,7 @@ impl WetOilEngine {
                 texture_entry(5, ReadOnly, Rgba16Float),
                 storage_entry(6, false),
                 storage_entry(7, false),
+                storage_entry(8, false),
             ],
         );
         let (dry_layout, dry_pipeline_layout) = layouts(
@@ -759,6 +771,7 @@ impl WetOilEngine {
                 "dab_contact_reference",
                 CONTACT_REFERENCE_BYTES,
             ),
+            paint_found: storage_buffer(gpu, "eyedropper_paint_found", PAINT_FOUND_BYTES),
             reference_pipeline: compute_pipeline(
                 gpu,
                 "dab_reference",
@@ -933,6 +946,10 @@ impl WetOilEngine {
         } else {
             MIN_PICK_RADIUS_PX
         };
+        let (width, height) = (canvas.spec.width as f32, canvas.spec.height as f32);
+        if x + radius < 0.0 || y + radius < 0.0 || x - radius > width || y - radius > height {
+            return;
+        }
         let record = PickRecord {
             center: [x, y],
             radius,
@@ -964,6 +981,7 @@ impl WetOilEngine {
                 texture_binding(5, canvas, StateTexture::DryTopPig1),
                 buffer_binding(6, &self.body),
                 buffer_binding(7, &self.tip),
+                buffer_binding(8, &self.paint_found),
             ],
         });
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {

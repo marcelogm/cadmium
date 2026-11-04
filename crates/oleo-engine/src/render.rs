@@ -7,6 +7,7 @@ use crate::spectral::{BANDS, band_xyz_weights};
 
 const SHADE_SOURCE: &str = concat!(
     include_str!("shaders/pigment_slots.wgsl"),
+    include_str!("shaders/slot_lane.wgsl"),
     include_str!("shaders/kubelka_munk.wgsl"),
     include_str!("shaders/shade.wgsl")
 );

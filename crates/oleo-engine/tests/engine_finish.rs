@@ -278,3 +278,58 @@ fn dabs_with_non_finite_geometry_are_skipped() {
     });
     assert!(s.canvas.wet_tiles.is_empty());
 }
+
+fn assert_brush_untouched_by_pick(x: f32, y: f32) {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let before = s.engine.brush_totals(&gpu);
+    let mixture_before = s.engine.reservoir_mixture(&gpu);
+    pick(&gpu, &mut s, x, y);
+    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(
+        s.engine.reservoir_mixture(&gpu).fractions,
+        mixture_before.fractions
+    );
+}
+
+#[test]
+fn eyedropper_off_the_canvas_leaves_the_brush_untouched() {
+    assert_brush_untouched_by_pick(-200.0, -200.0);
+}
+
+#[test]
+fn eyedropper_over_bare_primer_leaves_the_brush_untouched() {
+    assert_brush_untouched_by_pick(256.0, 20.0);
+}
+
+#[test]
+fn eyedropper_at_the_edge_of_dried_paint_ignores_the_bare_primer_around_it() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.canvas.write_f32(&gpu, StateTexture::DryTopPig0, &{
+        let mut low = vec![0.0; 4 * 512 * 256];
+        let texel = 4 * (128 * CANVAS_WIDTH + 256);
+        low[texel + 1] = 1.0;
+        low
+    });
+    let m = pick(&gpu, &mut s, 256.5, 128.5);
+    assert!((m.fractions[1] - 1.0).abs() < 1e-3, "{:?}", m.fractions);
+}
+
+#[test]
+fn a_queued_stroke_tail_is_painted_with_the_tool_it_was_drawn_with() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let tail = line(64.0, 40.0, 470.0, 0.8, 20.0);
+    without_wgpu_errors(&gpu, || {
+        s.begin_stroke(&gpu, tail[0]);
+        s.add_samples(&tail[1..]);
+        s.end_stroke(&gpu);
+    });
+    s.brush.tool = Tool::Rag;
+    let elsewhere = line(200.0, 40.0, 470.0, 0.8, 20.0);
+    without_wgpu_errors(&gpu, || s.begin_stroke(&gpu, elsewhere[0]));
+    let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol);
+    assert!(volume[64 * CANVAS_WIDTH + 256] > 0.0);
+}

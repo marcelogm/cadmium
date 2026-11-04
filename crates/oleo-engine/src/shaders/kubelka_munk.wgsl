@@ -31,13 +31,6 @@ fn composite_over(top: Layer, below_reflectance: f32) -> f32 {
             / (1.0 - top.reflectance * below_reflectance);
 }
 
-fn slot_lane(low: vec4<f32>, high: vec4<f32>, index: u32) -> f32 {
-    if (index < 4u) {
-        return low[index];
-    }
-    return high[index - 4u];
-}
-
 fn mixture_absorption(fractions_low: vec4<f32>, fractions_high: vec4<f32>, band: u32) -> f32 {
     var k = 0.0;
     for (var slot = 0u; slot < slots.count; slot++) {

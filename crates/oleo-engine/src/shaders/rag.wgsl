@@ -41,6 +41,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (volume <= 0.0) {
         return;
     }
-    let kept = clamp(1.0 - dab.transfer_fraction * dab.pressure * mask * cloth(pixel), 0.0, 1.0);
+    let kept = clamp(1.0 - dab.rag_strength * dab.pressure * mask * cloth(pixel), 0.0, 1.0);
     textureStore(wet_vol, pixel, vec4<f32>(volume * kept, 0.0, 0.0, 0.0));
 }

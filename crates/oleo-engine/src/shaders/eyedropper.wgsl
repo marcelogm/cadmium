@@ -6,7 +6,6 @@ struct Pick {
     empty_body_volume_um: f32,
 };
 
-const PICK_INVOCATIONS: u32 = 256u;
 const SUM_CHANNELS: u32 = 2u * PIGMENT_CHANNELS + 2u;
 const WET_VOLUME_SUM: u32 = PIGMENT_CHANNELS;
 const DRY_FRACTION_SUMS: u32 = PIGMENT_CHANNELS + 1u;
@@ -21,15 +20,17 @@ const MIN_WET_VOLUME_UM: f32 = 1e-3;
 @group(0) @binding(5) var dry_top_pig1: texture_storage_2d<rgba16float, read>;
 @group(0) @binding(6) var<storage, read_write> body: Body;
 @group(0) @binding(7) var<storage, read_write> tip: array<f32>;
+@group(0) @binding(8) var<storage, read_write> paint_found: u32;
 
 var<workgroup> partial: array<f32, PICK_INVOCATIONS>;
 var<workgroup> sums: array<f32, SUM_CHANNELS>;
 
-fn lane(low: vec4<f32>, high: vec4<f32>, index: u32) -> f32 {
-    if (index < 4u) {
-        return low[index];
-    }
-    return high[index - 4u];
+fn lane_total(low: vec4<f32>, high: vec4<f32>) -> f32 {
+    return dot(low, vec4<f32>(1.0)) + dot(high, vec4<f32>(1.0));
+}
+
+fn found_paint() -> bool {
+    return sums[WET_VOLUME_SUM] >= MIN_WET_VOLUME_UM || sums[DRY_PIXEL_COUNT] > 0.0;
 }
 
 fn picked_fractions() -> array<f32, 8> {
@@ -46,7 +47,7 @@ fn picked_fractions() -> array<f32, 8> {
     return fractions;
 }
 
-@compute @workgroup_size(256)
+@compute @workgroup_size(PICK_INVOCATIONS)
 fn sample(@builtin(local_invocation_index) local: u32) {
     let size = vec2<i32>(textureDimensions(wet_vol));
     let reach = i32(ceil(pick.radius));
@@ -66,12 +67,17 @@ fn sample(@builtin(local_invocation_index) local: u32) {
         let wet_high = textureLoad(wet_pig1, pixel);
         let dry_low = textureLoad(dry_top_pig0, pixel);
         let dry_high = textureLoad(dry_top_pig1, pixel);
+        let dry_painted = lane_total(dry_low, dry_high) > 0.0;
         for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-            mine[slot] += lane(wet_low, wet_high, slot) * volume;
-            mine[DRY_FRACTION_SUMS + slot] += lane(dry_low, dry_high, slot);
+            mine[slot] += slot_lane(wet_low, wet_high, slot) * volume;
+            if (dry_painted) {
+                mine[DRY_FRACTION_SUMS + slot] += slot_lane(dry_low, dry_high, slot);
+            }
         }
         mine[WET_VOLUME_SUM] += volume;
-        mine[DRY_PIXEL_COUNT] += 1.0;
+        if (dry_painted) {
+            mine[DRY_PIXEL_COUNT] += 1.0;
+        }
     }
     for (var channel = 0u; channel < SUM_CHANNELS; channel++) {
         partial[local] = mine[channel];
@@ -90,6 +96,11 @@ fn sample(@builtin(local_invocation_index) local: u32) {
     if (local != 0u) {
         return;
     }
+    let found = found_paint();
+    paint_found = select(0u, 1u, found);
+    if (!found) {
+        return;
+    }
     let fractions = picked_fractions();
     var volume = body.volume;
     if (volume <= 0.0) {
@@ -103,7 +114,7 @@ fn sample(@builtin(local_invocation_index) local: u32) {
 
 @compute @workgroup_size(8, 8)
 fn reload(@builtin(global_invocation_id) id: vec3<u32>) {
-    if (id.x >= TIP_SIZE || id.y >= TIP_SIZE) {
+    if (paint_found == 0u || id.x >= TIP_SIZE || id.y >= TIP_SIZE) {
         return;
     }
     let offset = vec2<f32>(vec2<i32>(id.xy) - vec2<i32>(TIP_HALF));

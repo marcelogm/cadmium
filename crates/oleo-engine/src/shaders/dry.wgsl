@@ -1,6 +1,3 @@
-const MIN_TOP_LAYER_UM: f32 = 0.01;
-const DRY_WORKGROUP_SIZE: u32 = 8u;
-
 @group(0) @binding(0) var<uniform> slots: PigmentSlots;
 @group(0) @binding(1) var<storage, read> tiles: array<vec2<u32>>;
 @group(0) @binding(2) var wet_pig0: texture_storage_2d<rgba16float, read_write>;
@@ -30,7 +27,7 @@ fn dry_bands(fractions_low: vec4<f32>, fractions_high: vec4<f32>, volume: f32, b
     );
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(DRY_WORKGROUP_SIZE, DRY_WORKGROUP_SIZE)
 fn main(
     @builtin(workgroup_id) group: vec3<u32>,
     @builtin(local_invocation_id) local: vec3<u32>,
