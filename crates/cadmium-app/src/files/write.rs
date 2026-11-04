@@ -2,13 +2,14 @@ use std::path::{Path, PathBuf};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
+use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
 use cadmium_engine::gpu::GpuLost;
 use gtk::{gio, glib};
 
 use super::finished;
 use crate::LOG_DOMAIN;
 use crate::window::CadmiumWindow;
-use crate::writes::WriteKind;
+use crate::writes::{EditMark, WriteKind};
 
 const SAVED_TOAST: &str = "Salvo";
 const SAVING_TOAST: &str = "Salvando…";
@@ -18,87 +19,36 @@ const CANNOT_SAVE: &str = "Não foi possível salvar";
 const CANNOT_EXPORT: &str = "Não foi possível exportar";
 
 impl CadmiumWindow {
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn save_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
         let generation = self.imp().document_generation.get();
-        let captured = self.begin_write(&path, WriteKind::Painting).then(|| {
-            let state = self.state();
-            let mut state = state.borrow_mut();
-            let mark = state.edit_mark();
-            state.capture_document().map(|snapshot| (snapshot, mark))
-        });
+        let captured = self
+            .begin_write(&path, WriteKind::Painting)
+            .then(|| self.capture_painting());
         let captured = self.settle_capture(&path, captured);
-        let window = self.downgrade();
-        async move {
-            let Some((snapshot, mark)) = captured else {
-                return false;
-            };
-            let target = path.clone();
-            let written = finished(gio::spawn_blocking(move || snapshot.write(&target)).await);
-            let Some(window) = window.upgrade() else {
-                return written.is_ok();
-            };
-            let same_document = generation == window.imp().document_generation.get();
-            let saved = match written {
-                Ok(()) => {
-                    if same_document {
-                        window.state().borrow_mut().saved_to(path.clone(), mark);
-                        window.show_document_title();
-                    }
-                    window.show_toast(SAVED_TOAST);
-                    true
-                }
-                Err(failure) => {
-                    glib::g_warning!(
-                        LOG_DOMAIN,
-                        "saving {} failed: {}",
-                        path.display(),
-                        failure.detail
-                    );
-                    window.show_toast(&format!("{CANNOT_SAVE}: {}", failure.shown));
-                    false
-                }
-            };
-            window.finish_write(&path);
-            saved
-        }
+        write_painting(self.downgrade(), path, generation, captured)
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn export_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
         let image = self
             .begin_write(&path, WriteKind::Image)
             .then(|| self.state().borrow_mut().render_export());
         let image = self.settle_capture(&path, image);
-        let window = self.downgrade();
-        async move {
-            let Some(image) = image else {
-                return false;
-            };
-            let target = path.clone();
-            let written = finished(gio::spawn_blocking(move || image.write_png(&target)).await);
-            let Some(window) = window.upgrade() else {
-                return written.is_ok();
-            };
-            let exported = match written {
-                Ok(()) => {
-                    window.show_toast(EXPORTED_TOAST);
-                    true
-                }
-                Err(failure) => {
-                    glib::g_warning!(
-                        LOG_DOMAIN,
-                        "exporting {} failed: {}",
-                        path.display(),
-                        failure.detail
-                    );
-                    window.show_toast(&format!("{CANNOT_EXPORT}: {}", failure.shown));
-                    false
-                }
-            };
-            window.finish_write(&path);
-            exported
+        write_image(self.downgrade(), path, image)
+    }
+
+    fn capture_painting(&self) -> Result<(DocumentSnapshot, EditMark), GpuLost> {
+        let state = self.state();
+        let mut state = state.borrow_mut();
+        let mark = state.edit_mark();
+        state.capture_document().map(|snapshot| (snapshot, mark))
+    }
+
+    fn painting_saved(&self, path: &Path, mark: EditMark, same_document: bool) {
+        if same_document {
+            self.state().borrow_mut().saved_to(path.to_path_buf(), mark);
+            self.show_document_title();
         }
+        self.show_toast(SAVED_TOAST);
     }
 
     fn begin_write(&self, path: &Path, kind: WriteKind) -> bool {
@@ -141,4 +91,60 @@ impl CadmiumWindow {
             self.close();
         }
     }
+}
+
+async fn write_painting(
+    window: glib::WeakRef<CadmiumWindow>,
+    path: PathBuf,
+    generation: u64,
+    captured: Option<(DocumentSnapshot, EditMark)>,
+) -> bool {
+    let Some((snapshot, mark)) = captured else {
+        return false;
+    };
+    let target = path.clone();
+    let written = finished(gio::spawn_blocking(move || snapshot.write(&target)).await);
+    let Some(window) = window.upgrade() else {
+        return written.is_ok();
+    };
+    let same_document = generation == window.imp().document_generation.get();
+    let saved = match written {
+        Ok(()) => {
+            window.painting_saved(&path, mark, same_document);
+            true
+        }
+        Err(failure) => {
+            window.report_failure("saving", &path, CANNOT_SAVE, &failure);
+            false
+        }
+    };
+    window.finish_write(&path);
+    saved
+}
+
+async fn write_image(
+    window: glib::WeakRef<CadmiumWindow>,
+    path: PathBuf,
+    image: Option<ExportedImage>,
+) -> bool {
+    let Some(image) = image else {
+        return false;
+    };
+    let target = path.clone();
+    let written = finished(gio::spawn_blocking(move || image.write_png(&target)).await);
+    let Some(window) = window.upgrade() else {
+        return written.is_ok();
+    };
+    let exported = match written {
+        Ok(()) => {
+            window.show_toast(EXPORTED_TOAST);
+            true
+        }
+        Err(failure) => {
+            window.report_failure("exporting", &path, CANNOT_EXPORT, &failure);
+            false
+        }
+    };
+    window.finish_write(&path);
+    exported
 }

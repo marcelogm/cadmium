@@ -77,7 +77,6 @@ impl CadmiumWindow {
         }
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn save_as(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(SAVE_AS_TITLE, &painting_filter(), file.as_deref());
@@ -85,43 +84,15 @@ impl CadmiumWindow {
             Some(path) => dialog.set_initial_file(Some(&gio::File::for_path(path))),
             None => dialog.set_initial_name(Some(&format!("{UNTITLED}.{PAINTING_EXTENSION}"))),
         }
-        let window = self.downgrade();
-        glib::spawn_future_local(async move {
-            let Some(target) = chosen_write_target(&window, dialog, PAINTING_EXTENSION).await
-            else {
-                return;
-            };
-            let saving = window.upgrade().map(|window| window.save_to(target));
-            if let Some(saving) = saving {
-                saving.await;
-            }
-        });
+        glib::spawn_future_local(save_chosen_painting(self.downgrade(), dialog));
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn open(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(OPEN_TITLE, &painting_filter(), file.as_deref());
-        let window = self.downgrade();
-        glib::spawn_future_local(async move {
-            let Some(choosing) = window
-                .upgrade()
-                .map(|parent| dialog.open_future(Some(&parent)))
-            else {
-                return;
-            };
-            let chosen = choosing.await;
-            let opening = window.upgrade().and_then(|window| {
-                let path = window.chosen_path(chosen)?;
-                Some(window.open_path(path))
-            });
-            if let Some(opening) = opening {
-                opening.await;
-            }
-        });
+        glib::spawn_future_local(open_chosen_painting(self.downgrade(), dialog));
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn export(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(EXPORT_TITLE, &image_filter(), file.as_deref());
@@ -129,40 +100,68 @@ impl CadmiumWindow {
             "{}.{IMAGE_EXTENSION}",
             document_name(file.as_deref())
         )));
-        let window = self.downgrade();
-        glib::spawn_future_local(async move {
-            let Some(target) = chosen_write_target(&window, dialog, IMAGE_EXTENSION).await else {
-                return;
-            };
-            let exporting = window.upgrade().map(|window| window.export_to(target));
-            if let Some(exporting) = exporting {
-                exporting.await;
-            }
-        });
+        glib::spawn_future_local(export_chosen_image(self.downgrade(), dialog));
     }
 
-    #[expect(clippy::excessive_nesting)]
     fn chosen_path(&self, chosen: Result<gio::File, glib::Error>) -> Option<PathBuf> {
         match chosen {
-            Ok(file) => {
-                let path = file.path();
-                if path.is_none() {
-                    self.show_toast(NOT_A_LOCAL_FILE);
-                }
-                path
-            }
-            Err(error)
-                if error.matches(gtk::DialogError::Dismissed)
-                    || error.matches(gtk::DialogError::Cancelled) =>
-            {
-                None
-            }
+            Ok(file) => self.local_path(&file),
+            Err(error) if was_dismissed(&error) => None,
             Err(error) => {
                 glib::g_warning!(LOG_DOMAIN, "file dialog failed: {error}");
                 self.show_toast(&error.to_string());
                 None
             }
         }
+    }
+
+    fn local_path(&self, file: &gio::File) -> Option<PathBuf> {
+        let path = file.path();
+        if path.is_none() {
+            self.show_toast(NOT_A_LOCAL_FILE);
+        }
+        path
+    }
+}
+
+fn was_dismissed(error: &glib::Error) -> bool {
+    error.matches(gtk::DialogError::Dismissed) || error.matches(gtk::DialogError::Cancelled)
+}
+
+async fn save_chosen_painting(window: glib::WeakRef<CadmiumWindow>, dialog: gtk::FileDialog) {
+    let Some(target) = chosen_write_target(&window, dialog, PAINTING_EXTENSION).await else {
+        return;
+    };
+    let saving = window.upgrade().map(|window| window.save_to(target));
+    if let Some(saving) = saving {
+        saving.await;
+    }
+}
+
+async fn open_chosen_painting(window: glib::WeakRef<CadmiumWindow>, dialog: gtk::FileDialog) {
+    let Some(choosing) = window
+        .upgrade()
+        .map(|parent| dialog.open_future(Some(&parent)))
+    else {
+        return;
+    };
+    let chosen = choosing.await;
+    let opening = window.upgrade().and_then(|window| {
+        let path = window.chosen_path(chosen)?;
+        Some(window.open_path(path))
+    });
+    if let Some(opening) = opening {
+        opening.await;
+    }
+}
+
+async fn export_chosen_image(window: glib::WeakRef<CadmiumWindow>, dialog: gtk::FileDialog) {
+    let Some(target) = chosen_write_target(&window, dialog, IMAGE_EXTENSION).await else {
+        return;
+    };
+    let exporting = window.upgrade().map(|window| window.export_to(target));
+    if let Some(exporting) = exporting {
+        exporting.await;
     }
 }
 

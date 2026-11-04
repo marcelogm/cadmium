@@ -1,4 +1,10 @@
+use std::path::Path;
+
 use cadmium_engine::document::DocumentError;
+use gtk::glib;
+
+use crate::LOG_DOMAIN;
+use crate::window::CadmiumWindow;
 
 pub const PAINTING_EXTENSION: &str = "cadmium";
 pub const IMAGE_EXTENSION: &str = "png";
@@ -59,6 +65,19 @@ fn finished<T>(outcome: std::thread::Result<Result<T, DocumentError>>) -> Result
             shown: BACKGROUND_TASK_FAILED.to_string(),
             detail: BACKGROUND_TASK_FAILED.to_string(),
         }),
+    }
+}
+
+impl CadmiumWindow {
+    fn report_failure(&self, action: &str, path: &Path, cannot: &str, failure: &Failure) {
+        glib::g_warning!(
+            LOG_DOMAIN,
+            "{} {} failed: {}",
+            action,
+            path.display(),
+            failure.detail
+        );
+        self.show_toast(&format!("{cannot}: {}", failure.shown));
     }
 }
 
