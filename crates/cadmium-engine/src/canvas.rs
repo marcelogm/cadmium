@@ -230,6 +230,10 @@ impl DirtyTiles {
         !self.marked.contains(&true)
     }
 
+    pub fn contains(&self, tile: TileCoord) -> bool {
+        tile.x < self.columns && tile.y < self.rows && self.marked[self.index(tile)]
+    }
+
     fn index(&self, tile: TileCoord) -> usize {
         (tile.y * self.columns + tile.x) as usize
     }

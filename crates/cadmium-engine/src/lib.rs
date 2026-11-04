@@ -1,6 +1,7 @@
 pub mod brush;
 pub mod canvas;
 pub mod document;
+pub mod draw_up;
 pub mod engine;
 pub mod gpu;
 pub mod history;

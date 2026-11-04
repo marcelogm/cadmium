@@ -35,7 +35,7 @@ const fn spec(
     }
 }
 
-const PARAM_COUNT: usize = 21;
+const PARAM_COUNT: usize = 22;
 
 const SPECS: [ParamSpec; PARAM_COUNT] = [
     spec(
@@ -151,6 +151,14 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         50.0,
         1500.0,
         500.0,
+    ),
+    spec(
+        "draw_up_rate",
+        "Carga pela bandeja (/s)",
+        ParamGroup::Tools,
+        0.1,
+        10.0,
+        2.0,
     ),
     spec(
         "impasto_scale",

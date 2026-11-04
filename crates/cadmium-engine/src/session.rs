@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
 
-use crate::brush::BrushSettings;
+use crate::brush::{BrushSettings, FULL_RESERVOIR_VOLUME_UM};
 use crate::canvas::{
-    Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TileCoord, tiles_in_rect,
+    Canvas, CanvasError, CanvasSpec, PaintTotals, StateTexture, TILE_SIZE, TileCoord, tiles_in_rect,
 };
+use crate::draw_up::{DrawUp, DrawUpRequest, draw_up_region};
 use crate::engine::{BrushOutline, BrushReadout, PaintEngine, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::history::{History, bytes_per_tile_all_textures};
@@ -46,6 +47,7 @@ pub struct PaintSession {
     stroke_surface: Surface,
     hold: Option<Surface>,
     tube: Tube,
+    drawer: DrawUp,
 }
 
 impl PaintSession {
@@ -71,6 +73,7 @@ impl PaintSession {
             stroke_surface: Surface::Painting,
             hold: None,
             tube: Tube::new(gpu),
+            drawer: DrawUp::new(gpu),
         };
         session.reload_brush(gpu);
         Ok(session)
@@ -191,6 +194,61 @@ impl PaintSession {
         self.tube
             .encode_squeeze(gpu, canvas, params, &nozzle, &region, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
+    }
+
+    pub fn draw_up(
+        &mut self,
+        gpu: &GpuContext,
+        request: DrawUpRequest,
+    ) -> Result<PaintTotals, GpuLost> {
+        let nothing = PaintTotals::default();
+        let Some(surface) = self.hold else {
+            return Ok(nothing);
+        };
+        if !draws_up(self.brush.tool) {
+            return Ok(nothing);
+        }
+        self.resize_tip();
+        let canvas = self.canvas_of(surface);
+        let Some(region) = draw_up_region(canvas, self.engine.params(), &request) else {
+            return Ok(nothing);
+        };
+        let [x0, y0, x1, y1] = region.rect();
+        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+        if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
+            return Ok(nothing);
+        }
+        let room_um = self.room_to_draw_up(gpu)?;
+        if room_um.is_nan() || room_um <= 0.0 {
+            return Ok(nothing);
+        }
+        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
+        let measured = self
+            .drawer
+            .measure(gpu, canvas, &request, &region, room_um)?;
+        if measured.taken.volume.is_nan() || measured.taken.volume <= 0.0 {
+            return Ok(nothing);
+        }
+        let mut encoder = new_encoder(gpu, "draw_up");
+        self.history
+            .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
+        self.drawer.encode_take(canvas, &measured, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        if self.holds_knife() {
+            self.engine.add_to_knife(gpu, &measured.taken)?;
+        } else {
+            self.engine.add_to_reserve(gpu, &measured.taken);
+        }
+        Ok(measured.taken)
+    }
+
+    fn room_to_draw_up(&self, gpu: &GpuContext) -> Result<f32, GpuLost> {
+        Ok(if self.holds_knife() {
+            self.engine.knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM)
+                - self.engine.knife_totals(gpu)?.volume as f32
+        } else {
+            self.engine.full_reserve_volume() - self.engine.reserve_totals(gpu)?.volume as f32
+        })
     }
 
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {
@@ -456,6 +514,10 @@ impl PaintSession {
         }
         touched.into_iter().collect()
     }
+}
+
+fn draws_up(tool: Tool) -> bool {
+    matches!(tool, Tool::Brush | Tool::Knife)
 }
 
 fn surface_canvas<'a>(
