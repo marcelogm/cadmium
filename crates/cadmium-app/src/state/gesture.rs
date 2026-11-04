@@ -61,6 +61,10 @@ impl AppState {
         }
     }
 
+    pub fn holds_on(&self, surface: Surface) -> bool {
+        self.hold_surface() == Some(surface)
+    }
+
     fn hold_surface(&self) -> Option<Surface> {
         match self.contact? {
             Contact::Stroke => None,
@@ -552,6 +556,31 @@ mod tests {
             .map(|(slot, _)| *slot)
             .collect();
         assert_eq!(slots, vec![1]);
+    }
+
+    #[test]
+    fn a_hold_is_on_the_surface_it_began_on() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Tube);
+        state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
+        assert!(state.holds_on(Surface::Painting));
+        assert!(!state.holds_on(Surface::Tray));
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        assert!(state.holds_on(Surface::Tray));
+        assert!(!state.holds_on(Surface::Painting));
+        state.release();
+        assert!(!state.holds_on(Surface::Tray));
+    }
+
+    #[test]
+    fn a_stroke_is_not_a_hold_on_any_surface() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Painting, sample_at(100.0, 100.0, 0.9), false);
+        assert!(!state.holds_on(Surface::Painting));
+        assert!(!state.holds_on(Surface::Tray));
+        state.release();
     }
 
     #[test]

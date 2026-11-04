@@ -8,6 +8,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use crate::canvas_widget::CadmiumCanvas;
+use crate::state::SharedState;
 use crate::tools::UiTool;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
@@ -59,9 +60,22 @@ impl PanFlags {
     }
 }
 
+pub trait PaintSurfaceWidget:
+    IsA<gtk::Widget> + glib::clone::Downgrade<Weak = glib::WeakRef<Self>>
+{
+    fn state(&self) -> SharedState;
+    fn surface(&self) -> Surface;
+    fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64);
+    fn set_hover(&self, position: Option<(f64, f64)>);
+    fn pick_colour_at(&self, widget_x: f64, widget_y: f64);
+    fn observe_hover_pen(&self, sample: &StrokeSample);
+    fn contact_released(&self) {}
+}
+
 #[derive(Default)]
-struct Contact {
+pub struct Contact {
     pans: PanFlags,
+    touching: Cell<bool>,
     stroking_device: RefCell<Option<gdk::Device>>,
 }
 
@@ -69,16 +83,31 @@ impl Contact {
     fn is_stroking_device(&self, device: Option<&gdk::Device>) -> bool {
         event_belongs_to_stroke(self.stroking_device.borrow().as_ref(), device)
     }
+
+    fn touch(&self, device: Option<gdk::Device>) {
+        self.touching.set(true);
+        self.stroking_device.replace(device);
+    }
+
+    fn lift(&self) -> bool {
+        self.stroking_device.replace(None);
+        self.touching.replace(false)
+    }
+}
+
+pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) -> Rc<Contact> {
+    let contact = Rc::new(Contact::default());
+    widget.add_controller(stylus_gesture(widget, &contact));
+    widget.add_controller(eyedropper_click(widget));
+    widget.add_controller(hover_controller(widget, &contact));
+    contact
 }
 
 pub fn attach(canvas: &CadmiumCanvas) {
-    let contact = Rc::new(Contact::default());
-    canvas.add_controller(stylus_gesture(canvas, &contact));
+    let contact = attach_stylus(canvas);
     canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Primary));
     canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Middle));
-    canvas.add_controller(eyedropper_click(canvas));
     canvas.add_controller(scroll_controller(canvas));
-    canvas.add_controller(hover_controller(canvas, &contact));
     canvas.add_controller(pinch_gesture(canvas));
 }
 
@@ -142,11 +171,16 @@ pub fn history_sample(
     }
 }
 
-fn event_sample(canvas: &CadmiumCanvas, event: &gdk::Event, x: f64, y: f64) -> StrokeSample {
-    let (canvas_x, canvas_y) = canvas.canvas_point(x, y);
+fn event_sample<W: PaintSurfaceWidget>(
+    widget: &W,
+    event: &gdk::Event,
+    x: f64,
+    y: f64,
+) -> StrokeSample {
+    let (surface_x, surface_y) = widget.surface_point(x, y);
     StrokeSample {
-        x: canvas_x,
-        y: canvas_y,
+        x: surface_x,
+        y: surface_y,
         pressure: pressure_or(event.axis(gdk::AxisUse::Pressure), MOUSE_PRESSURE),
         tilt_x_deg: tilt_degrees_or(event.axis(gdk::AxisUse::Xtilt), 0.0),
         tilt_y_deg: tilt_degrees_or(event.axis(gdk::AxisUse::Ytilt), 0.0),
@@ -154,20 +188,20 @@ fn event_sample(canvas: &CadmiumCanvas, event: &gdk::Event, x: f64, y: f64) -> S
     }
 }
 
-fn motion_samples(
-    canvas: &CadmiumCanvas,
+fn motion_samples<W: PaintSurfaceWidget>(
+    widget: &W,
     stylus: &gtk::GestureStylus,
     event: &gdk::Event,
     x: f64,
     y: f64,
 ) -> Vec<StrokeSample> {
-    let current = event_sample(canvas, event, x, y);
+    let current = event_sample(widget, event, x, y);
     let backlog = stylus.backlog().unwrap_or_default();
     let mut samples = Vec::with_capacity(backlog.len() + 1);
     samples.extend(backlog.iter().map(|coord| {
         history_sample(
             coord,
-            |widget_x, widget_y| canvas.canvas_point(widget_x, widget_y),
+            |widget_x, widget_y| widget.surface_point(widget_x, widget_y),
             &current,
         )
     }));
@@ -195,12 +229,12 @@ fn is_eraser(event: &gdk::Event) -> bool {
         .is_some_and(|tool| tool.tool_type() == gdk::DeviceToolType::Eraser)
 }
 
-fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::GestureStylus {
+fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> gtk::GestureStylus {
     let stylus = gtk::GestureStylus::new();
     stylus.set_stylus_only(false);
     stylus.connect_down(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         #[strong]
         contact,
         move |stylus, x, y| {
@@ -210,53 +244,51 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
             if !is_primary_contact(&event) || !stroke_may_begin(contact.pans.any()) {
                 return;
             }
-            let state = canvas.state();
+            let state = widget.state();
             let active = state.borrow().ui_tool;
             let eraser = is_eraser(&event);
             if active == UiTool::Move {
                 return;
             }
             if !eraser && active == UiTool::Paint(Tool::Eyedropper) {
-                canvas.pick_colour_at(x, y);
+                widget.pick_colour_at(x, y);
                 return;
             }
-            let sample = event_sample(&canvas, &event, x, y);
-            if !state.borrow_mut().press(Surface::Painting, sample, eraser) {
+            let sample = event_sample(&widget, &event, x, y);
+            if !state.borrow_mut().press(widget.surface(), sample, eraser) {
                 return;
             }
-            contact
-                .stroking_device
-                .replace(stylus.current_event_device());
-            canvas.set_hover(Some((x, y)));
+            contact.touch(stylus.current_event_device());
+            widget.set_hover(Some((x, y)));
         }
     ));
     stylus.connect_motion(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         #[strong]
         contact,
         move |stylus, x, y| {
-            canvas.set_hover(Some((x, y)));
+            widget.set_hover(Some((x, y)));
             let Some(event) = stylus.current_event() else {
                 return;
             };
-            let state = canvas.state();
-            if !state.borrow().is_stroking() {
+            let state = widget.state();
+            if !contact.touching.get() || !state.borrow().is_stroking() {
                 if comes_from_a_pen(&event) {
-                    canvas.observe_hover_pen(&event_sample(&canvas, &event, x, y));
+                    widget.observe_hover_pen(&event_sample(&widget, &event, x, y));
                 }
                 return;
             }
             if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
                 return;
             }
-            let samples = motion_samples(&canvas, stylus, &event, x, y);
+            let samples = motion_samples(&widget, stylus, &event, x, y);
             state.borrow_mut().motion(&samples);
         }
     ));
     stylus.connect_up(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         #[strong]
         contact,
         move |stylus, _, _| {
@@ -264,13 +296,13 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
                 .current_event()
                 .is_some_and(|event| is_primary_contact(&event))
             {
-                release(&canvas, &contact);
+                release(&widget, &contact);
             }
         }
     ));
     stylus.connect_proximity(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         #[strong]
         contact,
         move |stylus, x, y| {
@@ -279,30 +311,33 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
             };
             if event.event_type() == gdk::EventType::ProximityOut {
                 if contact.is_stroking_device(stylus.current_event_device().as_ref()) {
-                    release(&canvas, &contact);
+                    release(&widget, &contact);
                 }
-                canvas.set_hover(None);
+                widget.set_hover(None);
                 return;
             }
-            canvas.set_hover(Some((x, y)));
+            widget.set_hover(Some((x, y)));
             if comes_from_a_pen(&event) {
-                canvas.observe_hover_pen(&event_sample(&canvas, &event, x, y));
+                widget.observe_hover_pen(&event_sample(&widget, &event, x, y));
             }
         }
     ));
     stylus.connect_cancel(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         #[strong]
         contact,
-        move |_, _| release(&canvas, &contact)
+        move |_, _| release(&widget, &contact)
     ));
     stylus
 }
 
-fn release(canvas: &CadmiumCanvas, contact: &Contact) {
-    contact.stroking_device.replace(None);
-    canvas.state().borrow_mut().release();
+fn release<W: PaintSurfaceWidget>(widget: &W, contact: &Contact) {
+    if !contact.lift() {
+        return;
+    }
+    widget.state().borrow_mut().release();
+    widget.contact_released();
 }
 
 fn pan_gesture(
@@ -356,15 +391,15 @@ fn pan_gesture(
     drag
 }
 
-fn eyedropper_click(canvas: &CadmiumCanvas) -> gtk::GestureClick {
+fn eyedropper_click<W: PaintSurfaceWidget>(widget: &W) -> gtk::GestureClick {
     let click = gtk::GestureClick::new();
     click.set_button(EYEDROPPER_BUTTON);
     click.connect_pressed(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         move |_, _, x, y| {
-            if side_button_may_act(canvas.state().borrow().is_stroking()) {
-                canvas.pick_colour_at(x, y);
+            if side_button_may_act(widget.state().borrow().is_stroking()) {
+                widget.pick_colour_at(x, y);
             }
         }
     ));
@@ -414,27 +449,30 @@ fn scroll_controller(canvas: &CadmiumCanvas) -> gtk::EventControllerScroll {
     scroll
 }
 
-fn hover_controller(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::EventControllerMotion {
+fn hover_controller<W: PaintSurfaceWidget>(
+    widget: &W,
+    contact: &Rc<Contact>,
+) -> gtk::EventControllerMotion {
     let motion = gtk::EventControllerMotion::new();
     motion.connect_enter(glib::clone!(
         #[weak]
-        canvas,
-        move |_, x, y| canvas.set_hover(Some((x, y)))
+        widget,
+        move |_, x, y| widget.set_hover(Some((x, y)))
     ));
     motion.connect_motion(glib::clone!(
         #[weak]
-        canvas,
-        move |_, x, y| canvas.set_hover(Some((x, y)))
+        widget,
+        move |_, x, y| widget.set_hover(Some((x, y)))
     ));
     motion.connect_leave(glib::clone!(
         #[weak]
-        canvas,
+        widget,
         #[strong]
         contact,
         move |motion| {
-            canvas.set_hover(None);
+            widget.set_hover(None);
             if contact.is_stroking_device(motion.current_event_device().as_ref()) {
-                release(&canvas, &contact);
+                release(&widget, &contact);
             }
         }
     ));
@@ -560,6 +598,15 @@ mod tests {
         assert!(!pans.is_panning(PanGesture::Middle));
         pans.set(PanGesture::Primary, false);
         assert!(!pans.any());
+    }
+
+    #[test]
+    fn only_the_widget_that_was_touched_releases_the_contact() {
+        let contact = Contact::default();
+        assert!(!contact.lift());
+        contact.touch(None);
+        assert!(contact.lift());
+        assert!(!contact.lift());
     }
 
     #[test]

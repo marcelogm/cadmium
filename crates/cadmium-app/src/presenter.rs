@@ -1,7 +1,8 @@
 use std::time::{Duration, Instant};
 
 use cadmium_engine::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
-use cadmium_engine::present::{encode_rgba8_copy, rgba8_rows};
+use cadmium_engine::present::{ViewTransform, encode_rgba8_copy, rgba8_rows};
+use cadmium_engine::surface::{TRAY_HEIGHT, TRAY_WIDTH};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
@@ -16,6 +17,57 @@ const DEBUG_ENABLED: &str = "1";
 const VULKAN_RENDERER_MARK: &str = "Vulkan";
 const RESIZE_SETTLE: Duration = Duration::from_millis(150);
 const MILLISECONDS_PER_SECOND: f64 = 1000.0;
+
+pub fn tray_view(viewport_px: (u32, u32)) -> ViewTransform {
+    let zoom =
+        (viewport_px.0 as f32 / TRAY_WIDTH as f32).min(viewport_px.1 as f32 / TRAY_HEIGHT as f32);
+    ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PresentSource {
+    #[default]
+    Painting,
+    Tray,
+}
+
+impl PresentSource {
+    fn encode(
+        self,
+        state: &mut AppState,
+        gpu: &GpuContext,
+        target: &wgpu::Texture,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        match self {
+            PresentSource::Painting => {
+                state.encode_frame(encoder);
+                state.session.presenter.encode_present(
+                    gpu,
+                    &state.session.canvas,
+                    state.view,
+                    target,
+                    encoder,
+                );
+            }
+            PresentSource::Tray => {
+                state.encode_tray_frame(encoder);
+                let view = tray_view((target.width(), target.height()));
+                state.session.presenter.encode_present(
+                    gpu,
+                    &state.session.tray,
+                    view,
+                    target,
+                    encoder,
+                );
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PresentMode {
@@ -147,6 +199,7 @@ impl ReadbackTarget {
 }
 
 pub struct FramePresenter {
+    source: PresentSource,
     forced: Option<PresentMode>,
     mode: Option<PresentMode>,
     readback: Option<ReadbackTarget>,
@@ -162,6 +215,7 @@ pub struct FramePresenter {
 impl Default for FramePresenter {
     fn default() -> Self {
         FramePresenter {
+            source: PresentSource::default(),
             forced: PresentMode::forced_by_environment(),
             mode: None,
             readback: None,
@@ -177,6 +231,13 @@ impl Default for FramePresenter {
 }
 
 impl FramePresenter {
+    pub fn showing(source: PresentSource) -> FramePresenter {
+        FramePresenter {
+            source,
+            ..FramePresenter::default()
+        }
+    }
+
     pub fn matches_size(&self, width_px: u32, height_px: u32) -> bool {
         let size = Some((width_px, height_px));
         match self.mode {
@@ -207,7 +268,9 @@ impl FramePresenter {
         height_px: u32,
     ) -> Option<gdk::Texture> {
         let started = Instant::now();
-        state.view.zoom = clamp_zoom(state.view.zoom);
+        if self.source == PresentSource::Painting {
+            state.view.zoom = clamp_zoom(state.view.zoom);
+        }
         let mode = match self.mode {
             Some(mode) => mode,
             None => self.decide_mode(state, native),
@@ -290,16 +353,9 @@ impl FramePresenter {
         let Some(pool) = self.pool.as_mut() else {
             return Ok(None);
         };
-        let view = state.view;
+        let source = self.source;
         pool.present_with(&gpu, &display, |encoder, target| {
-            state.encode_frame(encoder);
-            state.session.presenter.encode_present(
-                &gpu,
-                &state.session.canvas,
-                view,
-                target,
-                encoder,
-            );
+            source.encode(state, &gpu, target, encoder);
         })
     }
 
@@ -336,14 +392,8 @@ impl FramePresenter {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("cadmium_frame"),
             });
-        state.encode_frame(&mut encoder);
-        state.session.presenter.encode_present(
-            &gpu,
-            &state.session.canvas,
-            state.view,
-            &target.texture,
-            &mut encoder,
-        );
+        self.source
+            .encode(state, &gpu, &target.texture, &mut encoder);
         encode_rgba8_copy(&target.texture, &target.staging, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         target.download(&gpu).ok()
@@ -356,6 +406,16 @@ mod tests {
 
     const VULKAN_RENDERER: &str = "GskVulkanRenderer";
     const GL_RENDERER: &str = "GskGLRenderer";
+
+    #[test]
+    fn tray_view_fits_the_whole_tray_in_the_widget() {
+        assert_eq!(tray_view((384, 400)).zoom, 0.25);
+        assert_eq!(tray_view((768, 256)).zoom, 0.25);
+        assert_eq!(
+            crate::view::viewport_to_canvas(tray_view((384, 256)), 384.0, 256.0),
+            (1536.0, 1024.0)
+        );
+    }
 
     #[test]
     fn present_mode_names_follow_the_environment_contract() {

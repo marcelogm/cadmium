@@ -3,10 +3,12 @@ use std::rc::Rc;
 
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::stroke::StrokeSample;
+use cadmium_engine::surface::Surface;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
+use crate::input::PaintSurfaceWidget;
 use crate::presenter::FramePresenter;
 use crate::state::{AppState, SharedState};
 use crate::tools::UiTool;
@@ -348,7 +350,10 @@ impl CadmiumCanvas {
 
     pub fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
-        let found_paint = self.state().borrow_mut().pick_colour(x as f32, y as f32);
+        let found_paint =
+            self.state()
+                .borrow_mut()
+                .pick_colour_on(Surface::Painting, x as f32, y as f32);
         for handler in self.imp().colour_picked_handlers.borrow().iter() {
             handler(self, found_paint);
         }
@@ -446,7 +451,7 @@ impl CadmiumCanvas {
         }
         self.imp().needs_present.get()
             || state.session.has_pending_work()
-            || state.is_holding()
+            || state.holds_on(Surface::Painting)
             || !presenter.matches_size(width_px, height_px)
     }
 
@@ -518,5 +523,31 @@ impl CadmiumCanvas {
         imp.presented_frames.set(imp.presented_frames.get() + 1);
         self.queue_draw();
         true
+    }
+}
+
+impl PaintSurfaceWidget for CadmiumCanvas {
+    fn state(&self) -> SharedState {
+        CadmiumCanvas::state(self)
+    }
+
+    fn surface(&self) -> Surface {
+        Surface::Painting
+    }
+
+    fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64) {
+        self.canvas_point(widget_x, widget_y)
+    }
+
+    fn set_hover(&self, position: Option<(f64, f64)>) {
+        CadmiumCanvas::set_hover(self, position);
+    }
+
+    fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
+        CadmiumCanvas::pick_colour_at(self, widget_x, widget_y);
+    }
+
+    fn observe_hover_pen(&self, sample: &StrokeSample) {
+        CadmiumCanvas::observe_hover_pen(self, sample);
     }
 }
