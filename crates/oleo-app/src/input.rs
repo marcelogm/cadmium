@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gtk::glib::translate::IntoGlib;
@@ -17,14 +17,42 @@ const WHEEL_PAN_STEP: f64 = 48.0;
 const PAN_BUTTON: u32 = gdk::BUTTON_MIDDLE;
 const EYEDROPPER_BUTTON: u32 = gdk::BUTTON_SECONDARY;
 
+#[derive(Default)]
+struct Contact {
+    panning: Cell<bool>,
+    stroking_device: RefCell<Option<gdk::Device>>,
+}
+
+impl Contact {
+    fn is_stroking_device(&self, device: Option<&gdk::Device>) -> bool {
+        event_belongs_to_stroke(self.stroking_device.borrow().as_ref(), device)
+    }
+}
+
 pub fn attach(canvas: &OleoCanvas) {
-    canvas.add_controller(stylus_gesture(canvas));
-    canvas.add_controller(pan_gesture(canvas, gdk::BUTTON_PRIMARY));
-    canvas.add_controller(pan_gesture(canvas, PAN_BUTTON));
+    let contact = Rc::new(Contact::default());
+    canvas.add_controller(stylus_gesture(canvas, &contact));
+    canvas.add_controller(pan_gesture(canvas, &contact, gdk::BUTTON_PRIMARY));
+    canvas.add_controller(pan_gesture(canvas, &contact, PAN_BUTTON));
     canvas.add_controller(eyedropper_click(canvas));
     canvas.add_controller(scroll_controller(canvas));
-    canvas.add_controller(hover_controller(canvas));
+    canvas.add_controller(hover_controller(canvas, &contact));
     canvas.add_controller(pinch_gesture(canvas));
+}
+
+fn event_belongs_to_stroke<D: PartialEq>(stroking: Option<&D>, event: Option<&D>) -> bool {
+    match (stroking, event) {
+        (Some(stroking), Some(event)) => stroking == event,
+        _ => true,
+    }
+}
+
+fn side_button_may_act(stroking: bool) -> bool {
+    !stroking
+}
+
+fn stroke_may_begin(panning: bool) -> bool {
+    !panning
 }
 
 fn axis_index(axis: gdk::AxisUse) -> usize {
@@ -84,19 +112,23 @@ fn event_sample(canvas: &OleoCanvas, event: &gdk::Event, x: f64, y: f64) -> Stro
     }
 }
 
-fn motion_samples(canvas: &OleoCanvas, event: &gdk::Event, x: f64, y: f64) -> Vec<StrokeSample> {
+fn motion_samples(
+    canvas: &OleoCanvas,
+    stylus: &gtk::GestureStylus,
+    event: &gdk::Event,
+    x: f64,
+    y: f64,
+) -> Vec<StrokeSample> {
     let current = event_sample(canvas, event, x, y);
-    let history = event.history();
-    let mut samples = Vec::with_capacity(history.len() + 1);
-    if let Some((event_x, event_y)) = event.position() {
-        let (offset_x, offset_y) = (x - event_x, y - event_y);
-        let to_canvas = |hx: f64, hy: f64| canvas.canvas_point(hx + offset_x, hy + offset_y);
-        samples.extend(
-            history
-                .iter()
-                .map(|coord| history_sample(coord, to_canvas, &current)),
-        );
-    }
+    let backlog = stylus.backlog().unwrap_or_default();
+    let mut samples = Vec::with_capacity(backlog.len() + 1);
+    samples.extend(backlog.iter().map(|coord| {
+        history_sample(
+            coord,
+            |widget_x, widget_y| canvas.canvas_point(widget_x, widget_y),
+            &current,
+        )
+    }));
     samples.push(current);
     samples
 }
@@ -117,17 +149,19 @@ fn is_eraser(event: &gdk::Event) -> bool {
         .is_some_and(|tool| tool.tool_type() == gdk::DeviceToolType::Eraser)
 }
 
-fn stylus_gesture(canvas: &OleoCanvas) -> gtk::GestureStylus {
+fn stylus_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>) -> gtk::GestureStylus {
     let stylus = gtk::GestureStylus::new();
     stylus.set_stylus_only(false);
     stylus.connect_down(glib::clone!(
         #[weak]
         canvas,
+        #[strong]
+        contact,
         move |stylus, x, y| {
             let Some(event) = stylus.current_event() else {
                 return;
             };
-            if !is_primary_contact(&event) {
+            if !is_primary_contact(&event) || !stroke_may_begin(contact.panning.get()) {
                 return;
             }
             let state = canvas.state();
@@ -142,61 +176,86 @@ fn stylus_gesture(canvas: &OleoCanvas) -> gtk::GestureStylus {
             }
             let sample = event_sample(&canvas, &event, x, y);
             state.borrow_mut().begin_stroke(tool, sample);
+            contact
+                .stroking_device
+                .replace(stylus.current_event_device());
             canvas.set_hover(Some((x, y)));
         }
     ));
     stylus.connect_motion(glib::clone!(
         #[weak]
         canvas,
+        #[strong]
+        contact,
         move |stylus, x, y| {
             canvas.set_hover(Some((x, y)));
-            let state = canvas.state();
-            if !state.borrow().is_stroking() {
-                return;
-            }
             let Some(event) = stylus.current_event() else {
                 return;
             };
-            let samples = motion_samples(&canvas, &event, x, y);
+            let state = canvas.state();
+            if !state.borrow().is_stroking() {
+                let sample = event_sample(&canvas, &event, x, y);
+                state.borrow_mut().observe_hover_pen(&sample);
+                return;
+            }
+            if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
+                return;
+            }
+            let samples = motion_samples(&canvas, stylus, &event, x, y);
             state.borrow_mut().add_samples(&samples);
         }
     ));
     stylus.connect_up(glib::clone!(
         #[weak]
         canvas,
+        #[strong]
+        contact,
         move |stylus, _, _| {
             if stylus
                 .current_event()
                 .is_some_and(|event| is_primary_contact(&event))
             {
-                canvas.state().borrow_mut().end_stroke();
+                end_stroke(&canvas, &contact);
             }
         }
     ));
     stylus.connect_proximity(glib::clone!(
         #[weak]
         canvas,
+        #[strong]
+        contact,
         move |stylus, x, y| {
-            let leaving = stylus
-                .current_event()
-                .is_some_and(|event| event.event_type() == gdk::EventType::ProximityOut);
-            if leaving {
-                canvas.state().borrow_mut().end_stroke();
+            let Some(event) = stylus.current_event() else {
+                return;
+            };
+            if event.event_type() == gdk::EventType::ProximityOut {
+                if contact.is_stroking_device(stylus.current_event_device().as_ref()) {
+                    end_stroke(&canvas, &contact);
+                }
                 canvas.set_hover(None);
-            } else {
-                canvas.set_hover(Some((x, y)));
+                return;
             }
+            canvas.set_hover(Some((x, y)));
+            let sample = event_sample(&canvas, &event, x, y);
+            canvas.state().borrow_mut().observe_hover_pen(&sample);
         }
     ));
     stylus.connect_cancel(glib::clone!(
         #[weak]
         canvas,
-        move |_, _| canvas.state().borrow_mut().end_stroke()
+        #[strong]
+        contact,
+        move |_, _| end_stroke(&canvas, &contact)
     ));
     stylus
 }
 
-fn pan_gesture(canvas: &OleoCanvas, button: u32) -> gtk::GestureDrag {
+fn end_stroke(canvas: &OleoCanvas, contact: &Contact) {
+    contact.stroking_device.replace(None);
+    canvas.state().borrow_mut().end_stroke();
+}
+
+fn pan_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>, button: u32) -> gtk::GestureDrag {
     let drag = gtk::GestureDrag::new();
     drag.set_button(button);
     let panning = Rc::new(Cell::new(false));
@@ -205,13 +264,21 @@ fn pan_gesture(canvas: &OleoCanvas, button: u32) -> gtk::GestureDrag {
         #[weak]
         canvas,
         #[strong]
+        contact,
+        #[strong]
         panning,
         #[strong]
         last_offset,
         move |drag, _, _| {
-            let moving = canvas.state().borrow().ui_tool == UiTool::Move;
-            let pans = button != gdk::BUTTON_PRIMARY || moving;
+            let (ui_tool, stroking) = {
+                let state = canvas.state();
+                let state = state.borrow();
+                (state.ui_tool, state.is_stroking())
+            };
+            let wants_pan = button != gdk::BUTTON_PRIMARY || ui_tool == UiTool::Move;
+            let pans = wants_pan && side_button_may_act(stroking);
             panning.set(pans);
+            contact.panning.set(contact.panning.get() || pans);
             last_offset.set((0.0, 0.0));
             if !pans {
                 drag.set_state(gtk::EventSequenceState::Denied);
@@ -231,7 +298,15 @@ fn pan_gesture(canvas: &OleoCanvas, button: u32) -> gtk::GestureDrag {
             canvas.pan_by(offset_x - last_x, offset_y - last_y);
         }
     ));
-    drag.connect_drag_end(move |_, _, _| panning.set(false));
+    drag.connect_drag_end(glib::clone!(
+        #[strong]
+        contact,
+        move |_, _, _| {
+            if panning.replace(false) {
+                contact.panning.set(false);
+            }
+        }
+    ));
     drag
 }
 
@@ -241,7 +316,11 @@ fn eyedropper_click(canvas: &OleoCanvas) -> gtk::GestureClick {
     click.connect_pressed(glib::clone!(
         #[weak]
         canvas,
-        move |_, _, x, y| canvas.pick_colour_at(x, y)
+        move |_, _, x, y| {
+            if side_button_may_act(canvas.state().borrow().is_stroking()) {
+                canvas.pick_colour_at(x, y);
+            }
+        }
     ));
     click
 }
@@ -289,7 +368,7 @@ fn scroll_controller(canvas: &OleoCanvas) -> gtk::EventControllerScroll {
     scroll
 }
 
-fn hover_controller(canvas: &OleoCanvas) -> gtk::EventControllerMotion {
+fn hover_controller(canvas: &OleoCanvas, contact: &Rc<Contact>) -> gtk::EventControllerMotion {
     let motion = gtk::EventControllerMotion::new();
     motion.connect_enter(glib::clone!(
         #[weak]
@@ -304,9 +383,13 @@ fn hover_controller(canvas: &OleoCanvas) -> gtk::EventControllerMotion {
     motion.connect_leave(glib::clone!(
         #[weak]
         canvas,
-        move |_| {
+        #[strong]
+        contact,
+        move |motion| {
             canvas.set_hover(None);
-            canvas.state().borrow_mut().end_stroke();
+            if contact.is_stroking_device(motion.current_event_device().as_ref()) {
+                end_stroke(&canvas, &contact);
+            }
         }
     ));
     motion
@@ -397,6 +480,36 @@ mod tests {
         assert_eq!(sample.pressure, 0.7);
         assert_eq!(sample.tilt_x_deg, 5.0);
         assert_eq!(sample.tilt_y_deg, -5.0);
+    }
+
+    #[test]
+    fn backlog_entries_are_widget_points_mapped_like_the_motion_event() {
+        let axes = axes_with(&[(gdk::AxisUse::X, 12.0), (gdk::AxisUse::Y, 34.0)]);
+        let coord = gdk::TimeCoord::new(80, axes, gdk::AxisFlags::X | gdk::AxisFlags::Y);
+        let widget_to_canvas = |x: f64, y: f64| (x / 2.0 + 100.0, y / 2.0 + 50.0);
+        let sample = history_sample(&coord, widget_to_canvas, &fallback());
+        assert_eq!((sample.x, sample.y), widget_to_canvas(12.0, 34.0));
+    }
+
+    #[test]
+    fn side_buttons_do_nothing_while_the_pen_is_painting() {
+        assert!(!side_button_may_act(true));
+        assert!(side_button_may_act(false));
+    }
+
+    #[test]
+    fn pen_down_during_a_pan_does_not_paint() {
+        assert!(!stroke_may_begin(true));
+        assert!(stroke_may_begin(false));
+    }
+
+    #[test]
+    fn another_device_leaving_does_not_end_the_stroke() {
+        let (pen, mouse) = ("pen", "mouse");
+        assert!(!event_belongs_to_stroke(Some(&pen), Some(&mouse)));
+        assert!(event_belongs_to_stroke(Some(&pen), Some(&pen)));
+        assert!(event_belongs_to_stroke(Some(&pen), None));
+        assert!(event_belongs_to_stroke(None, Some(&mouse)));
     }
 
     #[test]
