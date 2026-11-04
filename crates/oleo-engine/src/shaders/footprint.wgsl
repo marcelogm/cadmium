@@ -42,9 +42,8 @@ fn footprint(position: vec2<f32>) -> f32 {
 }
 
 fn pressure_envelope_gradient(position: vec2<f32>) -> vec2<f32> {
-    let semi = semi_axes();
-    let normalized = position / semi;
-    let slope = -2.0 * dab.pressure * dab.radius * normalized / semi;
+    let normalized = position / semi_axes();
+    let slope = -2.0 * dab.pressure * normalized;
     var gradient = vec2<f32>(0.0);
     if (dab.tool_mode == TOOL_MODE_KNIFE) {
         if (all(abs(normalized) < vec2<f32>(1.0))) {
