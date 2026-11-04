@@ -39,9 +39,14 @@ fn motion(pixel: vec2<i32>, volume: f32) -> vec4<f32> {
     if (outline <= 0.0 && all(squeeze_gradient == vec2<f32>(0.0))) {
         return vec4<f32>(0.0);
     }
-    let heading = vec2<f32>(cos(dab.direction), sin(dab.direction));
+    let ahead = heading();
+    let across = vec2<f32>(-ahead.y, ahead.x);
+    var squeeze_push = squeeze_gradient;
+    if (dab.tool_mode != TOOL_MODE_KNIFE) {
+        squeeze_push = dot(squeeze_gradient, across) * across;
+    }
     let drag = dab.advection * min(dab.speed * DRAG_SPEED_GAIN, 1.0);
-    var velocity = kept_at_canvas_border(pixel, outline * drag * heading - dab.squeeze * squeeze_gradient);
+    var velocity = kept_at_canvas_border(pixel, drag_weight(position) * drag * ahead - dab.squeeze * squeeze_push);
     let courant = outflow(velocity);
     if (courant > MAX_COURANT) {
         velocity *= MAX_COURANT / courant;
