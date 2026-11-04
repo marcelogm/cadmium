@@ -25,6 +25,8 @@ struct Dab {
     squeeze: f32,
     diffusion: f32,
     knife_flatten: f32,
+    spread_origin: vec2<i32>,
+    spread_size: vec2<u32>,
 };
 
 struct Body {
