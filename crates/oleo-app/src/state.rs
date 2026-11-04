@@ -17,6 +17,7 @@ use oleo_engine::stroke::{StrokeSample, Tool};
 
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
+use crate::writes::{EditCounter, EditMark};
 
 const RATE_SMOOTHING: f32 = 0.2;
 const MILLISECONDS_PER_SECOND: f32 = 1000.0;
@@ -208,7 +209,7 @@ pub struct AppState {
     pub session: PaintSession,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
-    pub dirty_since_save: bool,
+    edits: EditCounter,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
     pub tip_mixture: Mixture,
@@ -237,7 +238,7 @@ impl AppState {
                 zoom: 1.0,
             },
             ui_tool: UiTool::default(),
-            dirty_since_save: false,
+            edits: EditCounter::default(),
             file: None,
             pen: PenReadout::default(),
             tip_mixture: EMPTY_MIXTURE,
@@ -284,6 +285,19 @@ impl AppState {
         ExportedImage::render(&self.gpu, &mut self.session)
     }
 
+    pub fn has_unsaved_edits(&self) -> bool {
+        self.edits.has_unsaved_edits()
+    }
+
+    pub fn edit_mark(&self) -> EditMark {
+        self.edits.mark()
+    }
+
+    pub fn saved_to(&mut self, path: PathBuf, mark: EditMark) {
+        self.edits.saved_at(mark);
+        self.file = Some(path);
+    }
+
     fn adopt_session(&mut self, session: PaintSession, file: Option<PathBuf>) {
         let mut brush = self.session.brush.clone();
         brush.tool = self.resting_tool;
@@ -301,7 +315,7 @@ impl AppState {
         self.session.brush = brush;
         *self.session.engine.params_mut() = params;
         self.reload_brush();
-        self.dirty_since_save = false;
+        self.edits.forget_unsaved();
         self.file = file;
         self.wake();
     }
@@ -398,7 +412,7 @@ impl AppState {
     pub fn add_pigment(&mut self, id: &str) -> Result<usize, String> {
         let session = &mut self.session;
         let slot = session.canvas.add_slot(&self.gpu, &session.db, id)?;
-        self.dirty_since_save = true;
+        self.edits.record();
         self.wake();
         Ok(slot)
     }
@@ -410,7 +424,7 @@ impl AppState {
             return DryOutcome::NothingWet;
         }
         let undoable = self.session.dry(&self.gpu);
-        self.dirty_since_save = true;
+        self.edits.record();
         self.wake();
         DryOutcome::Dried { undoable }
     }
@@ -418,7 +432,9 @@ impl AppState {
     pub fn undo(&mut self) -> bool {
         self.end_stroke();
         let undone = self.session.undo(&self.gpu);
-        self.dirty_since_save |= undone;
+        if undone {
+            self.edits.record();
+        }
         self.wake();
         undone
     }
@@ -426,7 +442,9 @@ impl AppState {
     pub fn redo(&mut self) -> bool {
         self.end_stroke();
         let redone = self.session.redo(&self.gpu);
-        self.dirty_since_save |= redone;
+        if redone {
+            self.edits.record();
+        }
         self.wake();
         redone
     }
@@ -511,7 +529,7 @@ impl AppState {
         }
         self.session.end_stroke(&self.gpu);
         self.stroking = false;
-        self.dirty_since_save = true;
+        self.edits.record();
         self.measure_brush();
         self.wake();
     }
@@ -652,7 +670,7 @@ mod tests {
         let spec = &SimParams::specs()[0];
         let tuned = spec.min + (spec.max - spec.min) * TUNED_PARAM_VALUE_SHARE;
         current.set_param(spec.key, tuned);
-        current.dirty_since_save = true;
+        current.edits.record();
 
         let mut saved = painting_state();
         saved.session.canvas.spec.pigment_slots.reverse();
@@ -673,7 +691,7 @@ mod tests {
         );
         assert_eq!(current.session.engine.params().get(spec.key), tuned);
         assert_eq!(current.file, Some(path));
-        assert!(!current.dirty_since_save);
+        assert!(!current.has_unsaved_edits());
     }
 
     const WHITE_SLOT: usize = 0;
@@ -823,7 +841,7 @@ mod tests {
     fn drying_a_canvas_without_wet_paint_does_nothing() {
         let mut state = painting_state();
         assert_eq!(state.dry(), DryOutcome::NothingWet);
-        assert!(!state.dirty_since_save);
+        assert!(!state.has_unsaved_edits());
         assert!(!state.can_undo());
     }
 
@@ -831,9 +849,10 @@ mod tests {
     fn drying_wet_paint_can_be_undone() {
         let mut state = painting_state();
         stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
-        state.dirty_since_save = false;
+        let mark = state.edit_mark();
+        state.saved_to(PathBuf::from("seca.oleo"), mark);
         assert_eq!(state.dry(), DryOutcome::Dried { undoable: true });
-        assert!(state.dirty_since_save);
+        assert!(state.has_unsaved_edits());
     }
 
     #[test]

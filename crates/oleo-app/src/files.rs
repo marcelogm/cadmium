@@ -6,8 +6,12 @@ use gtk::{gio, glib};
 use oleo_engine::document::{DocumentError, DocumentSnapshot};
 
 use crate::LOG_DOMAIN;
-use crate::dialogs::{painting_discard_confirmed, unsaved_changes_discard_confirmed};
+use crate::dialogs::{
+    ask_to_quit_while_writing, overwrite_confirmed, painting_discard_confirmed,
+    unsaved_changes_discard_confirmed,
+};
 use crate::window::OleoWindow;
+use crate::writes::{WriteKind, work_would_be_lost};
 
 pub const PAINTING_EXTENSION: &str = "oleo";
 pub const IMAGE_EXTENSION: &str = "png";
@@ -21,6 +25,9 @@ const OPEN_TITLE: &str = "Abrir pintura";
 const SAVE_AS_TITLE: &str = "Salvar pintura";
 const EXPORT_TITLE: &str = "Exportar PNG";
 const SAVED_TOAST: &str = "Salvo";
+const SAVING_TOAST: &str = "Salvando…";
+const EXPORTING_TOAST: &str = "Exportando…";
+const WRITE_HANG_SECONDS: u32 = 10;
 const EXPORTED_TOAST: &str = "Exportado";
 const CANNOT_OPEN: &str = "Não foi possível abrir";
 const CANNOT_SAVE: &str = "Não foi possível salvar";
@@ -74,6 +81,10 @@ pub fn window_title(file: Option<&Path>) -> String {
         Some(_) => format!("{} — {APPLICATION_NAME}", document_name(file)),
         None => APPLICATION_NAME.to_string(),
     }
+}
+
+pub fn overwrite_needs_confirmation(chosen: &Path, target: &Path, target_exists: bool) -> bool {
+    chosen != target && target_exists
 }
 
 pub fn with_extension(path: PathBuf, extension: &str) -> PathBuf {
@@ -135,9 +146,10 @@ fn finished<T>(outcome: std::thread::Result<Result<T, DocumentError>>) -> Result
 
 impl OleoWindow {
     pub fn save(&self) {
-        match self.state().borrow().file.clone() {
+        let file = self.state().borrow().file.clone();
+        match file {
             Some(path) => {
-                glib::spawn_future_local(self.clone().save_to(path));
+                glib::spawn_future_local(self.save_to(path));
             }
             None => self.save_as(),
         }
@@ -150,13 +162,15 @@ impl OleoWindow {
             Some(path) => dialog.set_initial_file(Some(&gio::File::for_path(path))),
             None => dialog.set_initial_name(Some(&format!("{UNTITLED}.{PAINTING_EXTENSION}"))),
         }
-        let window = self.clone();
+        let window = self.downgrade();
         glib::spawn_future_local(async move {
-            let chosen = dialog.save_future(Some(&window)).await;
-            if let Some(path) = window.chosen_path(chosen) {
-                window
-                    .save_to(with_extension(path, PAINTING_EXTENSION))
-                    .await;
+            let Some(target) = chosen_write_target(&window, dialog, PAINTING_EXTENSION).await
+            else {
+                return;
+            };
+            let saving = window.upgrade().map(|window| window.save_to(target));
+            if let Some(saving) = saving {
+                saving.await;
             }
         });
     }
@@ -164,11 +178,21 @@ impl OleoWindow {
     pub fn open(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(OPEN_TITLE, &painting_filter(), file.as_deref());
-        let window = self.clone();
+        let window = self.downgrade();
         glib::spawn_future_local(async move {
-            let chosen = dialog.open_future(Some(&window)).await;
-            if let Some(path) = window.chosen_path(chosen) {
-                window.open_path(path).await;
+            let Some(choosing) = window
+                .upgrade()
+                .map(|parent| dialog.open_future(Some(&parent)))
+            else {
+                return;
+            };
+            let chosen = choosing.await;
+            let opening = window.upgrade().and_then(|window| {
+                let path = window.chosen_path(chosen)?;
+                Some(window.open_path(path))
+            });
+            if let Some(opening) = opening {
+                opening.await;
             }
         });
     }
@@ -180,65 +204,73 @@ impl OleoWindow {
             "{}.{IMAGE_EXTENSION}",
             document_name(file.as_deref())
         )));
-        let window = self.clone();
+        let window = self.downgrade();
         glib::spawn_future_local(async move {
-            let chosen = dialog.save_future(Some(&window)).await;
-            if let Some(path) = window.chosen_path(chosen) {
-                window
-                    .export_to(with_extension(path, IMAGE_EXTENSION))
-                    .await;
+            let Some(target) = chosen_write_target(&window, dialog, IMAGE_EXTENSION).await else {
+                return;
+            };
+            let exporting = window.upgrade().map(|window| window.export_to(target));
+            if let Some(exporting) = exporting {
+                exporting.await;
             }
         });
     }
 
-    pub async fn save_to(self, path: PathBuf) -> bool {
-        if !self.imp().saves_in_flight.borrow_mut().insert(path.clone()) {
-            glib::g_debug!(LOG_DOMAIN, "already saving to {}", path.display());
-            return false;
-        }
+    pub fn save_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
         let generation = self.imp().document_generation.get();
-        let (snapshot, was_dirty) = {
+        let captured = self.begin_write(&path, WriteKind::Painting).then(|| {
             let state = self.state();
             let mut state = state.borrow_mut();
-            let snapshot = state.capture_document();
-            (snapshot, std::mem::take(&mut state.dirty_since_save))
-        };
-        self.canvas().queue_present();
-        let target = path.clone();
-        let written = finished(gio::spawn_blocking(move || snapshot.write(&target)).await);
-        self.imp().saves_in_flight.borrow_mut().remove(&path);
-        let same_document = generation == self.imp().document_generation.get();
-        let saved = match written {
-            Ok(()) => {
-                if same_document {
-                    self.state().borrow_mut().file = Some(path);
-                    self.show_document_title();
+            (state.capture_document(), state.edit_mark())
+        });
+        if captured.is_some() {
+            self.canvas().queue_present();
+        }
+        let window = self.downgrade();
+        async move {
+            let Some((snapshot, mark)) = captured else {
+                return false;
+            };
+            let target = path.clone();
+            let written = finished(gio::spawn_blocking(move || snapshot.write(&target)).await);
+            let Some(window) = window.upgrade() else {
+                return written.is_ok();
+            };
+            let same_document = generation == window.imp().document_generation.get();
+            let saved = match written {
+                Ok(()) => {
+                    if same_document {
+                        window.state().borrow_mut().saved_to(path.clone(), mark);
+                        window.show_document_title();
+                    }
+                    window.show_toast(SAVED_TOAST);
+                    true
                 }
-                self.show_toast(SAVED_TOAST);
-                true
-            }
-            Err(failure) => {
-                if same_document {
-                    self.state().borrow_mut().dirty_since_save |= was_dirty;
+                Err(failure) => {
+                    glib::g_warning!(
+                        LOG_DOMAIN,
+                        "saving {} failed: {}",
+                        path.display(),
+                        failure.detail
+                    );
+                    window.show_toast(&format!("{CANNOT_SAVE}: {}", failure.shown));
+                    false
                 }
-                glib::g_warning!(
-                    LOG_DOMAIN,
-                    "saving {} failed: {}",
-                    path.display(),
-                    failure.detail
-                );
-                self.show_toast(&format!("{CANNOT_SAVE}: {}", failure.shown));
-                false
-            }
-        };
-        self.close_if_it_waited_for_saves();
-        saved
+            };
+            window.finish_write(&path);
+            saved
+        }
     }
 
-    pub async fn open_path(self, path: PathBuf) -> bool {
-        let source = path.clone();
-        let snapshot =
-            match finished(gio::spawn_blocking(move || DocumentSnapshot::read(&source)).await) {
+    pub fn open_path(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
+        let window = self.downgrade();
+        async move {
+            let source = path.clone();
+            let read = finished(gio::spawn_blocking(move || DocumentSnapshot::read(&source)).await);
+            let Some(window) = window.upgrade() else {
+                return false;
+            };
+            let snapshot = match read {
                 Ok(snapshot) => snapshot,
                 Err(failure) => {
                     glib::g_warning!(
@@ -247,48 +279,73 @@ impl OleoWindow {
                         path.display(),
                         failure.detail
                     );
-                    self.show_toast(&format!("{CANNOT_OPEN}: {}", failure.shown));
+                    window.show_toast(&format!("{CANNOT_OPEN}: {}", failure.shown));
                     return false;
                 }
             };
-        let dirty = self.state().borrow().dirty_since_save;
-        if dirty && !painting_discard_confirmed(&self).await {
-            return false;
+            if window.work_would_be_lost() && !painting_discard_confirmed(&window).await {
+                return false;
+            }
+            window.state().borrow_mut().open_painting(snapshot, path);
+            window.after_document_replaced();
+            true
         }
-        self.state().borrow_mut().open_painting(snapshot, path);
-        self.after_document_replaced();
-        true
     }
 
-    pub async fn export_to(self, path: PathBuf) -> bool {
-        let image = self.state().borrow_mut().render_export();
-        self.canvas().queue_present();
-        let target = path.clone();
-        match finished(gio::spawn_blocking(move || image.write_png(&target)).await) {
-            Ok(()) => {
-                self.show_toast(EXPORTED_TOAST);
-                true
-            }
-            Err(failure) => {
-                glib::g_warning!(
-                    LOG_DOMAIN,
-                    "exporting {} failed: {}",
-                    path.display(),
-                    failure.detail
-                );
-                self.show_toast(&format!("{CANNOT_EXPORT}: {}", failure.shown));
-                false
-            }
+    pub fn export_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
+        let image = self
+            .begin_write(&path, WriteKind::Image)
+            .then(|| self.state().borrow_mut().render_export());
+        if image.is_some() {
+            self.canvas().queue_present();
         }
+        let window = self.downgrade();
+        async move {
+            let Some(image) = image else {
+                return false;
+            };
+            let target = path.clone();
+            let written = finished(gio::spawn_blocking(move || image.write_png(&target)).await);
+            let Some(window) = window.upgrade() else {
+                return written.is_ok();
+            };
+            let exported = match written {
+                Ok(()) => {
+                    window.show_toast(EXPORTED_TOAST);
+                    true
+                }
+                Err(failure) => {
+                    glib::g_warning!(
+                        LOG_DOMAIN,
+                        "exporting {} failed: {}",
+                        path.display(),
+                        failure.detail
+                    );
+                    window.show_toast(&format!("{CANNOT_EXPORT}: {}", failure.shown));
+                    false
+                }
+            };
+            window.finish_write(&path);
+            exported
+        }
+    }
+
+    pub fn work_would_be_lost(&self) -> bool {
+        let unsaved_edits = self.state().borrow().has_unsaved_edits();
+        work_would_be_lost(unsaved_edits, &self.imp().writes_in_flight.borrow())
     }
 
     pub fn may_close(&self) -> bool {
         let imp = self.imp();
-        if !imp.saves_in_flight.borrow().is_empty() {
-            imp.close_after_saves.set(true);
+        if imp.abandon_writes.get() {
+            return true;
+        }
+        if !imp.writes_in_flight.borrow().is_empty() {
+            imp.close_after_writes.set(true);
+            self.offer_to_quit_if_writes_hang();
             return false;
         }
-        if imp.close_confirmed.get() || !self.state().borrow().dirty_since_save {
+        if imp.close_confirmed.get() || !self.work_would_be_lost() {
             return true;
         }
         if !imp.asking_to_close.replace(true) {
@@ -305,11 +362,69 @@ impl OleoWindow {
         false
     }
 
-    fn close_if_it_waited_for_saves(&self) {
+    fn begin_write(&self, path: &Path, kind: WriteKind) -> bool {
+        if self.imp().writes_in_flight.borrow_mut().begin(path, kind) {
+            return true;
+        }
+        glib::g_debug!(LOG_DOMAIN, "already writing {}", path.display());
+        self.show_toast(match kind {
+            WriteKind::Painting => SAVING_TOAST,
+            WriteKind::Image => EXPORTING_TOAST,
+        });
+        false
+    }
+
+    fn finish_write(&self, path: &Path) {
         let imp = self.imp();
-        if imp.saves_in_flight.borrow().is_empty() && imp.close_after_saves.replace(false) {
+        imp.writes_in_flight.borrow_mut().finish(path);
+        if !imp.writes_in_flight.borrow().is_empty() {
+            return;
+        }
+        if let Some(timeout) = imp.write_wait_timeout.take() {
+            timeout.remove();
+        }
+        if let Some(alert) = imp.write_wait_alert.take() {
+            alert.force_close();
+        }
+        if imp.close_after_writes.replace(false) {
             self.close();
         }
+    }
+
+    fn offer_to_quit_if_writes_hang(&self) {
+        let imp = self.imp();
+        if imp.write_wait_timeout.borrow().is_some() || imp.write_wait_alert.borrow().is_some() {
+            return;
+        }
+        let window = self.downgrade();
+        let timeout = glib::timeout_add_seconds_local_once(WRITE_HANG_SECONDS, move || {
+            let Some(window) = window.upgrade() else {
+                return;
+            };
+            let imp = window.imp();
+            imp.write_wait_timeout.take();
+            if imp.close_after_writes.get() && !imp.writes_in_flight.borrow().is_empty() {
+                window.ask_to_quit_while_writing();
+            }
+        });
+        imp.write_wait_timeout.replace(Some(timeout));
+    }
+
+    fn ask_to_quit_while_writing(&self) {
+        let window = self.downgrade();
+        let alert = ask_to_quit_while_writing(self, move || {
+            if let Some(window) = window.upgrade() {
+                window.imp().abandon_writes.set(true);
+                window.close();
+            }
+        });
+        let window = self.downgrade();
+        alert.connect_closed(move |_| {
+            if let Some(window) = window.upgrade() {
+                window.imp().write_wait_alert.take();
+            }
+        });
+        self.imp().write_wait_alert.replace(Some(alert));
     }
 
     fn chosen_path(&self, chosen: Result<gio::File, glib::Error>) -> Option<PathBuf> {
@@ -339,6 +454,25 @@ impl OleoWindow {
         let title = window_title(self.state().borrow().file.as_deref());
         self.set_title(Some(&title));
     }
+}
+
+async fn chosen_write_target(
+    window: &glib::WeakRef<OleoWindow>,
+    dialog: gtk::FileDialog,
+    extension: &str,
+) -> Option<PathBuf> {
+    let choosing = dialog.save_future(Some(&window.upgrade()?));
+    let chosen = choosing.await;
+    let parent = window.upgrade()?;
+    let chosen = parent.chosen_path(chosen)?;
+    let target = with_extension(chosen.clone(), extension);
+    if overwrite_needs_confirmation(&chosen, &target, target.exists()) {
+        let file_name = target.file_name()?.to_string_lossy().into_owned();
+        if !overwrite_confirmed(&parent, &file_name).await {
+            return None;
+        }
+    }
+    Some(target)
 }
 
 #[cfg(test)]
@@ -384,6 +518,27 @@ mod tests {
         );
         let other = DocumentError::Io(std::io::Error::other("boom"));
         assert_eq!(describe_document_error(&other), INPUT_OUTPUT_FAILED);
+    }
+
+    #[test]
+    fn appended_extension_landing_on_an_existing_file_asks_before_replacing_it() {
+        let chosen = Path::new("/tmp/estudo");
+        let target = with_extension(chosen.to_path_buf(), PAINTING_EXTENSION);
+        assert!(overwrite_needs_confirmation(chosen, &target, true));
+    }
+
+    #[test]
+    fn appended_extension_on_a_new_name_writes_without_asking() {
+        let chosen = Path::new("/tmp/estudo");
+        let target = with_extension(chosen.to_path_buf(), PAINTING_EXTENSION);
+        assert!(!overwrite_needs_confirmation(chosen, &target, false));
+    }
+
+    #[test]
+    fn name_already_confirmed_by_the_file_chooser_is_not_asked_again() {
+        let chosen = Path::new("/tmp/estudo.oleo");
+        let target = with_extension(chosen.to_path_buf(), PAINTING_EXTENSION);
+        assert!(!overwrite_needs_confirmation(chosen, &target, true));
     }
 
     #[test]

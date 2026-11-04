@@ -121,13 +121,13 @@ impl SmokeStep {
             SmokeStep::OpenDialog(dialog) => dialog.open(window),
             SmokeStep::PaintStroke => paint_stroke(window),
             SmokeStep::Save(path) => {
-                return file_work.advance(|| window.clone().save_to(path.clone()), path);
+                return file_work.advance(|| window.save_to(path.clone()), path);
             }
             SmokeStep::Open(path) => {
-                return file_work.advance(|| window.clone().open_path(path.clone()), path);
+                return file_work.advance(|| window.open_path(path.clone()), path);
             }
             SmokeStep::Export(path) => {
-                return file_work.advance(|| window.clone().export_to(path.clone()), path);
+                return file_work.advance(|| window.export_to(path.clone()), path);
             }
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {

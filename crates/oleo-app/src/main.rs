@@ -16,6 +16,7 @@ mod swatch;
 mod tools;
 mod view;
 mod window;
+mod writes;
 
 const APP_ID: &str = "io.github.marcelo.Oleo";
 pub const LOG_DOMAIN: &str = "oleo";

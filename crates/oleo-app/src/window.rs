@@ -1,6 +1,4 @@
 use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::HashSet;
-use std::path::PathBuf;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -17,6 +15,7 @@ use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::{DryOutcome, SharedState};
 use crate::tools::{Tool, UiTool};
+use crate::writes::WritesInFlight;
 
 pub type PanelRefresher = Rc<dyn Fn()>;
 
@@ -53,9 +52,12 @@ mod imp {
         pub tool: Cell<UiTool>,
         pub canvas: OnceCell<OleoCanvas>,
         pub panel_refreshers: RefCell<Vec<PanelRefresher>>,
-        pub saves_in_flight: RefCell<HashSet<PathBuf>>,
+        pub writes_in_flight: RefCell<WritesInFlight>,
         pub document_generation: Cell<u64>,
-        pub close_after_saves: Cell<bool>,
+        pub close_after_writes: Cell<bool>,
+        pub write_wait_timeout: RefCell<Option<glib::SourceId>>,
+        pub write_wait_alert: RefCell<Option<adw::AlertDialog>>,
+        pub abandon_writes: Cell<bool>,
         pub close_confirmed: Cell<bool>,
         pub asking_to_close: Cell<bool>,
     }
@@ -377,7 +379,7 @@ impl OleoWindow {
             #[weak(rename_to = window)]
             self,
             move |dialog, spec| {
-                if !window.state().borrow().dirty_since_save {
+                if !window.work_would_be_lost() {
                     dialog.close();
                     window.start_painting(spec);
                     return;

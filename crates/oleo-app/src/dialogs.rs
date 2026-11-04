@@ -137,6 +137,55 @@ pub async fn unsaved_changes_discard_confirmed(parent: &impl IsA<gtk::Widget>) -
         == DISCARD_RESPONSE
 }
 
+const REPLACE_RESPONSE: &str = "replace";
+const WAIT_RESPONSE: &str = "wait";
+const QUIT_ANYWAY_RESPONSE: &str = "quit-anyway";
+const STILL_WRITING_HEADING: &str = "Ainda gravando";
+const STILL_WRITING_BODY: &str =
+    "A gravação de um arquivo está demorando. Sair agora pode deixá-lo incompleto.";
+
+pub async fn overwrite_confirmed(parent: &impl IsA<gtk::Widget>, file_name: &str) -> bool {
+    let alert = adw::AlertDialog::builder()
+        .heading(format!("Substituir {file_name}?"))
+        .body("Já existe um arquivo com esse nome. Substituí-lo apaga o que ele contém.")
+        .default_response(CANCEL_RESPONSE)
+        .close_response(CANCEL_RESPONSE)
+        .build();
+    alert.add_responses(&[
+        (CANCEL_RESPONSE, "Cancelar"),
+        (REPLACE_RESPONSE, "Substituir"),
+    ]);
+    alert.set_response_appearance(REPLACE_RESPONSE, adw::ResponseAppearance::Destructive);
+    alert.choose_future(Some(parent)).await == REPLACE_RESPONSE
+}
+
+pub fn ask_to_quit_while_writing(
+    parent: &impl IsA<gtk::Widget>,
+    on_quit: impl Fn() + 'static,
+) -> adw::AlertDialog {
+    let alert = adw::AlertDialog::builder()
+        .heading(STILL_WRITING_HEADING)
+        .body(STILL_WRITING_BODY)
+        .default_response(WAIT_RESPONSE)
+        .close_response(WAIT_RESPONSE)
+        .build();
+    alert.add_responses(&[
+        (WAIT_RESPONSE, "Esperar"),
+        (QUIT_ANYWAY_RESPONSE, "Sair mesmo assim"),
+    ]);
+    alert.set_response_appearance(QUIT_ANYWAY_RESPONSE, adw::ResponseAppearance::Destructive);
+    alert.clone().choose(
+        Some(parent),
+        None::<&gtk::gio::Cancellable>,
+        move |response: glib::GString| {
+            if response == QUIT_ANYWAY_RESPONSE {
+                on_quit();
+            }
+        },
+    );
+    alert
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
