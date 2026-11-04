@@ -5,7 +5,7 @@ use super::{
 use crate::brush::{DEFAULT_LOAD, FULL_RESERVOIR_VOLUME_UM};
 use crate::canvas::PaintTotals;
 use crate::compute::read_buffer;
-use crate::gpu::{GpuContext, GpuLost};
+use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::pigments::Mixture;
 
 const DRAWN_LOADED_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM * DEFAULT_LOAD;
@@ -133,11 +133,7 @@ impl WetOilEngine {
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("clean_brush"),
-            });
+        let mut encoder = new_encoder(gpu, "clean_brush");
         encoder.clear_buffer(&self.buffers.tip, 0, None);
         encoder.clear_buffer(&self.buffers.tip_delta, 0, None);
         encoder.clear_buffer(&self.buffers.body, 0, None);

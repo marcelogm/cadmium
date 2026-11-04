@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::Path;
 
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE};
-use crate::gpu::{GpuContext, GpuLost, TexelRows, read_all_mapped, staging_buffer};
+use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
 use crate::session::PaintSession;
 use crate::surface::tray_spec;
 
@@ -185,11 +185,7 @@ fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, 
             )
         })
         .collect();
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("document_capture"),
-        });
+    let mut encoder = new_encoder(gpu, "document_capture");
     for (which, staging) in StateTexture::PAINT_STATE.iter().zip(&stagings) {
         canvas.encode_copy_out(*which, staging, &mut encoder);
     }

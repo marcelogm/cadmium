@@ -4,7 +4,7 @@ use super::{
 };
 use crate::canvas::PaintTotals;
 use crate::compute::read_buffer;
-use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
+use crate::gpu::{GpuContext, GpuLost, new_encoder, read_mapped, staging_buffer};
 use crate::pigments::Mixture;
 
 const TIP_TEXEL_COUNT_SUM: usize = TIP_CHANNELS;
@@ -19,11 +19,7 @@ pub struct BrushReadout {
 
 impl WetOilEngine {
     pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("brush_sum_tip"),
-            });
+        let mut encoder = new_encoder(gpu, "brush_sum_tip");
         self.encode_sum_tip(gpu, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         Ok(tip_mean_from_sums(&read_buffer(
@@ -47,11 +43,7 @@ impl WetOilEngine {
             "brush_readout",
             sources.iter().map(|source| source.size()).sum(),
         );
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("brush_readout"),
-            });
+        let mut encoder = new_encoder(gpu, "brush_readout");
         self.encode_sum_tip(gpu, &mut encoder);
         let mut offset = 0;
         for source in sources {

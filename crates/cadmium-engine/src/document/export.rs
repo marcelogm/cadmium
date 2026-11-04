@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::gpu::{GpuContext, GpuLost};
+use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::present::{PresentRequest, ViewTransform, readback_rgba8};
 use crate::render::ViewMode;
 use crate::session::PaintSession;
@@ -30,11 +30,7 @@ impl ExportedImage {
         session.view_mode = ViewMode::Color;
         session.canvas.dirty.mark_all();
         let target = session.presenter.create_target(gpu, width, height);
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("export_png"),
-            });
+        let mut encoder = new_encoder(gpu, "export_png");
         session.encode_frame(gpu, &mut encoder);
         session.presenter.encode_present(
             gpu,

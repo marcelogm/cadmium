@@ -5,7 +5,7 @@ use crate::compute::{ComputeStage, WORKGROUP_SIZE, buffer_binding, storage_entry
 use crate::engine::reservoir::DipRecord;
 use crate::engine::shader::{EYEDROPPER_SNIPPETS, shader_source};
 use crate::engine::{Buffers, TIP_SIZE};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, new_encoder};
 
 const TIP_GROUPS: u32 = TIP_SIZE.div_ceil(WORKGROUP_SIZE);
 
@@ -48,11 +48,7 @@ impl DipPass {
         fills_tip: bool,
     ) {
         let bind_group = self.bind_group(gpu, record, buffers);
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("brush_dip"),
-            });
+        let mut encoder = new_encoder(gpu, "brush_dip");
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("brush_dip"),
             timestamp_writes: None,

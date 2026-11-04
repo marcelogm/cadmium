@@ -6,7 +6,7 @@ use crate::compute::{
     texture_binding, texture_entry, uniform_entry,
 };
 use crate::engine::shader::shader_source;
-use crate::gpu::{GpuContext, GpuLost};
+use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::params::SimParams;
 use crate::pigments::MAX_SLOTS;
 use crate::region::{clamped_region, region_rect};
@@ -187,11 +187,7 @@ impl DrawUp {
     }
 
     fn submit_measure(&self, gpu: &GpuContext, group: &wgpu::BindGroup) {
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("draw_up_measure"),
-            });
+        let mut encoder = new_encoder(gpu, "draw_up_measure");
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("draw_up_measure"),
             timestamp_writes: None,

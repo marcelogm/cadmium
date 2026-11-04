@@ -2,7 +2,7 @@ use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture};
 use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
-use crate::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
+use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_mapped, staging_buffer};
 
 const PRESENT_WORKGROUP_SIZE: u32 = 8;
 const PRESENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -136,11 +136,7 @@ pub fn encode_rgba8_copy(
 pub fn readback_rgba8(gpu: &GpuContext, texture: &wgpu::Texture) -> Result<Vec<u8>, GpuLost> {
     let rows = rgba8_rows(texture);
     let staging = staging_buffer(gpu, "present_readback", rows.padded_size());
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("present_readback"),
-        });
+    let mut encoder = new_encoder(gpu, "present_readback");
     encode_rgba8_copy(texture, &staging, &mut encoder);
     gpu.queue.submit([encoder.finish()]);
     read_mapped(gpu, &staging, |padded| rows.unpad(padded))

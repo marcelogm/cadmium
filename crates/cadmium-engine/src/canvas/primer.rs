@@ -1,7 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, new_encoder};
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
 use crate::spectral::{BANDS, BandValues, km_infinite, reflectance_srgb8};
 
@@ -64,11 +64,7 @@ impl Canvas {
                 .map(|(binding, which)| texture_binding(binding, self, which)),
         );
         let bind_group = stage.bind_group(gpu, &entries);
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("canvas_init"),
-            });
+        let mut encoder = new_encoder(gpu, "canvas_init");
         stage.encode(
             &mut encoder,
             &bind_group,

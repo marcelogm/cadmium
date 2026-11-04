@@ -1,5 +1,5 @@
 use crate::canvas::{Canvas, StateTexture};
-use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
+use crate::gpu::{GpuContext, GpuLost, new_encoder, read_mapped, staging_buffer};
 
 pub(crate) const WORKGROUP_SIZE: u32 = 8;
 
@@ -200,11 +200,7 @@ pub(crate) fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::
 
 pub(crate) fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
     let staging = staging_buffer(gpu, "brush_readback", buffer.size());
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("brush_readback"),
-        });
+    let mut encoder = new_encoder(gpu, "brush_readback");
     encoder.copy_buffer_to_buffer(buffer, 0, &staging, 0, buffer.size());
     gpu.queue.submit([encoder.finish()]);
     read_mapped(gpu, &staging, |bytes| bytemuck::cast_slice(bytes).to_vec())

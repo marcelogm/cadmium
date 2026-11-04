@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
+use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_mapped, staging_buffer};
 use crate::pigments::PigmentDb;
 
 mod pigment_slots;
@@ -170,11 +170,7 @@ impl Canvas {
     pub fn read_bytes(&self, gpu: &GpuContext, which: StateTexture) -> Result<Vec<u8>, GpuLost> {
         let rows = self.texel_rows(which);
         let staging = staging_buffer(gpu, "canvas_readback", rows.padded_size());
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("canvas_readback"),
-            });
+        let mut encoder = new_encoder(gpu, "canvas_readback");
         self.encode_copy_out(which, &staging, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         read_mapped(gpu, &staging, |padded| rows.unpad(padded))
