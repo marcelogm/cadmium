@@ -1,22 +1,26 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use cadmium_engine::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
-use cadmium_engine::present::{ViewTransform, encode_rgba8_copy, rgba8_rows};
+use cadmium_engine::gpu::GpuContext;
+use cadmium_engine::present::ViewTransform;
 use cadmium_engine::surface::{TRAY_HEIGHT, TRAY_WIDTH};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
+use self::by_dmabuf::ResizeDebounce;
+use self::by_readback::ReadbackTarget;
+use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
 use crate::state::AppState;
 use crate::view::clamp_zoom;
 
-const PRESENT_MODE_VARIABLE: &str = "CADMIUM_PRESENT";
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
 const DEBUG_ENABLED: &str = "1";
-const VULKAN_RENDERER_MARK: &str = "Vulkan";
-const RESIZE_SETTLE: Duration = Duration::from_millis(150);
 const MILLISECONDS_PER_SECOND: f64 = 1000.0;
+
+mod by_dmabuf;
+mod by_readback;
+pub(crate) mod mode;
 
 pub fn tray_view(viewport_px: (u32, u32)) -> ViewTransform {
     let zoom =
@@ -66,135 +70,6 @@ impl PresentSource {
                 );
             }
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PresentMode {
-    Readback,
-    Dmabuf(ModifierPolicy),
-}
-
-impl PresentMode {
-    pub fn from_name(name: &str) -> Option<PresentMode> {
-        match name {
-            "readback" => Some(PresentMode::Readback),
-            "dmabuf" => Some(PresentMode::Dmabuf(ModifierPolicy::Any)),
-            "dmabuf-nodcc" => Some(PresentMode::Dmabuf(ModifierPolicy::NoCompression)),
-            "linear" => Some(PresentMode::Dmabuf(ModifierPolicy::LinearOnly)),
-            _ => None,
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            PresentMode::Readback => "readback",
-            PresentMode::Dmabuf(ModifierPolicy::Any) => "dmabuf",
-            PresentMode::Dmabuf(ModifierPolicy::NoCompression) => "dmabuf-nodcc",
-            PresentMode::Dmabuf(ModifierPolicy::LinearOnly) => "linear",
-        }
-    }
-
-    fn forced_by_environment() -> Option<PresentMode> {
-        let requested = std::env::var(PRESENT_MODE_VARIABLE).ok()?;
-        let mode = PresentMode::from_name(&requested);
-        if mode.is_none() {
-            glib::g_warning!(LOG_DOMAIN, "ignoring {PRESENT_MODE_VARIABLE}={requested:?}");
-        }
-        mode
-    }
-}
-
-pub fn choose_mode(
-    forced: Option<PresentMode>,
-    gpu_exports_dmabuf: bool,
-    renderer_name: &str,
-) -> PresentMode {
-    match forced {
-        Some(mode) => mode,
-        None if gpu_exports_dmabuf && renderer_name.contains(VULKAN_RENDERER_MARK) => {
-            PresentMode::Dmabuf(ModifierPolicy::Any)
-        }
-        None => PresentMode::Readback,
-    }
-}
-
-fn mode_reason(forced: bool, gpu_exports_dmabuf: bool, renderer_name: &str) -> String {
-    if forced {
-        format!("forced by {PRESENT_MODE_VARIABLE}")
-    } else if !gpu_exports_dmabuf {
-        "the GPU cannot export dmabufs".into()
-    } else if !renderer_name.contains(VULKAN_RENDERER_MARK) {
-        format!("GTK renders with {renderer_name}, not Vulkan")
-    } else {
-        format!("GTK renders with {renderer_name}")
-    }
-}
-
-fn describe_modifier(modifier: Option<u64>) -> String {
-    modifier.map_or_else(
-        || "none".to_string(),
-        |modifier| format!("0x{modifier:016x}"),
-    )
-}
-
-#[derive(Debug, Default)]
-struct ResizeDebounce {
-    pending: Option<((u32, u32), Instant)>,
-}
-
-impl ResizeDebounce {
-    fn has_settled(&mut self, size: (u32, u32), now: Instant) -> bool {
-        match self.pending {
-            Some((pending, since)) if pending == size => now.duration_since(since) >= RESIZE_SETTLE,
-            _ => {
-                self.pending = Some((size, now));
-                false
-            }
-        }
-    }
-
-    fn clear(&mut self) {
-        self.pending = None;
-    }
-}
-
-struct ReadbackTarget {
-    texture: wgpu::Texture,
-    staging: wgpu::Buffer,
-    rows: TexelRows,
-}
-
-impl ReadbackTarget {
-    fn new(state: &AppState, width: u32, height: u32) -> ReadbackTarget {
-        let texture = state
-            .session
-            .presenter
-            .create_target(&state.gpu, width, height);
-        let rows = rgba8_rows(&texture);
-        let staging = staging_buffer(&state.gpu, "present_readback", rows.padded_size());
-        ReadbackTarget {
-            texture,
-            staging,
-            rows,
-        }
-    }
-
-    fn size(&self) -> (u32, u32) {
-        (self.texture.width(), self.texture.height())
-    }
-
-    fn download(&self, gpu: &GpuContext) -> Result<gdk::Texture, GpuLost> {
-        let pixels = read_mapped(gpu, &self.staging, <[u8]>::to_vec)?;
-        let (width, height) = self.size();
-        Ok(gdk::MemoryTexture::new(
-            width as i32,
-            height as i32,
-            gdk::MemoryFormat::R8g8b8a8,
-            &glib::Bytes::from_owned(pixels),
-            self.rows.padded_row_bytes as usize,
-        )
-        .upcast())
     }
 }
 
@@ -260,7 +135,6 @@ impl FramePresenter {
         std::mem::take(&mut self.fallback_pending_notice)
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn present(
         &mut self,
         state: &mut AppState,
@@ -279,13 +153,7 @@ impl FramePresenter {
         let texture = match mode {
             PresentMode::Readback => self.present_by_readback(state, width_px, height_px),
             PresentMode::Dmabuf(policy) => {
-                match self.present_by_dmabuf(state, native, policy, width_px, height_px) {
-                    Ok(texture) => texture,
-                    Err(error) => {
-                        self.fall_back(policy, &error);
-                        self.present_by_readback(state, width_px, height_px)
-                    }
-                }
+                self.present_by_dmabuf_or_fall_back(state, native, policy, (width_px, height_px))
             }
         };
         if self.debug_timing && texture.is_some() {
@@ -316,50 +184,20 @@ impl FramePresenter {
         mode
     }
 
-    #[expect(clippy::excessive_nesting, clippy::too_many_arguments)]
-    fn present_by_dmabuf(
+    fn present_by_dmabuf_or_fall_back(
         &mut self,
         state: &mut AppState,
         native: &gtk::Native,
         policy: ModifierPolicy,
-        width_px: u32,
-        height_px: u32,
-    ) -> Result<Option<gdk::Texture>, DmabufError> {
-        let size = (width_px, height_px);
-        let gpu = state.gpu.clone();
-        let display = native.display();
-        let replace_pool = match self.pool.as_ref().map(DmabufPool::size) {
-            None => true,
-            Some(pool_size) if pool_size == size => {
-                self.resize.clear();
-                false
+        size: (u32, u32),
+    ) -> Option<gdk::Texture> {
+        match self.present_by_dmabuf(state, native, policy, size) {
+            Ok(texture) => texture,
+            Err(error) => {
+                self.fall_back(policy, &error);
+                self.present_by_readback(state, size.0, size.1)
             }
-            Some(_) => self.resize.has_settled(size, Instant::now()),
-        };
-        if replace_pool {
-            self.pool = None;
-            self.resize.clear();
-            let pool = DmabufPool::new(&gpu, &display, width_px, height_px, policy)?;
-            if !self.pool_announced {
-                glib::g_message!(
-                    LOG_DOMAIN,
-                    "presenting by {} with modifier 0x{:016x}: {}",
-                    PresentMode::Dmabuf(policy).name(),
-                    pool.modifier(),
-                    self.mode_reason
-                );
-                self.pool_announced = true;
-            }
-            self.last_modifier = Some(pool.modifier());
-            self.pool = Some(pool);
         }
-        let Some(pool) = self.pool.as_mut() else {
-            return Ok(None);
-        };
-        let source = self.source;
-        pool.present_with(&gpu, &display, |encoder, target| {
-            source.encode(state, &gpu, target, encoder);
-        })
     }
 
     fn fall_back(&mut self, policy: ModifierPolicy, error: &DmabufError) {
@@ -374,129 +212,7 @@ impl FramePresenter {
         self.mode = Some(PresentMode::Readback);
         self.fallback_pending_notice = true;
     }
-
-    fn present_by_readback(
-        &mut self,
-        state: &mut AppState,
-        width_px: u32,
-        height_px: u32,
-    ) -> Option<gdk::Texture> {
-        let size = (width_px, height_px);
-        if self.readback.as_ref().map(ReadbackTarget::size) != Some(size) {
-            self.readback = Some(ReadbackTarget::new(state, width_px, height_px));
-        }
-        let target = self
-            .readback
-            .as_ref()
-            .expect("readback target was just created");
-        let gpu = state.gpu.clone();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("cadmium_frame"),
-            });
-        self.source
-            .encode(state, &gpu, &target.texture, &mut encoder);
-        encode_rgba8_copy(&target.texture, &target.staging, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-        target.download(&gpu).ok()
-    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const VULKAN_RENDERER: &str = "GskVulkanRenderer";
-    const GL_RENDERER: &str = "GskGLRenderer";
-
-    #[test]
-    fn tray_view_fits_the_whole_tray_in_the_widget() {
-        let half = (TRAY_WIDTH / 2, TRAY_HEIGHT / 2);
-        assert_eq!(tray_view((half.0, TRAY_HEIGHT)).zoom, 0.5);
-        assert_eq!(tray_view((TRAY_WIDTH, half.1)).zoom, 0.5);
-        assert_eq!(
-            crate::view::viewport_to_canvas(tray_view(half), f64::from(half.0), f64::from(half.1)),
-            (f64::from(TRAY_WIDTH), f64::from(TRAY_HEIGHT))
-        );
-    }
-
-    #[test]
-    fn present_mode_names_follow_the_environment_contract() {
-        for name in ["readback", "dmabuf", "dmabuf-nodcc", "linear"] {
-            assert_eq!(
-                PresentMode::from_name(name).map(PresentMode::name),
-                Some(name)
-            );
-        }
-        assert_eq!(
-            PresentMode::from_name("linear"),
-            Some(PresentMode::Dmabuf(ModifierPolicy::LinearOnly))
-        );
-        assert_eq!(PresentMode::from_name("fast"), None);
-    }
-
-    #[test]
-    fn vulkan_gtk_on_an_exporting_gpu_presents_by_dmabuf() {
-        assert_eq!(
-            choose_mode(None, true, VULKAN_RENDERER),
-            PresentMode::Dmabuf(ModifierPolicy::Any)
-        );
-    }
-
-    #[test]
-    fn gl_gtk_or_a_gpu_without_export_presents_by_readback() {
-        assert_eq!(choose_mode(None, true, GL_RENDERER), PresentMode::Readback);
-        assert_eq!(
-            choose_mode(None, false, VULKAN_RENDERER),
-            PresentMode::Readback
-        );
-    }
-
-    #[test]
-    fn the_environment_overrides_the_automatic_choice() {
-        assert_eq!(
-            choose_mode(Some(PresentMode::Readback), true, VULKAN_RENDERER),
-            PresentMode::Readback
-        );
-        assert_eq!(
-            choose_mode(
-                Some(PresentMode::Dmabuf(ModifierPolicy::LinearOnly)),
-                true,
-                GL_RENDERER
-            ),
-            PresentMode::Dmabuf(ModifierPolicy::LinearOnly)
-        );
-    }
-
-    #[test]
-    fn fallback_reason_names_the_gl_renderer() {
-        assert!(mode_reason(false, true, GL_RENDERER).contains(GL_RENDERER));
-        assert!(mode_reason(true, true, VULKAN_RENDERER).contains(PRESENT_MODE_VARIABLE));
-    }
-
-    #[test]
-    fn fallback_log_names_the_last_modifier_or_none() {
-        assert_eq!(describe_modifier(Some(0x20)), "0x0000000000000020");
-        assert_eq!(describe_modifier(None), "none");
-    }
-
-    #[test]
-    fn pool_is_rebuilt_only_after_the_size_holds_still() {
-        let start = Instant::now();
-        let mut resize = ResizeDebounce::default();
-        assert!(!resize.has_settled((800, 600), start));
-        assert!(!resize.has_settled((800, 600), start + RESIZE_SETTLE / 2));
-        assert!(resize.has_settled((800, 600), start + RESIZE_SETTLE));
-    }
-
-    #[test]
-    fn a_new_size_during_a_drag_restarts_the_wait() {
-        let start = Instant::now();
-        let mut resize = ResizeDebounce::default();
-        assert!(!resize.has_settled((800, 600), start));
-        assert!(!resize.has_settled((820, 600), start + RESIZE_SETTLE));
-        assert!(!resize.has_settled((820, 600), start + RESIZE_SETTLE * 3 / 2));
-        assert!(resize.has_settled((820, 600), start + RESIZE_SETTLE * 2));
-    }
-}
+mod tests;

@@ -5,7 +5,7 @@ use gtk::glib;
 
 use crate::LOG_DOMAIN;
 use crate::dmabuf::ModifierPolicy;
-use crate::presenter::PresentMode;
+use crate::presenter::mode::PresentMode;
 use crate::tools::UiTool;
 
 use super::SmokeConfig;
