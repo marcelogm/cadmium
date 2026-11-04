@@ -10,6 +10,10 @@ use cadmium_engine::{
 
 const PREVIEW_WIDTH: u32 = 512;
 const PREVIEW_HEIGHT: u32 = 256;
+const DEFAULT_SPACING: f32 = 0.05;
+const DENSE_SPACING: f32 = 0.025;
+const SPACING_VOLUME_TOLERANCE: f64 = 0.05;
+const BROAD_BRUSH_DIAMETER_PX: f32 = 80.0;
 
 fn session(gpu: &GpuContext) -> PaintSession {
     PaintSession::new(
@@ -110,6 +114,27 @@ fn a_stroke_deposits_paint_on_the_canvas() {
     write_preview(&gpu, &s, "engine-brush.png");
     let wet = s.canvas.wet_totals(&gpu);
     assert!(wet.volume > 1000.0 && wet.pigment[0] > 0.0);
+}
+
+fn wet_volume_laid_with_spacing(gpu: &GpuContext, spacing: f32) -> f64 {
+    let mut s = session(gpu);
+    s.brush.geometry.spacing = spacing;
+    s.brush.geometry.max_diameter_px = BROAD_BRUSH_DIAMETER_PX;
+    s.reload_brush(gpu);
+    stroke(gpu, &mut s, 128.0, 40.0, 470.0);
+    s.canvas.wet_totals(gpu).volume
+}
+
+#[test]
+fn the_laid_volume_does_not_depend_on_the_dab_spacing() {
+    let gpu = GpuContext::new().unwrap();
+    let sparse = wet_volume_laid_with_spacing(&gpu, DEFAULT_SPACING);
+    let dense = wet_volume_laid_with_spacing(&gpu, DENSE_SPACING);
+    let difference = (dense - sparse).abs() / sparse;
+    eprintln!(
+        "laid {sparse} µm·px at spacing {DEFAULT_SPACING}, {dense} at {DENSE_SPACING} ({difference:.4})"
+    );
+    assert!(difference <= SPACING_VOLUME_TOLERANCE, "{difference}");
 }
 
 #[test]

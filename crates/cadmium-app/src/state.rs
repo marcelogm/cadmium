@@ -778,6 +778,7 @@ mod tests {
     const ULTRAMARINE_SLOT: usize = 4;
     const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
     const RESERVE_TOLERANCE: f64 = 1e-3;
+    const DIRT_DIP: f32 = 0.1;
 
     fn brush_totals(state: &AppState) -> PaintTotals {
         state.session.engine.brush_totals(&state.gpu)
@@ -857,7 +858,7 @@ mod tests {
         stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
         assert!(reserve_volume(&state) < full);
         let white = single_pigment(&state, WHITE_SLOT);
-        state.session.dip(&state.gpu.clone(), &white, PARTIAL_DIP);
+        state.session.dip(&state.gpu.clone(), &white, DIRT_DIP);
         let samples = row_samples(RAG_ROW_Y);
         state.begin_stroke(Tool::Brush, samples[0]);
         assert!((reserve_volume(&state) - full).abs() <= full * RESERVE_TOLERANCE);

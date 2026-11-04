@@ -2,7 +2,9 @@ use std::sync::mpsc;
 
 use wgpu::util::DeviceExt;
 
-use crate::brush::{BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX, FULL_RESERVOIR_VOLUME_UM};
+use crate::brush::{
+    BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING, FULL_RESERVOIR_VOLUME_UM,
+};
 use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
@@ -17,6 +19,7 @@ pub const MAX_TIP_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM;
 const TIP_HALF: u32 = TIP_SIZE / 2;
 const MAX_TIP_RADIUS: f32 = ((TIP_SIZE - TIP_MARGIN) / 2) as f32;
 const MIN_DAB_RADIUS: f32 = 0.5;
+const REFERENCE_STEP_PX: f32 = DEFAULT_SPACING * DEFAULT_MAX_DIAMETER_PX;
 const PIGMENT_CHANNELS: usize = MAX_SLOTS;
 const VOLUME_CHANNEL: usize = PIGMENT_CHANNELS;
 const TIP_CHANNELS: usize = PIGMENT_CHANNELS + 1;
@@ -148,10 +151,12 @@ struct DabRecord {
     rest_follow: f32,
     blade_capacity_um: f32,
     blade_spill_share: f32,
+    step_ratio: f32,
+    _pad: [f32; 3],
 }
 
 const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 160 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+const _: () = assert!(DAB_RECORD_SIZE == 176 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -440,6 +445,10 @@ fn tool_mode(tool: Tool) -> u32 {
     }
 }
 
+fn rate_over_step(reference_rate: f32, step_ratio: f32) -> f32 {
+    1.0 - (1.0 - reference_rate.clamp(0.0, 1.0)).powf(step_ratio)
+}
+
 fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
     let reach = semi_axes.map(|semi| (semi + TIP_APRON_TEXELS).ceil() as u32);
     let origin = reach.map(|r| (TIP_HALF - r) as i32);
@@ -449,6 +458,7 @@ fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
 
 fn place(
     dab: &Dab,
+    step_px: f32,
     brush: &BrushSettings,
     params: &SimParams,
     loaded_thickness_um: f32,
@@ -461,6 +471,7 @@ fn place(
         return None;
     }
     let footprint = Footprint::of(dab, brush, params);
+    let step_ratio = step_px / REFERENCE_STEP_PX;
     let [half_x, half_y] = footprint.canvas_half_extents();
     let first = [
         (dab.x - half_x).floor() as i32,
@@ -505,7 +516,7 @@ fn place(
         bristle_count: params
             .get("bristle_count")
             .min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
-        refill_rate: params.get("refill_rate"),
+        refill_rate: rate_over_step(params.get("refill_rate"), step_ratio),
         loaded_thickness_um,
         advection: spreading.advection,
         squeeze: spreading.squeeze,
@@ -517,6 +528,8 @@ fn place(
         rest_follow: rest_follow(brush.tool),
         blade_capacity_um: blade_capacity_um(dab.altitude),
         blade_spill_share: KNIFE_SPILL_SHARE,
+        step_ratio,
+        _pad: [0.0; 3],
     };
     Some(Placement {
         record,
@@ -768,6 +781,7 @@ pub struct WetOilEngine {
     blade_grant: wgpu::Buffer,
     blade_state: wgpu::Buffer,
     rest_pending: bool,
+    previous_dab: Option<[f32; 2]>,
     blade_layout: wgpu::BindGroupLayout,
     blade_pipelines: BladePipelines,
     exchange_layout: wgpu::BindGroupLayout,
@@ -961,6 +975,7 @@ impl WetOilEngine {
             blade_grant: storage_buffer(gpu, "knife_blade_grant", BLADE_LOAD_BYTES),
             blade_state: storage_buffer(gpu, "knife_blade_state", BLADE_STATE_BYTES),
             rest_pending: true,
+            previous_dab: None,
             blade_pipelines: BladePipelines::new(gpu, &blade_pipeline_layout),
             blade_layout,
             reference_pipeline: compute_pipeline(
@@ -1067,6 +1082,17 @@ impl WetOilEngine {
             dip_layout,
             scratch: None,
         }
+    }
+
+    fn step_since_previous_dab(&mut self, dab: &Dab) -> f32 {
+        if !is_finite(dab) {
+            return REFERENCE_STEP_PX;
+        }
+        let step = self
+            .previous_dab
+            .map_or(REFERENCE_STEP_PX, |[x, y]| (dab.x - x).hypot(dab.y - y));
+        self.previous_dab = Some([dab.x, dab.y]);
+        step
     }
 
     pub fn resize_tip(&mut self, radius_px: f32) {
@@ -1391,8 +1417,15 @@ impl WetOilEngine {
         brush: &BrushSettings,
         dab: &Dab,
     ) -> Option<[f32; 4]> {
-        place(dab, brush, &self.params, self.loaded_thickness_um, canvas)
-            .map(|placement| placement.canvas_rect)
+        place(
+            dab,
+            REFERENCE_STEP_PX,
+            brush,
+            &self.params,
+            self.loaded_thickness_um,
+            canvas,
+        )
+        .map(|placement| placement.canvas_rect)
     }
 
     pub fn encode_dry_tiles(
@@ -1634,6 +1667,7 @@ fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::
 impl PaintEngine for WetOilEngine {
     fn begin_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas, _brush: &BrushSettings) {
         self.rest_pending = true;
+        self.previous_dab = None;
     }
 
     fn encode_dabs(
@@ -1644,10 +1678,18 @@ impl PaintEngine for WetOilEngine {
         dabs: &[Dab],
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let mut placements: Vec<Placement> = dabs
-            .iter()
-            .filter_map(|dab| place(dab, brush, &self.params, self.loaded_thickness_um, canvas))
-            .collect();
+        let mut placements = Vec::with_capacity(dabs.len());
+        for dab in dabs {
+            let step_px = self.step_since_previous_dab(dab);
+            placements.extend(place(
+                dab,
+                step_px,
+                brush,
+                &self.params,
+                self.loaded_thickness_um,
+                canvas,
+            ));
+        }
         if placements.is_empty() {
             return;
         }

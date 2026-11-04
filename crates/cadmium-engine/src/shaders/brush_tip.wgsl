@@ -31,6 +31,10 @@ struct Dab {
     rest_follow: f32,
     blade_capacity_um: f32,
     blade_spill_share: f32,
+    step_ratio: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 struct Body {

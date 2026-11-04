@@ -8,6 +8,7 @@ const MIN_VELOCITY_CUTOFF: f32 = 1e-6;
 const MIN_CONTACT_DEPTH_UM: f32 = 1.0;
 const EMPTY_VOLUME_UM: f32 = 1e-4;
 const QUANTIZE_LIMIT: f32 = 2.0e9;
+const MIN_KEPT_SHARE: f32 = 1e-6;
 const REFERENCE_THREADS: u32 = 256u;
 
 var<workgroup> weighted_heights: array<f32, REFERENCE_THREADS>;
@@ -55,7 +56,8 @@ struct Transfer {
 };
 
 fn bristle_transfer(mask: f32, volume: f32, height: f32, tip_volume: f32) -> Transfer {
-    let rate = dab.transfer_fraction * mask * contact(height) * velocity_share();
+    let reference_rate = dab.transfer_fraction * mask * contact(height) * velocity_share();
+    let rate = 1.0 - pow(max(1.0 - reference_rate, MIN_KEPT_SHARE), dab.step_ratio);
     let deposit = min(rate * tip_volume, MAX_DEPOSIT_SHARE * tip_volume);
     let pickup = rate * max(volume - dab.residual_um, 0.0);
     return Transfer(deposit, pickup);
