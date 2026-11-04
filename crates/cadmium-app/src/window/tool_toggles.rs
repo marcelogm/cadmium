@@ -8,6 +8,14 @@ use crate::tools::UiTool;
 use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS};
 
 impl CadmiumWindow {
+    pub(super) fn fill_tool_group(&self) {
+        let tool_group = &self.imp().tool_group;
+        for tool in UiTool::ALL {
+            tool_group.add(tool_toggle(tool));
+        }
+        tool_group.set_active_name(Some(UiTool::default().name()));
+    }
+
     pub(super) fn change_tool_state(
         &self,
         action: &gio::SimpleAction,
@@ -18,7 +26,7 @@ impl CadmiumWindow {
         }
     }
 
-    pub(super) fn select_tool(&self, action: &gio::SimpleAction, name: &str) {
+    fn select_tool(&self, action: &gio::SimpleAction, name: &str) {
         let Some(tool) = UiTool::from_name(name) else {
             glib::g_warning!(LOG_DOMAIN, "unknown tool {name:?}");
             return;
@@ -68,4 +76,13 @@ impl CadmiumWindow {
         }
         self.add_controller(controller);
     }
+}
+
+fn tool_toggle(tool: UiTool) -> adw::Toggle {
+    let profile = tool.profile();
+    adw::Toggle::builder()
+        .name(tool.name())
+        .icon_name(profile.icon)
+        .tooltip(profile.tooltip)
+        .build()
 }

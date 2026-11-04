@@ -25,6 +25,20 @@ fn toggle_names_match_the_header_tool_group() {
 }
 
 #[test]
+fn every_toggle_tooltip_names_the_tool_and_its_first_key() {
+    for tool in UiTool::ALL {
+        let profile = tool.profile();
+        let key = profile.keys[0].name().unwrap().to_uppercase();
+        assert!(
+            profile
+                .tooltip
+                .starts_with(&format!("{} ({key}", tool.label())),
+            "{tool:?}"
+        );
+    }
+}
+
+#[test]
 fn the_tube_is_not_an_engine_tool() {
     assert_eq!(UiTool::from_name(UiTool::Tube.name()), Some(UiTool::Tube));
     assert_eq!(UiTool::Tube.label(), "Tubo");

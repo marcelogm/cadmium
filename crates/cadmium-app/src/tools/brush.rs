@@ -6,6 +6,8 @@ use super::{Press, Tool, UiToolProfile};
 pub(super) const BRUSH: UiToolProfile = UiToolProfile {
     name: "brush",
     label: "Pincel",
+    icon: "cadmium-brush-symbolic",
+    tooltip: "Pincel (1)",
     keys: &[gdk::Key::_1],
     keypad_keys: &[gdk::Key::KP_1],
     on_tray: Press::LoadFromPile(Tool::Brush),

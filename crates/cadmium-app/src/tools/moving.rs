@@ -7,6 +7,8 @@ use super::{Press, UiToolProfile};
 pub(super) const MOVE: UiToolProfile = UiToolProfile {
     name: "move",
     label: "Mover",
+    icon: "cadmium-move-symbolic",
+    tooltip: "Mover (H)",
     keys: &[gdk::Key::h],
     keypad_keys: &[],
     on_tray: Press::Pan,

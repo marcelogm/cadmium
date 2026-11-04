@@ -7,6 +7,8 @@ use super::{KNIFE_HANDLING, Press, Tool, UiToolProfile};
 pub(super) const KNIFE: UiToolProfile = UiToolProfile {
     name: "knife",
     label: "Espátula",
+    icon: "cadmium-knife-symbolic",
+    tooltip: "Espátula (2): deitada assenta placas, em pé raspa e abre sulco; pressão leve deixa a placa mais grossa",
     keys: &[gdk::Key::_2],
     keypad_keys: &[gdk::Key::KP_2],
     on_tray: Press::LoadFromPile(Tool::Knife),

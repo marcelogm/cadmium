@@ -7,6 +7,8 @@ use super::{Press, UiToolProfile};
 pub(super) const TUBE: UiToolProfile = UiToolProfile {
     name: "tube",
     label: "Tubo",
+    icon: "cadmium-tube-symbolic",
+    tooltip: "Tubo (6): espreme pigmento puro na bandeja ou na tela; a pressão aperta o tubo",
     keys: &[gdk::Key::_6],
     keypad_keys: &[gdk::Key::KP_6],
     on_tray: Press::Squeeze,

@@ -7,6 +7,8 @@ use super::{Press, UiToolProfile};
 pub(super) const EYEDROPPER: UiToolProfile = UiToolProfile {
     name: "eyedropper",
     label: "Conta-gotas",
+    icon: "color-select-symbolic",
+    tooltip: "Conta-gotas (5)",
     keys: &[gdk::Key::_5],
     keypad_keys: &[gdk::Key::KP_5],
     on_tray: Press::PickColour,

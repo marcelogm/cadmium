@@ -36,6 +36,8 @@ pub(crate) enum Press {
 pub(crate) struct UiToolProfile {
     name: &'static str,
     label: &'static str,
+    pub(crate) icon: &'static str,
+    pub(crate) tooltip: &'static str,
     pub(crate) keys: &'static [gdk::Key],
     keypad_keys: &'static [gdk::Key],
     on_tray: Press,

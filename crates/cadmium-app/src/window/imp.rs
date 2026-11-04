@@ -68,6 +68,7 @@ impl ObjectImpl for CadmiumWindow {
     fn constructed(&self) {
         self.parent_constructed();
         let window = self.obj();
+        window.fill_tool_group();
         window.setup_actions();
         window.setup_tool_shortcuts();
         window.follow_tool_group();
