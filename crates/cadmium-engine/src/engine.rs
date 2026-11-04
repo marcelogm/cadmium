@@ -1,8 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::brush::{
-    BrushSettings, BrushShape, DEFAULT_LOAD, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING,
-    FULL_RESERVOIR_VOLUME_UM,
+    BrushSettings, DEFAULT_LOAD, DEFAULT_MAX_DIAMETER_PX, FULL_RESERVOIR_VOLUME_UM,
 };
 use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::compute::{
@@ -12,12 +11,18 @@ use crate::compute::{
 use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
-use crate::region::clamped_region;
-use crate::stroke::{Dab, StrokeSample, pen_angles};
-use crate::tool::{FootprintShape, ToolProfile};
+use crate::stroke::Dab;
 
+mod dab_record;
+mod footprint;
+mod placement;
 pub(crate) mod shader;
 
+pub use dab_record::blade_gap_um;
+pub use footprint::BrushOutline;
+
+use dab_record::{DAB_RECORD_SIZE, DAB_RECORD_STRIDE, upload_dab_records};
+use placement::{mark_dab_regions, max_dab_region_side};
 use shader::{DAB_SNIPPETS, DRY_SNIPPETS, EYEDROPPER_SNIPPETS, shader_source};
 
 pub const TIP_SIZE: u32 = 512;
@@ -28,7 +33,6 @@ pub const MAX_TIP_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM;
 const TIP_HALF: u32 = TIP_SIZE / 2;
 const MAX_TIP_RADIUS: f32 = ((TIP_SIZE - TIP_MARGIN) / 2) as f32;
 const MIN_DAB_RADIUS: f32 = 0.5;
-const REFERENCE_STEP_PX: f32 = DEFAULT_SPACING * DEFAULT_MAX_DIAMETER_PX;
 const PIGMENT_CHANNELS: usize = MAX_SLOTS;
 const VOLUME_CHANNEL: usize = PIGMENT_CHANNELS;
 const TIP_CHANNELS: usize = PIGMENT_CHANNELS + 1;
@@ -40,37 +44,14 @@ const TIP_SUM_CHANNELS: usize = TIP_CHANNELS + 1;
 const TIP_TEXEL_COUNT_SUM: usize = TIP_CHANNELS;
 const TIP_SUMS_BYTES: u64 = (TIP_SUM_CHANNELS * std::mem::size_of::<f32>()) as u64;
 const MIN_TIP_MEAN_VOLUME_UM: f32 = 1e-3;
-const DAB_RECORD_STRIDE: u64 = 256;
-const DAB_APRON_PX: i32 = 2;
-const MAX_SWEEP_PX: f32 = 32.0;
-const FLAT_THICKNESS_SHARE: f32 = 0.25;
-const FAN_THICKNESS_SHARE: f32 = 0.12;
-const FAN_BRISTLE_CONTRAST: f32 = 0.9;
-const FAN_BRISTLE_COUNT_SHARE: f32 = 0.5;
-const UPRIGHT_TILT_RAD: f32 = 5.0 * std::f32::consts::PI / 180.0;
-const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
-const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
-const CAPILLARY_SHARE: f32 = 0.2;
-const CROSS_CAPILLARY_SHARE: f32 = 0.01;
 const CAPILLARY_POOLS: u64 = TIP_SIZE as u64 + 1;
 const CAPILLARY_BYTES: u64 = (3 * CAPILLARY_POOLS * TIP_CHANNELS as u64 + 2 * CAPILLARY_POOLS)
     * std::mem::size_of::<u32>() as u64;
-const CAPILLARY_POOL_BUDGET: f32 = 4.0e9;
 const CAPILLARY_POOL_GROUP_SIZE: u32 = 64;
 const CAPILLARY_POOL_GROUPS: u32 = (CAPILLARY_POOLS as u32).div_ceil(CAPILLARY_POOL_GROUP_SIZE);
-const SPREAD_APRON_PX: i32 = 1;
-const TIP_APRON_TEXELS: f32 = 1.0;
-const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
-const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
-const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
-const KNIFE_LAID_ALTITUDE_RAD: f32 = std::f32::consts::FRAC_PI_4;
-const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
 const KNIFE_DIP_LENGTH_PX: f32 = 380.0;
 const KNIFE_LAID_CAPACITY_UM: f32 = MAX_TIP_THICKNESS_UM * KNIFE_DIP_LENGTH_PX;
-const KNIFE_UPRIGHT_CAPACITY_UM: f32 = 200.0;
 const DRAWN_LOADED_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM * DEFAULT_LOAD;
-const KNIFE_SPILL_SHARE: f32 = 0.5;
-const FIRST_REST_FOLLOW: f32 = 1.0;
 const BLADE_SPILL_BAND_PX: f32 = 2.0;
 const BLADE_COVERAGE_MARGIN_PX: f32 = 1.0;
 const BLADE_ENDS: usize = 2;
@@ -105,52 +86,6 @@ pub trait PaintEngine {
     fn params(&self) -> &SimParams;
     fn params_mut(&mut self) -> &mut SimParams;
 }
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct DabRecord {
-    center: [f32; 2],
-    radius: f32,
-    pressure: f32,
-    altitude: f32,
-    azimuth: f32,
-    direction: f32,
-    speed: f32,
-    orientation: [f32; 2],
-    elongation: f32,
-    tool_mode: u32,
-    canvas_origin: [i32; 2],
-    canvas_size: [u32; 2],
-    tip_origin: [i32; 2],
-    tip_size: [u32; 2],
-    transfer_fraction: f32,
-    velocity_cutoff: f32,
-    residual_um: f32,
-    penetration_um: f32,
-    bristle_contrast: f32,
-    bristle_count: f32,
-    refill_rate: f32,
-    loaded_thickness_um: f32,
-    advection: f32,
-    squeeze: f32,
-    diffusion: f32,
-    blade_gap_um: f32,
-    spread_origin: [i32; 2],
-    spread_size: [u32; 2],
-    rag_strength: f32,
-    rest_follow: f32,
-    blade_capacity_um: f32,
-    blade_spill_share: f32,
-    step_ratio: f32,
-    sweep: [f32; 2],
-    capillary_rate: f32,
-    cross_capillary_rate: f32,
-    capillary_scale: f32,
-    _pad: [f32; 2],
-}
-
-const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 192 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -197,16 +132,6 @@ const PICKED_PAINT_FOUND: usize = 0;
 const PICKED_FRACTIONS: usize = 1;
 const PICKED_BYTES: u64 =
     ((PICKED_FRACTIONS + PIGMENT_CHANNELS) * std::mem::size_of::<f32>()) as u64;
-
-#[derive(Clone, Copy, Debug)]
-struct Placement {
-    record: DabRecord,
-    canvas_rect: [f32; 4],
-    canvas_groups: [u32; 2],
-    tip_groups: [u32; 2],
-    spread_groups: [u32; 2],
-    profile: &'static ToolProfile,
-}
 
 struct ScratchSurface {
     _texture: wgpu::Texture,
@@ -265,267 +190,9 @@ fn scratch_surface(
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BrushOutline {
-    pub semi_axes: [f32; 2],
-    pub orientation: f32,
-}
-
-struct Footprint {
-    radius: f32,
-    elongation: f32,
-    orientation: f32,
-    rectangular: bool,
-    lateral_reach: f32,
-}
-
-fn upright_share(altitude: f32) -> f32 {
-    let t = ((altitude - KNIFE_LAID_ALTITUDE_RAD)
-        / (KNIFE_UPRIGHT_ALTITUDE_RAD - KNIFE_LAID_ALTITUDE_RAD))
-        .clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
-pub fn blade_gap_um(params: &SimParams, pressure: f32, altitude: f32) -> f32 {
-    let residual = params.get("residual_um");
-    let lift = (1.0 - pressure.clamp(0.0, 1.0)) * (1.0 - upright_share(altitude));
-    residual + (params.get("knife_gap_um") - residual).max(0.0) * lift
-}
-
-fn blade_capacity_um(altitude: f32) -> f32 {
-    KNIFE_LAID_CAPACITY_UM
-        + (KNIFE_UPRIGHT_CAPACITY_UM - KNIFE_LAID_CAPACITY_UM) * upright_share(altitude)
-}
-
-fn shape_thickness(shape: BrushShape) -> f32 {
-    match shape {
-        BrushShape::Round => 1.0,
-        BrushShape::Flat => FLAT_THICKNESS_SHARE,
-        BrushShape::Fan => FAN_THICKNESS_SHARE,
-    }
-}
-
-fn blade_orientation(shape: BrushShape, altitude: f32, azimuth: f32) -> f32 {
-    if shape == BrushShape::Round {
-        return azimuth;
-    }
-    let tilt = std::f32::consts::FRAC_PI_2 - altitude;
-    let lean = smoothstep(UPRIGHT_TILT_RAD, LEANING_TILT_RAD, tilt);
-    let doubled = [
-        lean * (2.0 * azimuth).cos() + (1.0 - lean) * (2.0 * UPRIGHT_ORIENTATION).cos(),
-        lean * (2.0 * azimuth).sin() + (1.0 - lean) * (2.0 * UPRIGHT_ORIENTATION).sin(),
-    ];
-    if doubled[0].hypot(doubled[1]) <= f32::EPSILON {
-        return UPRIGHT_ORIENTATION;
-    }
-    doubled[1].atan2(doubled[0]) / 2.0
-}
-
-fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
-    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
-fn bristle_spread(shape: BrushShape, params: &SimParams) -> (f32, f32) {
-    let contrast = params.get("bristle_contrast");
-    let count = params.get("bristle_count");
-    match shape {
-        BrushShape::Fan => (
-            contrast.max(FAN_BRISTLE_CONTRAST),
-            count * FAN_BRISTLE_COUNT_SHARE,
-        ),
-        _ => (contrast, count),
-    }
-}
-
-fn knife_half_width(radius: f32) -> f32 {
-    (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX)
-}
-
 fn blade_cell_cover(offset: i32, half_length: f32) -> f32 {
     let centre = offset as f32 + 0.5;
     (half_length - centre.abs() + 0.5).clamp(0.0, 1.0)
-}
-
-fn heading_known(dab: &Dab) -> bool {
-    dab.speed > 0.0
-}
-
-fn is_finite(dab: &Dab) -> bool {
-    [
-        dab.x,
-        dab.y,
-        dab.radius,
-        dab.pressure,
-        dab.altitude,
-        dab.azimuth,
-        dab.direction,
-        dab.speed,
-    ]
-    .iter()
-    .all(|value| value.is_finite())
-}
-
-impl Footprint {
-    fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
-        if brush.tool.profile().footprint == Some(FootprintShape::Blade) {
-            let radius =
-                (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-            return Footprint {
-                radius,
-                elongation: knife_half_width(radius) / radius,
-                orientation: dab.direction,
-                rectangular: true,
-                lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
-            };
-        }
-        let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-        let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
-        let elongation = (shape_thickness(brush.shape)
-            * (1.0 + params.get("tilt_elongation") * tilt))
-            .min(MAX_TIP_RADIUS / radius);
-        let orientation = blade_orientation(brush.shape, dab.altitude, dab.azimuth);
-        Footprint {
-            radius,
-            elongation,
-            orientation,
-            rectangular: false,
-            lateral_reach: 0.0,
-        }
-    }
-
-    fn semi_axes(&self) -> [f32; 2] {
-        [self.radius * self.elongation, self.radius]
-    }
-
-    fn canvas_half_extents(&self) -> [f32; 2] {
-        let [along, across] = self.semi_axes();
-        let (sin, cos) = self.orientation.sin_cos();
-        if self.rectangular {
-            let along = along + BLADE_COVERAGE_MARGIN_PX;
-            let across = across + self.lateral_reach;
-            return [
-                along * cos.abs() + across * sin.abs(),
-                along * sin.abs() + across * cos.abs(),
-            ];
-        }
-        [
-            (along * along * cos * cos + across * across * sin * sin).sqrt(),
-            (along * along * sin * sin + across * across * cos * cos).sqrt(),
-        ]
-    }
-}
-
-fn rate_over_step(reference_rate: f32, step_ratio: f32) -> f32 {
-    1.0 - (1.0 - reference_rate.clamp(0.0, 1.0)).powf(step_ratio)
-}
-
-fn capillary_scale(tip_size: [u32; 2]) -> f32 {
-    let texels = (tip_size[0] * tip_size[1]).max(1) as f32;
-    let fitting = CAPILLARY_POOL_BUDGET / (texels * MAX_TIP_THICKNESS_UM);
-    fitting.min(DELTA_SCALE).log2().floor().exp2()
-}
-
-fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
-    let reach = semi_axes.map(|semi| (semi + TIP_APRON_TEXELS).ceil() as u32);
-    let origin = reach.map(|r| (TIP_HALF - r) as i32);
-    let size = reach.map(|r| 2 * r + 1);
-    (origin, size)
-}
-
-#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
-fn place(
-    dab: &Dab,
-    step_px: f32,
-    sweep: [f32; 2],
-    brush: &BrushSettings,
-    params: &SimParams,
-    loaded_thickness_um: f32,
-    canvas: &Canvas,
-) -> Option<Placement> {
-    let profile = brush.tool.profile();
-    if profile.footprint.is_none() || !is_finite(dab) {
-        return None;
-    }
-    if profile.footprint == Some(FootprintShape::Blade) && !heading_known(dab) {
-        return None;
-    }
-    let footprint = Footprint::of(dab, brush, params);
-    let (bristle_contrast, bristle_count) = bristle_spread(brush.shape, params);
-    let step_ratio = step_px / REFERENCE_STEP_PX;
-    let [half_x, half_y] = footprint.canvas_half_extents();
-    let swept_from = [dab.x + sweep[0], dab.y + sweep[1]];
-    let first = [
-        (dab.x.min(swept_from[0]) - half_x).floor() as i32,
-        (dab.y.min(swept_from[1]) - half_y).floor() as i32,
-    ];
-    let last = [
-        (dab.x.max(swept_from[0]) + half_x).floor() as i32,
-        (dab.y.max(swept_from[1]) + half_y).floor() as i32,
-    ];
-    let limits = [canvas.spec.width as i32, canvas.spec.height as i32];
-    let (canvas_origin, canvas_size) = clamped_region(first, last, DAB_APRON_PX, limits)?;
-    let (spread_origin, spread_size) = clamped_region(first, last, SPREAD_APRON_PX, limits)?;
-    let [x0, y0] = canvas_origin.map(|origin| origin as f32);
-    let [x1, y1] = [0, 1].map(|axis| (canvas_origin[axis] + canvas_size[axis] as i32) as f32);
-    let (tip_origin, tip_size) = tip_window(footprint.semi_axes());
-    let (sin, cos) = footprint.orientation.sin_cos();
-    let spreading = profile.spreading.rates(params);
-    let record = DabRecord {
-        center: [dab.x, dab.y],
-        radius: footprint.radius,
-        pressure: dab.pressure,
-        altitude: dab.altitude,
-        azimuth: dab.azimuth,
-        direction: dab.direction,
-        speed: dab.speed,
-        orientation: [cos, sin],
-        elongation: footprint.elongation,
-        tool_mode: profile.shader_mode,
-        canvas_origin,
-        canvas_size,
-        tip_origin,
-        tip_size,
-        transfer_fraction: params.get("transfer_fraction"),
-        velocity_cutoff: params.get("velocity_cutoff"),
-        residual_um: params.get("residual_um"),
-        penetration_um: params.get("penetration_um"),
-        bristle_contrast: if profile.wipes { 0.0 } else { bristle_contrast },
-        bristle_count: bristle_count.min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
-        refill_rate: rate_over_step(params.get("refill_rate"), step_ratio),
-        loaded_thickness_um,
-        advection: spreading.advection,
-        squeeze: spreading.squeeze,
-        diffusion: spreading.diffusion,
-        blade_gap_um: blade_gap_um(params, dab.pressure, dab.altitude),
-        spread_origin,
-        spread_size,
-        rag_strength: params.get("rag_strength"),
-        rest_follow: profile.rest_follow,
-        blade_capacity_um: blade_capacity_um(dab.altitude),
-        blade_spill_share: KNIFE_SPILL_SHARE,
-        step_ratio,
-        sweep,
-        capillary_rate: rate_over_step(CAPILLARY_SHARE, step_ratio),
-        cross_capillary_rate: rate_over_step(CROSS_CAPILLARY_SHARE, step_ratio),
-        capillary_scale: capillary_scale(tip_size),
-        _pad: [0.0; 2],
-    };
-    Some(Placement {
-        record,
-        canvas_rect: [x0, y0, x1 - 1.0, y1 - 1.0],
-        canvas_groups: canvas_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
-        tip_groups: tip_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
-        spread_groups: spread_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
-        profile,
-    })
-}
-
-fn max_dab_region_side() -> u32 {
-    let along = knife_half_width(MAX_TIP_RADIUS) + BLADE_COVERAGE_MARGIN_PX;
-    let across = MAX_TIP_RADIUS + BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX;
-    let half_extent = across.hypot(along).ceil() as u32;
-    2 * (half_extent + 1 + DAB_APRON_PX as u32) + 2 * MAX_SWEEP_PX as u32
 }
 
 struct BladePipelines {
@@ -820,20 +487,6 @@ impl WetOilEngine {
             dip_compute,
             scratch: None,
         }
-    }
-
-    fn step_since_previous_dab(&mut self, dab: &Dab) -> (f32, [f32; 2]) {
-        if !is_finite(dab) {
-            return (REFERENCE_STEP_PX, [0.0; 2]);
-        }
-        let back = self.previous_dab.map(|[x, y]| [x - dab.x, y - dab.y]);
-        self.previous_dab = Some([dab.x, dab.y]);
-        let Some(back) = back else {
-            return (REFERENCE_STEP_PX, [0.0; 2]);
-        };
-        let step = back[0].hypot(back[1]);
-        let sweep = if step <= MAX_SWEEP_PX { back } else { [0.0; 2] };
-        (step, sweep)
     }
 
     pub fn resize_tip(&mut self, radius_px: f32) {
@@ -1244,50 +897,6 @@ impl WetOilEngine {
         }))
     }
 
-    pub fn brush_outline(
-        &self,
-        brush: &BrushSettings,
-        sample: &StrokeSample,
-    ) -> Option<BrushOutline> {
-        if brush.tool.profile().footprint != Some(FootprintShape::Ellipse) {
-            return None;
-        }
-        let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
-        let dab = Dab {
-            x: sample.x as f32,
-            y: sample.y as f32,
-            radius: brush.geometry.max_diameter_px / 2.0,
-            pressure: 1.0,
-            altitude: angles.altitude_rad,
-            azimuth: angles.azimuth_rad,
-            direction: 0.0,
-            speed: 0.0,
-        };
-        let footprint = Footprint::of(&dab, brush, &self.params);
-        Some(BrushOutline {
-            semi_axes: footprint.semi_axes(),
-            orientation: footprint.orientation,
-        })
-    }
-
-    pub fn dab_bounds(
-        &self,
-        canvas: &Canvas,
-        brush: &BrushSettings,
-        dab: &Dab,
-    ) -> Option<[f32; 4]> {
-        place(
-            dab,
-            REFERENCE_STEP_PX,
-            [0.0; 2],
-            brush,
-            &self.params,
-            self.loaded_thickness_um,
-            canvas,
-        )
-        .map(|placement| placement.canvas_rect)
-    }
-
     #[expect(clippy::too_many_lines)]
     pub fn encode_dry_tiles(
         &mut self,
@@ -1600,46 +1209,12 @@ impl PaintEngine for WetOilEngine {
         dabs: &[Dab],
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let mut placements = Vec::with_capacity(dabs.len());
-        for dab in dabs {
-            let (step_px, sweep) = self.step_since_previous_dab(dab);
-            placements.extend(place(
-                dab,
-                step_px,
-                sweep,
-                brush,
-                &self.params,
-                self.loaded_thickness_um,
-                canvas,
-            ));
-        }
+        let mut placements = self.place_all(canvas, brush, dabs);
         if placements.is_empty() {
             return;
         }
-        if let Some(first_resting) = placements
-            .iter_mut()
-            .find(|placement| !placement.profile.wipes)
-            && self.rest_pending
-        {
-            first_resting.record.rest_follow = FIRST_REST_FOLLOW;
-            self.rest_pending = false;
-        }
-        let mut records = vec![0u8; placements.len() * DAB_RECORD_STRIDE as usize];
-        for (slot, placement) in records
-            .as_chunks_mut::<{ DAB_RECORD_STRIDE as usize }>()
-            .0
-            .iter_mut()
-            .zip(&placements)
-        {
-            slot[..DAB_RECORD_SIZE as usize].copy_from_slice(bytemuck::bytes_of(&placement.record));
-        }
-        let dab_buffer = gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("dab_records"),
-                contents: &records,
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
+        self.take_first_rest(&mut placements);
+        let dab_buffer = upload_dab_records(gpu, &placements);
         let exchange_group = self.exchange_bind_group(gpu, canvas, &dab_buffer);
         let apply_group = self.apply_bind_group(gpu, &dab_buffer);
         let refill_group = self.refill_bind_group(gpu, &dab_buffer);
@@ -1648,7 +1223,7 @@ impl PaintEngine for WetOilEngine {
         self.fit_scratch(gpu, canvas);
         debug_assert!(placements.iter().all(|placement| {
             let scratch_size = self.scratch.as_ref().map_or([0; 2], |scratch| scratch.size);
-            (0..2).all(|axis| placement.record.canvas_size[axis] <= scratch_size[axis])
+            placement.fits_within(scratch_size)
         }));
         let (copy_group, advect_group) = self.spreading_bind_groups(gpu, canvas, &dab_buffer);
 
@@ -1724,11 +1299,7 @@ impl PaintEngine for WetOilEngine {
         }
         drop(pass);
 
-        for placement in &placements {
-            let [x0, y0, x1, y1] = placement.canvas_rect;
-            canvas.dirty.mark_rect(x0, y0, x1, y1);
-            canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
-        }
+        mark_dab_regions(canvas, &placements);
     }
 
     fn params(&self) -> &SimParams {
