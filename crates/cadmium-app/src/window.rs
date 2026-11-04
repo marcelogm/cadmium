@@ -61,6 +61,7 @@ mod imp {
         pub abandon_writes: Cell<bool>,
         pub close_confirmed: Cell<bool>,
         pub asking_to_close: Cell<bool>,
+        pub history_disabled_announced: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -118,6 +119,7 @@ const UNDO_LABEL: &str = "Desfazer";
 const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indisponível)";
 const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
+const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
@@ -220,6 +222,14 @@ impl CadmiumWindow {
         });
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
+        self.announce_if_history_disabled();
+    }
+
+    fn announce_if_history_disabled(&self) {
+        let enabled = self.state().borrow().history_is_enabled();
+        if !enabled && !self.imp().history_disabled_announced.replace(true) {
+            self.show_toast(HISTORY_DISABLED_TOAST);
+        }
     }
 
     pub fn connect_refresh_panels(&self, refresher: PanelRefresher) {
@@ -440,6 +450,7 @@ impl CadmiumWindow {
         self.sync_history_actions();
         self.refresh_panels();
         self.show_document_title();
+        self.announce_if_history_disabled();
     }
 
     fn select_tool(&self, action: &gio::SimpleAction, name: &str) {

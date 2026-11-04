@@ -535,6 +535,10 @@ impl AppState {
         self.session.history.can_redo()
     }
 
+    pub fn history_is_enabled(&self) -> bool {
+        self.session.history.is_enabled()
+    }
+
     pub fn set_view_mode(&mut self, mode: ViewMode) {
         let mode = clamp_view_mode(mode, self.slot_count());
         if self.session.view_mode != mode {
