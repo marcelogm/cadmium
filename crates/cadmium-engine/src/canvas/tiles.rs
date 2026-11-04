@@ -45,18 +45,10 @@ impl DirtyTiles {
         tiles
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn tiles(&self) -> Vec<TileCoord> {
-        let mut tiles = Vec::new();
-        for x in 0..self.columns {
-            for y in 0..self.rows {
-                let tile = TileCoord { x, y };
-                if self.marked[self.index(tile)] {
-                    tiles.push(tile);
-                }
-            }
-        }
-        tiles
+        tile_grid(self.columns, self.rows)
+            .filter(|tile| self.marked[self.index(*tile)])
+            .collect()
     }
 
     pub fn clear(&mut self) {
@@ -106,4 +98,8 @@ fn tile_span(length: u32, a: f32, b: f32) -> Option<std::ops::RangeInclusive<u32
     let first = first_pixel.max(0.0) as u32 / TILE_SIZE;
     let last = final_pixel.min(last_pixel) as u32 / TILE_SIZE;
     Some(first..=last)
+}
+
+fn tile_grid(columns: u32, rows: u32) -> impl Iterator<Item = TileCoord> {
+    (0..columns).flat_map(move |x| (0..rows).map(move |y| TileCoord { x, y }))
 }

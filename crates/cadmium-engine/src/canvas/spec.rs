@@ -28,7 +28,6 @@ pub struct CanvasSpec {
 }
 
 impl CanvasSpec {
-    #[expect(clippy::excessive_nesting)]
     pub fn validate(&self, db: &PigmentDb) -> Result<(), String> {
         let allowed = 1..=MAX_CANVAS_SIZE;
         if !allowed.contains(&self.width) || !allowed.contains(&self.height) {
@@ -44,14 +43,22 @@ impl CanvasSpec {
             ));
         }
         let mut seen = HashSet::new();
-        for id in &self.pigment_slots {
-            if db.get(id).is_none() {
-                return Err(format!("unknown pigment {id:?}"));
-            }
-            if !seen.insert(id.as_str()) {
-                return Err(format!("pigment {id:?} appears in more than one slot"));
-            }
-        }
-        Ok(())
+        self.pigment_slots
+            .iter()
+            .try_for_each(|id| validate_slot(db, &mut seen, id))
     }
+}
+
+fn validate_slot<'a>(
+    db: &PigmentDb,
+    seen: &mut HashSet<&'a str>,
+    id: &'a str,
+) -> Result<(), String> {
+    if db.get(id).is_none() {
+        return Err(format!("unknown pigment {id:?}"));
+    }
+    if !seen.insert(id) {
+        return Err(format!("pigment {id:?} appears in more than one slot"));
+    }
+    Ok(())
 }

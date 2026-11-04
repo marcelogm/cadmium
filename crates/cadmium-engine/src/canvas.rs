@@ -32,6 +32,16 @@ pub struct PaintTotals {
     pub pigment: [f64; 8],
 }
 
+impl PaintTotals {
+    fn add_texel<'a>(&mut self, volume: f32, concentrations: impl Iterator<Item = &'a f32>) {
+        let volume = f64::from(volume);
+        self.volume += volume;
+        for (slot, &c) in concentrations.enumerate() {
+            self.pigment[slot] += f64::from(c) * volume;
+        }
+    }
+}
+
 struct StateSurface {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
@@ -189,7 +199,6 @@ impl Canvas {
         );
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn wet_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         let volume = self.read_f32(gpu, StateTexture::WetVol)?;
         let low = self.read_f32(gpu, StateTexture::WetPig0)?;
@@ -200,11 +209,7 @@ impl Canvas {
             .zip(low.as_chunks::<CHANNELS_PER_PIGMENT_TEXTURE>().0)
             .zip(high.as_chunks::<CHANNELS_PER_PIGMENT_TEXTURE>().0);
         for ((&v, low), high) in texels {
-            let v = f64::from(v);
-            totals.volume += v;
-            for (slot, &c) in low.iter().chain(high).enumerate() {
-                totals.pigment[slot] += f64::from(c) * v;
-            }
+            totals.add_texel(v, low.iter().chain(high));
         }
         Ok(totals)
     }

@@ -1,5 +1,6 @@
 use wgpu::util::DeviceExt;
 
+use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
 use crate::gpu::GpuContext;
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
 use crate::spectral::{BANDS, BandValues, km_infinite, reflectance_srgb8};
@@ -49,71 +50,34 @@ pub fn primer_srgb8(db: &PigmentDb, primer: Primer) -> [u8; 3] {
 }
 
 impl Canvas {
-    #[expect(clippy::too_many_lines)]
     pub(super) fn initialise(&self, gpu: &GpuContext, db: &PigmentDb) {
-        let primer = primer_reflectance(db, self.spec.primer);
-        let params = InitParams {
-            primer_bands_low: std::array::from_fn(|band| primer[band]),
-            primer_bands_high: std::array::from_fn(|band| primer[BANDS_PER_VEC4 + band]),
-        };
-        let params_buffer = gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("canvas_init_params"),
-                contents: bytemuck::bytes_of(&params),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
-        let module = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("canvas_init"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../shaders/canvas_init.wgsl").into(),
-                ),
-            });
-        let pipeline = gpu
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("canvas_init"),
-                layout: None,
-                module: &module,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let mut entries = vec![wgpu::BindGroupEntry {
-            binding: 0,
-            resource: params_buffer.as_entire_binding(),
-        }];
-        for (binding, which) in (1..).zip(StateTexture::ALL) {
-            entries.push(wgpu::BindGroupEntry {
-                binding,
-                resource: wgpu::BindingResource::TextureView(self.view(which)),
-            });
-        }
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("canvas_init"),
-            layout: &pipeline.get_bind_group_layout(0),
-            entries: &entries,
-        });
+        let params_buffer = init_params_buffer(gpu, db, self.spec.primer);
+        let stage = AutoLayoutStage::new(
+            gpu,
+            "canvas_init",
+            include_str!("../shaders/canvas_init.wgsl"),
+        );
+        let mut entries = vec![buffer_binding(0, &params_buffer)];
+        entries.extend(
+            (1..)
+                .zip(StateTexture::ALL)
+                .map(|(binding, which)| texture_binding(binding, self, which)),
+        );
+        let bind_group = stage.bind_group(gpu, &entries);
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("canvas_init"),
             });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("canvas_init"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
-            pass.dispatch_workgroups(
+        stage.encode(
+            &mut encoder,
+            &bind_group,
+            [
                 self.spec.width.div_ceil(INIT_WORKGROUP_SIZE),
                 self.spec.height.div_ceil(INIT_WORKGROUP_SIZE),
                 1,
-            );
-        }
+            ],
+        );
         gpu.queue.submit([encoder.finish()]);
         self.write_f32(
             gpu,
@@ -121,4 +85,18 @@ impl Canvas {
             &weave_heights(self.spec.weave, self.spec.width, self.spec.height),
         );
     }
+}
+
+fn init_params_buffer(gpu: &GpuContext, db: &PigmentDb, primer: Primer) -> wgpu::Buffer {
+    let primer = primer_reflectance(db, primer);
+    let params = InitParams {
+        primer_bands_low: std::array::from_fn(|band| primer[band]),
+        primer_bands_high: std::array::from_fn(|band| primer[BANDS_PER_VEC4 + band]),
+    };
+    gpu.device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("canvas_init_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        })
 }
