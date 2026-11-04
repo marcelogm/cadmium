@@ -66,8 +66,11 @@ fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> 
     session.end_stroke(&gpu);
     encode_frame(&gpu, &mut session);
 
-    let volume = session.canvas.read_f32(&gpu, StateTexture::WetVol);
-    let pigment = session.canvas.read_f32(&gpu, StateTexture::WetPig0);
+    let volume = session.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+    let pigment = session
+        .canvas
+        .read_f32(&gpu, StateTexture::WetPig0)
+        .unwrap();
     let row_start = ROW as usize * WIDTH as usize + STROKE_FROM_PX as usize;
     (row_start..row_start + STROKE_LENGTH_PX as usize)
         .map(|texel| pigment[texel * PIGMENT_CHANNELS_PER_TEXTURE + BLUE_SLOT] * volume[texel])

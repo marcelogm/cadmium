@@ -43,6 +43,8 @@ mod imp {
         pub pen_observed_handlers: RefCell<Vec<CanvasHandler>>,
         pub presented_handlers: RefCell<Vec<CanvasHandler>>,
         pub fallback_handlers: RefCell<Vec<CanvasHandler>>,
+        pub gpu_lost_handlers: RefCell<Vec<CanvasHandler>>,
+        pub gpu_lost_announced: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -313,6 +315,13 @@ impl CadmiumCanvas {
             .push(Box::new(handler));
     }
 
+    pub fn connect_gpu_lost(&self, handler: impl Fn(&CadmiumCanvas) + 'static) {
+        self.imp()
+            .gpu_lost_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     pub fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
         let found_paint = self.state().borrow_mut().pick_colour(x as f32, y as f32);
@@ -388,7 +397,7 @@ impl CadmiumCanvas {
 
     fn frame_needed(&self, state: &AppState, presenter: &FramePresenter) -> bool {
         let (width_px, height_px) = self.viewport_px();
-        if width_px == 0 || height_px == 0 {
+        if width_px == 0 || height_px == 0 || state.gpu_is_lost() {
             return false;
         }
         self.imp().needs_present.get()
@@ -407,9 +416,25 @@ impl CadmiumCanvas {
         self.frame_needed(&state, &presenter)
     }
 
+    fn announce_if_gpu_lost(&self) {
+        let imp = self.imp();
+        let lost = imp
+            .state
+            .get()
+            .and_then(|state| state.try_borrow().ok().map(|state| state.gpu_is_lost()))
+            .unwrap_or(false);
+        if lost && !imp.gpu_lost_announced.replace(true) {
+            for handler in imp.gpu_lost_handlers.borrow().iter() {
+                handler(self);
+            }
+        }
+    }
+
     fn present_if_needed(&self) {
         self.fit_if_a_stroke_held_it_back();
-        if !self.present_frame() {
+        let presented = self.present_frame();
+        self.announce_if_gpu_lost();
+        if !presented {
             return;
         }
         let imp = self.imp();

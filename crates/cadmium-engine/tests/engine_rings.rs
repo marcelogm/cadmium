@@ -102,7 +102,7 @@ fn colour_view(gpu: &GpuContext, s: &PaintSession) -> Vec<u8> {
         &mut e,
     );
     gpu.queue.submit([e.finish()]);
-    readback_rgba8(gpu, &target)
+    readback_rgba8(gpu, &target).unwrap()
 }
 
 fn srgb_to_linear(channel: u8) -> f32 {
@@ -213,7 +213,7 @@ fn height_view(height: &[f32]) -> Vec<u8> {
 }
 
 fn total_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
-    s.canvas.wet_totals(gpu).volume + s.engine.brush_totals(gpu).volume
+    s.canvas.wet_totals(gpu).unwrap().volume + s.engine.brush_totals(gpu).unwrap().volume
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn a_thick_stroke_has_no_dab_spaced_ridges_inside() {
     let before = total_volume(&gpu, &s);
     paint_arc(&gpu, &mut s);
     let drift = (total_volume(&gpu, &s) - before) / before;
-    let height = s.canvas.read_f32(&gpu, StateTexture::WetVol);
+    let height = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     let rgba = colour_view(&gpu, &s);
     write_png("engine-rings.png", &rgba);
     write_png("engine-rings-height.png", &height_view(&height));

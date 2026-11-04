@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasSpec, TileCoord, tiles_in_rect};
 use crate::engine::{PaintEngine, WetOilEngine};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, GpuLost};
 use crate::history::History;
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
@@ -121,7 +121,12 @@ impl PaintSession {
         self.history.redo(gpu, &mut self.canvas)
     }
 
-    pub fn pick_colour(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Option<Mixture> {
+    pub fn pick_colour(
+        &mut self,
+        gpu: &GpuContext,
+        x: f32,
+        y: f32,
+    ) -> Result<Option<Mixture>, GpuLost> {
         let mut encoder = new_encoder(gpu, "pick_colour");
         self.encode_queued_dabs(gpu, &mut encoder);
         self.engine
@@ -146,13 +151,14 @@ impl PaintSession {
         }
     }
 
-    pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
+    pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) -> Result<(), GpuLost> {
         self.flush(gpu);
         if self.holds_knife() {
             self.resize_tip();
-            self.engine.dip_knife(gpu, mixture, amount);
+            self.engine.dip_knife(gpu, mixture, amount)
         } else {
             self.engine.dip(gpu, mixture, amount);
+            Ok(())
         }
     }
 
@@ -164,7 +170,7 @@ impl PaintSession {
         }
     }
 
-    pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Mixture {
+    pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         self.flush(gpu);
         self.engine.tip_mean_mixture(gpu)
     }

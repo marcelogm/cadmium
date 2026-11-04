@@ -75,7 +75,7 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
 fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
     StateTexture::PAINT_STATE
         .iter()
-        .map(|t| s.canvas.read_bytes(gpu, *t))
+        .map(|t| s.canvas.read_bytes(gpu, *t).unwrap())
         .collect()
 }
 

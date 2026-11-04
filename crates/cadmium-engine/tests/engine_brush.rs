@@ -62,8 +62,8 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
 }
 
 fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
-    let c = s.canvas.wet_totals(gpu);
-    let b = s.engine.brush_totals(gpu);
+    let c = s.canvas.wet_totals(gpu).unwrap();
+    let b = s.engine.brush_totals(gpu).unwrap();
     let mut t = c;
     t.volume += b.volume;
     for i in 0..8 {
@@ -89,7 +89,7 @@ fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
         &mut e,
     );
     gpu.queue.submit([e.finish()]);
-    let rgba = readback_rgba8(gpu, &target);
+    let rgba = readback_rgba8(gpu, &target).unwrap();
     let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .parent()
         .expect("cargo target tmpdir lives inside the target directory")
@@ -112,7 +112,7 @@ fn a_stroke_deposits_paint_on_the_canvas() {
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     write_preview(&gpu, &s, "engine-brush.png");
-    let wet = s.canvas.wet_totals(&gpu);
+    let wet = s.canvas.wet_totals(&gpu).unwrap();
     assert!(wet.volume > 1000.0 && wet.pigment[0] > 0.0);
 }
 
@@ -122,7 +122,7 @@ fn wet_volume_laid_with_spacing(gpu: &GpuContext, spacing: f32) -> f64 {
     s.brush.geometry.max_diameter_px = BROAD_BRUSH_DIAMETER_PX;
     s.reload_brush(gpu);
     stroke(gpu, &mut s, 128.0, 40.0, 470.0);
-    s.canvas.wet_totals(gpu).volume
+    s.canvas.wet_totals(gpu).unwrap().volume
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn painting_yellow_over_wet_blue_picks_blue_into_the_brush() {
     s.brush.recipe = vec![(1, 1.0)];
     s.reload_brush(&gpu);
     stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
-    assert!(s.engine.brush_totals(&gpu).pigment[0] > 0.0);
+    assert!(s.engine.brush_totals(&gpu).unwrap().pigment[0] > 0.0);
 }
 
 #[test]
@@ -206,6 +206,7 @@ fn canvas_never_gets_negative_volume() {
     assert!(
         s.canvas
             .read_f32(&gpu, StateTexture::WetVol)
+            .unwrap()
             .iter()
             .all(|v| *v >= 0.0)
     );
@@ -253,7 +254,7 @@ fn a_dab_marks_its_tiles_wet_and_dirty_including_the_apron() {
 fn clean_brush_empties_tip_and_body() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    assert!(s.engine.brush_totals(&gpu).volume > 0.0);
+    assert!(s.engine.brush_totals(&gpu).unwrap().volume > 0.0);
     s.clean_brush(&gpu);
-    assert_eq!(s.engine.brush_totals(&gpu).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
 }

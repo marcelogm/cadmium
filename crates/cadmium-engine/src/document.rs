@@ -5,7 +5,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE, weave_heights};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::PigmentDb;
 use crate::present::{ViewTransform, readback_rgba8};
 use crate::render::ViewMode;
@@ -35,6 +35,7 @@ pub enum DocumentError {
     Io(std::io::Error),
     Format(String),
     UnsupportedVersion(u32),
+    GpuLost,
 }
 
 impl fmt::Display for DocumentError {
@@ -46,6 +47,7 @@ impl fmt::Display for DocumentError {
                 f,
                 "painting uses file format {version}, this version of Cadmium reads formats up to {FORMAT_VERSION}"
             ),
+            DocumentError::GpuLost => write!(f, "{GpuLost}"),
         }
     }
 }
@@ -62,6 +64,12 @@ impl std::error::Error for DocumentError {
 impl From<std::io::Error> for DocumentError {
     fn from(error: std::io::Error) -> Self {
         DocumentError::Io(error)
+    }
+}
+
+impl From<GpuLost> for DocumentError {
+    fn from(_: GpuLost) -> Self {
+        DocumentError::GpuLost
     }
 }
 
@@ -103,15 +111,18 @@ pub struct DocumentSnapshot {
 }
 
 impl DocumentSnapshot {
-    pub fn capture(gpu: &GpuContext, session: &mut PaintSession) -> DocumentSnapshot {
+    pub fn capture(
+        gpu: &GpuContext,
+        session: &mut PaintSession,
+    ) -> Result<DocumentSnapshot, GpuLost> {
         session.flush(gpu);
-        DocumentSnapshot {
+        Ok(DocumentSnapshot {
             spec: session.canvas.spec.clone(),
             states: StateTexture::PAINT_STATE
                 .iter()
-                .map(|which| (*which, session.canvas.read_bytes(gpu, *which)))
-                .collect(),
-        }
+                .map(|which| Ok((*which, session.canvas.read_bytes(gpu, *which)?)))
+                .collect::<Result<_, GpuLost>>()?,
+        })
     }
 
     pub fn read(path: &Path) -> Result<DocumentSnapshot, DocumentError> {
@@ -129,9 +140,7 @@ impl DocumentSnapshot {
         for (which, raw) in self.states {
             session.canvas.write_bytes(gpu, which, &raw);
             gpu.queue.submit([]);
-            gpu.device
-                .poll(wgpu::PollType::wait_indefinitely())
-                .expect("GPU device lost while uploading the painting");
+            let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
             if which == StateTexture::WetVol {
                 mark_wet_tiles(&mut session.canvas, &raw);
             }
@@ -179,7 +188,7 @@ pub struct ExportedImage {
 }
 
 impl ExportedImage {
-    pub fn render(gpu: &GpuContext, session: &mut PaintSession) -> ExportedImage {
+    pub fn render(gpu: &GpuContext, session: &mut PaintSession) -> Result<ExportedImage, GpuLost> {
         let (width, height) = (session.canvas.spec.width, session.canvas.spec.height);
         let chosen_mode = session.view_mode;
         session.view_mode = ViewMode::Color;
@@ -199,19 +208,20 @@ impl ExportedImage {
             &mut encoder,
         );
         gpu.queue.submit([encoder.finish()]);
-        let mut rgba = readback_rgba8(gpu, &target);
+        let rgba = readback_rgba8(gpu, &target);
         session.view_mode = chosen_mode;
         if chosen_mode != ViewMode::Color {
             session.canvas.dirty.mark_all();
         }
+        let mut rgba = rgba?;
         for pixel in rgba.as_chunks_mut::<RGBA_CHANNELS>().0 {
             pixel[ALPHA_CHANNEL] = OPAQUE_ALPHA;
         }
-        ExportedImage {
+        Ok(ExportedImage {
             width,
             height,
             rgba,
-        }
+        })
     }
 
     pub fn write_png(&self, path: &Path) -> Result<(), DocumentError> {
@@ -233,7 +243,7 @@ pub fn save(
     session: &mut PaintSession,
     path: &Path,
 ) -> Result<(), DocumentError> {
-    DocumentSnapshot::capture(gpu, session).write(path)
+    DocumentSnapshot::capture(gpu, session)?.write(path)
 }
 
 pub fn open(gpu: &GpuContext, path: &Path) -> Result<PaintSession, DocumentError> {
@@ -245,7 +255,7 @@ pub fn export_png(
     session: &mut PaintSession,
     path: &Path,
 ) -> Result<(), DocumentError> {
-    ExportedImage::render(gpu, session).write_png(path)
+    ExportedImage::render(gpu, session)?.write_png(path)
 }
 
 fn read_manifest<R: Read + std::io::Seek>(

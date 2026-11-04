@@ -1,12 +1,10 @@
-use std::sync::mpsc;
-
 use wgpu::util::DeviceExt;
 
 use crate::brush::{
     BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING, FULL_RESERVOIR_VOLUME_UM,
 };
 use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::{Dab, Tool};
@@ -201,7 +199,8 @@ const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
 const CONTACT_REFERENCE_BYTES: u64 = std::mem::size_of::<f32>() as u64;
 const PICKED_PAINT_FOUND: usize = 0;
 const PICKED_FRACTIONS: usize = 1;
-const PICKED_BYTES: u64 = ((PICKED_FRACTIONS + PIGMENT_CHANNELS) * std::mem::size_of::<f32>()) as u64;
+const PICKED_BYTES: u64 =
+    ((PICKED_FRACTIONS + PIGMENT_CHANNELS) * std::mem::size_of::<f32>()) as u64;
 
 #[derive(Clone, Copy, Debug)]
 struct Placement {
@@ -698,13 +697,8 @@ fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
     })
 }
 
-fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Vec<f32> {
-    let staging = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("brush_readback"),
-        size: buffer.size(),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
+fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
+    let staging = staging_buffer(gpu, "brush_readback", buffer.size());
     let mut encoder = gpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -712,26 +706,7 @@ fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Vec<f32> {
         });
     encoder.copy_buffer_to_buffer(buffer, 0, &staging, 0, buffer.size());
     gpu.queue.submit([encoder.finish()]);
-    let slice = staging.slice(..);
-    let (sender, receiver) = mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
-    gpu.device
-        .poll(wgpu::PollType::wait_indefinitely())
-        .expect("GPU device lost while reading the brush back");
-    receiver
-        .recv()
-        .expect("readback map callback dropped")
-        .expect("failed to map the brush readback buffer");
-    let values = bytemuck::cast_slice(
-        &slice
-            .get_mapped_range()
-            .expect("brush readback buffer is mapped"),
-    )
-    .to_vec();
-    staging.unmap();
-    values
+    read_mapped(gpu, &staging, |bytes| bytemuck::cast_slice(bytes).to_vec())
 }
 
 struct BladePipelines {
@@ -1133,7 +1108,7 @@ impl WetOilEngine {
         self.loaded_thickness_um = thickness;
     }
 
-    pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Mixture {
+    pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         let group = self.dip_bind_group(gpu, &DipRecord::measuring(self.tip_radius));
         let mut encoder = gpu
             .device
@@ -1149,25 +1124,25 @@ impl WetOilEngine {
         pass.dispatch_workgroups(1, 1, 1);
         drop(pass);
         gpu.queue.submit([encoder.finish()]);
-        let sums = read_buffer(gpu, &self.tip_sums);
+        let sums = read_buffer(gpu, &self.tip_sums)?;
         let volume = sums[VOLUME_CHANNEL];
         let texels = sums[TIP_TEXEL_COUNT_SUM];
         if volume < MIN_TIP_MEAN_VOLUME_UM || texels <= 0.0 {
-            return Mixture {
+            return Ok(Mixture {
                 volume_um: 0.0,
                 fractions: [0.0; PIGMENT_CHANNELS],
-            };
+            });
         }
-        Mixture {
+        Ok(Mixture {
             volume_um: volume / texels,
             fractions: std::array::from_fn(|slot| sums[slot] / volume),
-        }
+        })
     }
 
-    pub fn reserve_totals(&self, gpu: &GpuContext) -> PaintTotals {
+    pub fn reserve_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         let mut totals = PaintTotals::default();
-        accumulate(&mut totals, &read_buffer(gpu, &self.body)[..TIP_CHANNELS]);
-        totals
+        accumulate(&mut totals, &read_buffer(gpu, &self.body)?[..TIP_CHANNELS]);
+        Ok(totals)
     }
 
     fn reserve_volume(&self, thickness_um: f32) -> f32 {
@@ -1229,15 +1204,20 @@ impl WetOilEngine {
         gpu.queue.submit([encoder.finish()]);
     }
 
-    pub fn dip_knife(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
+    pub fn dip_knife(
+        &mut self,
+        gpu: &GpuContext,
+        mixture: &Mixture,
+        amount: f32,
+    ) -> Result<(), GpuLost> {
         let Some(thickness) = dip_thickness(mixture) else {
-            return;
+            return Ok(());
         };
         if !amount.is_finite() || amount <= 0.0 {
-            return;
+            return Ok(());
         }
         let fractions = dip_fractions(mixture);
-        let mut load = read_buffer(gpu, &self.blade_load);
+        let mut load = read_buffer(gpu, &self.blade_load)?;
         let reach = self.tip_radius.ceil() as i32 + 1;
         for offset in -reach..=reach {
             let cover = blade_cell_cover(offset, self.tip_radius);
@@ -1252,6 +1232,7 @@ impl WetOilEngine {
         }
         gpu.queue
             .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
+        Ok(())
     }
 
     pub fn knife_full_dip_volume(&self, thickness_um: f32) -> f32 {
@@ -1279,15 +1260,15 @@ impl WetOilEngine {
         gpu.queue.submit([encoder.finish()]);
     }
 
-    pub fn knife_totals(&self, gpu: &GpuContext) -> PaintTotals {
+    pub fn knife_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         let mut totals = PaintTotals::default();
-        for cell in read_buffer(gpu, &self.blade_load)
+        for cell in read_buffer(gpu, &self.blade_load)?
             .as_chunks::<TIP_CHANNELS>()
             .0
         {
             accumulate(&mut totals, cell);
         }
-        totals
+        Ok(totals)
     }
 
     fn blade_bind_group(
@@ -1313,17 +1294,17 @@ impl WetOilEngine {
         })
     }
 
-    pub fn brush_totals(&self, gpu: &GpuContext) -> PaintTotals {
+    pub fn brush_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         let mut totals = PaintTotals::default();
-        for texel in read_buffer(gpu, &self.tip).as_chunks::<TIP_CHANNELS>().0 {
+        for texel in read_buffer(gpu, &self.tip)?.as_chunks::<TIP_CHANNELS>().0 {
             accumulate(&mut totals, texel);
         }
-        accumulate(&mut totals, &read_buffer(gpu, &self.body)[..TIP_CHANNELS]);
-        totals
+        accumulate(&mut totals, &read_buffer(gpu, &self.body)?[..TIP_CHANNELS]);
+        Ok(totals)
     }
 
-    pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Mixture {
-        let body = read_buffer(gpu, &self.body);
+    pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
+        let body = read_buffer(gpu, &self.body)?;
         let volume = body[VOLUME_CHANNEL];
         let fractions = std::array::from_fn(|slot| {
             if volume > 0.0 {
@@ -1332,10 +1313,10 @@ impl WetOilEngine {
                 0.0
             }
         });
-        Mixture {
+        Ok(Mixture {
             volume_um: self.loaded_thickness_um,
             fractions,
-        }
+        })
     }
 
     pub fn encode_eyedropper(
@@ -1394,15 +1375,15 @@ impl WetOilEngine {
         pass.dispatch_workgroups(1, 1, 1);
     }
 
-    pub fn picked_mixture(&self, gpu: &GpuContext) -> Option<Mixture> {
-        let picked = read_buffer(gpu, &self.picked);
+    pub fn picked_mixture(&self, gpu: &GpuContext) -> Result<Option<Mixture>, GpuLost> {
+        let picked = read_buffer(gpu, &self.picked)?;
         if picked[PICKED_PAINT_FOUND].to_bits() == 0 {
-            return None;
+            return Ok(None);
         }
-        Some(Mixture {
+        Ok(Some(Mixture {
             volume_um: self.loaded_thickness_um,
             fractions: std::array::from_fn(|slot| picked[PICKED_FRACTIONS + slot]),
-        })
+        }))
     }
 
     pub fn dab_bounds(

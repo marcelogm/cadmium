@@ -106,8 +106,8 @@ fn full_load_volume(s: &PaintSession, thickness_um: f32, radius: f32) -> f64 {
 }
 
 fn tip_totals(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
-    let brush = s.engine.brush_totals(gpu);
-    let reserve = s.engine.reserve_totals(gpu);
+    let brush = s.engine.brush_totals(gpu).unwrap();
+    let reserve = s.engine.reserve_totals(gpu).unwrap();
     PaintTotals {
         volume: brush.volume - reserve.volume,
         pigment: std::array::from_fn(|slot| brush.pigment[slot] - reserve.pigment[slot]),
@@ -126,11 +126,11 @@ fn clean(gpu: &GpuContext, s: &mut PaintSession) {
 }
 
 fn dip(gpu: &GpuContext, s: &mut PaintSession, mixture: &Mixture, amount: f32) {
-    without_wgpu_errors(gpu, || s.dip(gpu, mixture, amount));
+    without_wgpu_errors(gpu, || s.dip(gpu, mixture, amount).unwrap());
 }
 
 fn tip_mean(gpu: &GpuContext, s: &mut PaintSession) -> Mixture {
-    without_wgpu_errors(gpu, || s.tip_mean_mixture(gpu))
+    without_wgpu_errors(gpu, || s.tip_mean_mixture(gpu).unwrap())
 }
 
 #[test]
@@ -147,17 +147,17 @@ fn dip_adds_its_share_of_a_full_load_to_tip_and_reserve() {
     clean(&gpu, &mut s);
     let blue = pure(BLUE, 100.0);
     dip(&gpu, &mut s, &blue, 0.5);
-    let once = s.engine.brush_totals(&gpu);
+    let once = s.engine.brush_totals(&gpu).unwrap();
     assert_close(
         once.volume,
         0.5 * full_load_volume(&s, 100.0, DEFAULT_TIP_RADIUS_PX),
     );
     assert_close(once.pigment[BLUE], once.volume);
     dip(&gpu, &mut s, &blue, 0.5);
-    let twice = s.engine.brush_totals(&gpu);
+    let twice = s.engine.brush_totals(&gpu).unwrap();
     assert_close(twice.volume, 2.0 * once.volume);
     assert_close(
-        s.engine.reserve_totals(&gpu).volume,
+        s.engine.reserve_totals(&gpu).unwrap().volume,
         reserve_factor(&s) * 100.0 * disk_texels(DEFAULT_TIP_RADIUS_PX),
     );
 }
@@ -173,7 +173,7 @@ fn dipping_a_second_colour_mixes_with_what_the_brush_holds_by_volume() {
     assert!((tip.volume_um - 160.0).abs() < 1e-2, "{}", tip.volume_um);
     assert!((tip.fractions[BLUE] - 0.75).abs() < FRACTION_TOLERANCE);
     assert!((tip.fractions[YELLOW] - 0.25).abs() < FRACTION_TOLERANCE);
-    let reserve = s.engine.reserve_totals(&gpu);
+    let reserve = s.engine.reserve_totals(&gpu).unwrap();
     assert_close(reserve.pigment[BLUE] / reserve.volume, 0.75);
     assert_close(reserve.pigment[YELLOW] / reserve.volume, 0.25);
 }
@@ -194,7 +194,7 @@ fn dipping_never_piles_the_tip_above_its_maximum_thickness() {
         tip.volume_um
     );
     assert_close(
-        s.engine.brush_totals(&gpu).volume,
+        s.engine.brush_totals(&gpu).unwrap().volume,
         f64::from(MAX_TIP_THICKNESS_UM)
             * disk_texels(DEFAULT_TIP_RADIUS_PX)
             * (1.0 + reserve_factor(&s)),
@@ -205,11 +205,11 @@ fn dipping_never_piles_the_tip_above_its_maximum_thickness() {
 fn a_dip_of_nothing_leaves_the_brush_untouched() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let before = s.engine.brush_totals(&gpu);
+    let before = s.engine.brush_totals(&gpu).unwrap();
     dip(&gpu, &mut s, &pure(YELLOW, 100.0), 0.0);
     dip(&gpu, &mut s, &pure(YELLOW, 100.0), f32::NAN);
     dip(&gpu, &mut s, &pure(YELLOW, 0.0), 1.0);
-    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), before);
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn reload_replaces_a_contaminated_brush_with_the_recipe() {
     assert!((tip.fractions[BLUE] - recipe.fractions[BLUE]).abs() < FRACTION_TOLERANCE);
     assert!((tip.volume_um - recipe.volume_um).abs() < 1e-2);
     assert_close(
-        s.engine.brush_totals(&gpu).volume,
+        s.engine.brush_totals(&gpu).unwrap().volume,
         full_load_volume(&s, recipe.volume_um, DEFAULT_TIP_RADIUS_PX),
     );
 }
@@ -241,17 +241,17 @@ fn reloading_with_an_empty_recipe_cleans_the_brush_instead_of_loading_bare_mediu
     let mut s = session(&gpu);
     s.brush.recipe.clear();
     s.reload_brush(&gpu);
-    assert_eq!(s.engine.brush_totals(&gpu).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
 }
 
 #[test]
 fn shrinking_the_tip_keeps_the_paint_outside_the_new_radius() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let before = s.engine.brush_totals(&gpu);
+    let before = s.engine.brush_totals(&gpu).unwrap();
     s.brush.geometry.max_diameter_px = 2.0 * SMALL_TIP_RADIUS_PX;
     s.resize_tip();
-    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), before);
     s.brush.geometry.max_diameter_px = 2.0 * DEFAULT_TIP_RADIUS_PX;
     s.resize_tip();
     let tip = tip_mean(&gpu, &mut s);
@@ -264,10 +264,10 @@ fn growing_the_tip_does_not_load_the_newly_exposed_bristles() {
     let mut s = session(&gpu);
     s.brush.geometry.max_diameter_px = 2.0 * SMALL_TIP_RADIUS_PX;
     s.reload_brush(&gpu);
-    let before = s.engine.brush_totals(&gpu);
+    let before = s.engine.brush_totals(&gpu).unwrap();
     s.brush.geometry.max_diameter_px = 2.0 * DEFAULT_TIP_RADIUS_PX;
     s.resize_tip();
-    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), before);
     let loaded = s.brush.reservoir_mixture(3).volume_um;
     let expected_mean =
         loaded * (disk_texels(SMALL_TIP_RADIUS_PX) / disk_texels(DEFAULT_TIP_RADIUS_PX)) as f32;
@@ -283,7 +283,7 @@ fn restoring_the_reserve_refills_it_to_the_load_and_leaves_the_dirty_tip_alone()
     s.reload_brush(&gpu);
     stroke(&gpu, &mut s, 64.0, 470.0, 40.0);
     let tip_before = tip_totals(&gpu, &s);
-    let reserve_before = s.engine.reserve_totals(&gpu);
+    let reserve_before = s.engine.reserve_totals(&gpu).unwrap();
     let recipe = s.brush.reservoir_mixture(3);
     let full_reserve =
         reserve_factor(&s) * f64::from(recipe.volume_um) * disk_texels(DEFAULT_TIP_RADIUS_PX);
@@ -292,7 +292,7 @@ fn restoring_the_reserve_refills_it_to_the_load_and_leaves_the_dirty_tip_alone()
     let tip_after = tip_totals(&gpu, &s);
     assert_close(tip_after.volume, tip_before.volume);
     assert_close(tip_after.pigment[BLUE], tip_before.pigment[BLUE]);
-    let reserve = s.engine.reserve_totals(&gpu);
+    let reserve = s.engine.reserve_totals(&gpu).unwrap();
     assert_close(reserve.volume, full_reserve);
     assert_close(
         reserve.pigment[YELLOW] - reserve_before.pigment[YELLOW],
@@ -304,9 +304,9 @@ fn restoring_the_reserve_refills_it_to_the_load_and_leaves_the_dirty_tip_alone()
 fn restoring_a_full_reserve_adds_nothing() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let before = s.engine.brush_totals(&gpu);
+    let before = s.engine.brush_totals(&gpu).unwrap();
     without_wgpu_errors(&gpu, || s.restore_reserve(&gpu));
-    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), before);
 }
 
 #[test]
@@ -314,10 +314,10 @@ fn restoring_the_reserve_with_an_empty_recipe_adds_nothing() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 64.0, 40.0, 470.0);
-    let before = s.engine.brush_totals(&gpu);
+    let before = s.engine.brush_totals(&gpu).unwrap();
     s.brush.recipe.clear();
     without_wgpu_errors(&gpu, || s.restore_reserve(&gpu));
-    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), before);
 }
 
 #[test]
@@ -342,7 +342,10 @@ fn the_tip_mean_shows_wet_paint_picked_up_from_the_canvas() {
     stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
     let tip = tip_mean(&gpu, &mut s);
     assert!(tip.fractions[YELLOW] > 0.01, "{:?}", tip.fractions);
-    assert_eq!(s.engine.reservoir_mixture(&gpu).fractions[YELLOW], 0.0);
+    assert_eq!(
+        s.engine.reservoir_mixture(&gpu).unwrap().fractions[YELLOW],
+        0.0
+    );
 }
 
 #[test]
@@ -350,8 +353,9 @@ fn dipping_conserves_everything_already_on_canvas_and_brush_plus_the_dip() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 64.0, 40.0, 470.0);
-    let total =
-        |s: &PaintSession| s.canvas.wet_totals(&gpu).volume + s.engine.brush_totals(&gpu).volume;
+    let total = |s: &PaintSession| {
+        s.canvas.wet_totals(&gpu).unwrap().volume + s.engine.brush_totals(&gpu).unwrap().volume
+    };
     let before = total(&s);
     let yellow = pure(YELLOW, 40.0);
     dip(&gpu, &mut s, &yellow, 0.25);

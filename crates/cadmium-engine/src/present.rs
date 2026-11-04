@@ -1,9 +1,7 @@
-use std::sync::mpsc;
-
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
 
 const PRESENT_WORKGROUP_SIZE: u32 = 8;
 const PRESENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -136,57 +134,34 @@ impl Presenter {
     }
 }
 
-pub fn readback_rgba8(gpu: &GpuContext, texture: &wgpu::Texture) -> Vec<u8> {
-    let width = texture.width();
-    let height = texture.height();
-    let row_bytes = width * RGBA8_BYTES_PER_TEXEL;
-    let padded_row_bytes = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-    let staging = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("present_readback"),
-        size: u64::from(padded_row_bytes) * u64::from(height),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
+pub fn rgba8_rows(texture: &wgpu::Texture) -> TexelRows {
+    TexelRows::new(texture.width() * RGBA8_BYTES_PER_TEXEL, texture.height())
+}
+
+pub fn encode_rgba8_copy(
+    texture: &wgpu::Texture,
+    staging: &wgpu::Buffer,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: staging,
+            layout: rgba8_rows(texture).layout(0),
+        },
+        texture.size(),
+    );
+}
+
+pub fn readback_rgba8(gpu: &GpuContext, texture: &wgpu::Texture) -> Result<Vec<u8>, GpuLost> {
+    let rows = rgba8_rows(texture);
+    let staging = staging_buffer(gpu, "present_readback", rows.padded_size());
     let mut encoder = gpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("present_readback"),
         });
-    encoder.copy_texture_to_buffer(
-        texture.as_image_copy(),
-        wgpu::TexelCopyBufferInfo {
-            buffer: &staging,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_row_bytes),
-                rows_per_image: Some(height),
-            },
-        },
-        texture.size(),
-    );
+    encode_rgba8_copy(texture, &staging, &mut encoder);
     gpu.queue.submit([encoder.finish()]);
-
-    let slice = staging.slice(..);
-    let (sender, receiver) = mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
-    gpu.device
-        .poll(wgpu::PollType::wait_indefinitely())
-        .expect("GPU device lost while reading the presented image back");
-    receiver
-        .recv()
-        .expect("readback map callback dropped")
-        .expect("failed to map the present readback buffer");
-
-    let mapped = slice
-        .get_mapped_range()
-        .expect("present readback buffer is mapped");
-    let mut pixels = Vec::with_capacity((row_bytes * height) as usize);
-    for row in mapped.chunks_exact(padded_row_bytes as usize) {
-        pixels.extend_from_slice(&row[..row_bytes as usize]);
-    }
-    drop(mapped);
-    staging.unmap();
-    pixels
+    read_mapped(gpu, &staging, |padded| rows.unpad(padded))
 }

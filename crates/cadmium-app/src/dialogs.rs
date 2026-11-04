@@ -160,6 +160,23 @@ pub async fn overwrite_confirmed(parent: &impl IsA<gtk::Widget>, file_name: &str
     alert.choose_future(Some(parent)).await == REPLACE_RESPONSE
 }
 
+const CLOSE_RESPONSE: &str = "close";
+const GPU_LOST_HEADING: &str = "A GPU foi reiniciada; a pintura não pôde ser recuperada";
+
+pub fn announce_gpu_lost(parent: &impl IsA<gtk::Widget>, on_close: impl Fn() + 'static) {
+    let alert = adw::AlertDialog::builder()
+        .heading(GPU_LOST_HEADING)
+        .default_response(CLOSE_RESPONSE)
+        .close_response(CLOSE_RESPONSE)
+        .build();
+    alert.add_responses(&[(CLOSE_RESPONSE, "Fechar")]);
+    alert.choose(
+        Some(parent),
+        None::<&gtk::gio::Cancellable>,
+        move |_: glib::GString| on_close(),
+    );
+}
+
 pub fn ask_to_quit_while_writing(
     parent: &impl IsA<gtk::Widget>,
     on_quit: impl Fn() + 'static,

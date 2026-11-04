@@ -335,8 +335,11 @@ impl History {
 
     fn abandon(&mut self, step: &mut Step) {
         step.complete = false;
-        self.free_slots
-            .extend(std::mem::take(&mut step.tiles).iter().map(|saved| saved.before));
+        self.free_slots.extend(
+            std::mem::take(&mut step.tiles)
+                .iter()
+                .map(|saved| saved.before),
+        );
         self.drop_undo_steps();
         self.drop_redo_steps();
     }

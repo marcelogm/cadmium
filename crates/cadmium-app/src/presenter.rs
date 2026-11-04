@@ -1,7 +1,7 @@
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use cadmium_engine::gpu::GpuContext;
+use cadmium_engine::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
+use cadmium_engine::present::{encode_rgba8_copy, rgba8_rows};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
@@ -14,7 +14,6 @@ const PRESENT_MODE_VARIABLE: &str = "CADMIUM_PRESENT";
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
 const DEBUG_ENABLED: &str = "1";
 const VULKAN_RENDERER_MARK: &str = "Vulkan";
-const RGBA8_BYTES_PER_PIXEL: u32 = 4;
 const RESIZE_SETTLE: Duration = Duration::from_millis(150);
 const MILLISECONDS_PER_SECOND: f64 = 1000.0;
 
@@ -111,7 +110,7 @@ impl ResizeDebounce {
 struct ReadbackTarget {
     texture: wgpu::Texture,
     staging: wgpu::Buffer,
-    padded_row_bytes: u32,
+    rows: TexelRows,
 }
 
 impl ReadbackTarget {
@@ -120,18 +119,12 @@ impl ReadbackTarget {
             .session
             .presenter
             .create_target(&state.gpu, width, height);
-        let padded_row_bytes =
-            (width * RGBA8_BYTES_PER_PIXEL).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let staging = state.gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("present_readback"),
-            size: u64::from(padded_row_bytes) * u64::from(height),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let rows = rgba8_rows(&texture);
+        let staging = staging_buffer(&state.gpu, "present_readback", rows.padded_size());
         ReadbackTarget {
             texture,
             staging,
-            padded_row_bytes,
+            rows,
         }
     }
 
@@ -139,48 +132,17 @@ impl ReadbackTarget {
         (self.texture.width(), self.texture.height())
     }
 
-    fn encode_copy(&self, encoder: &mut wgpu::CommandEncoder) {
-        encoder.copy_texture_to_buffer(
-            self.texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &self.staging,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(self.padded_row_bytes),
-                    rows_per_image: Some(self.texture.height()),
-                },
-            },
-            self.texture.size(),
-        );
-    }
-
-    fn download(&self, gpu: &GpuContext) -> gdk::Texture {
-        let slice = self.staging.slice(..);
-        let (sender, receiver) = mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        gpu.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .expect("GPU device lost while reading the presented image back");
-        receiver
-            .recv()
-            .expect("readback map callback dropped")
-            .expect("failed to map the present readback buffer");
-        let pixels = slice
-            .get_mapped_range()
-            .expect("present readback buffer is mapped")
-            .to_vec();
-        self.staging.unmap();
+    fn download(&self, gpu: &GpuContext) -> Result<gdk::Texture, GpuLost> {
+        let pixels = read_mapped(gpu, &self.staging, <[u8]>::to_vec)?;
         let (width, height) = self.size();
-        gdk::MemoryTexture::new(
+        Ok(gdk::MemoryTexture::new(
             width as i32,
             height as i32,
             gdk::MemoryFormat::R8g8b8a8,
             &glib::Bytes::from_owned(pixels),
-            self.padded_row_bytes as usize,
+            self.rows.padded_row_bytes as usize,
         )
-        .upcast()
+        .upcast())
     }
 }
 
@@ -251,13 +213,13 @@ impl FramePresenter {
             None => self.decide_mode(state, native),
         };
         let texture = match mode {
-            PresentMode::Readback => Some(self.present_by_readback(state, width_px, height_px)),
+            PresentMode::Readback => self.present_by_readback(state, width_px, height_px),
             PresentMode::Dmabuf(policy) => {
                 match self.present_by_dmabuf(state, native, policy, width_px, height_px) {
                     Ok(texture) => texture,
                     Err(error) => {
                         self.fall_back(policy, &error);
-                        Some(self.present_by_readback(state, width_px, height_px))
+                        self.present_by_readback(state, width_px, height_px)
                     }
                 }
             }
@@ -359,7 +321,7 @@ impl FramePresenter {
         state: &mut AppState,
         width_px: u32,
         height_px: u32,
-    ) -> gdk::Texture {
+    ) -> Option<gdk::Texture> {
         let size = (width_px, height_px);
         if self.readback.as_ref().map(ReadbackTarget::size) != Some(size) {
             self.readback = Some(ReadbackTarget::new(state, width_px, height_px));
@@ -382,9 +344,9 @@ impl FramePresenter {
             &target.texture,
             &mut encoder,
         );
-        target.encode_copy(&mut encoder);
+        encode_rgba8_copy(&target.texture, &target.staging, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        target.download(&gpu)
+        target.download(&gpu).ok()
     }
 }
 

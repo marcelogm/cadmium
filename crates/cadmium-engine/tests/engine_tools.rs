@@ -123,9 +123,12 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
 }
 
 fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
-    let c = s.canvas.wet_totals(gpu);
+    let c = s.canvas.wet_totals(gpu).unwrap();
     let mut t = c;
-    for tool in [s.engine.brush_totals(gpu), s.engine.knife_totals(gpu)] {
+    for tool in [
+        s.engine.brush_totals(gpu).unwrap(),
+        s.engine.knife_totals(gpu).unwrap(),
+    ] {
         t.volume += tool.volume;
         for i in 0..8 {
             t.pigment[i] += tool.pigment[i];
@@ -151,7 +154,7 @@ fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
         &mut e,
     );
     gpu.queue.submit([e.finish()]);
-    let rgba = readback_rgba8(gpu, &target);
+    let rgba = readback_rgba8(gpu, &target).unwrap();
     let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .parent()
         .expect("cargo target tmpdir lives inside the target directory")
@@ -209,7 +212,7 @@ fn brush_and_knife_spreading_conserve_volume_and_each_pigment() {
 }
 
 fn cross_section(gpu: &GpuContext, s: &PaintSession, rows: std::ops::Range<usize>) -> Vec<f32> {
-    let vol = s.canvas.read_f32(gpu, StateTexture::WetVol);
+    let vol = s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap();
     rows.map(|y| {
         let sum: f32 = SECTION_COLUMNS.map(|x| vol[y * CANVAS_WIDTH + x]).sum();
         sum / SECTION_COLUMNS.len() as f32
@@ -296,12 +299,15 @@ fn a_knife_tap_without_motion_leaves_the_canvas_untouched() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let painted = s.canvas.read_f32(&gpu, StateTexture::WetVol);
+    let painted = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     s.canvas.wet_tiles.take();
     s.brush.tool = Tool::Knife;
     drag(&gpu, &mut s, &line(128.0, 256.0, 256.0, 1.0, 0.0)[..1]);
     assert!(s.canvas.wet_tiles.is_empty());
-    assert_eq!(s.canvas.read_f32(&gpu, StateTexture::WetVol), painted);
+    assert_eq!(
+        s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap(),
+        painted
+    );
 }
 
 #[test]
@@ -320,8 +326,8 @@ fn spread_mixtures_keep_their_fractions_within_the_volume() {
     drag(&gpu, &mut s, &column(256.0, 60.0, 200.0, 1.0, 20.0));
     s.brush.tool = Tool::Knife;
     drag(&gpu, &mut s, &line(126.0, 40.0, 470.0, 1.0, 60.0));
-    let low = s.canvas.read_f32(&gpu, StateTexture::WetPig0);
-    let high = s.canvas.read_f32(&gpu, StateTexture::WetPig1);
+    let low = s.canvas.read_f32(&gpu, StateTexture::WetPig0).unwrap();
+    let high = s.canvas.read_f32(&gpu, StateTexture::WetPig1).unwrap();
     let worst = low
         .chunks(4)
         .zip(high.chunks(4))
@@ -349,13 +355,13 @@ fn blender_previews_show_smeared_colours() {
         drag(&gpu, &mut s, &column(x, from, to, 1.0, 20.0));
     }
     write_preview(&gpu, &s, "engine-blend.png");
-    assert!(s.canvas.wet_totals(&gpu).volume > 0.0);
+    assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
 }
 
 fn dip_knife(gpu: &GpuContext, s: &mut PaintSession) {
     s.brush.tool = Tool::Knife;
     let mixture = s.brush.reservoir_mixture(SLOT_COUNT);
-    s.dip(gpu, &mixture, FULL_DIP);
+    s.dip(gpu, &mixture, FULL_DIP).unwrap();
 }
 
 fn laid_knife(y: f64, pressure: f32) -> Vec<StrokeSample> {
@@ -371,8 +377,8 @@ fn plate_height_above_weave_peaks(
     s: &PaintSession,
     rows: std::ops::Range<usize>,
 ) -> f32 {
-    let dry = s.canvas.read_f32(gpu, StateTexture::DryHeight);
-    let wet = s.canvas.read_f32(gpu, StateTexture::WetVol);
+    let dry = s.canvas.read_f32(gpu, StateTexture::DryHeight).unwrap();
+    let wet = s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap();
     let texels: Vec<usize> = rows
         .flat_map(|y| SECTION_COLUMNS.map(move |x| y * CANVAS_WIDTH + x))
         .collect();
@@ -500,24 +506,24 @@ fn light_knife_pressure_lays_a_thicker_plate_than_heavy_pressure() {
 fn an_undipped_knife_lays_none_of_the_brush_load_on_bare_canvas() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let brush = s.engine.brush_totals(&gpu);
+    let brush = s.engine.brush_totals(&gpu).unwrap();
     s.brush.tool = Tool::Knife;
     drag(&gpu, &mut s, &laid_knife(KNIFE_ROW, LIGHT_PRESSURE));
-    assert_eq!(s.canvas.wet_totals(&gpu).volume, 0.0);
-    assert_eq!(s.engine.brush_totals(&gpu), brush);
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), brush);
 }
 
 #[test]
 fn dipping_with_the_knife_loads_the_knife_and_leaves_the_brush_as_it_was() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let brush = s.engine.brush_totals(&gpu);
+    let brush = s.engine.brush_totals(&gpu).unwrap();
     dip_knife(&gpu, &mut s);
-    assert!(s.engine.knife_totals(&gpu).volume > 0.0);
-    assert_eq!(s.engine.brush_totals(&gpu), brush);
+    assert!(s.engine.knife_totals(&gpu).unwrap().volume > 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), brush);
     s.clean_brush(&gpu);
-    assert_eq!(s.engine.knife_totals(&gpu).volume, 0.0);
-    assert_eq!(s.engine.brush_totals(&gpu), brush);
+    assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), brush);
 }
 
 #[test]
@@ -530,7 +536,7 @@ fn a_full_dip_lays_on_a_clean_knife_the_volume_the_engine_predicts() {
     let predicted = f64::from(s.engine.knife_full_dip_volume(mixture.volume_um));
     assert!(predicted > 0.0);
     dip_knife(&gpu, &mut s);
-    let loaded = s.engine.knife_totals(&gpu).volume;
+    let loaded = s.engine.knife_totals(&gpu).unwrap().volume;
     assert!(
         (loaded - predicted).abs() <= predicted * PREDICTION_TOLERANCE,
         "{loaded} {predicted}"
@@ -544,7 +550,7 @@ fn row_profile(
     width: usize,
     rows: std::ops::Range<usize>,
 ) -> Vec<f32> {
-    let wet = s.canvas.read_f32(gpu, StateTexture::WetVol);
+    let wet = s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap();
     let count = rows.len() as f32;
     (0..width)
         .map(|x| rows.clone().map(|y| wet[y * width + x]).sum::<f32>() / count)
@@ -617,5 +623,5 @@ fn knife_previews_show_raised_plates_and_ploughed_ridges() {
     s.canvas.dirty.mark_all();
     frame(&gpu, &mut s);
     write_preview(&gpu, &s, "knife-depth-height.png");
-    assert!(s.canvas.wet_totals(&gpu).volume > 0.0);
+    assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
 }

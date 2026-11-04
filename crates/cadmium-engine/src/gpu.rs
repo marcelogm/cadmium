@@ -1,5 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 
 use wgpu::hal::{self, api::Vulkan};
 
@@ -9,7 +11,19 @@ pub struct GpuContext {
     pub queue: wgpu::Queue,
     pub supports_dmabuf_export: bool,
     pub supports_timestamps: bool,
+    lost: Arc<AtomicBool>,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GpuLost;
+
+impl fmt::Display for GpuLost {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the GPU device was lost")
+    }
+}
+
+impl std::error::Error for GpuLost {}
 
 #[derive(Debug)]
 pub enum GpuError {
@@ -93,6 +107,9 @@ impl GpuContext {
         };
 
         device.on_uncaptured_error(Arc::new(|e| eprintln!("cadmium: wgpu error: {e}")));
+        let lost = Arc::new(AtomicBool::new(false));
+        let lost_flag = lost.clone();
+        device.set_device_lost_callback(move |_, _| lost_flag.store(true, Ordering::SeqCst));
 
         Ok(GpuContext {
             adapter,
@@ -100,7 +117,96 @@ impl GpuContext {
             queue,
             supports_dmabuf_export,
             supports_timestamps,
+            lost,
         })
+    }
+
+    pub fn is_lost(&self) -> bool {
+        self.lost.load(Ordering::SeqCst)
+    }
+
+    fn mark_lost(&self) -> GpuLost {
+        self.lost.store(true, Ordering::SeqCst);
+        GpuLost
+    }
+}
+
+pub fn staging_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
+    gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    })
+}
+
+pub fn read_mapped<T>(
+    gpu: &GpuContext,
+    staging: &wgpu::Buffer,
+    read: impl FnOnce(&[u8]) -> T,
+) -> Result<T, GpuLost> {
+    if gpu.is_lost() {
+        return Err(GpuLost);
+    }
+    let slice = staging.slice(..);
+    let (sender, receiver) = mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    let waited = gpu.device.poll(wgpu::PollType::wait_indefinitely()).is_ok();
+    let mapped = waited && matches!(receiver.try_recv(), Ok(Ok(())));
+    if !mapped || gpu.is_lost() {
+        return Err(gpu.mark_lost());
+    }
+    let value = match slice.get_mapped_range() {
+        Ok(view) => Ok(read(&view)),
+        Err(_) => Err(gpu.mark_lost()),
+    };
+    staging.unmap();
+    value
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TexelRows {
+    pub row_bytes: u32,
+    pub padded_row_bytes: u32,
+    pub rows: u32,
+}
+
+impl TexelRows {
+    pub fn new(row_bytes: u32, rows: u32) -> TexelRows {
+        TexelRows {
+            row_bytes,
+            padded_row_bytes: row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+            rows,
+        }
+    }
+
+    pub fn padded_size(&self) -> u64 {
+        u64::from(self.padded_row_bytes) * u64::from(self.rows)
+    }
+
+    pub fn unpadded_size(&self) -> usize {
+        self.row_bytes as usize * self.rows as usize
+    }
+
+    pub fn layout(&self, offset: u64) -> wgpu::TexelCopyBufferLayout {
+        wgpu::TexelCopyBufferLayout {
+            offset,
+            bytes_per_row: Some(self.padded_row_bytes),
+            rows_per_image: Some(self.rows),
+        }
+    }
+
+    pub fn unpad(&self, padded: &[u8]) -> Vec<u8> {
+        let mut texels = Vec::with_capacity(self.unpadded_size());
+        for row in padded
+            .chunks_exact(self.padded_row_bytes as usize)
+            .take(self.rows as usize)
+        {
+            texels.extend_from_slice(&row[..self.row_bytes as usize]);
+        }
+        texels
     }
 }
 

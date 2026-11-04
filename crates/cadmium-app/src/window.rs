@@ -10,7 +10,7 @@ use cadmium_engine::canvas::CanvasSpec;
 use crate::LOG_DOMAIN;
 use crate::brush_panel::BrushPanel;
 use crate::canvas_widget::CadmiumCanvas;
-use crate::dialogs::confirm_discard;
+use crate::dialogs::{announce_gpu_lost, confirm_discard};
 use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::{DryOutcome, SharedState};
@@ -178,6 +178,11 @@ impl CadmiumWindow {
             self,
             move |_| window.sync_history_actions()
         ));
+        canvas.connect_gpu_lost(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.announce_gpu_lost()
+        ));
         canvas.connect_presentation_fallback(glib::clone!(
             #[weak(rename_to = window)]
             self,
@@ -269,6 +274,20 @@ impl CadmiumWindow {
             toast.set_action_name(Some("win.undo"));
         }
         self.imp().toast_overlay.add_toast(toast);
+    }
+
+    fn announce_gpu_lost(&self) {
+        announce_gpu_lost(
+            self,
+            glib::clone!(
+                #[weak(rename_to = window)]
+                self,
+                move || {
+                    window.imp().close_confirmed.set(true);
+                    window.close();
+                }
+            ),
+        );
     }
 
     fn show_zoom(&self, zoom: f32) {

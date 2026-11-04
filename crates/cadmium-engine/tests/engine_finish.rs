@@ -82,13 +82,13 @@ fn dry(gpu: &GpuContext, s: &mut PaintSession) {
 }
 
 fn pick(gpu: &GpuContext, s: &mut PaintSession, x: f32, y: f32) -> Option<Mixture> {
-    without_wgpu_errors(gpu, || s.pick_colour(gpu, x, y))
+    without_wgpu_errors(gpu, || s.pick_colour(gpu, x, y).unwrap())
 }
 
 fn shaded_display(gpu: &GpuContext, s: &mut PaintSession) -> Vec<f32> {
     s.canvas.dirty.mark_all();
     frame(gpu, s);
-    s.canvas.read_f32(gpu, StateTexture::Display)
+    s.canvas.read_f32(gpu, StateTexture::Display).unwrap()
 }
 
 #[test]
@@ -96,16 +96,20 @@ fn rag_only_removes_paint() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let before = s.canvas.wet_totals(&gpu).volume;
-    let brush_before = s.engine.brush_totals(&gpu).volume;
-    let dry_before = s.canvas.read_f32(&gpu, StateTexture::DryRefl0);
+    let before = s.canvas.wet_totals(&gpu).unwrap().volume;
+    let brush_before = s.engine.brush_totals(&gpu).unwrap().volume;
+    let dry_before = s.canvas.read_f32(&gpu, StateTexture::DryRefl0).unwrap();
     s.brush.tool = Tool::Rag;
     stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
-    assert!(s.canvas.wet_totals(&gpu).volume < before);
+    assert!(s.canvas.wet_totals(&gpu).unwrap().volume < before);
     assert!(
-        (s.engine.brush_totals(&gpu).volume - brush_before).abs() < 1e-3 * brush_before.max(1.0)
+        (s.engine.brush_totals(&gpu).unwrap().volume - brush_before).abs()
+            < 1e-3 * brush_before.max(1.0)
     );
-    assert_eq!(s.canvas.read_f32(&gpu, StateTexture::DryRefl0), dry_before);
+    assert_eq!(
+        s.canvas.read_f32(&gpu, StateTexture::DryRefl0).unwrap(),
+        dry_before
+    );
 }
 
 #[test]
@@ -113,10 +117,13 @@ fn rag_keeps_the_wet_mixture_proportions() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let before = s.canvas.read_f32(&gpu, StateTexture::WetPig0);
+    let before = s.canvas.read_f32(&gpu, StateTexture::WetPig0).unwrap();
     s.brush.tool = Tool::Rag;
     stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
-    assert_eq!(s.canvas.read_f32(&gpu, StateTexture::WetPig0), before);
+    assert_eq!(
+        s.canvas.read_f32(&gpu, StateTexture::WetPig0).unwrap(),
+        before
+    );
 }
 
 #[test]
@@ -141,7 +148,7 @@ fn a_brush_loaded_with_the_picked_mixture_paints_the_picked_colour() {
     s.brush.recipe = picked.fractions.iter().copied().enumerate().collect();
     s.reload_brush(&gpu);
     stroke(&gpu, &mut s, 192.0, 40.0, 470.0);
-    let low = s.canvas.read_f32(&gpu, StateTexture::WetPig0);
+    let low = s.canvas.read_f32(&gpu, StateTexture::WetPig0).unwrap();
     let texel = 4 * (192 * CANVAS_WIDTH + 256);
     assert!(low[texel + 1] > 0.5, "{:?}", &low[texel..texel + 4]);
     assert!(low[texel] < 0.05, "{:?}", &low[texel..texel + 4]);
@@ -155,7 +162,7 @@ fn eyedropper_over_paint_finds_it_without_touching_the_brush() {
     s.clean_brush(&gpu);
     let m = pick(&gpu, &mut s, 256.0, 128.0).unwrap();
     assert!(m.fractions[0] > 0.5, "{:?}", m.fractions);
-    assert_eq!(s.engine.brush_totals(&gpu).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
 }
 
 #[test]
@@ -186,7 +193,7 @@ fn drying_keeps_the_displayed_colour_and_empties_the_wet_layer() {
         .map(|(a, b)| (a - b).abs())
         .fold(0.0, f32::max);
     assert!(worst < 0.01, "worst {worst}");
-    assert_eq!(s.canvas.wet_totals(&gpu).volume, 0.0);
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
 }
 
 #[test]
@@ -194,10 +201,10 @@ fn drying_moves_the_wet_thickness_into_the_dry_height() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let wet = s.canvas.read_f32(&gpu, StateTexture::WetVol);
-    let height = s.canvas.read_f32(&gpu, StateTexture::DryHeight);
+    let wet = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+    let height = s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap();
     dry(&gpu, &mut s);
-    let dried = s.canvas.read_f32(&gpu, StateTexture::DryHeight);
+    let dried = s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap();
     let worst = wet
         .iter()
         .zip(&height)
@@ -239,8 +246,8 @@ fn drying_a_large_canvas_in_chunks_dries_every_wet_tile() {
         .write_f32(&gpu, StateTexture::WetVol, &vec![10.0; 1024 * 1024]);
     s.canvas.wet_tiles.mark_all();
     dry(&gpu, &mut s);
-    assert_eq!(s.canvas.wet_totals(&gpu).volume, 0.0);
-    let height = s.canvas.read_f32(&gpu, StateTexture::DryHeight);
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    let height = s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap();
     assert!(height.iter().all(|h| *h >= 10.0));
 }
 
@@ -249,7 +256,7 @@ fn clean_brush_empties_tip_and_reservoir() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     s.clean_brush(&gpu);
-    assert_eq!(s.engine.brush_totals(&gpu).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
 }
 
 #[test]
@@ -285,12 +292,12 @@ fn assert_brush_untouched_by_pick(x: f32, y: f32) {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let before = s.engine.brush_totals(&gpu);
-    let mixture_before = s.engine.reservoir_mixture(&gpu);
+    let before = s.engine.brush_totals(&gpu).unwrap();
+    let mixture_before = s.engine.reservoir_mixture(&gpu).unwrap();
     assert!(pick(&gpu, &mut s, x, y).is_none());
-    assert_eq!(s.engine.brush_totals(&gpu), before);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), before);
     assert_eq!(
-        s.engine.reservoir_mixture(&gpu).fractions,
+        s.engine.reservoir_mixture(&gpu).unwrap().fractions,
         mixture_before.fractions
     );
 }
@@ -341,6 +348,6 @@ fn a_queued_stroke_tail_is_painted_with_the_tool_it_was_drawn_with() {
     s.brush.tool = Tool::Rag;
     let elsewhere = line(200.0, 40.0, 470.0, 0.8, 20.0);
     without_wgpu_errors(&gpu, || s.begin_stroke(&gpu, elsewhere[0]));
-    let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol);
+    let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     assert!(volume[64 * CANVAS_WIDTH + 256] > 0.0);
 }

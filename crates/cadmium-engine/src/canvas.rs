@@ -1,9 +1,8 @@
 use std::collections::HashSet;
-use std::sync::mpsc;
 
 use wgpu::util::DeviceExt;
 
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
 use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
 
@@ -457,65 +456,46 @@ impl Canvas {
         Ok(self.spec.pigment_slots.len() - 1)
     }
 
-    pub fn read_f32(&self, gpu: &GpuContext, which: StateTexture) -> Vec<f32> {
-        decode_texels(which, &self.read_bytes(gpu, which))
+    pub fn read_f32(&self, gpu: &GpuContext, which: StateTexture) -> Result<Vec<f32>, GpuLost> {
+        Ok(decode_texels(which, &self.read_bytes(gpu, which)?))
     }
 
     pub fn write_f32(&self, gpu: &GpuContext, which: StateTexture, data: &[f32]) {
         self.write_bytes(gpu, which, &encode_texels(which, data));
     }
 
-    pub fn read_bytes(&self, gpu: &GpuContext, which: StateTexture) -> Vec<u8> {
-        let row_bytes = self.spec.width * which.bytes_per_texel();
-        let padded_row_bytes = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let staging = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("canvas_readback"),
-            size: u64::from(padded_row_bytes) * u64::from(self.spec.height),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+    pub fn texel_rows(&self, which: StateTexture) -> TexelRows {
+        TexelRows::new(self.spec.width * which.bytes_per_texel(), self.spec.height)
+    }
+
+    pub fn encode_copy_out(
+        &self,
+        which: StateTexture,
+        staging: &wgpu::Buffer,
+        offset: u64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        encoder.copy_texture_to_buffer(
+            self.texture(which).as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: staging,
+                layout: self.texel_rows(which).layout(offset),
+            },
+            self.extent(),
+        );
+    }
+
+    pub fn read_bytes(&self, gpu: &GpuContext, which: StateTexture) -> Result<Vec<u8>, GpuLost> {
+        let rows = self.texel_rows(which);
+        let staging = staging_buffer(gpu, "canvas_readback", rows.padded_size());
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("canvas_readback"),
             });
-        encoder.copy_texture_to_buffer(
-            self.texture(which).as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &staging,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_row_bytes),
-                    rows_per_image: Some(self.spec.height),
-                },
-            },
-            self.extent(),
-        );
+        self.encode_copy_out(which, &staging, 0, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-
-        let slice = staging.slice(..);
-        let (sender, receiver) = mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        gpu.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .expect("GPU device lost while reading the canvas back");
-        receiver
-            .recv()
-            .expect("readback map callback dropped")
-            .expect("failed to map the canvas readback buffer");
-
-        let mapped = slice
-            .get_mapped_range()
-            .expect("canvas readback buffer is mapped");
-        let mut texels = Vec::with_capacity((row_bytes * self.spec.height) as usize);
-        for row in mapped.chunks_exact(padded_row_bytes as usize) {
-            texels.extend_from_slice(&row[..row_bytes as usize]);
-        }
-        drop(mapped);
-        staging.unmap();
-        texels
+        read_mapped(gpu, &staging, |padded| rows.unpad(padded))
     }
 
     pub fn write_bytes(&self, gpu: &GpuContext, which: StateTexture, data: &[u8]) {
@@ -537,10 +517,10 @@ impl Canvas {
         );
     }
 
-    pub fn wet_totals(&self, gpu: &GpuContext) -> PaintTotals {
-        let volume = self.read_f32(gpu, StateTexture::WetVol);
-        let low = self.read_f32(gpu, StateTexture::WetPig0);
-        let high = self.read_f32(gpu, StateTexture::WetPig1);
+    pub fn wet_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
+        let volume = self.read_f32(gpu, StateTexture::WetVol)?;
+        let low = self.read_f32(gpu, StateTexture::WetPig0)?;
+        let high = self.read_f32(gpu, StateTexture::WetPig1)?;
         let mut totals = PaintTotals::default();
         let texels = volume
             .iter()
@@ -553,7 +533,7 @@ impl Canvas {
                 totals.pigment[slot] += f64::from(c) * v;
             }
         }
-        totals
+        Ok(totals)
     }
 
     fn extent(&self) -> wgpu::Extent3d {

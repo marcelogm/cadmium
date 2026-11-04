@@ -38,7 +38,7 @@ fn shade_and_present(
     );
     presenter.encode_present(gpu, canvas, view, &target, &mut enc);
     gpu.queue.submit([enc.finish()]);
-    readback_rgba8(gpu, &target)
+    readback_rgba8(gpu, &target).unwrap()
 }
 
 fn write_png(name: &str, width: u32, height: u32, rgba: &[u8]) {

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use cadmium_engine::document::{DocumentError, DocumentSnapshot};
+use cadmium_engine::gpu::GpuLost;
 use gtk::{gio, glib};
 
 use crate::LOG_DOMAIN;
@@ -42,6 +43,7 @@ const READ_ONLY: &str = "o local é somente leitura";
 const UNREADABLE_DATA: &str = "o arquivo está corrompido ou incompleto";
 const INPUT_OUTPUT_FAILED: &str = "falha de leitura ou gravação";
 const NOT_A_PAINTING: &str = "o arquivo não é uma pintura do Cadmium válida";
+const GPU_LOST: &str = "a GPU foi reiniciada";
 
 struct Failure {
     shown: String,
@@ -55,6 +57,7 @@ pub fn describe_document_error(error: &DocumentError) -> String {
         DocumentError::UnsupportedVersion(version) => {
             format!("a pintura usa o formato {version}, que esta versão do Cadmium não sabe ler")
         }
+        DocumentError::GpuLost => GPU_LOST.to_string(),
     }
 }
 
@@ -221,11 +224,10 @@ impl CadmiumWindow {
         let captured = self.begin_write(&path, WriteKind::Painting).then(|| {
             let state = self.state();
             let mut state = state.borrow_mut();
-            (state.capture_document(), state.edit_mark())
+            let mark = state.edit_mark();
+            state.capture_document().map(|snapshot| (snapshot, mark))
         });
-        if captured.is_some() {
-            self.canvas().queue_present();
-        }
+        let captured = self.settle_capture(&path, captured);
         let window = self.downgrade();
         async move {
             let Some((snapshot, mark)) = captured else {
@@ -296,9 +298,7 @@ impl CadmiumWindow {
         let image = self
             .begin_write(&path, WriteKind::Image)
             .then(|| self.state().borrow_mut().render_export());
-        if image.is_some() {
-            self.canvas().queue_present();
-        }
+        let image = self.settle_capture(&path, image);
         let window = self.downgrade();
         async move {
             let Some(image) = image else {
@@ -372,6 +372,18 @@ impl CadmiumWindow {
             WriteKind::Image => EXPORTING_TOAST,
         });
         false
+    }
+
+    fn settle_capture<T>(&self, path: &Path, captured: Option<Result<T, GpuLost>>) -> Option<T> {
+        let captured = captured?;
+        self.canvas().queue_present();
+        match captured {
+            Ok(captured) => Some(captured),
+            Err(_) => {
+                self.finish_write(path);
+                None
+            }
+        }
     }
 
     fn finish_write(&self, path: &Path) {

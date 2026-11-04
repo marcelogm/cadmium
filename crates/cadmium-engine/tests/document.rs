@@ -334,8 +334,8 @@ fn save_then_open_restores_every_state_texture() {
     assert_eq!(opened.canvas.spec, s.canvas.spec);
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
-            opened.canvas.read_bytes(&gpu, t),
-            s.canvas.read_bytes(&gpu, t),
+            opened.canvas.read_bytes(&gpu, t).unwrap(),
+            s.canvas.read_bytes(&gpu, t).unwrap(),
             "{t:?}"
         );
     }
@@ -357,8 +357,8 @@ fn a_dried_stroke_survives_save_and_open_bit_for_bit() {
     let opened = document::open(&gpu, &path).unwrap();
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
-            opened.canvas.read_bytes(&gpu, t),
-            s.canvas.read_bytes(&gpu, t),
+            opened.canvas.read_bytes(&gpu, t).unwrap(),
+            s.canvas.read_bytes(&gpu, t).unwrap(),
             "{t:?}"
         );
     }
@@ -380,7 +380,7 @@ fn a_format_1_painting_opens_with_the_dry_height_it_stored() {
         serde_json::to_vec(&manifest).unwrap(),
     )];
     for (name, which) in FORMAT_1_STATE_ENTRIES {
-        let raw = s.canvas.read_bytes(&gpu, which);
+        let raw = s.canvas.read_bytes(&gpu, which).unwrap();
         entries.push((
             name.to_string(),
             zstd::encode_all(raw.as_slice(), 3).unwrap(),
@@ -389,8 +389,8 @@ fn a_format_1_painting_opens_with_the_dry_height_it_stored() {
     let opened = read_entries(Entries(entries)).unwrap().into_session(&gpu);
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
-            opened.canvas.read_bytes(&gpu, t),
-            s.canvas.read_bytes(&gpu, t),
+            opened.canvas.read_bytes(&gpu, t).unwrap(),
+            s.canvas.read_bytes(&gpu, t).unwrap(),
             "{t:?}"
         );
     }
@@ -420,8 +420,11 @@ fn a_large_painting_with_one_stroke_saves_without_its_weave() {
     assert!(size <= MAX_ONE_STROKE_PAINTING_BYTES, "{size}");
     let opened = document::open(&gpu, &path).unwrap();
     assert_eq!(
-        opened.canvas.read_bytes(&gpu, StateTexture::DryHeight),
-        s.canvas.read_bytes(&gpu, StateTexture::DryHeight)
+        opened
+            .canvas
+            .read_bytes(&gpu, StateTexture::DryHeight)
+            .unwrap(),
+        s.canvas.read_bytes(&gpu, StateTexture::DryHeight).unwrap()
     );
 }
 
@@ -433,7 +436,7 @@ fn saving_right_after_a_stroke_ends_keeps_the_stroke() {
     let path = dir.file("t.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
     let opened = document::open(&gpu, &path).unwrap();
-    let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol);
+    let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     assert!(volume.iter().any(|&v| v > 0.0));
     assert!(s.history.can_undo());
 }
@@ -452,7 +455,7 @@ fn opened_document_marks_every_tile_dirty_and_only_painted_tiles_wet() {
     let wet = opened.canvas.wet_tiles.tiles();
     assert!(!wet.is_empty());
     assert!(wet.len() < full.tiles().len());
-    let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol);
+    let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     for (index, &v) in volume.iter().enumerate() {
         if v > 0.0 {
             let tile = TileCoord {
@@ -477,8 +480,11 @@ fn a_snapshot_read_off_the_main_thread_becomes_a_session() {
         .unwrap();
     let opened = snapshot.into_session(&gpu);
     assert_eq!(
-        opened.canvas.read_bytes(&gpu, StateTexture::WetVol),
-        s.canvas.read_bytes(&gpu, StateTexture::WetVol)
+        opened
+            .canvas
+            .read_bytes(&gpu, StateTexture::WetVol)
+            .unwrap(),
+        s.canvas.read_bytes(&gpu, StateTexture::WetVol).unwrap()
     );
 }
 
@@ -491,7 +497,7 @@ fn drying_an_opened_document_clears_its_wet_layer() {
     document::save(&gpu, &mut s, &path).unwrap();
     let mut opened = document::open(&gpu, &path).unwrap();
     opened.dry(&gpu);
-    let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol);
+    let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     assert!(volume.iter().all(|&v| v == 0.0));
 }
 
@@ -568,7 +574,7 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
     s.canvas.dirty.mark_all();
     s.encode_frame(&gpu, &mut e);
     gpu.queue.submit([e.finish()]);
-    let height_display = s.canvas.read_bytes(&gpu, StateTexture::Display);
+    let height_display = s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap();
     let dir = TempDir::new("export-mode");
     let path = dir.file("export-mode.png");
     document::export_png(&gpu, &mut s, &path).unwrap();
@@ -577,7 +583,7 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
     s.encode_frame(&gpu, &mut e);
     gpu.queue.submit([e.finish()]);
     assert_eq!(
-        s.canvas.read_bytes(&gpu, StateTexture::Display),
+        s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap(),
         height_display
     );
 }

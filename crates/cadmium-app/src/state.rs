@@ -7,7 +7,7 @@ use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
 use cadmium_engine::canvas::{CanvasSpec, PaintTotals};
 use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
 use cadmium_engine::engine::{PaintEngine, TIP_MARGIN, TIP_SIZE};
-use cadmium_engine::gpu::GpuContext;
+use cadmium_engine::gpu::{GpuContext, GpuLost};
 use cadmium_engine::params::{ParamGroup, SimParams};
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
@@ -300,11 +300,11 @@ impl AppState {
         self.adopt_session(session, Some(path));
     }
 
-    pub fn capture_document(&mut self) -> DocumentSnapshot {
+    pub fn capture_document(&mut self) -> Result<DocumentSnapshot, GpuLost> {
         DocumentSnapshot::capture(&self.gpu, &mut self.session)
     }
 
-    pub fn render_export(&mut self) -> ExportedImage {
+    pub fn render_export(&mut self) -> Result<ExportedImage, GpuLost> {
         ExportedImage::render(&self.gpu, &mut self.session)
     }
 
@@ -392,7 +392,13 @@ impl AppState {
         self.session.clean_brush(&self.gpu);
         let mixture = self.palette_mixture();
         if !mixture_is_empty(&mixture) {
-            self.session.dip(&self.gpu, &mixture, FULL_DIP);
+            self.dip(&mixture, FULL_DIP);
+        }
+    }
+
+    fn dip(&mut self, mixture: &Mixture, amount: f32) {
+        if self.session.dip(&self.gpu, mixture, amount).is_err() {
+            self.wake();
         }
     }
 
@@ -407,10 +413,13 @@ impl AppState {
         }
         self.session.flush(&self.gpu);
         self.session.resize_tip();
-        let volume = self.session.engine.knife_totals(&self.gpu).volume as f32;
+        let Ok(totals) = self.session.engine.knife_totals(&self.gpu) else {
+            self.wake();
+            return;
+        };
         let target = self.session.engine.knife_full_dip_volume(mixture.volume_um);
-        if let Some(amount) = knife_top_up(volume, target) {
-            self.session.dip(&self.gpu, &mixture, amount);
+        if let Some(amount) = knife_top_up(totals.volume as f32, target) {
+            self.dip(&mixture, amount);
         }
     }
 
@@ -435,13 +444,13 @@ impl AppState {
             PigmentDip::CleanAndLoad => self.clean_and_load(),
             PigmentDip::DipAgain => {
                 let mixture = self.palette_mixture();
-                self.session.dip(&self.gpu, &mixture, FULL_DIP);
+                self.dip(&mixture, FULL_DIP);
             }
             PigmentDip::AddOnTop(slot) => {
                 let mut single = self.session.brush.clone();
                 single.recipe = vec![(slot, 1.0)];
                 let mixture = single.reservoir_mixture(self.slot_count());
-                self.session.dip(&self.gpu, &mixture, PARTIAL_DIP);
+                self.dip(&mixture, PARTIAL_DIP);
             }
         }
         self.measure_brush();
@@ -470,7 +479,8 @@ impl AppState {
 
     pub fn pick_colour(&mut self, x: f32, y: f32) -> bool {
         self.put_down_stroke_tool();
-        let Some(picked) = self.session.pick_colour(&self.gpu, x, y) else {
+        let Ok(Some(picked)) = self.session.pick_colour(&self.gpu, x, y) else {
+            self.wake();
             return false;
         };
         self.session.brush.recipe = recipe_from_fractions(&picked.fractions);
@@ -617,11 +627,23 @@ impl AppState {
     }
 
     fn measure_brush(&mut self) {
-        self.tip_mixture = self.session.tip_mean_mixture(&self.gpu);
-        self.reserve_volume = self.session.engine.reserve_totals(&self.gpu).volume as f32;
-        let knife = self.session.engine.knife_totals(&self.gpu);
+        let measured = self.session.tip_mean_mixture(&self.gpu).and_then(|tip| {
+            let reserve = self.session.engine.reserve_totals(&self.gpu)?;
+            let knife = self.session.engine.knife_totals(&self.gpu)?;
+            Ok((tip, reserve, knife))
+        });
+        let Ok((tip, reserve, knife)) = measured else {
+            self.wake();
+            return;
+        };
+        self.tip_mixture = tip;
+        self.reserve_volume = reserve.volume as f32;
         self.knife_mixture = mean_mixture(&knife);
         self.knife_volume = knife.volume as f32;
+    }
+
+    pub fn gpu_is_lost(&self) -> bool {
+        self.gpu.is_lost()
     }
 
     fn note_samples(&mut self, samples: &[StrokeSample]) {
@@ -692,6 +714,7 @@ mod tests {
             .session
             .canvas
             .read_f32(&state.gpu, StateTexture::WetVol)
+            .unwrap()
             .iter()
             .sum()
     }
@@ -752,7 +775,7 @@ mod tests {
         let mut saved = painting_state();
         saved.session.canvas.spec.pigment_slots.reverse();
         let reversed_palette = saved.session.canvas.spec.pigment_slots.clone();
-        let snapshot = saved.capture_document();
+        let snapshot = saved.capture_document().unwrap();
         let path = PathBuf::from("opened.cadmium");
         current.open_painting(snapshot, path.clone());
 
@@ -778,11 +801,16 @@ mod tests {
     const DIRT_DIP: f32 = 0.1;
 
     fn brush_totals(state: &AppState) -> PaintTotals {
-        state.session.engine.brush_totals(&state.gpu)
+        state.session.engine.brush_totals(&state.gpu).unwrap()
     }
 
     fn reserve_volume(state: &AppState) -> f64 {
-        state.session.engine.reserve_totals(&state.gpu).volume
+        state
+            .session
+            .engine
+            .reserve_totals(&state.gpu)
+            .unwrap()
+            .volume
     }
 
     fn single_pigment(state: &AppState, slot: usize) -> Mixture {
@@ -855,7 +883,10 @@ mod tests {
         stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
         assert!(reserve_volume(&state) < full);
         let white = single_pigment(&state, WHITE_SLOT);
-        state.session.dip(&state.gpu.clone(), &white, DIRT_DIP);
+        state
+            .session
+            .dip(&state.gpu.clone(), &white, DIRT_DIP)
+            .unwrap();
         let samples = row_samples(RAG_ROW_Y);
         state.begin_stroke(Tool::Brush, samples[0]);
         assert!((reserve_volume(&state) - full).abs() <= full * RESERVE_TOLERANCE);
@@ -878,7 +909,10 @@ mod tests {
         let mut state = painting_state();
         state.clean_each_stroke = true;
         let white = single_pigment(&state, WHITE_SLOT);
-        state.session.dip(&state.gpu.clone(), &white, PARTIAL_DIP);
+        state
+            .session
+            .dip(&state.gpu.clone(), &white, PARTIAL_DIP)
+            .unwrap();
         assert!(brush_totals(&state).pigment[WHITE_SLOT] > 0.0);
         let samples = row_samples(PAINT_ROW_Y);
         state.begin_stroke(Tool::Brush, samples[0]);
@@ -1062,7 +1096,7 @@ mod tests {
     const KNIFE_LEVEL_TOLERANCE: f32 = 0.01;
 
     fn knife_totals(state: &AppState) -> PaintTotals {
-        state.session.engine.knife_totals(&state.gpu)
+        state.session.engine.knife_totals(&state.gpu).unwrap()
     }
 
     fn holding_the_knife() -> AppState {

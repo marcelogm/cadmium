@@ -20,7 +20,7 @@ fn new_canvas_has_no_wet_paint() {
         &PigmentDb::builtin(),
         spec(Primer::WhiteGesso, Weave::Smooth),
     );
-    assert_eq!(c.wet_totals(&gpu), PaintTotals::default());
+    assert_eq!(c.wet_totals(&gpu).unwrap(), PaintTotals::default());
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn white_gesso_primer_reflects_like_titanium_white() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
     let c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth));
-    let refl = c.read_f32(&gpu, StateTexture::DryRefl0);
+    let refl = c.read_f32(&gpu, StateTexture::DryRefl0).unwrap();
     let w = db.get("titanium_white").unwrap();
     let expected = cadmium_engine::spectral::km_infinite(w.absorption[0], w.scattering[0]);
     assert!((refl[0] - expected).abs() < 2e-3);
@@ -39,10 +39,12 @@ fn smooth_weave_is_flat_and_linen_is_not() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
     let flat = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth))
-        .read_f32(&gpu, StateTexture::DryHeight);
+        .read_f32(&gpu, StateTexture::DryHeight)
+        .unwrap();
     assert!(flat.iter().all(|h| *h == 0.0));
     let linen = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Linen))
-        .read_f32(&gpu, StateTexture::DryHeight);
+        .read_f32(&gpu, StateTexture::DryHeight)
+        .unwrap();
     let max = linen.iter().cloned().fold(0.0, f32::max);
     assert!(max > 3.0 && max <= 12.0);
 }
@@ -57,7 +59,7 @@ fn write_then_read_roundtrips_half_floats() {
     );
     let data: Vec<f32> = (0..256 * 128 * 4).map(|i| (i % 7) as f32 * 0.125).collect();
     c.write_f32(&gpu, StateTexture::WetPig0, &data);
-    assert_eq!(c.read_f32(&gpu, StateTexture::WetPig0), data);
+    assert_eq!(c.read_f32(&gpu, StateTexture::WetPig0).unwrap(), data);
 }
 
 #[test]
@@ -84,7 +86,8 @@ fn cotton_weave_stays_within_its_amplitude() {
         &PigmentDb::builtin(),
         spec(Primer::WhiteGesso, Weave::Cotton),
     )
-    .read_f32(&gpu, StateTexture::DryHeight);
+    .read_f32(&gpu, StateTexture::DryHeight)
+    .unwrap();
     assert!(cotton.iter().all(|h| (0.0..=6.0).contains(h)));
     assert!(cotton.iter().cloned().fold(0.0, f32::max) > 1.5);
 }
@@ -95,9 +98,9 @@ fn sienna_imprimatura_is_warm_and_darker_than_gesso() {
     let db = PigmentDb::builtin();
     let gesso = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth));
     let sienna = Canvas::new(&gpu, &db, spec(Primer::SiennaImprimatura, Weave::Smooth));
-    let blue_band = sienna.read_f32(&gpu, StateTexture::DryRefl0)[0];
-    let red_band = sienna.read_f32(&gpu, StateTexture::DryRefl1)[3];
-    let gesso_blue_band = gesso.read_f32(&gpu, StateTexture::DryRefl0)[0];
+    let blue_band = sienna.read_f32(&gpu, StateTexture::DryRefl0).unwrap()[0];
+    let red_band = sienna.read_f32(&gpu, StateTexture::DryRefl1).unwrap()[3];
+    let gesso_blue_band = gesso.read_f32(&gpu, StateTexture::DryRefl0).unwrap()[0];
     assert!(red_band > blue_band);
     assert!(blue_band < gesso_blue_band);
 }
@@ -131,7 +134,7 @@ fn new_canvas_clears_wet_dry_top_and_display_textures() {
         StateTexture::Display,
     ] {
         assert!(
-            c.read_f32(&gpu, which).iter().all(|v| *v == 0.0),
+            c.read_f32(&gpu, which).unwrap().iter().all(|v| *v == 0.0),
             "{which:?}"
         );
     }
@@ -146,8 +149,11 @@ fn raw_bytes_roundtrip_with_unpadded_rows() {
     let c = Canvas::new(&gpu, &PigmentDb::builtin(), odd);
     let bytes: Vec<u8> = (0..37 * 5 * 4).map(|i| (i % 251) as u8).collect();
     c.write_bytes(&gpu, StateTexture::DryHeight, &bytes);
-    assert_eq!(c.read_bytes(&gpu, StateTexture::DryHeight), bytes);
-    assert_eq!(c.read_bytes(&gpu, StateTexture::DryRefl0).len(), 37 * 5 * 8);
+    assert_eq!(c.read_bytes(&gpu, StateTexture::DryHeight).unwrap(), bytes);
+    assert_eq!(
+        c.read_bytes(&gpu, StateTexture::DryRefl0).unwrap().len(),
+        37 * 5 * 8
+    );
 }
 
 #[test]
@@ -168,7 +174,7 @@ fn wet_totals_weigh_concentrations_by_volume() {
         StateTexture::WetPig1,
         &[0.0, 0.0, 0.0, 0.125, 0.0, 0.0, 0.0, 0.5],
     );
-    let totals = c.wet_totals(&gpu);
+    let totals = c.wet_totals(&gpu).unwrap();
     assert_eq!(totals.volume, 40.0);
     assert_eq!(totals.pigment, [12.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, 16.25]);
 }
