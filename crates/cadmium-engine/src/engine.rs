@@ -739,6 +739,13 @@ impl BladePipelines {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BrushReadout {
+    pub tip_mean: Mixture,
+    pub reserve: PaintTotals,
+    pub knife: PaintTotals,
+}
+
 pub struct WetOilEngine {
     params: SimParams,
     tip_radius: f32,
@@ -1109,12 +1116,53 @@ impl WetOilEngine {
     }
 
     pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
-        let group = self.dip_bind_group(gpu, &DipRecord::measuring(self.tip_radius));
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("brush_sum_tip"),
             });
+        self.encode_sum_tip(gpu, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        Ok(tip_mean_from_sums(&read_buffer(gpu, &self.tip_sums)?))
+    }
+
+    pub fn reserve_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
+        Ok(reserve_from_body(&read_buffer(gpu, &self.body)?))
+    }
+
+    pub fn read_brush(&self, gpu: &GpuContext) -> Result<BrushReadout, GpuLost> {
+        let sources = [&self.tip_sums, &self.body, &self.blade_load];
+        let staging = staging_buffer(
+            gpu,
+            "brush_readout",
+            sources.iter().map(|source| source.size()).sum(),
+        );
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("brush_readout"),
+            });
+        self.encode_sum_tip(gpu, &mut encoder);
+        let mut offset = 0;
+        for source in sources {
+            encoder.copy_buffer_to_buffer(source, 0, &staging, offset, source.size());
+            offset += source.size();
+        }
+        gpu.queue.submit([encoder.finish()]);
+        read_mapped(gpu, &staging, |bytes| {
+            let values: &[f32] = bytemuck::cast_slice(bytes);
+            let (sums, rest) = values.split_at(TIP_SUM_CHANNELS);
+            let (body, load) = rest.split_at(BODY_BYTES as usize / std::mem::size_of::<f32>());
+            BrushReadout {
+                tip_mean: tip_mean_from_sums(sums),
+                reserve: reserve_from_body(body),
+                knife: knife_from_load(load),
+            }
+        })
+    }
+
+    fn encode_sum_tip(&self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
+        let group = self.dip_bind_group(gpu, &DipRecord::measuring(self.tip_radius));
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("brush_sum_tip"),
             timestamp_writes: None,
@@ -1122,27 +1170,6 @@ impl WetOilEngine {
         pass.set_bind_group(0, &group, &[]);
         pass.set_pipeline(&self.sum_tip_pipeline);
         pass.dispatch_workgroups(1, 1, 1);
-        drop(pass);
-        gpu.queue.submit([encoder.finish()]);
-        let sums = read_buffer(gpu, &self.tip_sums)?;
-        let volume = sums[VOLUME_CHANNEL];
-        let texels = sums[TIP_TEXEL_COUNT_SUM];
-        if volume < MIN_TIP_MEAN_VOLUME_UM || texels <= 0.0 {
-            return Ok(Mixture {
-                volume_um: 0.0,
-                fractions: [0.0; PIGMENT_CHANNELS],
-            });
-        }
-        Ok(Mixture {
-            volume_um: volume / texels,
-            fractions: std::array::from_fn(|slot| sums[slot] / volume),
-        })
-    }
-
-    pub fn reserve_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
-        let mut totals = PaintTotals::default();
-        accumulate(&mut totals, &read_buffer(gpu, &self.body)?[..TIP_CHANNELS]);
-        Ok(totals)
     }
 
     fn reserve_volume(&self, thickness_um: f32) -> f32 {
@@ -1261,14 +1288,7 @@ impl WetOilEngine {
     }
 
     pub fn knife_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
-        let mut totals = PaintTotals::default();
-        for cell in read_buffer(gpu, &self.blade_load)?
-            .as_chunks::<TIP_CHANNELS>()
-            .0
-        {
-            accumulate(&mut totals, cell);
-        }
-        Ok(totals)
+        Ok(knife_from_load(&read_buffer(gpu, &self.blade_load)?))
     }
 
     fn blade_bind_group(
@@ -1605,6 +1625,35 @@ fn disk_texels(radius: f32) -> u32 {
                 .count() as u32
         })
         .sum()
+}
+
+fn tip_mean_from_sums(sums: &[f32]) -> Mixture {
+    let volume = sums[VOLUME_CHANNEL];
+    let texels = sums[TIP_TEXEL_COUNT_SUM];
+    if volume < MIN_TIP_MEAN_VOLUME_UM || texels <= 0.0 {
+        return Mixture {
+            volume_um: 0.0,
+            fractions: [0.0; PIGMENT_CHANNELS],
+        };
+    }
+    Mixture {
+        volume_um: volume / texels,
+        fractions: std::array::from_fn(|slot| sums[slot] / volume),
+    }
+}
+
+fn reserve_from_body(body: &[f32]) -> PaintTotals {
+    let mut totals = PaintTotals::default();
+    accumulate(&mut totals, &body[..TIP_CHANNELS]);
+    totals
+}
+
+fn knife_from_load(load: &[f32]) -> PaintTotals {
+    let mut totals = PaintTotals::default();
+    for cell in load.as_chunks::<TIP_CHANNELS>().0 {
+        accumulate(&mut totals, cell);
+    }
+    totals
 }
 
 fn accumulate(totals: &mut PaintTotals, amounts: &[f32]) {

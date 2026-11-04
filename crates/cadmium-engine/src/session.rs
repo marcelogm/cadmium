@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasSpec, TileCoord, tiles_in_rect};
-use crate::engine::{PaintEngine, WetOilEngine};
+use crate::engine::{BrushReadout, PaintEngine, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::history::History;
 use crate::pigments::{Mixture, PigmentDb};
@@ -173,6 +173,11 @@ impl PaintSession {
     pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         self.flush(gpu);
         self.engine.tip_mean_mixture(gpu)
+    }
+
+    pub fn read_brush(&mut self, gpu: &GpuContext) -> Result<BrushReadout, GpuLost> {
+        self.flush(gpu);
+        self.engine.read_brush(gpu)
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {

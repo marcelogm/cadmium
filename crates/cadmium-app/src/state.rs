@@ -627,19 +627,14 @@ impl AppState {
     }
 
     fn measure_brush(&mut self) {
-        let measured = self.session.tip_mean_mixture(&self.gpu).and_then(|tip| {
-            let reserve = self.session.engine.reserve_totals(&self.gpu)?;
-            let knife = self.session.engine.knife_totals(&self.gpu)?;
-            Ok((tip, reserve, knife))
-        });
-        let Ok((tip, reserve, knife)) = measured else {
+        let Ok(readout) = self.session.read_brush(&self.gpu) else {
             self.wake();
             return;
         };
-        self.tip_mixture = tip;
-        self.reserve_volume = reserve.volume as f32;
-        self.knife_mixture = mean_mixture(&knife);
-        self.knife_volume = knife.volume as f32;
+        self.tip_mixture = readout.tip_mean;
+        self.reserve_volume = readout.reserve.volume as f32;
+        self.knife_mixture = mean_mixture(&readout.knife);
+        self.knife_volume = readout.knife.volume as f32;
     }
 
     pub fn gpu_is_lost(&self) -> bool {

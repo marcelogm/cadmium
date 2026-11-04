@@ -364,3 +364,15 @@ fn dipping_conserves_everything_already_on_canvas_and_brush_plus_the_dip() {
     stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
     assert_close(total(&s), before + dipped);
 }
+
+#[test]
+fn one_brush_readout_matches_reading_tip_reserve_and_knife_apart() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let readout = without_wgpu_errors(&gpu, || s.read_brush(&gpu).unwrap());
+    assert_eq!(readout.tip_mean, s.tip_mean_mixture(&gpu).unwrap());
+    assert_eq!(readout.reserve, s.engine.reserve_totals(&gpu).unwrap());
+    assert_eq!(readout.knife, s.engine.knife_totals(&gpu).unwrap());
+    assert!(readout.reserve.volume > 0.0);
+}

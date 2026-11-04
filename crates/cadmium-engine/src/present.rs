@@ -147,7 +147,7 @@ pub fn encode_rgba8_copy(
         texture.as_image_copy(),
         wgpu::TexelCopyBufferInfo {
             buffer: staging,
-            layout: rgba8_rows(texture).layout(0),
+            layout: rgba8_rows(texture).layout(),
         },
         texture.size(),
     );

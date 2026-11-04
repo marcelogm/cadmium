@@ -341,6 +341,34 @@ fn save_then_open_restores_every_state_texture() {
     }
 }
 
+#[test]
+fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
+    const UNALIGNED_WIDTH: u32 = 100;
+    const UNALIGNED_HEIGHT: u32 = 60;
+    let gpu = GpuContext::new().unwrap();
+    let spec = CanvasSpec {
+        width: UNALIGNED_WIDTH,
+        height: UNALIGNED_HEIGHT,
+        ..painted_spec()
+    };
+    let mut s = PaintSession::new(&gpu, spec);
+    s.begin_stroke(&gpu, sample(10.0, 30.0, 0));
+    s.add_samples(&[sample(90.0, 32.0, 200)]);
+    s.end_stroke(&gpu);
+    let dir = TempDir::new("unaligned");
+    let path = dir.file("t.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let opened = document::open(&gpu, &path).unwrap();
+    assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
+    for t in StateTexture::PAINT_STATE {
+        assert_eq!(
+            opened.canvas.read_bytes(&gpu, t).unwrap(),
+            s.canvas.read_bytes(&gpu, t).unwrap(),
+            "{t:?}"
+        );
+    }
+}
+
 fn dried_session(gpu: &GpuContext) -> PaintSession {
     let mut s = painted_session(gpu);
     s.dry(gpu);

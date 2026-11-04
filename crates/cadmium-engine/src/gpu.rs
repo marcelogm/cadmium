@@ -145,20 +145,56 @@ pub fn read_mapped<T>(
     staging: &wgpu::Buffer,
     read: impl FnOnce(&[u8]) -> T,
 ) -> Result<T, GpuLost> {
+    map_and_wait(gpu, &[staging])?;
+    read_view(gpu, staging, read)
+}
+
+pub fn read_all_mapped<T>(
+    gpu: &GpuContext,
+    stagings: &[&wgpu::Buffer],
+    mut read: impl FnMut(usize, &[u8]) -> T,
+) -> Result<Vec<T>, GpuLost> {
+    map_and_wait(gpu, stagings)?;
+    stagings
+        .iter()
+        .enumerate()
+        .map(|(index, staging)| read_view(gpu, staging, |bytes| read(index, bytes)))
+        .collect()
+}
+
+fn map_and_wait(gpu: &GpuContext, stagings: &[&wgpu::Buffer]) -> Result<(), GpuLost> {
     if gpu.is_lost() {
         return Err(GpuLost);
     }
-    let slice = staging.slice(..);
-    let (sender, receiver) = mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
+    let receivers: Vec<_> = stagings
+        .iter()
+        .map(|staging| {
+            let (sender, receiver) = mpsc::channel();
+            staging
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    let _ = sender.send(result);
+                });
+            receiver
+        })
+        .collect();
     let waited = gpu.device.poll(wgpu::PollType::wait_indefinitely()).is_ok();
-    let mapped = waited && matches!(receiver.try_recv(), Ok(Ok(())));
+    let mapped = waited
+        && receivers
+            .iter()
+            .all(|receiver| matches!(receiver.try_recv(), Ok(Ok(()))));
     if !mapped || gpu.is_lost() {
         return Err(gpu.mark_lost());
     }
-    let value = match slice.get_mapped_range() {
+    Ok(())
+}
+
+fn read_view<T>(
+    gpu: &GpuContext,
+    staging: &wgpu::Buffer,
+    read: impl FnOnce(&[u8]) -> T,
+) -> Result<T, GpuLost> {
+    let value = match staging.slice(..).get_mapped_range() {
         Ok(view) => Ok(read(&view)),
         Err(_) => Err(gpu.mark_lost()),
     };
@@ -182,6 +218,18 @@ impl TexelRows {
         }
     }
 
+    pub fn unpadded(row_bytes: u32, rows: u32) -> TexelRows {
+        TexelRows {
+            row_bytes,
+            padded_row_bytes: row_bytes,
+            rows,
+        }
+    }
+
+    pub fn is_padded(&self) -> bool {
+        self.padded_row_bytes != self.row_bytes
+    }
+
     pub fn padded_size(&self) -> u64 {
         u64::from(self.padded_row_bytes) * u64::from(self.rows)
     }
@@ -190,9 +238,9 @@ impl TexelRows {
         self.row_bytes as usize * self.rows as usize
     }
 
-    pub fn layout(&self, offset: u64) -> wgpu::TexelCopyBufferLayout {
+    pub fn layout(&self) -> wgpu::TexelCopyBufferLayout {
         wgpu::TexelCopyBufferLayout {
-            offset,
+            offset: 0,
             bytes_per_row: Some(self.padded_row_bytes),
             rows_per_image: Some(self.rows),
         }

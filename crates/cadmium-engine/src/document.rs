@@ -5,7 +5,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE, weave_heights};
-use crate::gpu::{GpuContext, GpuLost};
+use crate::gpu::{GpuContext, GpuLost, TexelRows, read_all_mapped, staging_buffer};
 use crate::pigments::PigmentDb;
 use crate::present::{ViewTransform, readback_rgba8};
 use crate::render::ViewMode;
@@ -105,9 +105,25 @@ struct FormatProbe {
     format: u32,
 }
 
+struct StateBytes {
+    which: StateTexture,
+    rows: TexelRows,
+    bytes: Vec<u8>,
+}
+
+impl StateBytes {
+    fn texels(&self) -> Cow<'_, [u8]> {
+        if self.rows.is_padded() {
+            Cow::Owned(self.rows.unpad(&self.bytes))
+        } else {
+            Cow::Borrowed(&self.bytes)
+        }
+    }
+}
+
 pub struct DocumentSnapshot {
     spec: CanvasSpec,
-    states: Vec<(StateTexture, Vec<u8>)>,
+    states: Vec<StateBytes>,
 }
 
 impl DocumentSnapshot {
@@ -116,12 +132,38 @@ impl DocumentSnapshot {
         session: &mut PaintSession,
     ) -> Result<DocumentSnapshot, GpuLost> {
         session.flush(gpu);
+        let canvas = &session.canvas;
+        let stagings: Vec<wgpu::Buffer> = StateTexture::PAINT_STATE
+            .iter()
+            .map(|which| {
+                staging_buffer(
+                    gpu,
+                    "document_capture",
+                    canvas.texel_rows(*which).padded_size(),
+                )
+            })
+            .collect();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("document_capture"),
+            });
+        for (which, staging) in StateTexture::PAINT_STATE.iter().zip(&stagings) {
+            canvas.encode_copy_out(*which, staging, &mut encoder);
+        }
+        gpu.queue.submit([encoder.finish()]);
+        let stagings: Vec<&wgpu::Buffer> = stagings.iter().collect();
+        let states = read_all_mapped(gpu, &stagings, |index, padded| {
+            let which = StateTexture::PAINT_STATE[index];
+            StateBytes {
+                which,
+                rows: canvas.texel_rows(which),
+                bytes: padded.to_vec(),
+            }
+        })?;
         Ok(DocumentSnapshot {
-            spec: session.canvas.spec.clone(),
-            states: StateTexture::PAINT_STATE
-                .iter()
-                .map(|which| Ok((*which, session.canvas.read_bytes(gpu, *which)?)))
-                .collect::<Result<_, GpuLost>>()?,
+            spec: canvas.spec.clone(),
+            states,
         })
     }
 
@@ -130,14 +172,21 @@ impl DocumentSnapshot {
         let (format, spec) = read_manifest(&mut archive)?;
         let states = StateTexture::PAINT_STATE
             .iter()
-            .map(|which| Ok((*which, read_state(&mut archive, format, &spec, *which)?)))
+            .map(|which| {
+                Ok(StateBytes {
+                    which: *which,
+                    rows: TexelRows::unpadded(spec.width * which.bytes_per_texel(), spec.height),
+                    bytes: read_state(&mut archive, format, &spec, *which)?,
+                })
+            })
             .collect::<Result<_, DocumentError>>()?;
         Ok(DocumentSnapshot { spec, states })
     }
 
     pub fn into_session(self, gpu: &GpuContext) -> PaintSession {
         let mut session = PaintSession::new(gpu, self.spec);
-        for (which, raw) in self.states {
+        for state in self.states {
+            let (which, raw) = (state.which, state.texels());
             session.canvas.write_bytes(gpu, which, &raw);
             gpu.queue.submit([]);
             let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
@@ -165,14 +214,15 @@ impl DocumentSnapshot {
                 .compression_method(zip::CompressionMethod::Stored);
             archive.start_file(MANIFEST_ENTRY, options)?;
             archive.write_all(&manifest)?;
-            for (which, raw) in &self.states {
-                let stored = if *which == StateTexture::DryHeight {
-                    Cow::Owned(dry_relief(&self.spec, raw))
+            for state in &self.states {
+                let raw = state.texels();
+                let stored = if state.which == StateTexture::DryHeight {
+                    Cow::Owned(dry_relief(&self.spec, &raw))
                 } else {
-                    Cow::Borrowed(raw.as_slice())
+                    raw
                 };
                 let compressed = zstd::encode_all(stored.as_ref(), ZSTD_LEVEL)?;
-                archive.start_file(state_entry(*which, FORMAT_VERSION), options)?;
+                archive.start_file(state_entry(state.which, FORMAT_VERSION), options)?;
                 archive.write_all(&compressed)?;
             }
             archive.finish()?;

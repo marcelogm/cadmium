@@ -472,14 +472,13 @@ impl Canvas {
         &self,
         which: StateTexture,
         staging: &wgpu::Buffer,
-        offset: u64,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         encoder.copy_texture_to_buffer(
             self.texture(which).as_image_copy(),
             wgpu::TexelCopyBufferInfo {
                 buffer: staging,
-                layout: self.texel_rows(which).layout(offset),
+                layout: self.texel_rows(which).layout(),
             },
             self.extent(),
         );
@@ -493,7 +492,7 @@ impl Canvas {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("canvas_readback"),
             });
-        self.encode_copy_out(which, &staging, 0, &mut encoder);
+        self.encode_copy_out(which, &staging, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         read_mapped(gpu, &staging, |padded| rows.unpad(padded))
     }
