@@ -190,12 +190,10 @@
               </object>
             </child>
             <property name="content">
-              <object class="GtkPaned" id="sidebar_paned">
-                <property name="orientation">vertical</property>
-                <property name="shrink-start-child">False</property>
-                <property name="shrink-end-child">False</property>
-                <property name="resize-end-child">False</property>
-                <property name="start-child">
+              <object class="AdwBottomSheet" id="tray_sheet">
+                <property name="open">False</property>
+                <property name="modal">False</property>
+                <property name="content">
                   <object class="AdwViewStack" id="sidebar_stack">
                     <child>
                       <object class="AdwViewStackPage">
@@ -233,24 +231,33 @@
                     </child>
                   </object>
                 </property>
-                <property name="end-child">
-                  <object class="GtkBox" id="tray_box">
-                    <property name="orientation">vertical</property>
-                    <child>
-                      <object class="GtkCenterBox">
-                        <property name="margin-start">12</property>
-                        <property name="margin-end">6</property>
-                        <property name="margin-top">6</property>
-                        <property name="margin-bottom">6</property>
-                        <property name="start-widget">
+                <property name="bottom-bar">
+                  <object class="GtkLabel">
+                    <property name="label">Bandeja</property>
+                    <property name="margin-top">12</property>
+                    <property name="margin-bottom">12</property>
+                    <style>
+                      <class name="heading"/>
+                    </style>
+                  </object>
+                </property>
+                <property name="sheet">
+                  <object class="AdwToolbarView">
+                    <child type="top">
+                      <object class="AdwHeaderBar">
+                        <property name="show-title">False</property>
+                        <property name="show-start-title-buttons">False</property>
+                        <property name="show-end-title-buttons">False</property>
+                        <child type="start">
                           <object class="GtkLabel">
                             <property name="label">Bandeja</property>
+                            <property name="margin-start">6</property>
                             <style>
                               <class name="heading"/>
                             </style>
                           </object>
-                        </property>
-                        <property name="end-widget">
+                        </child>
+                        <child type="end">
                           <object class="GtkButton">
                             <property name="label">Limpar bandeja</property>
                             <property name="action-name">win.clear-tray</property>
@@ -258,14 +265,17 @@
                               <class name="flat"/>
                             </style>
                           </object>
-                        </property>
+                        </child>
                       </object>
                     </child>
-                    <child>
+                    <property name="content">
                       <object class="GtkBox" id="tray_slot">
-                        <property name="vexpand">True</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
                       </object>
-                    </child>
+                    </property>
                   </object>
                 </property>
               </object>

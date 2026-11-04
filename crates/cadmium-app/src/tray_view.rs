@@ -23,6 +23,9 @@ pub const RING_MIN_ALPHA: f32 = 0.35;
 pub const RING_ALPHA_RANGE: f32 = 0.6;
 pub const RING_FADE_SECONDS: f32 = 0.4;
 const TRAY_CURSOR: &str = "crosshair";
+const TRAY_FRAME_CLASS: &str = "card";
+const TRAY_CORNER_RADIUS: f32 = 12.0;
+const TRAY_MIN_WIDTH: i32 = 180;
 const TRAY_MIN_HEIGHT: i32 = 120;
 const CHANNEL_MAX: f32 = 255.0;
 
@@ -66,6 +69,10 @@ pub fn tray_point(
 
 pub fn is_on_tray((x, y): (f64, f64)) -> bool {
     (0.0..f64::from(TRAY_WIDTH)).contains(&x) && (0.0..f64::from(TRAY_HEIGHT)).contains(&y)
+}
+
+pub fn tray_height_for_width(width: i32) -> i32 {
+    (f64::from(width) * f64::from(TRAY_HEIGHT) / f64::from(TRAY_WIDTH)).ceil() as i32
 }
 
 pub fn tray_screen_zoom(viewport_px: (u32, u32), device_scale: f64) -> f32 {
@@ -116,15 +123,31 @@ mod imp {
                 .replace(FramePresenter::showing(PresentSource::Tray));
             let tray = self.obj();
             tray.set_hexpand(true);
-            tray.set_vexpand(true);
+            tray.add_css_class(TRAY_FRAME_CLASS);
             tray.set_overflow(gtk::Overflow::Hidden);
             tray.set_cursor_from_name(Some(TRAY_CURSOR));
-            tray.set_size_request(-1, TRAY_MIN_HEIGHT);
             tray.connect_scale_factor_notify(super::TrayView::follow_scale_change);
         }
     }
 
     impl WidgetImpl for TrayView {
+        fn request_mode(&self) -> gtk::SizeRequestMode {
+            gtk::SizeRequestMode::HeightForWidth
+        }
+
+        fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {
+            if orientation == gtk::Orientation::Horizontal {
+                return (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1);
+            }
+            let width = if for_size < 0 {
+                TRAY_MIN_WIDTH
+            } else {
+                for_size
+            };
+            let height = tray_height_for_width(width);
+            (TRAY_MIN_HEIGHT.min(height), height, -1, -1)
+        }
+
         fn realize(&self) {
             self.parent_realize();
             let tray = self.obj();
@@ -168,7 +191,7 @@ mod imp {
                     TRAY_WIDTH as f32 * to_widget,
                     TRAY_HEIGHT as f32 * to_widget,
                 );
-                snapshot.push_clip(&image);
+                snapshot.push_rounded_clip(&gsk::RoundedRect::from_rect(image, TRAY_CORNER_RADIUS));
                 snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Linear, &bounds);
                 snapshot.pop();
             }
@@ -575,6 +598,26 @@ mod tests {
         let viewport = (768, 512);
         assert_eq!(tray_point(viewport, 2.0, 0.0, 0.0), (0.0, 0.0));
         assert_eq!(tray_point(viewport, 2.0, 384.0, 256.0), (1536.0, 1024.0));
+    }
+
+    #[test]
+    fn the_tray_is_two_thirds_as_tall_as_it_is_wide() {
+        assert_eq!(tray_height_for_width(384), 256);
+        assert_eq!(tray_height_for_width(1536), 1024);
+    }
+
+    #[test]
+    fn the_tray_image_fills_the_width_its_height_was_measured_for() {
+        for width in [180, 316, 317, 331, 356] {
+            let viewport = (width as u32, tray_height_for_width(width) as u32);
+            let zoom = tray_view(viewport).zoom;
+            assert_eq!(zoom, width as f32 / TRAY_WIDTH as f32, "{width}");
+            assert!(TRAY_HEIGHT as f32 * zoom <= viewport.1 as f32, "{width}");
+            assert!(
+                viewport.1 as f32 - TRAY_HEIGHT as f32 * zoom < 1.0,
+                "{width}"
+            );
+        }
     }
 
     #[test]

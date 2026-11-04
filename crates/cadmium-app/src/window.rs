@@ -48,7 +48,7 @@ mod imp {
         #[template_child]
         pub sidebar_stack: TemplateChild<adw::ViewStack>,
         #[template_child]
-        pub sidebar_paned: TemplateChild<gtk::Paned>,
+        pub tray_sheet: TemplateChild<adw::BottomSheet>,
         #[template_child]
         pub tray_slot: TemplateChild<gtk::Box>,
         #[template_child]
@@ -93,7 +93,6 @@ mod imp {
             window.setup_tool_shortcuts();
             window.follow_tool_group();
             window.keep_window_buttons_reachable();
-            window.give_the_tray_its_first_height();
             self.tool_group
                 .set_active_name(Some(UiTool::default().name()));
         }
@@ -127,7 +126,6 @@ const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indispo
 const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
 const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
-const PANELS_SHARE_OF_SIDEBAR: f64 = 0.6;
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 8] = [
     (gdk::Key::h, UiTool::Move),
@@ -267,28 +265,6 @@ impl CadmiumWindow {
         }
     }
 
-    fn give_the_tray_its_first_height(&self) {
-        let first_height: Rc<RefCell<Option<glib::SignalHandlerId>>> = Rc::default();
-        let handler = self.imp().sidebar_paned.connect_notify_local(
-            Some("max-position"),
-            glib::clone!(
-                #[strong]
-                first_height,
-                move |paned, _| {
-                    let height = paned.height();
-                    if height <= 0 {
-                        return;
-                    }
-                    paned.set_position((f64::from(height) * PANELS_SHARE_OF_SIDEBAR) as i32);
-                    if let Some(handler) = first_height.borrow_mut().take() {
-                        paned.disconnect(handler);
-                    }
-                }
-            ),
-        );
-        first_height.replace(Some(handler));
-    }
-
     fn after_colour_pick(&self, found_paint: bool) {
         if found_paint {
             self.refresh_panels();
@@ -328,6 +304,12 @@ impl CadmiumWindow {
         } else {
             glib::g_warning!(LOG_DOMAIN, "no sidebar page named {name:?}");
         }
+    }
+
+    pub fn show_tray(&self) {
+        let imp = self.imp();
+        imp.split_view.set_show_sidebar(true);
+        imp.tray_sheet.set_open(true);
     }
 
     fn sync_history_actions(&self) {
