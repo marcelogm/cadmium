@@ -9,17 +9,20 @@ use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
+use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
 const HISTORY_CANVAS_COPIES: u64 = 4;
+const TRAY_HISTORY_COPIES: u64 = 1;
 const PLACEHOLDER_SIZE_PX: u32 = 1;
 const SAVE_MARGIN_PX: f32 = 4.0;
 
 pub struct PaintSession {
     pub canvas: Canvas,
+    pub tray: Canvas,
     pub engine: WetOilEngine,
     pub renderer: Renderer,
     pub presenter: Presenter,
@@ -37,9 +40,11 @@ impl PaintSession {
     pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
         let history_budget = history_budget(&spec);
+        let tray = Canvas::new(gpu, &db, tray_spec(&spec.pigment_slots))?;
         let canvas = Canvas::new(gpu, &db, spec)?;
         let mut session = PaintSession {
             canvas,
+            tray,
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
@@ -66,13 +71,10 @@ impl PaintSession {
         self.step_open = false;
         self.history.clear();
         let previous = self.canvas.spec.clone();
-        let placeholder = CanvasSpec {
-            width: PLACEHOLDER_SIZE_PX,
-            height: PLACEHOLDER_SIZE_PX,
-            ..previous.clone()
-        };
-        let placeholder = Canvas::new(gpu, &self.db, placeholder)?;
+        let placeholder = Canvas::new(gpu, &self.db, placeholder_spec(&previous))?;
+        let tray_placeholder = Canvas::new(gpu, &self.db, placeholder_spec(&self.tray.spec))?;
         drop(std::mem::replace(&mut self.canvas, placeholder));
+        drop(std::mem::replace(&mut self.tray, tray_placeholder));
         gpu.queue.submit([]);
         let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
         let replaced = match Canvas::new(gpu, &self.db, spec) {
@@ -87,11 +89,33 @@ impl PaintSession {
                 Err(error)
             }
         };
+        let tray_rebuilt = Canvas::new(gpu, &self.db, tray_spec(&self.canvas.spec.pigment_slots))
+            .map(|tray| self.tray = tray);
         self.history.refit(gpu, history_budget(&self.canvas.spec));
         self.view_mode = ViewMode::Color;
         self.engine.clean_brush(gpu);
         self.engine.clean_knife(gpu);
-        replaced
+        replaced.and(tray_rebuilt)
+    }
+
+    pub fn canvas_of(&self, surface: Surface) -> &Canvas {
+        match surface {
+            Surface::Painting => &self.canvas,
+            Surface::Tray => &self.tray,
+        }
+    }
+
+    pub fn canvas_of_mut(&mut self, surface: Surface) -> &mut Canvas {
+        match surface {
+            Surface::Painting => &mut self.canvas,
+            Surface::Tray => &mut self.tray,
+        }
+    }
+
+    pub fn add_slot(&mut self, gpu: &GpuContext, id: &str) -> Result<usize, String> {
+        let slot = self.canvas.add_slot(gpu, &self.db, id)?;
+        self.tray.add_slot(gpu, &self.db, id)?;
+        Ok(slot)
     }
 
     pub fn begin_stroke(&mut self, gpu: &GpuContext, sample: StrokeSample) {
@@ -312,10 +336,22 @@ impl PaintSession {
     }
 }
 
+fn placeholder_spec(spec: &CanvasSpec) -> CanvasSpec {
+    CanvasSpec {
+        width: PLACEHOLDER_SIZE_PX,
+        height: PLACEHOLDER_SIZE_PX,
+        ..spec.clone()
+    }
+}
+
+fn tile_count(width: u32, height: u32) -> u64 {
+    u64::from(width.div_ceil(TILE_SIZE)) * u64::from(height.div_ceil(TILE_SIZE))
+}
+
 fn history_budget(spec: &CanvasSpec) -> u64 {
-    let tiles =
-        u64::from(spec.width.div_ceil(TILE_SIZE)) * u64::from(spec.height.div_ceil(TILE_SIZE));
-    HISTORY_BUDGET_BYTES.min(tiles * HISTORY_CANVAS_COPIES * bytes_per_tile_all_textures())
+    let painting = tile_count(spec.width, spec.height) * HISTORY_CANVAS_COPIES;
+    let tray = tile_count(TRAY_WIDTH, TRAY_HEIGHT) * TRAY_HISTORY_COPIES;
+    HISTORY_BUDGET_BYTES.min((painting + tray) * bytes_per_tile_all_textures())
 }
 
 fn new_encoder(gpu: &GpuContext, label: &str) -> wgpu::CommandEncoder {

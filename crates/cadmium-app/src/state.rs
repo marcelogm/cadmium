@@ -488,8 +488,7 @@ impl AppState {
     }
 
     pub fn add_pigment(&mut self, id: &str) -> Result<usize, String> {
-        let session = &mut self.session;
-        let slot = session.canvas.add_slot(&self.gpu, &session.db, id)?;
+        let slot = self.session.add_slot(&self.gpu, id)?;
         self.edits.record();
         self.wake();
         Ok(slot)

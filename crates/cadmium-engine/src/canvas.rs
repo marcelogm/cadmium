@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 
 use crate::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
-use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
+use crate::spectral::{BANDS, BandValues, km_infinite, reflectance_srgb8};
 
 pub const TILE_SIZE: u32 = 64;
 pub const MAX_CANVAS_SIZE: u32 = 4096;
@@ -13,6 +13,7 @@ const PRIMER_WHITE_ID: &str = "titanium_white";
 const IMPRIMATURA_PIGMENT_ID: &str = "burnt_sienna";
 const IMPRIMATURA_FRACTION: f32 = 0.5;
 const IMPRIMATURA_THICKNESS_UM: f32 = 12.0;
+const TRAY_REFLECTANCE: f32 = 0.75;
 
 const LINEN_AMPLITUDE_UM: f32 = 12.0;
 const LINEN_PERIOD_PX: f32 = 6.0;
@@ -40,6 +41,7 @@ const BYTES_PER_FLOAT: usize = 4;
 pub enum Primer {
     WhiteGesso,
     SiennaImprimatura,
+    Tray,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -328,6 +330,7 @@ pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
                 &gesso,
             )
         }
+        Primer::Tray => [TRAY_REFLECTANCE; BANDS],
     }
 }
 
