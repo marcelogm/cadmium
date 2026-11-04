@@ -6,7 +6,7 @@ use cadmium_engine::{
     pigments::PigmentDb,
     session::PaintSession,
     stroke::StrokeSample,
-    surface::{TRAY_HEIGHT, TRAY_WIDTH},
+    surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH},
 };
 
 const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 2 * 4);
@@ -91,7 +91,7 @@ fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
 
 fn save_step(gpu: &GpuContext, history: &mut History, canvas: &Canvas, tiles: &[TileCoord]) {
     without_wgpu_errors(gpu, || {
-        history.begin_step();
+        history.begin_step(Surface::Painting);
         let mut e = gpu.device.create_command_encoder(&Default::default());
         history.encode_save_tiles(gpu, canvas, tiles, &mut e);
         gpu.queue.submit([e.finish()]);
@@ -222,7 +222,7 @@ fn saving_the_same_tile_twice_in_a_step_keeps_the_first_copy() {
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES, 100);
     without_wgpu_errors(&gpu, || {
-        history.begin_step();
+        history.begin_step(Surface::Painting);
         let mut e = gpu.device.create_command_encoder(&Default::default());
         history.encode_save_tiles(&gpu, &canvas, &tiles(1), &mut e);
         history.encode_save_tiles(&gpu, &canvas, &tiles(1), &mut e);
