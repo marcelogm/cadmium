@@ -48,7 +48,7 @@ impl Default for BrushSettings {
 impl BrushSettings {
     pub fn stroke_geometry(&self) -> BrushGeometry {
         let mut geometry = self.geometry;
-        if self.tool == Tool::Knife && geometry.max_diameter_px > 0.0 {
+        if self.tool.profile().has_blade_footprint() && geometry.max_diameter_px > 0.0 {
             geometry.spacing = geometry
                 .spacing
                 .min(KNIFE_MAX_STEP_PX / geometry.max_diameter_px);
@@ -59,10 +59,8 @@ impl BrushSettings {
     pub fn reservoir_mixture(&self, slot_count: usize) -> Mixture {
         let usable_slots = slot_count.min(MAX_SLOTS);
         let mut parts = [0.0f32; MAX_SLOTS];
-        for &(slot, amount) in &self.recipe {
-            if slot < usable_slots {
-                parts[slot] += amount.max(0.0);
-            }
+        for &(slot, amount) in self.recipe.iter().filter(|(slot, _)| *slot < usable_slots) {
+            parts[slot] += amount.max(0.0);
         }
         let total: f32 = parts.iter().sum();
         let pigment_share = 1.0 - self.medium.clamp(0.0, MAX_MEDIUM);

@@ -1,0 +1,170 @@
+use super::*;
+use crate::tools::knife::KNIFE_HANDLING;
+
+#[test]
+fn recipe_description_names_a_single_pigment() {
+    assert_eq!(describe_recipe(&["Branco", "Azul"], &[(1, 1.0)]), "Azul");
+}
+
+#[test]
+fn recipe_description_lists_shares_largest_first() {
+    assert_eq!(
+        describe_recipe(&["Branco", "Azul", "Amarelo"], &[(1, 1.0), (2, 3.0)]),
+        "Amarelo 75% · Azul 25%"
+    );
+}
+
+#[test]
+fn empty_recipe_reads_as_a_clean_brush() {
+    assert_eq!(describe_recipe(&["Branco"], &[]), CLEAN_LABEL);
+    assert_eq!(describe_recipe(&["Branco"], &[(0, 0.0)]), CLEAN_LABEL);
+}
+
+#[test]
+fn brush_shows_every_control_and_eyedropper_only_the_hint() {
+    let brush = visible_controls(PanelTool::Paint(Tool::Brush));
+    assert!(brush.pigments && brush.loaded && brush.size && brush.load && brush.medium);
+    assert!(brush.shape && brush.stroke_loading && brush.clean && !brush.hint);
+    assert!(!brush.plate_gap);
+    let eyedropper = visible_controls(PanelTool::Paint(Tool::Eyedropper));
+    assert!(eyedropper.hint);
+    assert!(!eyedropper.pigments && !eyedropper.loaded && !eyedropper.size);
+    assert!(!eyedropper.load && !eyedropper.medium && !eyedropper.plate_gap);
+    assert!(!eyedropper.shape && !eyedropper.clean);
+    assert!(!eyedropper.stroke_loading);
+}
+
+#[test]
+fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() {
+    let knife = visible_controls(PanelTool::Paint(Tool::Knife));
+    assert!(knife.pigments && knife.loaded && knife.size && knife.load);
+    assert!(knife.plate_gap && knife.stroke_loading && knife.clean && knife.hint);
+    assert!(!knife.medium && !knife.shape);
+}
+
+#[test]
+fn rag_shows_only_the_size() {
+    let shown = visible_controls(PanelTool::Paint(Tool::Rag));
+    assert!(shown.size);
+    assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
+    assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
+    assert!(!shown.clean && !shown.hint);
+}
+
+#[test]
+fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
+    let knife = tool_wording(PanelTool::Paint(Tool::Knife));
+    assert_eq!(knife.clean_button, "Limpar espátula");
+    assert_eq!(knife.loaded_title, "Na espátula");
+    assert_eq!(knife.size_title, "Tamanho");
+    assert_eq!(tool_hint(PanelTool::Paint(Tool::Knife)), KNIFE_HANDLING);
+    assert_eq!(
+        tool_wording(PanelTool::Paint(Tool::Brush)).clean_button,
+        "Limpar pincel"
+    );
+    assert_eq!(
+        tool_hint(PanelTool::Paint(Tool::Eyedropper)),
+        EYEDROPPER_HINT
+    );
+}
+
+#[test]
+fn the_tube_shows_only_pigments_and_nozzle_size() {
+    let tube = visible_controls(PanelTool::Tube);
+    assert!(tube.pigments && tube.size && tube.tool_group());
+    assert!(!tube.loaded && !tube.load && !tube.medium && !tube.plate_gap);
+    assert!(!tube.shape && !tube.stroke_loading && !tube.clean && !tube.hint);
+}
+
+#[test]
+fn the_tube_names_its_size_nozzle_without_a_subtitle() {
+    let tube = tool_wording(PanelTool::Tube);
+    assert_eq!(tube.size_title, "Bico");
+    assert_eq!(tube.size_subtitle, None);
+}
+
+#[test]
+fn the_tube_asks_for_a_pile_to_squeeze() {
+    assert_eq!(
+        tool_wording(PanelTool::Tube).pigments,
+        "Clique escolhe o tubo"
+    );
+}
+
+#[test]
+fn moving_keeps_the_panel_of_the_tool_in_hand() {
+    assert_eq!(
+        panel_tool(UiTool::Move, Tool::Knife),
+        PanelTool::Paint(Tool::Knife)
+    );
+    assert_eq!(panel_tool(UiTool::Tube, Tool::Knife), PanelTool::Tube);
+    assert_eq!(
+        panel_tool(UiTool::Paint(Tool::Rag), Tool::Brush),
+        PanelTool::Paint(Tool::Rag)
+    );
+}
+
+#[test]
+fn the_tube_highlights_its_own_pile_not_the_recipe() {
+    let recipe = [(0, 1.0), (2, 0.5)];
+    assert!(pile_is_highlighted(PanelTool::Tube, 1, 1, &recipe));
+    assert!(!pile_is_highlighted(PanelTool::Tube, 0, 1, &recipe));
+    let brush = PanelTool::Paint(Tool::Brush);
+    assert!(pile_is_highlighted(brush, 2, 1, &recipe));
+    assert!(!pile_is_highlighted(brush, 1, 1, &recipe));
+}
+
+#[test]
+fn the_tube_group_names_the_chosen_pigment() {
+    let names = ["Branco", "Azul"];
+    assert_eq!(
+        tool_group_description(PanelTool::Tube, &names, 1),
+        Some("Azul")
+    );
+    assert_eq!(
+        tool_group_description(PanelTool::Paint(Tool::Brush), &names, 1),
+        None
+    );
+}
+
+#[test]
+fn modifiers_choose_how_a_swatch_click_loads_the_brush() {
+    assert_eq!(
+        pigment_click(gdk::ModifierType::empty()),
+        PigmentClick::Choose
+    );
+    assert_eq!(
+        pigment_click(gdk::ModifierType::CONTROL_MASK),
+        PigmentClick::Mix
+    );
+    assert_eq!(
+        pigment_click(gdk::ModifierType::SHIFT_MASK),
+        PigmentClick::CleanAndLoad
+    );
+    assert_eq!(
+        pigment_click(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK),
+        PigmentClick::Mix
+    );
+}
+
+#[test]
+fn size_slider_is_left_alone_while_its_value_rounds_to_the_brush_size() {
+    let dragged = size_to_slider(40.0) + SIZE_STEP / 10.0;
+    assert!(!slider_needs_sync(dragged, 40.0));
+    assert!(slider_needs_sync(size_to_slider(80.0), 40.0));
+}
+
+#[test]
+fn size_slider_is_logarithmic_and_clamped() {
+    assert_eq!(slider_to_size(size_to_slider(40.0)), 40.0);
+    assert_eq!(slider_to_size(size_to_slider(1.0)), MIN_SIZE_PX as f32);
+    assert_eq!(slider_to_size(size_to_slider(9000.0)), MAX_SIZE_PX as f32);
+    let middle = slider_to_size((size_to_slider(4.0) + size_to_slider(500.0)) / 2.0);
+    assert!(middle > 40.0 && middle < 50.0, "{middle}");
+}
+
+#[test]
+fn plate_gap_control_drives_the_knife_gap_parameter() {
+    assert_eq!(plate_gap_spec().key, PLATE_GAP_KEY);
+    assert_eq!(plate_gap_text(80.0), "80 µm");
+}

@@ -19,52 +19,7 @@ pub enum SwatchShape {
     RoundedRect,
 }
 
-mod imp {
-    use super::*;
-
-    #[derive(Default)]
-    pub struct Swatch {
-        pub colour: Cell<[u8; 3]>,
-        pub right_half_colour: Cell<Option<[u8; 3]>>,
-        pub selected: Cell<bool>,
-        pub shape: Cell<SwatchShape>,
-        pub accent_colour_handler: RefCell<Option<glib::SignalHandlerId>>,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for Swatch {
-        const NAME: &'static str = "CadmiumSwatch";
-        type Type = super::Swatch;
-        type ParentType = gtk::DrawingArea;
-    }
-
-    impl ObjectImpl for Swatch {
-        fn constructed(&self) {
-            self.parent_constructed();
-            let swatch = self.obj();
-            swatch.set_draw_func(|area, context, width, height| {
-                if let Some(swatch) = area.downcast_ref::<super::Swatch>() {
-                    swatch.draw(context, width as f64, height as f64);
-                }
-            });
-            let handler = adw::StyleManager::default().connect_accent_color_notify(glib::clone!(
-                #[weak]
-                swatch,
-                move |_| swatch.queue_draw()
-            ));
-            self.accent_colour_handler.replace(Some(handler));
-        }
-
-        fn dispose(&self) {
-            if let Some(handler) = self.accent_colour_handler.take() {
-                adw::StyleManager::default().disconnect(handler);
-            }
-        }
-    }
-
-    impl WidgetImpl for Swatch {}
-    impl DrawingAreaImpl for Swatch {}
-}
+mod imp;
 
 glib::wrapper! {
     pub struct Swatch(ObjectSubclass<imp::Swatch>)
@@ -197,32 +152,4 @@ fn trace_shape(context: &cairo::Context, shape: SwatchShape, width: f64, height:
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn style_manager_has_accent_colour_handler() -> bool {
-        let style_manager = adw::StyleManager::default();
-        let notify = glib::subclass::SignalId::lookup("notify", style_manager.type_())
-            .expect("notify signal");
-        glib::signal::signal_has_handler_pending(
-            &style_manager,
-            notify,
-            Some(glib::Quark::from_str("accent-color")),
-            true,
-        )
-    }
-
-    #[test]
-    fn dropped_swatches_leave_no_accent_colour_handler_behind() {
-        adw::init().expect("libadwaita initialises");
-        let before = style_manager_has_accent_colour_handler();
-        let swatches: Vec<_> = (0..64)
-            .map(|_| Swatch::new([0, 0, 0], SwatchShape::Circle, 16, 16))
-            .collect();
-        assert!(style_manager_has_accent_colour_handler());
-        let finalized: Vec<_> = swatches.iter().map(|swatch| swatch.downgrade()).collect();
-        drop(swatches);
-        assert!(finalized.iter().all(|swatch| swatch.upgrade().is_none()));
-        assert_eq!(style_manager_has_accent_colour_handler(), before);
-    }
-}
+mod tests;

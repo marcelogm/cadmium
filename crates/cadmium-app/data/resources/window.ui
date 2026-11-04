@@ -39,58 +39,7 @@
                   </object>
                 </child>
                 <property name="title-widget">
-                  <object class="AdwToggleGroup" id="tool_group">
-                    <property name="active-name">brush</property>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">move</property>
-                        <property name="icon-name">cadmium-move-symbolic</property>
-                        <property name="tooltip">Mover (H)</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">brush</property>
-                        <property name="icon-name">cadmium-brush-symbolic</property>
-                        <property name="tooltip">Pincel (1)</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">knife</property>
-                        <property name="icon-name">cadmium-knife-symbolic</property>
-                        <property name="tooltip">Espátula (2): deitada assenta placas, em pé raspa e abre sulco; pressão leve deixa a placa mais grossa</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">blender</property>
-                        <property name="icon-name">cadmium-blender-symbolic</property>
-                        <property name="tooltip">Misturador (3)</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">rag</property>
-                        <property name="icon-name">cadmium-rag-symbolic</property>
-                        <property name="tooltip">Pano (4 ou R)</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">eyedropper</property>
-                        <property name="icon-name">color-select-symbolic</property>
-                        <property name="tooltip">Conta-gotas (5)</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwToggle">
-                        <property name="name">tube</property>
-                        <property name="icon-name">cadmium-tube-symbolic</property>
-                        <property name="tooltip">Tubo (6): espreme pigmento puro na bandeja ou na tela; a pressão aperta o tubo</property>
-                      </object>
-                    </child>
-                  </object>
+                  <object class="AdwToggleGroup" id="tool_group"/>
                 </property>
                 <child type="end">
                   <object class="GtkToggleButton">

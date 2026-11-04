@@ -1,13 +1,56 @@
-pub use cadmium_engine::stroke::Tool;
+use gtk::gdk;
 
-pub const KNIFE_HANDLING: &str = "Deitada (caneta inclinada) assenta placas; em pé raspa e abre sulco; \
-pressão leve deixa a placa mais grossa";
+pub use cadmium_engine::stroke::Tool;
+use cadmium_engine::surface::Surface;
+use panel::{ToolWording, VisibleControls};
+
+mod blender;
+mod brush;
+mod eyedropper;
+pub(crate) mod keys;
+pub(crate) mod knife;
+mod moving;
+pub(crate) mod panel;
+mod rag;
+mod tube;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
     Move,
     Paint(Tool),
     Tube,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Press {
+    Pan,
+    PickColour,
+    Stroke(Tool),
+    LoadFromPile(Tool),
+    Squeeze,
+}
+
+pub(crate) struct UiToolProfile {
+    name: &'static str,
+    label: &'static str,
+    pub(crate) icon: &'static str,
+    pub(crate) tooltip: &'static str,
+    pub(crate) keys: &'static [gdk::Key],
+    keypad_keys: &'static [gdk::Key],
+    on_tray: Press,
+    on_painting: Press,
+    pub(crate) controls: VisibleControls,
+    pub(crate) wording: ToolWording,
+    handling: Option<&'static str>,
+}
+
+impl UiToolProfile {
+    pub(crate) fn press_on(&self, surface: Surface) -> Press {
+        match surface {
+            Surface::Tray => self.on_tray,
+            Surface::Painting => self.on_painting,
+        }
+    }
 }
 
 impl Default for UiTool {
@@ -27,93 +70,34 @@ impl UiTool {
         UiTool::Tube,
     ];
 
+    pub(crate) const fn profile(self) -> &'static UiToolProfile {
+        match self {
+            UiTool::Move => &moving::MOVE,
+            UiTool::Paint(Tool::Brush) => &brush::BRUSH,
+            UiTool::Paint(Tool::Knife) => &knife::KNIFE,
+            UiTool::Paint(Tool::Blender) => &blender::BLENDER,
+            UiTool::Paint(Tool::Rag) => &rag::RAG,
+            UiTool::Paint(Tool::Eyedropper) => &eyedropper::EYEDROPPER,
+            UiTool::Tube => &tube::TUBE,
+        }
+    }
+
     pub fn from_name(name: &str) -> Option<UiTool> {
         UiTool::ALL.into_iter().find(|tool| tool.name() == name)
     }
 
     pub fn name(self) -> &'static str {
-        match self {
-            UiTool::Move => "move",
-            UiTool::Paint(Tool::Brush) => "brush",
-            UiTool::Paint(Tool::Knife) => "knife",
-            UiTool::Paint(Tool::Blender) => "blender",
-            UiTool::Paint(Tool::Rag) => "rag",
-            UiTool::Paint(Tool::Eyedropper) => "eyedropper",
-            UiTool::Tube => "tube",
-        }
+        self.profile().name
     }
 
     pub fn label(self) -> &'static str {
-        match self {
-            UiTool::Move => "Mover",
-            UiTool::Paint(Tool::Brush) => "Pincel",
-            UiTool::Paint(Tool::Knife) => "Espátula",
-            UiTool::Paint(Tool::Blender) => "Misturador",
-            UiTool::Paint(Tool::Rag) => "Pano",
-            UiTool::Paint(Tool::Eyedropper) => "Conta-gotas",
-            UiTool::Tube => "Tubo",
-        }
+        self.profile().label
     }
 
     pub fn handling(self) -> Option<&'static str> {
-        match self {
-            UiTool::Paint(Tool::Knife) => Some(KNIFE_HANDLING),
-            _ => None,
-        }
+        self.profile().handling
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_tool_round_trips_through_its_toggle_name() {
-        for tool in UiTool::ALL {
-            assert_eq!(UiTool::from_name(tool.name()), Some(tool));
-        }
-    }
-
-    #[test]
-    fn toggle_names_match_the_header_tool_group() {
-        let names: Vec<_> = UiTool::ALL.iter().map(|tool| tool.name()).collect();
-        assert_eq!(
-            names,
-            [
-                "move",
-                "brush",
-                "knife",
-                "blender",
-                "rag",
-                "eyedropper",
-                "tube"
-            ]
-        );
-    }
-
-    #[test]
-    fn the_tube_is_not_an_engine_tool() {
-        assert_eq!(UiTool::from_name(UiTool::Tube.name()), Some(UiTool::Tube));
-        assert_eq!(UiTool::Tube.label(), "Tubo");
-    }
-
-    #[test]
-    fn unknown_toggle_name_is_not_a_tool() {
-        assert_eq!(UiTool::from_name("spray"), None);
-    }
-
-    #[test]
-    fn only_the_knife_explains_how_it_is_held() {
-        for tool in UiTool::ALL {
-            assert_eq!(
-                tool.handling().is_some(),
-                tool == UiTool::Paint(Tool::Knife)
-            );
-        }
-    }
-
-    #[test]
-    fn app_starts_with_the_brush() {
-        assert_eq!(UiTool::default(), UiTool::Paint(Tool::Brush));
-    }
-}
+mod tests;

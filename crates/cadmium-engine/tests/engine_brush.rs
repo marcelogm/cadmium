@@ -1,15 +1,8 @@
-use std::path::PathBuf;
+pub mod support;
 
-use cadmium_engine::{
-    canvas::*,
-    gpu::GpuContext,
-    present::{ViewTransform, readback_rgba8},
-    session::PaintSession,
-    stroke::StrokeSample,
-};
+use cadmium_engine::{canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample};
+use support::{encode_frame, write_preview};
 
-const PREVIEW_WIDTH: u32 = 512;
-const PREVIEW_HEIGHT: u32 = 256;
 const DEFAULT_SPACING: f32 = 0.05;
 const DENSE_SPACING: f32 = 0.025;
 const SPACING_VOLUME_TOLERANCE: f64 = 0.05;
@@ -51,15 +44,11 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
             s.add_samples(&[sample])
         }
         if i % 4 == 0 {
-            let mut e = gpu.device.create_command_encoder(&Default::default());
-            s.encode_frame(gpu, &mut e);
-            gpu.queue.submit([e.finish()]);
+            encode_frame(gpu, s);
         }
     }
     s.end_stroke();
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
-    gpu.queue.submit([e.finish()]);
+    encode_frame(gpu, s);
 }
 
 fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
@@ -71,40 +60,6 @@ fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
         t.pigment[i] += b.pigment[i];
     }
     t
-}
-
-fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
-    let target = s
-        .presenter
-        .create_target(gpu, PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.presenter.encode_present(
-        gpu,
-        &s.canvas,
-        ViewTransform {
-            origin_x: 0.0,
-            origin_y: 0.0,
-            zoom: 1.0,
-        },
-        &target,
-        &mut e,
-    );
-    gpu.queue.submit([e.finish()]);
-    let rgba = readback_rgba8(gpu, &target).unwrap();
-    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .parent()
-        .expect("cargo target tmpdir lives inside the target directory")
-        .to_path_buf();
-    let file = std::fs::File::create(target_dir.join(name)).unwrap();
-    let mut encoder =
-        png::Encoder::new(std::io::BufWriter::new(file), PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder
-        .write_header()
-        .unwrap()
-        .write_image_data(&rgba)
-        .unwrap();
 }
 
 #[test]

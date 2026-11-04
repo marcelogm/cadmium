@@ -1,6 +1,9 @@
+pub mod support;
+
 use cadmium_engine::{
     brush::BrushShape, canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample,
 };
+use support::encode_frame;
 
 const SIDE: u32 = 512;
 const CENTRE: f64 = 256.0;
@@ -87,9 +90,7 @@ fn paint_straight(gpu: &GpuContext, s: &mut PaintSession, horizontal: bool) {
         }
     }
     s.end_stroke();
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
-    gpu.queue.submit([e.finish()]);
+    encode_frame(gpu, s);
 }
 
 #[test]

@@ -1,6 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture, TILE_SIZE};
+use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
 use crate::spectral::{BANDS, band_xyz_weights};
@@ -65,16 +66,9 @@ struct ShadeParams {
 
 impl ShadeParams {
     fn new(params: &SimParams, mode: ViewMode) -> Self {
-        let weights = band_xyz_weights();
-        let mut xyz_weights = [[0.0; 4]; XYZ_WEIGHT_VEC4S];
-        for (channel, bands) in weights.iter().enumerate() {
-            for (part, chunk) in bands.as_chunks::<BANDS_PER_VEC4>().0.iter().enumerate() {
-                xyz_weights[channel * BANDS / BANDS_PER_VEC4 + part] = *chunk;
-            }
-        }
         let (view_mode, view_slot) = mode.shader_selector();
         ShadeParams {
-            xyz_weights,
+            xyz_weights: xyz_weight_vec4s(),
             impasto_scale: params.get("impasto_scale"),
             light_azimuth_deg: params.get("light_azimuth_deg"),
             light_elevation_deg: params.get("light_elevation_deg"),
@@ -87,37 +81,38 @@ impl ShadeParams {
     }
 }
 
+fn xyz_weight_vec4s() -> [[f32; 4]; XYZ_WEIGHT_VEC4S] {
+    let weights = band_xyz_weights();
+    let mut xyz_weights = [[0.0; 4]; XYZ_WEIGHT_VEC4S];
+    for (channel, bands) in weights.iter().enumerate() {
+        for (part, chunk) in bands.as_chunks::<BANDS_PER_VEC4>().0.iter().enumerate() {
+            xyz_weights[channel * BANDS / BANDS_PER_VEC4 + part] = *chunk;
+        }
+    }
+    xyz_weights
+}
+
 pub struct Renderer {
-    pipeline: wgpu::ComputePipeline,
+    compute: AutoLayoutStage,
+}
+
+pub struct ShadeRequest<'a> {
+    pub params: &'a SimParams,
+    pub mode: ViewMode,
 }
 
 impl Renderer {
     pub fn new(gpu: &GpuContext) -> Self {
-        let module = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("shade"),
-                source: wgpu::ShaderSource::Wgsl(SHADE_SOURCE.into()),
-            });
-        let pipeline = gpu
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("shade"),
-                layout: None,
-                module: &module,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        Renderer { pipeline }
+        Renderer {
+            compute: AutoLayoutStage::new(gpu, "shade", SHADE_SOURCE),
+        }
     }
 
     pub fn encode_shade(
         &self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
-        params: &SimParams,
-        mode: ViewMode,
+        request: ShadeRequest<'_>,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         let tiles = canvas.dirty.take();
@@ -125,56 +120,56 @@ impl Renderer {
             return;
         }
         let tile_list: Vec<[u32; 2]> = tiles.iter().map(|tile| [tile.x, tile.y]).collect();
-        let tile_buffer = gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("shade_tiles"),
-                contents: bytemuck::cast_slice(&tile_list),
-                usage: wgpu::BufferUsages::STORAGE,
-            });
-        let params_buffer = gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("shade_params"),
-                contents: bytemuck::bytes_of(&ShadeParams::new(params, mode)),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
-        let mut entries = vec![
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: canvas.slot_table().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: params_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: tile_buffer.as_entire_binding(),
-            },
-        ];
-        let textures = SHADE_INPUTS.iter().chain([&StateTexture::Display]);
-        for (binding, which) in (3..).zip(textures) {
-            entries.push(wgpu::BindGroupEntry {
-                binding,
-                resource: wgpu::BindingResource::TextureView(canvas.view(*which)),
-            });
-        }
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("shade"),
-            layout: &self.pipeline.get_bind_group_layout(0),
-            entries: &entries,
-        });
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("shade"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(
-            WORKGROUPS_PER_TILE_SIDE,
-            WORKGROUPS_PER_TILE_SIDE,
-            tile_list.len() as u32,
+        let tile_buffer = shade_tile_buffer(gpu, &tile_list);
+        let params_buffer = shade_params_buffer(gpu, request.params, request.mode);
+        let bind_group = self.shade_bind_group(gpu, canvas, &params_buffer, &tile_buffer);
+        self.compute.encode(
+            encoder,
+            &bind_group,
+            [
+                WORKGROUPS_PER_TILE_SIDE,
+                WORKGROUPS_PER_TILE_SIDE,
+                tile_list.len() as u32,
+            ],
         );
     }
+
+    fn shade_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        params_buffer: &wgpu::Buffer,
+        tile_buffer: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        let mut entries = vec![
+            buffer_binding(0, canvas.slot_table()),
+            buffer_binding(1, params_buffer),
+            buffer_binding(2, tile_buffer),
+        ];
+        let textures = SHADE_INPUTS.iter().chain([&StateTexture::Display]);
+        entries.extend(
+            (3..)
+                .zip(textures)
+                .map(|(binding, which)| texture_binding(binding, canvas, *which)),
+        );
+        self.compute.bind_group(gpu, &entries)
+    }
+}
+
+fn shade_tile_buffer(gpu: &GpuContext, tile_list: &[[u32; 2]]) -> wgpu::Buffer {
+    gpu.device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("shade_tiles"),
+            contents: bytemuck::cast_slice(tile_list),
+            usage: wgpu::BufferUsages::STORAGE,
+        })
+}
+
+fn shade_params_buffer(gpu: &GpuContext, params: &SimParams, mode: ViewMode) -> wgpu::Buffer {
+    gpu.device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("shade_params"),
+            contents: bytemuck::bytes_of(&ShadeParams::new(params, mode)),
+            usage: wgpu::BufferUsages::UNIFORM,
+        })
 }

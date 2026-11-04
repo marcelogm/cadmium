@@ -62,48 +62,13 @@ impl GpuContext {
             ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
         let adapter = pollster::block_on(select_adapter(&instance))?;
-
         let adapter_features = adapter.features();
-        if !adapter_features.contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES) {
-            return Err(GpuError::MissingFeature(
-                "TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES",
-            ));
-        }
-        if !adapter
-            .get_texture_format_features(wgpu::TextureFormat::Rgba16Float)
-            .flags
-            .contains(wgpu::TextureFormatFeatureFlags::STORAGE_READ_WRITE)
-        {
-            return Err(GpuError::MissingFeature("rgba16float storage read-write"));
-        }
+        require_storage_features(&adapter, adapter_features)?;
         let supports_dmabuf_export = cfg!(target_os = "linux")
             && adapter_features.contains(DMABUF_EXPORT_FEATURES)
             && supports_dmabuf_sync_extensions(&adapter);
-
-        let mut required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
-        if supports_dmabuf_export {
-            required_features |= DMABUF_EXPORT_FEATURES;
-        }
-        let descriptor = wgpu::DeviceDescriptor {
-            label: Some("cadmium"),
-            required_features,
-            required_limits: adapter.limits(),
-            memory_hints: wgpu::MemoryHints::Performance,
-            ..Default::default()
-        };
-
-        let (device, queue) = if supports_dmabuf_export {
-            open_device_with_dmabuf_sync(&adapter, &descriptor)?
-        } else {
-            pollster::block_on(adapter.request_device(&descriptor))
-                .map_err(|e| GpuError::DeviceCreation(e.to_string()))?
-        };
-
-        device.on_uncaptured_error(Arc::new(|e| eprintln!("cadmium: wgpu error: {e}")));
-        let lost = Arc::new(AtomicBool::new(false));
-        let lost_flag = lost.clone();
-        device.set_device_lost_callback(move |_, _| lost_flag.store(true, Ordering::SeqCst));
-
+        let (device, queue) = open_device(&adapter, supports_dmabuf_export)?;
+        let lost = watch_device(&device);
         Ok(GpuContext {
             adapter,
             device,
@@ -121,6 +86,61 @@ impl GpuContext {
         self.lost.store(true, Ordering::SeqCst);
         GpuLost
     }
+}
+
+fn require_storage_features(
+    adapter: &wgpu::Adapter,
+    adapter_features: wgpu::Features,
+) -> Result<(), GpuError> {
+    if !adapter_features.contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES) {
+        return Err(GpuError::MissingFeature(
+            "TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES",
+        ));
+    }
+    if !adapter
+        .get_texture_format_features(wgpu::TextureFormat::Rgba16Float)
+        .flags
+        .contains(wgpu::TextureFormatFeatureFlags::STORAGE_READ_WRITE)
+    {
+        return Err(GpuError::MissingFeature("rgba16float storage read-write"));
+    }
+    Ok(())
+}
+
+fn open_device(
+    adapter: &wgpu::Adapter,
+    supports_dmabuf_export: bool,
+) -> Result<(wgpu::Device, wgpu::Queue), GpuError> {
+    let mut required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+    if supports_dmabuf_export {
+        required_features |= DMABUF_EXPORT_FEATURES;
+    }
+    let descriptor = wgpu::DeviceDescriptor {
+        label: Some("cadmium"),
+        required_features,
+        required_limits: adapter.limits(),
+        memory_hints: wgpu::MemoryHints::Performance,
+        ..Default::default()
+    };
+    if supports_dmabuf_export {
+        open_device_with_dmabuf_sync(adapter, &descriptor)
+    } else {
+        pollster::block_on(adapter.request_device(&descriptor))
+            .map_err(|e| GpuError::DeviceCreation(e.to_string()))
+    }
+}
+
+fn watch_device(device: &wgpu::Device) -> Arc<AtomicBool> {
+    device.on_uncaptured_error(Arc::new(|e| eprintln!("cadmium: wgpu error: {e}")));
+    let lost = Arc::new(AtomicBool::new(false));
+    let lost_flag = lost.clone();
+    device.set_device_lost_callback(move |_, _| lost_flag.store(true, Ordering::SeqCst));
+    lost
+}
+
+pub(crate) fn new_encoder(gpu: &GpuContext, label: &str) -> wgpu::CommandEncoder {
+    gpu.device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) })
 }
 
 pub fn staging_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {

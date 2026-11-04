@@ -1,7 +1,8 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture};
-use crate::gpu::{GpuContext, GpuLost, TexelRows, read_mapped, staging_buffer};
+use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
+use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_mapped, staging_buffer};
 
 const PRESENT_WORKGROUP_SIZE: u32 = 8;
 const PRESENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -14,6 +15,11 @@ pub struct ViewTransform {
     pub zoom: f32,
 }
 
+pub struct PresentRequest<'a> {
+    pub canvas: &'a Canvas,
+    pub view: ViewTransform,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct PresentParams {
@@ -23,28 +29,13 @@ struct PresentParams {
 }
 
 pub struct Presenter {
-    pipeline: wgpu::ComputePipeline,
+    compute: AutoLayoutStage,
     sampler: wgpu::Sampler,
 }
 
 impl Presenter {
     pub fn new(gpu: &GpuContext) -> Self {
-        let module = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("present"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/present.wgsl").into()),
-            });
-        let pipeline = gpu
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("present"),
-                layout: None,
-                module: &module,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let compute = AutoLayoutStage::new(gpu, "present", include_str!("shaders/present.wgsl"));
         let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("present_display"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -53,7 +44,7 @@ impl Presenter {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        Presenter { pipeline, sampler }
+        Presenter { compute, sampler }
     }
 
     pub fn create_target(&self, gpu: &GpuContext, width: u32, height: u32) -> wgpu::Texture {
@@ -78,11 +69,11 @@ impl Presenter {
     pub fn encode_present(
         &self,
         gpu: &GpuContext,
-        canvas: &Canvas,
-        view: ViewTransform,
+        request: PresentRequest<'_>,
         target: &wgpu::Texture,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        let PresentRequest { canvas, view } = request;
         let params = PresentParams {
             origin: [view.origin_x, view.origin_y],
             zoom: view.zoom,
@@ -96,20 +87,11 @@ impl Presenter {
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let target_view = target.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("present"),
-            layout: &self.pipeline.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: params_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(
-                        canvas.view(StateTexture::Display),
-                    ),
-                },
+        let bind_group = self.compute.bind_group(
+            gpu,
+            &[
+                buffer_binding(0, &params_buffer),
+                texture_binding(1, canvas, StateTexture::Display),
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
@@ -119,17 +101,15 @@ impl Presenter {
                     resource: wgpu::BindingResource::TextureView(&target_view),
                 },
             ],
-        });
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("present"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(
-            target.width().div_ceil(PRESENT_WORKGROUP_SIZE),
-            target.height().div_ceil(PRESENT_WORKGROUP_SIZE),
-            1,
+        );
+        self.compute.encode(
+            encoder,
+            &bind_group,
+            [
+                target.width().div_ceil(PRESENT_WORKGROUP_SIZE),
+                target.height().div_ceil(PRESENT_WORKGROUP_SIZE),
+                1,
+            ],
         );
     }
 }
@@ -156,11 +136,7 @@ pub fn encode_rgba8_copy(
 pub fn readback_rgba8(gpu: &GpuContext, texture: &wgpu::Texture) -> Result<Vec<u8>, GpuLost> {
     let rows = rgba8_rows(texture);
     let staging = staging_buffer(gpu, "present_readback", rows.padded_size());
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("present_readback"),
-        });
+    let mut encoder = new_encoder(gpu, "present_readback");
     encode_rgba8_copy(texture, &staging, &mut encoder);
     gpu.queue.submit([encoder.finish()]);
     read_mapped(gpu, &staging, |padded| rows.unpad(padded))

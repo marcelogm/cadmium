@@ -1,10 +1,7 @@
-use cadmium_engine::{
-    canvas::*,
-    gpu::GpuContext,
-    present::{ViewTransform, readback_rgba8},
-    session::PaintSession,
-    stroke::StrokeSample,
-};
+pub mod support;
+
+use cadmium_engine::{canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample};
+use support::{encode_frame, presented_rgba};
 
 const WIDTH: u32 = 2048;
 const HEIGHT: u32 = 1536;
@@ -44,12 +41,6 @@ fn session(gpu: &GpuContext) -> PaintSession {
     s
 }
 
-fn frame(gpu: &GpuContext, s: &mut PaintSession) {
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
-    gpu.queue.submit([e.finish()]);
-}
-
 fn along(t: f64) -> [f64; 2] {
     [
         FROM[0] + (TO[0] - FROM[0]) * t,
@@ -76,29 +67,15 @@ fn paint_light_stroke(gpu: &GpuContext, s: &mut PaintSession) {
             s.add_samples(&[sample])
         }
         if (i as usize).is_multiple_of(FRAME_EVERY_SAMPLES) {
-            frame(gpu, s);
+            encode_frame(gpu, s);
         }
     }
     s.end_stroke();
-    frame(gpu, s);
+    encode_frame(gpu, s);
 }
 
 fn colour_view(gpu: &GpuContext, s: &PaintSession) -> Vec<u8> {
-    let target = s.presenter.create_target(gpu, WIDTH, HEIGHT);
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.presenter.encode_present(
-        gpu,
-        &s.canvas,
-        ViewTransform {
-            origin_x: 0.0,
-            origin_y: 0.0,
-            zoom: 1.0,
-        },
-        &target,
-        &mut e,
-    );
-    gpu.queue.submit([e.finish()]);
-    readback_rgba8(gpu, &target).unwrap()
+    presented_rgba(gpu, s, WIDTH, HEIGHT)
 }
 
 fn brightness(rgba: &[u8], x: i32, y: i32) -> f64 {

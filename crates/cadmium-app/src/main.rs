@@ -3,23 +3,28 @@
 mod application;
 mod brush_panel;
 mod canvas_widget;
+mod cursor_outline;
 mod dialogs;
 #[cfg_attr(not(target_os = "linux"), path = "dmabuf_off.rs")]
 mod dmabuf;
 #[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
 mod dmabuf_selftest;
 mod files;
+mod handlers;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;
 mod presenter;
 mod presets;
+mod side_panel;
+mod sliders;
 #[cfg_attr(
     not(all(target_os = "linux", any(debug_assertions, feature = "smoke"))),
     path = "smoke_off.rs"
 )]
 mod smoke;
 mod state;
+mod surface_scale;
 mod swatch;
 mod tools;
 mod tray_view;

@@ -1,12 +1,7 @@
-use std::path::PathBuf;
+pub mod support;
 
-use cadmium_engine::{
-    canvas::*,
-    gpu::GpuContext,
-    present::{ViewTransform, readback_rgba8},
-    session::PaintSession,
-    stroke::StrokeSample,
-};
+use cadmium_engine::{canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample};
+use support::{encode_frame, presented_rgba, total_volume};
 
 const SIDE: u32 = 1024;
 const ARC_CENTRE: [f64; 2] = [512.0, 560.0];
@@ -50,12 +45,6 @@ fn session(gpu: &GpuContext) -> PaintSession {
     s
 }
 
-fn frame(gpu: &GpuContext, s: &mut PaintSession) {
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
-    gpu.queue.submit([e.finish()]);
-}
-
 fn arc_samples() -> Vec<StrokeSample> {
     (0..=ARC_SAMPLES)
         .map(|i| {
@@ -81,29 +70,15 @@ fn paint_arc(gpu: &GpuContext, s: &mut PaintSession) {
             s.add_samples(&[sample])
         }
         if i % FRAME_EVERY_SAMPLES == 0 {
-            frame(gpu, s);
+            encode_frame(gpu, s);
         }
     }
     s.end_stroke();
-    frame(gpu, s);
+    encode_frame(gpu, s);
 }
 
 fn colour_view(gpu: &GpuContext, s: &PaintSession) -> Vec<u8> {
-    let target = s.presenter.create_target(gpu, SIDE, SIDE);
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.presenter.encode_present(
-        gpu,
-        &s.canvas,
-        ViewTransform {
-            origin_x: 0.0,
-            origin_y: 0.0,
-            zoom: 1.0,
-        },
-        &target,
-        &mut e,
-    );
-    gpu.queue.submit([e.finish()]);
-    readback_rgba8(gpu, &target).unwrap()
+    presented_rgba(gpu, s, SIDE, SIDE)
 }
 
 fn srgb_to_linear(channel: u8) -> f32 {
@@ -187,19 +162,7 @@ fn ripple(height: &[f32], lum: &[f32]) -> Ripple {
 }
 
 fn write_png(name: &str, rgba: &[u8]) {
-    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .parent()
-        .expect("cargo target tmpdir lives inside the target directory")
-        .to_path_buf();
-    let file = std::fs::File::create(target_dir.join(name)).unwrap();
-    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), SIDE, SIDE);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder
-        .write_header()
-        .unwrap()
-        .write_image_data(rgba)
-        .unwrap();
+    support::write_png(name, SIDE, SIDE, rgba);
 }
 
 fn height_view(height: &[f32]) -> Vec<u8> {
@@ -211,10 +174,6 @@ fn height_view(height: &[f32]) -> Vec<u8> {
             [grey, grey, grey, u8::MAX]
         })
         .collect()
-}
-
-fn total_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
-    s.canvas.wet_totals(gpu).unwrap().volume + s.engine.brush_totals(gpu).unwrap().volume
 }
 
 #[test]

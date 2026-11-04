@@ -1,14 +1,15 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, PaintTotals, StateTexture};
-use crate::engine::{
-    WORKGROUP_SIZE, buffer_binding, clamped_region, compute_pipeline, layouts, read_buffer,
-    region_rect, shader_module, storage_buffer, storage_entry, texture_binding, texture_entry,
-    uniform_entry,
+use crate::compute::{
+    ComputeStage, WORKGROUP_SIZE, buffer_binding, read_buffer, storage_buffer, storage_entry,
+    texture_binding, texture_entry, uniform_entry,
 };
-use crate::gpu::{GpuContext, GpuLost};
+use crate::engine::shader::shader_source;
+use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::params::SimParams;
 use crate::pigments::MAX_SLOTS;
+use crate::region::{clamped_region, region_rect};
 
 const DRAW_UP_INVOCATIONS: u32 = 256;
 const DRAWN_GRANTED_SHARE: usize = 0;
@@ -53,6 +54,8 @@ pub(crate) struct DrawUpRegion {
     pub origin: [i32; 2],
     pub size: [u32; 2],
     pub share: f32,
+    pub center: [f32; 2],
+    pub radius: f32,
 }
 
 impl DrawUpRegion {
@@ -86,6 +89,8 @@ pub(crate) fn draw_up_region(
         origin,
         size,
         share,
+        center: request.center,
+        radius: request.radius,
     })
 }
 
@@ -96,7 +101,7 @@ pub(crate) struct Measured {
 }
 
 pub(crate) struct DrawUp {
-    layout: wgpu::BindGroupLayout,
+    compute: ComputeStage,
     measure: wgpu::ComputePipeline,
     take: wgpu::ComputePipeline,
     drawn: wgpu::Buffer,
@@ -106,9 +111,14 @@ impl DrawUp {
     pub(crate) fn new(gpu: &GpuContext) -> DrawUp {
         use wgpu::StorageTextureAccess::{ReadOnly, ReadWrite};
         use wgpu::TextureFormat::{R32Float, Rgba16Float};
-        let (layout, pipeline_layout) = layouts(
+        let invocations = format!("const DRAW_UP_INVOCATIONS: u32 = {DRAW_UP_INVOCATIONS}u;");
+        let compute = ComputeStage::new(
             gpu,
             "draw_up",
+            &shader_source(
+                &[&invocations, include_str!("shaders/slot_lane.wgsl")],
+                include_str!("shaders/draw_up.wgsl"),
+            ),
             &[
                 uniform_entry(0, None),
                 texture_entry(1, ReadOnly, Rgba16Float),
@@ -117,18 +127,11 @@ impl DrawUp {
                 storage_entry(4, false),
             ],
         );
-        let invocations = format!("const DRAW_UP_INVOCATIONS: u32 = {DRAW_UP_INVOCATIONS}u;");
-        let module = shader_module(
-            gpu,
-            "draw_up",
-            &[&invocations, include_str!("shaders/slot_lane.wgsl")],
-            include_str!("shaders/draw_up.wgsl"),
-        );
         DrawUp {
-            layout,
-            measure: compute_pipeline(gpu, "draw_up_measure", &module, &pipeline_layout, "measure"),
-            take: compute_pipeline(gpu, "draw_up_take", &module, &pipeline_layout, "take"),
+            measure: compute.pipeline(gpu, "draw_up_measure", "measure"),
+            take: compute.pipeline(gpu, "draw_up_take", "take"),
             drawn: storage_buffer(gpu, "drawn", DRAWN_BYTES),
+            compute,
         }
     }
 
@@ -136,13 +139,12 @@ impl DrawUp {
         &self,
         gpu: &GpuContext,
         canvas: &Canvas,
-        request: &DrawUpRequest,
         region: &DrawUpRegion,
         room_um: f32,
     ) -> Result<Measured, GpuLost> {
         let record = DrawUpRecord {
-            center: request.center,
-            radius: request.radius,
+            center: region.center,
+            radius: region.radius,
             share: region.share,
             room: room_um,
             _pad: 0.0,
@@ -156,44 +158,45 @@ impl DrawUp {
                 contents: bytemuck::bytes_of(&record),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("draw_up"),
-            layout: &self.layout,
-            entries: &[
-                buffer_binding(0, &uniform),
+        let group = self.measure_bind_group(gpu, canvas, &uniform);
+        self.submit_measure(gpu, &group);
+        let drawn = read_buffer(gpu, &self.drawn)?;
+        Ok(Measured {
+            group,
+            region: *region,
+            taken: drawn_totals(&drawn),
+        })
+    }
+
+    fn measure_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        uniform: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        self.compute.bind_group(
+            gpu,
+            &[
+                buffer_binding(0, uniform),
                 texture_binding(1, canvas, StateTexture::WetPig0),
                 texture_binding(2, canvas, StateTexture::WetPig1),
                 texture_binding(3, canvas, StateTexture::WetVol),
                 buffer_binding(4, &self.drawn),
             ],
-        });
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("draw_up_measure"),
-            });
+        )
+    }
+
+    fn submit_measure(&self, gpu: &GpuContext, group: &wgpu::BindGroup) {
+        let mut encoder = new_encoder(gpu, "draw_up_measure");
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("draw_up_measure"),
             timestamp_writes: None,
         });
-        pass.set_bind_group(0, &group, &[]);
+        pass.set_bind_group(0, group, &[]);
         pass.set_pipeline(&self.measure);
         pass.dispatch_workgroups(1, 1, 1);
         drop(pass);
         gpu.queue.submit([encoder.finish()]);
-        let drawn = read_buffer(gpu, &self.drawn)?;
-        let mut taken = PaintTotals {
-            volume: f64::from(drawn[DRAWN_VOLUME]),
-            ..PaintTotals::default()
-        };
-        for (slot, amount) in drawn[DRAWN_PIGMENT..].iter().enumerate() {
-            taken.pigment[slot] = f64::from(*amount);
-        }
-        Ok(Measured {
-            group,
-            region: *region,
-            taken,
-        })
     }
 
     pub(crate) fn encode_take(
@@ -220,31 +223,16 @@ impl DrawUp {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn request(pressure: f32, seconds: f32) -> DrawUpRequest {
-        DrawUpRequest {
-            center: [0.0, 0.0],
-            radius: 10.0,
-            pressure,
-            seconds,
-        }
+fn drawn_totals(drawn: &[f32]) -> PaintTotals {
+    let mut taken = PaintTotals {
+        volume: f64::from(drawn[DRAWN_VOLUME]),
+        ..PaintTotals::default()
+    };
+    for (slot, amount) in drawn[DRAWN_PIGMENT..].iter().enumerate() {
+        taken.pigment[slot] = f64::from(*amount);
     }
-
-    #[test]
-    fn share_grows_with_pressure_and_time() {
-        let params = SimParams::default();
-        let light = drawn_share(&params, &request(0.2, 0.05));
-        assert!(drawn_share(&params, &request(1.0, 0.05)) > light);
-        assert!(drawn_share(&params, &request(0.2, 0.1)) > light);
-    }
-
-    #[test]
-    fn share_never_exceeds_everything_under_the_brush() {
-        let params = SimParams::default();
-        assert_eq!(drawn_share(&params, &request(1.0, 1e6)), 1.0);
-        assert_eq!(drawn_share(&params, &request(1.0, f32::INFINITY)), 1.0);
-    }
+    taken
 }
+
+#[cfg(test)]
+mod tests;

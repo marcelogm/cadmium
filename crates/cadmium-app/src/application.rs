@@ -9,7 +9,7 @@ use crate::LOG_DOMAIN;
 use crate::dialogs;
 use crate::presets::starting_canvas_spec;
 use crate::smoke::SmokeConfig;
-use crate::state::AppState;
+use crate::state::{AppState, SharedState};
 use crate::window::CadmiumWindow;
 
 const ICON_RESOURCE_PATH: &str = "/io/github/marcelogm/Cadmium/icons";
@@ -51,47 +51,57 @@ impl CadmiumApplication {
             .flags(flags)
             .build();
         let smoke = RefCell::new(smoke);
-        app.connect_startup(|app| {
-            register_icons();
-            setup_actions(app);
-            for (action, accels) in ACCELERATORS {
-                app.set_accels_for_action(action, accels);
-            }
-        });
-        app.connect_activate(move |app| {
-            if let Some(window) = app.active_window() {
-                window.present();
-                return;
-            }
-            let gpu = match GpuContext::new() {
-                Ok(gpu) => Rc::new(gpu),
-                Err(error) => {
-                    report_startup_failure(
-                        app,
-                        MISSING_GPU_HEADING,
-                        &format!("{MISSING_GPU_BODY}\n\n{error}"),
-                    );
-                    return;
-                }
-            };
-            let state = match AppState::new(gpu, starting_canvas_spec()) {
-                Ok(state) => Rc::new(RefCell::new(state)),
-                Err(error) => {
-                    report_startup_failure(app, OUT_OF_VIDEO_MEMORY_HEADING, &error.to_string());
-                    return;
-                }
-            };
-            let window = CadmiumWindow::new(app, state);
-            if let Some(smoke) = smoke.borrow_mut().take() {
-                smoke.run(app, &window);
-            }
-            window.present();
-        });
+        app.connect_startup(start_up);
+        app.connect_activate(move |app| activate(app, &smoke));
         Self { app }
     }
 
     pub fn run(&self) -> glib::ExitCode {
         self.app.run()
+    }
+}
+
+fn start_up(app: &adw::Application) {
+    register_icons();
+    setup_actions(app);
+    for (action, accels) in ACCELERATORS {
+        app.set_accels_for_action(action, accels);
+    }
+}
+
+fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
+    if let Some(window) = app.active_window() {
+        window.present();
+        return;
+    }
+    let Some(state) = start_state(app) else {
+        return;
+    };
+    let window = CadmiumWindow::new(app, state);
+    if let Some(smoke) = smoke.borrow_mut().take() {
+        smoke.run(app, &window);
+    }
+    window.present();
+}
+
+fn start_state(app: &adw::Application) -> Option<SharedState> {
+    let gpu = match GpuContext::new() {
+        Ok(gpu) => Rc::new(gpu),
+        Err(error) => {
+            report_startup_failure(
+                app,
+                MISSING_GPU_HEADING,
+                &format!("{MISSING_GPU_BODY}\n\n{error}"),
+            );
+            return None;
+        }
+    };
+    match AppState::new(gpu, starting_canvas_spec()) {
+        Ok(state) => Some(Rc::new(RefCell::new(state))),
+        Err(error) => {
+            report_startup_failure(app, OUT_OF_VIDEO_MEMORY_HEADING, &error.to_string());
+            None
+        }
     }
 }
 
@@ -127,27 +137,33 @@ fn register_icons() {
 
 fn setup_actions(app: &adw::Application) {
     let shortcuts = gio::ActionEntry::builder("shortcuts")
-        .activate(|app: &adw::Application, _, _| {
-            if !active_window_shows_a_dialog(app) {
-                dialogs::shortcuts_dialog().present(app.active_window().as_ref());
-            }
-        })
+        .activate(|app: &adw::Application, _, _| present_shortcuts(app))
         .build();
     let about = gio::ActionEntry::builder("about")
-        .activate(|app: &adw::Application, _, _| {
-            if !active_window_shows_a_dialog(app) {
-                dialogs::about_dialog().present(app.active_window().as_ref());
-            }
-        })
+        .activate(|app: &adw::Application, _, _| present_about(app))
         .build();
     let quit = gio::ActionEntry::builder("quit")
-        .activate(|app: &adw::Application, _, _| {
-            for window in app.windows() {
-                window.close();
-            }
-        })
+        .activate(|app: &adw::Application, _, _| close_every_window(app))
         .build();
     app.add_action_entries([shortcuts, about, quit]);
+}
+
+fn present_shortcuts(app: &adw::Application) {
+    if !active_window_shows_a_dialog(app) {
+        dialogs::shortcuts_dialog().present(app.active_window().as_ref());
+    }
+}
+
+fn present_about(app: &adw::Application) {
+    if !active_window_shows_a_dialog(app) {
+        dialogs::about_dialog().present(app.active_window().as_ref());
+    }
+}
+
+fn close_every_window(app: &adw::Application) {
+    for window in app.windows() {
+        window.close();
+    }
 }
 
 fn active_window_shows_a_dialog(app: &adw::Application) -> bool {

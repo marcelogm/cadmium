@@ -1,3 +1,5 @@
+pub mod support;
+
 use cadmium_engine::{
     canvas::*,
     engine::PaintEngine,
@@ -5,81 +7,14 @@ use cadmium_engine::{
     history::History,
     pigments::PigmentDb,
     session::PaintSession,
-    stroke::StrokeSample,
     surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH},
 };
+use support::{frame, line, session, spec, stroke, without_wgpu_errors};
 
 const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 2 * 4);
 
-fn without_wgpu_errors<T>(gpu: &GpuContext, work: impl FnOnce() -> T) -> T {
-    let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let result = work();
-    let error = pollster::block_on(scope.pop());
-    assert!(error.is_none(), "wgpu error: {error:?}");
-    result
-}
-
-fn spec(width: u32, height: u32) -> CanvasSpec {
-    CanvasSpec {
-        width,
-        height,
-        primer: Primer::WhiteGesso,
-        weave: Weave::Linen,
-        pigment_slots: vec![
-            "ultramarine_blue".into(),
-            "cadmium_yellow".into(),
-            "titanium_white".into(),
-        ],
-    }
-}
-
 fn tray_tiles() -> u32 {
     TRAY_WIDTH.div_ceil(TILE_SIZE) * TRAY_HEIGHT.div_ceil(TILE_SIZE)
-}
-
-fn session(gpu: &GpuContext) -> PaintSession {
-    without_wgpu_errors(gpu, || PaintSession::new(gpu, spec(512, 256)).unwrap())
-}
-
-fn frame(gpu: &GpuContext, s: &mut PaintSession) {
-    without_wgpu_errors(gpu, || {
-        let mut e = gpu.device.create_command_encoder(&Default::default());
-        s.encode_frame(gpu, &mut e);
-        gpu.queue.submit([e.finish()]);
-    });
-}
-
-fn drag(gpu: &GpuContext, s: &mut PaintSession, samples: &[StrokeSample]) {
-    for (i, sample) in samples.iter().enumerate() {
-        if i == 0 {
-            s.begin_stroke(gpu, *sample)
-        } else {
-            s.add_samples(&[*sample])
-        }
-        if i % 4 == 0 {
-            frame(gpu, s);
-        }
-    }
-    s.end_stroke();
-    frame(gpu, s);
-}
-
-fn line(y: f64, from: f64, to: f64, pressure: f32, tilt_x_deg: f32) -> Vec<StrokeSample> {
-    let steps = 60;
-    (0..=steps)
-        .map(|i| StrokeSample {
-            x: from + (to - from) * i as f64 / steps as f64,
-            y,
-            pressure,
-            tilt_x_deg,
-            tilt_y_deg: 0.0,
-            time_ms: i * 4,
-        })
-        .collect()
-}
-
-fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
-    drag(gpu, s, &line(y, from, to, 0.8, 20.0));
 }
 
 fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
@@ -376,12 +311,7 @@ fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_
     stroke(&gpu, &mut s, 64.0, 40.0, 470.0);
     let wider = spec(1024, 256);
     without_wgpu_errors(&gpu, || s.replace_document(&gpu, wider.clone())).unwrap();
-    assert_eq!(s.canvas.spec, wider);
-    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
-    assert!(!s.history.can_undo());
-    assert!(!s.history.can_redo());
-    let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
-    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles());
+    assert_a_blank_canvas_with_an_empty_history(&gpu, &s, wider);
     assert_eq!(s.engine.params().get(TUNED_KEY), TUNED_VALUE);
     assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
     assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);
@@ -390,4 +320,17 @@ fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_
     assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
     assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+}
+
+fn assert_a_blank_canvas_with_an_empty_history(
+    gpu: &GpuContext,
+    s: &PaintSession,
+    wider: CanvasSpec,
+) {
+    assert_eq!(s.canvas.spec, wider);
+    assert_eq!(s.canvas.wet_totals(gpu).unwrap().volume, 0.0);
+    assert!(!s.history.can_undo());
+    assert!(!s.history.can_redo());
+    let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
+    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles());
 }

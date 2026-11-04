@@ -1,3 +1,5 @@
+pub mod support;
+
 use cadmium_engine::{
     brush::FULL_RESERVOIR_VOLUME_UM,
     canvas::*,
@@ -5,8 +7,8 @@ use cadmium_engine::{
     gpu::GpuContext,
     pigments::{MAX_SLOTS, Mixture},
     session::PaintSession,
-    stroke::StrokeSample,
 };
+use support::{session, stroke, without_wgpu_errors};
 
 const BLUE: usize = 0;
 const YELLOW: usize = 1;
@@ -14,66 +16,6 @@ const SMALL_TIP_RADIUS_PX: f32 = 5.0;
 const DEFAULT_TIP_RADIUS_PX: f32 = 20.0;
 const RELATIVE_TOLERANCE: f64 = 1e-4;
 const FRACTION_TOLERANCE: f32 = 1e-3;
-
-fn without_wgpu_errors<T>(gpu: &GpuContext, work: impl FnOnce() -> T) -> T {
-    let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let result = work();
-    let error = pollster::block_on(scope.pop());
-    assert!(error.is_none(), "wgpu error: {error:?}");
-    result
-}
-
-fn session(gpu: &GpuContext) -> PaintSession {
-    without_wgpu_errors(gpu, || {
-        PaintSession::new(
-            gpu,
-            CanvasSpec {
-                width: 512,
-                height: 256,
-                primer: Primer::WhiteGesso,
-                weave: Weave::Linen,
-                pigment_slots: vec![
-                    "ultramarine_blue".into(),
-                    "cadmium_yellow".into(),
-                    "titanium_white".into(),
-                ],
-            },
-        )
-        .unwrap()
-    })
-}
-
-fn frame(gpu: &GpuContext, s: &mut PaintSession) {
-    without_wgpu_errors(gpu, || {
-        let mut e = gpu.device.create_command_encoder(&Default::default());
-        s.encode_frame(gpu, &mut e);
-        gpu.queue.submit([e.finish()]);
-    });
-}
-
-fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
-    let steps = 60;
-    for i in 0..=steps {
-        let sample = StrokeSample {
-            x: from + (to - from) * f64::from(i) / f64::from(steps),
-            y,
-            pressure: 0.8,
-            tilt_x_deg: 20.0,
-            tilt_y_deg: 0.0,
-            time_ms: i * 4,
-        };
-        if i == 0 {
-            s.begin_stroke(gpu, sample)
-        } else {
-            s.add_samples(&[sample])
-        }
-        if i % 4 == 0 {
-            frame(gpu, s);
-        }
-    }
-    s.end_stroke();
-    frame(gpu, s);
-}
 
 fn pure(slot: usize, volume_um: f32) -> Mixture {
     let mut fractions = [0.0; MAX_SLOTS];
@@ -90,9 +32,7 @@ fn disk_texels(radius: f32) -> f64 {
     for y in -half..half {
         for x in -half..half {
             let (x, y) = (x as f32, y as f32);
-            if x * x + y * y <= radius * radius {
-                count += 1;
-            }
+            count += u32::from(x * x + y * y <= radius * radius);
         }
     }
     f64::from(count)

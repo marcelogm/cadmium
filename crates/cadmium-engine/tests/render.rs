@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+pub mod support;
 
 use cadmium_engine::{
     canvas::*, gpu::GpuContext, params::SimParams, pigments::PigmentDb, present::*, render::*,
 };
+use support::write_png;
 
 fn blank(gpu: &GpuContext) -> Canvas {
     Canvas::new(
@@ -33,29 +34,15 @@ fn shade_and_present(
     renderer.encode_shade(
         gpu,
         canvas,
-        &SimParams::default(),
-        ViewMode::Color,
+        ShadeRequest {
+            params: &SimParams::default(),
+            mode: ViewMode::Color,
+        },
         &mut enc,
     );
-    presenter.encode_present(gpu, canvas, view, &target, &mut enc);
+    presenter.encode_present(gpu, PresentRequest { canvas, view }, &target, &mut enc);
     gpu.queue.submit([enc.finish()]);
     readback_rgba8(gpu, &target).unwrap()
-}
-
-fn write_png(name: &str, width: u32, height: u32, rgba: &[u8]) {
-    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .parent()
-        .expect("cargo target tmpdir lives inside the target directory")
-        .to_path_buf();
-    let file = std::fs::File::create(target_dir.join(name)).unwrap();
-    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder
-        .write_header()
-        .unwrap()
-        .write_image_data(rgba)
-        .unwrap();
 }
 
 const IDENTITY_VIEW: ViewTransform = ViewTransform {
@@ -137,11 +124,9 @@ fn impasto_edge_facing_the_light_is_brighter_than_the_edge_in_shadow() {
     let mut pig = vec![0.0f32; side * side * 4];
     let mut vol = vec![0.0f32; side * side];
     for y in 0..side {
-        for x in 0..side {
-            if inside(x, y) {
-                pig[(y * side + x) * 4] = 1.0;
-                vol[y * side + x] = 200.0;
-            }
+        for x in (0..side).filter(|&x| inside(x, y)) {
+            pig[(y * side + x) * 4] = 1.0;
+            vol[y * side + x] = 200.0;
         }
     }
     canvas.write_f32(&gpu, StateTexture::WetPig0, &pig);

@@ -3,7 +3,6 @@ use gtk::glib;
 
 use crate::application::ACCELERATORS;
 use crate::tools::UiTool;
-use crate::window::TOOL_KEYS;
 
 const APPLICATION_ICON: &str = "applications-graphics-symbolic";
 const PIGMENT_DATA_CREDIT: &str = "Espectros provisórios, ajustados à mão a partir da aparência conhecida de cada pigmento; não são medições";
@@ -48,10 +47,10 @@ pub fn action_accelerator(action: &str) -> Option<String> {
 }
 
 pub fn tool_accelerator(tool: UiTool) -> String {
-    TOOL_KEYS
+    tool.profile()
+        .keys
         .iter()
-        .filter(|(_, bound)| *bound == tool)
-        .filter_map(|(key, _)| key.name())
+        .filter_map(|key| key.name())
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -71,6 +70,14 @@ pub fn about_dialog() -> adw::AboutDialog {
 
 pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     let dialog = adw::ShortcutsDialog::new();
+    dialog.add(tool_shortcuts());
+    for (title, entries) in ACTION_SHORTCUTS {
+        dialog.add(action_shortcuts(title, entries));
+    }
+    dialog
+}
+
+fn tool_shortcuts() -> adw::ShortcutsSection {
     let tools = adw::ShortcutsSection::new(Some("Ferramentas"));
     for tool in UiTool::ALL {
         let item = adw::ShortcutsItem::new(tool.label(), &tool_accelerator(tool));
@@ -79,17 +86,17 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
         }
         tools.add(item);
     }
-    dialog.add(tools);
-    for (title, entries) in ACTION_SHORTCUTS {
-        let section = adw::ShortcutsSection::new(Some(title));
-        for (label, action) in entries {
-            if let Some(accelerator) = action_accelerator(action) {
-                section.add(adw::ShortcutsItem::new(label, &accelerator));
-            }
+    tools
+}
+
+fn action_shortcuts(title: &str, entries: &[(&str, &str)]) -> adw::ShortcutsSection {
+    let section = adw::ShortcutsSection::new(Some(title));
+    for (label, action) in entries {
+        if let Some(accelerator) = action_accelerator(action) {
+            section.add(adw::ShortcutsItem::new(label, &accelerator));
         }
-        dialog.add(section);
     }
-    dialog
+    section
 }
 
 const DISCARD_RESPONSE: &str = "discard";
@@ -205,55 +212,4 @@ pub fn ask_to_quit_while_writing(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_accelerator_is_listed_exactly_once() {
-        for (action, _) in ACCELERATORS {
-            let listed = ACTION_SHORTCUTS
-                .iter()
-                .flat_map(|(_, entries)| entries.iter())
-                .filter(|(_, listed)| *listed == action)
-                .count();
-            assert_eq!(listed, 1, "{action}");
-        }
-    }
-
-    #[test]
-    fn every_listed_action_has_an_accelerator() {
-        for (_, entries) in ACTION_SHORTCUTS {
-            for (label, action) in entries {
-                assert!(action_accelerator(action).is_some(), "{label}: {action}");
-            }
-        }
-    }
-
-    #[test]
-    fn every_tool_key_is_listed() {
-        for tool in UiTool::ALL {
-            assert!(!tool_accelerator(tool).is_empty(), "{tool:?}");
-        }
-    }
-
-    #[test]
-    fn rag_lists_both_of_its_keys() {
-        assert_eq!(
-            tool_accelerator(UiTool::Paint(crate::tools::Tool::Rag)),
-            "4 r"
-        );
-    }
-
-    #[test]
-    fn the_tube_answers_to_six() {
-        assert_eq!(tool_accelerator(UiTool::Tube), "6");
-    }
-
-    #[test]
-    fn zoom_in_lists_both_of_its_accelerators() {
-        assert_eq!(
-            action_accelerator("win.zoom-in").as_deref(),
-            Some("<Control>plus <Control>equal")
-        );
-    }
-}
+mod tests;
