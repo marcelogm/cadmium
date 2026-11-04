@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE, TileCoord, tiles_in_rect};
-use crate::engine::{BrushReadout, PaintEngine, WetOilEngine};
+use crate::engine::{BrushOutline, BrushReadout, PaintEngine, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
@@ -158,6 +158,10 @@ impl PaintSession {
     pub fn redo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
         self.history.redo(gpu, &mut self.canvas)
+    }
+
+    pub fn brush_outline(&self, pen: &StrokeSample) -> Option<BrushOutline> {
+        self.engine.brush_outline(&self.brush, pen)
     }
 
     pub fn pick_colour(

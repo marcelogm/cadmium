@@ -9,6 +9,7 @@ use gtk::{gdk, glib, graphene, gsk};
 
 use crate::presenter::FramePresenter;
 use crate::state::{AppState, SharedState};
+use crate::tools::UiTool;
 use crate::view;
 
 const FIT_MARGIN: f64 = 24.0;
@@ -123,16 +124,23 @@ mod imp {
                 snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Nearest, &bounds);
             }
             if let Some((x, y)) = self.hover.get()
-                && let Some(radius) = canvas.outline_radius()
+                && let Some(outline) = canvas.cursor_outline()
             {
+                let [along, across] = outline.semi_axes;
                 append_ring(
                     snapshot,
-                    x as f32,
-                    y as f32,
-                    radius + OUTLINE_WIDTH,
+                    (x as f32, y as f32),
+                    [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
+                    outline.rotation_deg,
                     OUTLINE_DARK,
                 );
-                append_ring(snapshot, x as f32, y as f32, radius, OUTLINE_LIGHT);
+                append_ring(
+                    snapshot,
+                    (x as f32, y as f32),
+                    outline.semi_axes,
+                    outline.rotation_deg,
+                    OUTLINE_LIGHT,
+                );
             }
         }
     }
@@ -144,10 +152,26 @@ glib::wrapper! {
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
-fn append_ring(snapshot: &gtk::Snapshot, x: f32, y: f32, radius: f32, colour: gdk::RGBA) {
-    let bounds = graphene::Rect::new(x - radius, y - radius, 2.0 * radius, 2.0 * radius);
-    let outline = gsk::RoundedRect::from_rect(bounds, radius);
+struct CursorOutline {
+    semi_axes: [f32; 2],
+    rotation_deg: f32,
+}
+
+fn append_ring(
+    snapshot: &gtk::Snapshot,
+    (x, y): (f32, f32),
+    [along, across]: [f32; 2],
+    rotation_deg: f32,
+    colour: gdk::RGBA,
+) {
+    snapshot.save();
+    snapshot.translate(&graphene::Point::new(x, y));
+    snapshot.rotate(rotation_deg);
+    let bounds = graphene::Rect::new(-along, -across, 2.0 * along, 2.0 * across);
+    let corner = graphene::Size::new(along, across);
+    let outline = gsk::RoundedRect::new(bounds, corner, corner, corner, corner);
     snapshot.append_border(&outline, &[OUTLINE_WIDTH; 4], &[colour; 4]);
+    snapshot.restore();
 }
 
 impl CadmiumCanvas {
@@ -351,11 +375,31 @@ impl CadmiumCanvas {
         }
     }
 
-    fn outline_radius(&self) -> Option<f32> {
+    fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
-        let canvas_radius = state.session.brush.geometry.max_diameter_px / 2.0;
-        let radius = canvas_radius * state.view.zoom / self.device_scale() as f32;
-        (radius >= OUTLINE_MIN_RADIUS).then_some(radius)
+        let mut brush = state.session.brush.clone();
+        if let UiTool::Paint(tool) = state.ui_tool {
+            brush.tool = tool;
+        }
+        let pen = StrokeSample {
+            x: 0.0,
+            y: 0.0,
+            pressure: state.pen.pressure,
+            tilt_x_deg: state.pen.tilt_x,
+            tilt_y_deg: state.pen.tilt_y,
+            time_ms: 0,
+        };
+        let to_widget = state.view.zoom / self.device_scale() as f32;
+        let canvas_radius = brush.geometry.max_diameter_px / 2.0;
+        let (semi_axes, rotation_deg) = match state.session.engine.brush_outline(&brush, &pen) {
+            Some(outline) => (outline.semi_axes, outline.orientation.to_degrees()),
+            None => ([canvas_radius; 2], 0.0),
+        };
+        let semi_axes = semi_axes.map(|semi| semi * to_widget);
+        (semi_axes[0].max(semi_axes[1]) >= OUTLINE_MIN_RADIUS).then_some(CursorOutline {
+            semi_axes,
+            rotation_deg,
+        })
     }
 
     fn viewport_px(&self) -> (u32, u32) {

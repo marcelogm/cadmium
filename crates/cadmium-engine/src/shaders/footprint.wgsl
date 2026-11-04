@@ -40,8 +40,9 @@ fn along_heading_share(position: vec2<f32>) -> f32 {
 
 fn tuft_footprint(position: vec2<f32>) -> f32 {
     let normalized_distance = length(position / semi_axes());
-    let softness = mix(EDGE_SOFTNESS_PX, max(EDGE_SOFTNESS_PX, ALONG_HEADING_SOFTNESS_SHARE * dab.radius), along_heading_share(position));
-    return smoothstep(0.0, softness, (1.0 - normalized_distance) * dab.radius);
+    let thinnest = min(semi_axes().x, semi_axes().y);
+    let softness = mix(EDGE_SOFTNESS_PX, max(EDGE_SOFTNESS_PX, ALONG_HEADING_SOFTNESS_SHARE * thinnest), along_heading_share(position));
+    return smoothstep(0.0, softness, (1.0 - normalized_distance) * thinnest);
 }
 
 fn across_heading(position: vec2<f32>) -> f32 {

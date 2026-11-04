@@ -7,7 +7,7 @@ use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
-use crate::stroke::{Dab, Tool};
+use crate::stroke::{Dab, StrokeSample, Tool, pen_angles};
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -33,6 +33,13 @@ const MIN_TIP_MEAN_VOLUME_UM: f32 = 1e-3;
 const DAB_RECORD_STRIDE: u64 = 256;
 const DAB_APRON_PX: i32 = 2;
 const MAX_SWEEP_PX: f32 = 32.0;
+const FLAT_THICKNESS_SHARE: f32 = 0.25;
+const FAN_THICKNESS_SHARE: f32 = 0.12;
+const FAN_BRISTLE_CONTRAST: f32 = 0.9;
+const FAN_BRISTLE_COUNT_SHARE: f32 = 0.5;
+const UPRIGHT_TILT_RAD: f32 = 5.0 * std::f32::consts::PI / 180.0;
+const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
+const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
 const CAPILLARY_SHARE: f32 = 0.2;
 const CROSS_CAPILLARY_SHARE: f32 = 0.01;
 const CAPILLARY_POOLS: u64 = TIP_SIZE as u64 + 1;
@@ -278,6 +285,12 @@ fn scratch_surface(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BrushOutline {
+    pub semi_axes: [f32; 2],
+    pub orientation: f32,
+}
+
 struct Footprint {
     radius: f32,
     elongation: f32,
@@ -358,6 +371,47 @@ fn blade_capacity_um(altitude: f32) -> f32 {
         + (KNIFE_UPRIGHT_CAPACITY_UM - KNIFE_LAID_CAPACITY_UM) * upright_share(altitude)
 }
 
+fn shape_thickness(shape: BrushShape) -> f32 {
+    match shape {
+        BrushShape::Round => 1.0,
+        BrushShape::Flat => FLAT_THICKNESS_SHARE,
+        BrushShape::Fan => FAN_THICKNESS_SHARE,
+    }
+}
+
+fn blade_orientation(shape: BrushShape, altitude: f32, azimuth: f32) -> f32 {
+    if shape == BrushShape::Round {
+        return azimuth;
+    }
+    let tilt = std::f32::consts::FRAC_PI_2 - altitude;
+    let lean = smoothstep(UPRIGHT_TILT_RAD, LEANING_TILT_RAD, tilt);
+    let doubled = [
+        lean * (2.0 * azimuth).cos() + (1.0 - lean) * (2.0 * UPRIGHT_ORIENTATION).cos(),
+        lean * (2.0 * azimuth).sin() + (1.0 - lean) * (2.0 * UPRIGHT_ORIENTATION).sin(),
+    ];
+    if doubled[0].hypot(doubled[1]) <= f32::EPSILON {
+        return UPRIGHT_ORIENTATION;
+    }
+    doubled[1].atan2(doubled[0]) / 2.0
+}
+
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+fn bristle_spread(shape: BrushShape, params: &SimParams) -> (f32, f32) {
+    let contrast = params.get("bristle_contrast");
+    let count = params.get("bristle_count");
+    match shape {
+        BrushShape::Fan => (
+            contrast.max(FAN_BRISTLE_CONTRAST),
+            count * FAN_BRISTLE_COUNT_SHARE,
+        ),
+        _ => (contrast, count),
+    }
+}
+
 fn knife_half_width(radius: f32) -> f32 {
     (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX)
 }
@@ -401,13 +455,10 @@ impl Footprint {
         }
         let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
         let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
-        let elongation = (1.0 + params.get("tilt_elongation") * tilt).min(MAX_TIP_RADIUS / radius);
-        let follows_stroke = brush.shape == BrushShape::Flat;
-        let orientation = if follows_stroke {
-            dab.direction
-        } else {
-            dab.azimuth
-        };
+        let elongation = (shape_thickness(brush.shape)
+            * (1.0 + params.get("tilt_elongation") * tilt))
+            .min(MAX_TIP_RADIUS / radius);
+        let orientation = blade_orientation(brush.shape, dab.altitude, dab.azimuth);
         Footprint {
             radius,
             elongation,
@@ -482,6 +533,7 @@ fn place(
         return None;
     }
     let footprint = Footprint::of(dab, brush, params);
+    let (bristle_contrast, bristle_count) = bristle_spread(brush.shape, params);
     let step_ratio = step_px / REFERENCE_STEP_PX;
     let [half_x, half_y] = footprint.canvas_half_extents();
     let swept_from = [dab.x + sweep[0], dab.y + sweep[1]];
@@ -523,11 +575,9 @@ fn place(
         bristle_contrast: if wipes(brush.tool) {
             0.0
         } else {
-            params.get("bristle_contrast")
+            bristle_contrast
         },
-        bristle_count: params
-            .get("bristle_count")
-            .min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
+        bristle_count: bristle_count.min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
         refill_rate: rate_over_step(params.get("refill_rate"), step_ratio),
         loaded_thickness_um,
         advection: spreading.advection,
@@ -1464,6 +1514,32 @@ impl WetOilEngine {
             volume_um: self.loaded_thickness_um,
             fractions: std::array::from_fn(|slot| picked[PICKED_FRACTIONS + slot]),
         }))
+    }
+
+    pub fn brush_outline(
+        &self,
+        brush: &BrushSettings,
+        sample: &StrokeSample,
+    ) -> Option<BrushOutline> {
+        if matches!(brush.tool, Tool::Knife | Tool::Eyedropper) {
+            return None;
+        }
+        let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
+        let dab = Dab {
+            x: sample.x as f32,
+            y: sample.y as f32,
+            radius: brush.geometry.max_diameter_px / 2.0,
+            pressure: 1.0,
+            altitude: angles.altitude_rad,
+            azimuth: angles.azimuth_rad,
+            direction: 0.0,
+            speed: 0.0,
+        };
+        let footprint = Footprint::of(&dab, brush, &self.params);
+        Some(BrushOutline {
+            semi_axes: footprint.semi_axes(),
+            orientation: footprint.orientation,
+        })
     }
 
     pub fn dab_bounds(
