@@ -13,4 +13,5 @@ pub mod session;
 pub mod spectral;
 pub mod stroke;
 pub mod surface;
+pub mod tool;
 pub mod tube;

@@ -9,6 +9,7 @@ use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::{Dab, StrokeSample, Tool, pen_angles};
+use crate::tool::TOOL_MODE_KNIFE;
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -55,7 +56,6 @@ const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
 pub(crate) const WORKGROUP_SIZE: u32 = 8;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
-const KNIFE_DRAG: f32 = 0.15;
 const KNIFE_LAID_ALTITUDE_RAD: f32 = std::f32::consts::FRAC_PI_4;
 const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
 const KNIFE_DIP_LENGTH_PX: f32 = 380.0;
@@ -63,8 +63,6 @@ const KNIFE_LAID_CAPACITY_UM: f32 = MAX_TIP_THICKNESS_UM * KNIFE_DIP_LENGTH_PX;
 const KNIFE_UPRIGHT_CAPACITY_UM: f32 = 200.0;
 const DRAWN_LOADED_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM * DEFAULT_LOAD;
 const KNIFE_SPILL_SHARE: f32 = 0.5;
-const KNIFE_REST_FOLLOW: f32 = 0.25;
-const CONTACT_REST_FOLLOW: f32 = 0.25;
 const FIRST_REST_FOLLOW: f32 = 1.0;
 const BLADE_SPILL_BAND_PX: f32 = 2.0;
 const BLADE_COVERAGE_MARGIN_PX: f32 = 1.0;
@@ -104,12 +102,6 @@ const DRY_SNIPPETS: [&str; 4] = [
     include_str!("shaders/kubelka_munk.wgsl"),
     include_str!("shaders/nearest_half.wgsl"),
 ];
-
-const TOOL_MODE_BRUSH: u32 = 0;
-const TOOL_MODE_KNIFE: u32 = 1;
-const TOOL_MODE_BLENDER: u32 = 2;
-const TOOL_MODE_RAG: u32 = 3;
-const TOOL_MODE_EYEDROPPER: u32 = 4;
 
 pub trait PaintEngine {
     fn begin_stroke(&mut self);
@@ -302,36 +294,6 @@ struct Footprint {
     lateral_reach: f32,
 }
 
-struct Spreading {
-    advection: f32,
-    squeeze: f32,
-    diffusion: f32,
-}
-
-impl Spreading {
-    fn of(tool: Tool, params: &SimParams) -> Spreading {
-        let advection = params.get("advection");
-        let squeeze = params.get("squeeze");
-        match tool {
-            Tool::Knife => Spreading {
-                advection: KNIFE_DRAG,
-                squeeze: 0.0,
-                diffusion: 0.0,
-            },
-            Tool::Blender => Spreading {
-                advection,
-                squeeze,
-                diffusion: params.get("blend_diffusion"),
-            },
-            _ => Spreading {
-                advection,
-                squeeze,
-                diffusion: 0.0,
-            },
-        }
-    }
-}
-
 fn spreads(tool: Tool) -> bool {
     matches!(tool, Tool::Brush | Tool::Knife | Tool::Blender)
 }
@@ -346,14 +308,6 @@ fn wipes(tool: Tool) -> bool {
 
 fn blades(tool: Tool) -> bool {
     tool == Tool::Knife
-}
-
-fn rest_follow(tool: Tool) -> f32 {
-    if blades(tool) {
-        KNIFE_REST_FOLLOW
-    } else {
-        CONTACT_REST_FOLLOW
-    }
 }
 
 fn upright_share(altitude: f32) -> f32 {
@@ -493,16 +447,6 @@ impl Footprint {
     }
 }
 
-fn tool_mode(tool: Tool) -> u32 {
-    match tool {
-        Tool::Brush => TOOL_MODE_BRUSH,
-        Tool::Knife => TOOL_MODE_KNIFE,
-        Tool::Blender => TOOL_MODE_BLENDER,
-        Tool::Rag => TOOL_MODE_RAG,
-        Tool::Eyedropper => TOOL_MODE_EYEDROPPER,
-    }
-}
-
 fn rate_over_step(reference_rate: f32, step_ratio: f32) -> f32 {
     1.0 - (1.0 - reference_rate.clamp(0.0, 1.0)).powf(step_ratio)
 }
@@ -530,6 +474,7 @@ fn place(
     loaded_thickness_um: f32,
     canvas: &Canvas,
 ) -> Option<Placement> {
+    let profile = brush.tool.profile();
     if brush.tool == Tool::Eyedropper || !is_finite(dab) {
         return None;
     }
@@ -556,7 +501,7 @@ fn place(
     let [x1, y1] = [0, 1].map(|axis| (canvas_origin[axis] + canvas_size[axis] as i32) as f32);
     let (tip_origin, tip_size) = tip_window(footprint.semi_axes());
     let (sin, cos) = footprint.orientation.sin_cos();
-    let spreading = Spreading::of(brush.tool, params);
+    let spreading = profile.spreading.rates(params);
     let record = DabRecord {
         center: [dab.x, dab.y],
         radius: footprint.radius,
@@ -567,7 +512,7 @@ fn place(
         speed: dab.speed,
         orientation: [cos, sin],
         elongation: footprint.elongation,
-        tool_mode: tool_mode(brush.tool),
+        tool_mode: profile.shader_mode,
         canvas_origin,
         canvas_size,
         tip_origin,
@@ -591,7 +536,7 @@ fn place(
         spread_origin,
         spread_size,
         rag_strength: params.get("rag_strength"),
-        rest_follow: rest_follow(brush.tool),
+        rest_follow: profile.rest_follow,
         blade_capacity_um: blade_capacity_um(dab.altitude),
         blade_spill_share: KNIFE_SPILL_SHARE,
         step_ratio,
