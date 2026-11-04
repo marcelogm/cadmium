@@ -32,6 +32,15 @@ const TIP_SUMS_BYTES: u64 = (TIP_SUM_CHANNELS * std::mem::size_of::<f32>()) as u
 const MIN_TIP_MEAN_VOLUME_UM: f32 = 1e-3;
 const DAB_RECORD_STRIDE: u64 = 256;
 const DAB_APRON_PX: i32 = 2;
+const MAX_SWEEP_PX: f32 = 32.0;
+const CAPILLARY_SHARE: f32 = 0.2;
+const CROSS_CAPILLARY_SHARE: f32 = 0.01;
+const CAPILLARY_POOLS: u64 = TIP_SIZE as u64 + 1;
+const CAPILLARY_BYTES: u64 = (3 * CAPILLARY_POOLS * TIP_CHANNELS as u64 + 2 * CAPILLARY_POOLS)
+    * std::mem::size_of::<u32>() as u64;
+const CAPILLARY_POOL_BUDGET: f32 = 4.0e9;
+const CAPILLARY_POOL_GROUP_SIZE: u32 = 64;
+const CAPILLARY_POOL_GROUPS: u32 = (CAPILLARY_POOLS as u32).div_ceil(CAPILLARY_POOL_GROUP_SIZE);
 const SPREAD_APRON_PX: i32 = 1;
 const TIP_APRON_TEXELS: f32 = 1.0;
 const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
@@ -143,11 +152,15 @@ struct DabRecord {
     blade_capacity_um: f32,
     blade_spill_share: f32,
     step_ratio: f32,
-    _pad: [f32; 3],
+    sweep: [f32; 2],
+    capillary_rate: f32,
+    cross_capillary_rate: f32,
+    capillary_scale: f32,
+    _pad: [f32; 2],
 }
 
 const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 176 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+const _: () = assert!(DAB_RECORD_SIZE == 192 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -440,6 +453,12 @@ fn rate_over_step(reference_rate: f32, step_ratio: f32) -> f32 {
     1.0 - (1.0 - reference_rate.clamp(0.0, 1.0)).powf(step_ratio)
 }
 
+fn capillary_scale(tip_size: [u32; 2]) -> f32 {
+    let texels = (tip_size[0] * tip_size[1]).max(1) as f32;
+    let fitting = CAPILLARY_POOL_BUDGET / (texels * MAX_TIP_THICKNESS_UM);
+    fitting.min(DELTA_SCALE).log2().floor().exp2()
+}
+
 fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
     let reach = semi_axes.map(|semi| (semi + TIP_APRON_TEXELS).ceil() as u32);
     let origin = reach.map(|r| (TIP_HALF - r) as i32);
@@ -450,6 +469,7 @@ fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
 fn place(
     dab: &Dab,
     step_px: f32,
+    sweep: [f32; 2],
     brush: &BrushSettings,
     params: &SimParams,
     loaded_thickness_um: f32,
@@ -464,13 +484,14 @@ fn place(
     let footprint = Footprint::of(dab, brush, params);
     let step_ratio = step_px / REFERENCE_STEP_PX;
     let [half_x, half_y] = footprint.canvas_half_extents();
+    let swept_from = [dab.x + sweep[0], dab.y + sweep[1]];
     let first = [
-        (dab.x - half_x).floor() as i32,
-        (dab.y - half_y).floor() as i32,
+        (dab.x.min(swept_from[0]) - half_x).floor() as i32,
+        (dab.y.min(swept_from[1]) - half_y).floor() as i32,
     ];
     let last = [
-        (dab.x + half_x).floor() as i32,
-        (dab.y + half_y).floor() as i32,
+        (dab.x.max(swept_from[0]) + half_x).floor() as i32,
+        (dab.y.max(swept_from[1]) + half_y).floor() as i32,
     ];
     let limits = [canvas.spec.width as i32, canvas.spec.height as i32];
     let (canvas_origin, canvas_size) = clamped_region(first, last, DAB_APRON_PX, limits)?;
@@ -520,7 +541,11 @@ fn place(
         blade_capacity_um: blade_capacity_um(dab.altitude),
         blade_spill_share: KNIFE_SPILL_SHARE,
         step_ratio,
-        _pad: [0.0; 3],
+        sweep,
+        capillary_rate: rate_over_step(CAPILLARY_SHARE, step_ratio),
+        cross_capillary_rate: rate_over_step(CROSS_CAPILLARY_SHARE, step_ratio),
+        capillary_scale: capillary_scale(tip_size),
+        _pad: [0.0; 2],
     };
     Some(Placement {
         record,
@@ -539,7 +564,7 @@ fn max_dab_region_side() -> u32 {
     let along = knife_half_width(MAX_TIP_RADIUS) + BLADE_COVERAGE_MARGIN_PX;
     let across = MAX_TIP_RADIUS + BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX;
     let half_extent = across.hypot(along).ceil() as u32;
-    2 * (half_extent + 1 + DAB_APRON_PX as u32)
+    2 * (half_extent + 1 + DAB_APRON_PX as u32) + 2 * MAX_SWEEP_PX as u32
 }
 
 fn clamped_region(
@@ -739,6 +764,12 @@ pub struct BrushReadout {
     pub knife: PaintTotals,
 }
 
+struct CapillaryPipelines {
+    gather: wgpu::ComputePipeline,
+    settle: wgpu::ComputePipeline,
+    distribute: wgpu::ComputePipeline,
+}
+
 pub struct WetOilEngine {
     params: SimParams,
     tip_radius: f32,
@@ -747,6 +778,7 @@ pub struct WetOilEngine {
     tip_delta: wgpu::Buffer,
     body: wgpu::Buffer,
     wanted: wgpu::Buffer,
+    capillary_rows: wgpu::Buffer,
     contact_reference: wgpu::Buffer,
     picked: wgpu::Buffer,
     tip_sums: wgpu::Buffer,
@@ -774,6 +806,7 @@ pub struct WetOilEngine {
     gather_pipeline: wgpu::ComputePipeline,
     settle_pipeline: wgpu::ComputePipeline,
     distribute_pipeline: wgpu::ComputePipeline,
+    capillary_pipelines: CapillaryPipelines,
     copy_pipeline: wgpu::ComputePipeline,
     advect_pipeline: wgpu::ComputePipeline,
     rag_pipeline: wgpu::ComputePipeline,
@@ -821,6 +854,7 @@ impl WetOilEngine {
                 storage_entry(2, false),
                 storage_entry(3, false),
                 storage_entry(4, false),
+                storage_entry(5, false),
             ],
         );
         let spreading_entries = |motion_access| {
@@ -909,6 +943,7 @@ impl WetOilEngine {
         let exchange = dab_module("dab_exchange", include_str!("shaders/dab_exchange.wgsl"));
         let apply = dab_module("tip_apply", include_str!("shaders/tip_apply.wgsl"));
         let refill = dab_module("tip_refill", include_str!("shaders/tip_refill.wgsl"));
+        let capillary = dab_module("tip_capillary", include_str!("shaders/tip_capillary.wgsl"));
         let copy = dab_module("region_copy", include_str!("shaders/region_copy.wgsl"));
         let advect = dab_module("advect", include_str!("shaders/advect.wgsl"));
         let rag = dab_module("rag", include_str!("shaders/rag.wgsl"));
@@ -934,6 +969,7 @@ impl WetOilEngine {
             tip_delta: storage_buffer(gpu, "brush_tip_delta", TIP_BYTES),
             body: storage_buffer(gpu, "brush_body", BODY_BYTES),
             wanted: storage_buffer(gpu, "brush_refill_wanted", WANTED_BYTES),
+            capillary_rows: storage_buffer(gpu, "brush_capillary_rows", CAPILLARY_BYTES),
             contact_reference: storage_buffer(
                 gpu,
                 "dab_contact_reference",
@@ -991,6 +1027,29 @@ impl WetOilEngine {
                 &refill_pipeline_layout,
                 "distribute",
             ),
+            capillary_pipelines: CapillaryPipelines {
+                gather: compute_pipeline(
+                    gpu,
+                    "tip_capillary_gather",
+                    &capillary,
+                    &refill_pipeline_layout,
+                    "gather",
+                ),
+                settle: compute_pipeline(
+                    gpu,
+                    "tip_capillary_settle",
+                    &capillary,
+                    &refill_pipeline_layout,
+                    "settle",
+                ),
+                distribute: compute_pipeline(
+                    gpu,
+                    "tip_capillary_distribute",
+                    &capillary,
+                    &refill_pipeline_layout,
+                    "distribute",
+                ),
+            },
             copy_pipeline: compute_pipeline(
                 gpu,
                 "region_copy",
@@ -1048,15 +1107,18 @@ impl WetOilEngine {
         }
     }
 
-    fn step_since_previous_dab(&mut self, dab: &Dab) -> f32 {
+    fn step_since_previous_dab(&mut self, dab: &Dab) -> (f32, [f32; 2]) {
         if !is_finite(dab) {
-            return REFERENCE_STEP_PX;
+            return (REFERENCE_STEP_PX, [0.0; 2]);
         }
-        let step = self
-            .previous_dab
-            .map_or(REFERENCE_STEP_PX, |[x, y]| (dab.x - x).hypot(dab.y - y));
+        let back = self.previous_dab.map(|[x, y]| [x - dab.x, y - dab.y]);
         self.previous_dab = Some([dab.x, dab.y]);
-        step
+        let Some(back) = back else {
+            return (REFERENCE_STEP_PX, [0.0; 2]);
+        };
+        let step = back[0].hypot(back[1]);
+        let sweep = if step <= MAX_SWEEP_PX { back } else { [0.0; 2] };
+        (step, sweep)
     }
 
     pub fn resize_tip(&mut self, radius_px: f32) {
@@ -1225,6 +1287,7 @@ impl WetOilEngine {
         encoder.clear_buffer(&self.tip_delta, 0, None);
         encoder.clear_buffer(&self.body, 0, None);
         encoder.clear_buffer(&self.wanted, 0, None);
+        encoder.clear_buffer(&self.capillary_rows, 0, None);
         gpu.queue.submit([encoder.finish()]);
     }
 
@@ -1412,6 +1475,7 @@ impl WetOilEngine {
         place(
             dab,
             REFERENCE_STEP_PX,
+            [0.0; 2],
             brush,
             &self.params,
             self.loaded_thickness_um,
@@ -1587,6 +1651,7 @@ impl WetOilEngine {
                 buffer_binding(2, &self.tip_delta),
                 buffer_binding(3, &self.body),
                 buffer_binding(4, &self.wanted),
+                buffer_binding(5, &self.capillary_rows),
             ],
         })
     }
@@ -1701,10 +1766,11 @@ impl PaintEngine for WetOilEngine {
     ) {
         let mut placements = Vec::with_capacity(dabs.len());
         for dab in dabs {
-            let step_px = self.step_since_previous_dab(dab);
+            let (step_px, sweep) = self.step_since_previous_dab(dab);
             placements.extend(place(
                 dab,
                 step_px,
+                sweep,
                 brush,
                 &self.params,
                 self.loaded_thickness_um,
@@ -1791,8 +1857,17 @@ impl PaintEngine for WetOilEngine {
             pass.set_bind_group(0, &apply_group, &[offset]);
             pass.set_pipeline(&self.apply_pipeline);
             pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+            pass.set_bind_group(0, &refill_group, &[offset]);
+            let capillary = &self.capillary_pipelines;
+            for (pipeline, groups) in [
+                (&capillary.gather, placement.tip_groups),
+                (&capillary.settle, [CAPILLARY_POOL_GROUPS, 1]),
+                (&capillary.distribute, placement.tip_groups),
+            ] {
+                pass.set_pipeline(pipeline);
+                pass.dispatch_workgroups(groups[0], groups[1], 1);
+            }
             if placement.refills {
-                pass.set_bind_group(0, &refill_group, &[offset]);
                 pass.set_pipeline(&self.gather_pipeline);
                 pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
                 pass.set_pipeline(&self.settle_pipeline);

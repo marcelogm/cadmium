@@ -32,9 +32,13 @@ struct Dab {
     blade_capacity_um: f32,
     blade_spill_share: f32,
     step_ratio: f32,
+    sweep_x: f32,
+    sweep_y: f32,
+    capillary_rate: f32,
+    cross_capillary_rate: f32,
+    capillary_scale: f32,
     _pad0: f32,
     _pad1: f32,
-    _pad2: f32,
 };
 
 struct Body {
