@@ -35,8 +35,8 @@ pub struct SmokeConfig {
 
 impl SmokeConfig {
     pub fn run(self, app: &adw::Application, window: &CadmiumWindow) {
-        if let Some(mode) = self.dmabuf_selftest {
-            run_dmabuf_selftest(app, window, mode);
+        if let Some(policy) = self.dmabuf_selftest {
+            run_dmabuf_selftest(app, window, policy);
             return;
         }
         let run = SmokeRun {

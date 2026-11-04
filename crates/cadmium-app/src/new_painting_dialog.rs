@@ -18,12 +18,12 @@ use selection::PigmentSelection;
 
 const CONTENT_WIDTH: i32 = 560;
 
-pub const PRIMERS: [(Primer, &str); 2] = [
+const PRIMERS: [(Primer, &str); 2] = [
     (Primer::WhiteGesso, "Gesso branco"),
     (Primer::SiennaImprimatura, "Imprimatura siena"),
 ];
 
-pub const WEAVES: [(Weave, &str); 3] = [
+const WEAVES: [(Weave, &str); 3] = [
     (Weave::Linen, "Linho"),
     (Weave::Cotton, "Algodão"),
     (Weave::Smooth, "Lisa"),

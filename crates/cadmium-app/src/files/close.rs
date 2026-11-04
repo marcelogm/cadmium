@@ -39,9 +39,8 @@ impl CadmiumWindow {
             return;
         }
         let window = self.downgrade();
-        let timeout = glib::timeout_add_seconds_local_once(WRITE_HANG_SECONDS, move || {
-            offer_to_quit_now(&window)
-        });
+        let offer = move || offer_to_quit_now(&window);
+        let timeout = glib::timeout_add_seconds_local_once(WRITE_HANG_SECONDS, offer);
         imp.write_wait_timeout.replace(Some(timeout));
     }
 

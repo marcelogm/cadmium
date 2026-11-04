@@ -9,7 +9,7 @@ use crate::LOG_DOMAIN;
 use crate::dialogs;
 use crate::presets::starting_canvas_spec;
 use crate::smoke::SmokeConfig;
-use crate::state::AppState;
+use crate::state::{AppState, SharedState};
 use crate::window::CadmiumWindow;
 
 const ICON_RESOURCE_PATH: &str = "/io/github/marcelogm/Cadmium/icons";
@@ -39,7 +39,6 @@ pub struct CadmiumApplication {
 }
 
 impl CadmiumApplication {
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn new(app_id: &str) -> Self {
         let smoke = SmokeConfig::from_env();
         let flags = if smoke.is_some() {
@@ -52,47 +51,57 @@ impl CadmiumApplication {
             .flags(flags)
             .build();
         let smoke = RefCell::new(smoke);
-        app.connect_startup(|app| {
-            register_icons();
-            setup_actions(app);
-            for (action, accels) in ACCELERATORS {
-                app.set_accels_for_action(action, accels);
-            }
-        });
-        app.connect_activate(move |app| {
-            if let Some(window) = app.active_window() {
-                window.present();
-                return;
-            }
-            let gpu = match GpuContext::new() {
-                Ok(gpu) => Rc::new(gpu),
-                Err(error) => {
-                    report_startup_failure(
-                        app,
-                        MISSING_GPU_HEADING,
-                        &format!("{MISSING_GPU_BODY}\n\n{error}"),
-                    );
-                    return;
-                }
-            };
-            let state = match AppState::new(gpu, starting_canvas_spec()) {
-                Ok(state) => Rc::new(RefCell::new(state)),
-                Err(error) => {
-                    report_startup_failure(app, OUT_OF_VIDEO_MEMORY_HEADING, &error.to_string());
-                    return;
-                }
-            };
-            let window = CadmiumWindow::new(app, state);
-            if let Some(smoke) = smoke.borrow_mut().take() {
-                smoke.run(app, &window);
-            }
-            window.present();
-        });
+        app.connect_startup(start_up);
+        app.connect_activate(move |app| activate(app, &smoke));
         Self { app }
     }
 
     pub fn run(&self) -> glib::ExitCode {
         self.app.run()
+    }
+}
+
+fn start_up(app: &adw::Application) {
+    register_icons();
+    setup_actions(app);
+    for (action, accels) in ACCELERATORS {
+        app.set_accels_for_action(action, accels);
+    }
+}
+
+fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
+    if let Some(window) = app.active_window() {
+        window.present();
+        return;
+    }
+    let Some(state) = start_state(app) else {
+        return;
+    };
+    let window = CadmiumWindow::new(app, state);
+    if let Some(smoke) = smoke.borrow_mut().take() {
+        smoke.run(app, &window);
+    }
+    window.present();
+}
+
+fn start_state(app: &adw::Application) -> Option<SharedState> {
+    let gpu = match GpuContext::new() {
+        Ok(gpu) => Rc::new(gpu),
+        Err(error) => {
+            report_startup_failure(
+                app,
+                MISSING_GPU_HEADING,
+                &format!("{MISSING_GPU_BODY}\n\n{error}"),
+            );
+            return None;
+        }
+    };
+    match AppState::new(gpu, starting_canvas_spec()) {
+        Ok(state) => Some(Rc::new(RefCell::new(state))),
+        Err(error) => {
+            report_startup_failure(app, OUT_OF_VIDEO_MEMORY_HEADING, &error.to_string());
+            None
+        }
     }
 }
 

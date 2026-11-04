@@ -19,7 +19,7 @@ fn tilt_degrees_or(value: Option<f64>, fallback: f32) -> f32 {
     value.map_or(fallback, |tilt| (tilt * TILT_AXIS_TO_DEGREES) as f32)
 }
 
-pub fn history_sample(
+fn history_sample(
     coord: &gdk::TimeCoord,
     to_canvas: impl Fn(f64, f64) -> (f64, f64),
     fallback: &StrokeSample,

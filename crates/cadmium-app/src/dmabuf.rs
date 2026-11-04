@@ -15,7 +15,6 @@ mod tests;
 
 const PRESENT_VK_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 const PRESENT_FOURCC: u32 = drm_fourcc::DrmFourcc::Abgr8888 as u32;
-
 const IMAGE_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::STORAGE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
