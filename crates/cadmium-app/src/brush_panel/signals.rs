@@ -7,46 +7,35 @@ use super::presentation::{PLATE_GAP_KEY, SHAPES, slider_to_size};
 
 impl BrushPanel {
     pub(super) fn connect_controls(self: &Rc<Self>) {
+        let group = &self.tool_group;
         let panel = Rc::downgrade(self);
-        self.tool_group.size.1.connect_value_changed(move |scale| {
+        group.size.scale.connect_value_changed(move |scale| {
             with_panel(&panel, |panel| panel.resize_brush(scale))
         });
         let panel = Rc::downgrade(self);
-        self.tool_group.load.1.connect_value_changed(move |scale| {
+        group.load.scale.connect_value_changed(move |scale| {
             with_panel(&panel, |panel| panel.change_load(scale))
         });
         let panel = Rc::downgrade(self);
-        self.tool_group
-            .plate_gap
-            .1
-            .connect_value_changed(move |scale| {
-                with_panel(&panel, |panel| panel.change_plate_gap(scale))
-            });
+        group.plate_gap.scale.connect_value_changed(move |scale| {
+            with_panel(&panel, |panel| panel.change_plate_gap(scale))
+        });
         let panel = Rc::downgrade(self);
-        self.tool_group
-            .medium
-            .1
-            .connect_value_changed(move |scale| {
-                with_panel(&panel, |panel| panel.change_medium(scale))
-            });
+        group.medium.scale.connect_value_changed(move |scale| {
+            with_panel(&panel, |panel| panel.change_medium(scale))
+        });
         let panel = Rc::downgrade(self);
-        self.tool_group
-            .shape_row
-            .connect_selected_notify(move |row| {
-                with_panel(&panel, |panel| panel.change_shape(row))
-            });
+        group.shape_row.connect_selected_notify(move |row| {
+            with_panel(&panel, |panel| panel.change_shape(row))
+        });
         let panel = Rc::downgrade(self);
-        self.tool_group
-            .reload_row
-            .connect_active_notify(move |row| {
-                with_panel(&panel, |panel| panel.change_reload_each_stroke(row))
-            });
+        group.reload_row.connect_active_notify(move |row| {
+            with_panel(&panel, |panel| panel.change_reload_each_stroke(row))
+        });
         let panel = Rc::downgrade(self);
-        self.tool_group
-            .clean_each_row
-            .connect_active_notify(move |row| {
-                with_panel(&panel, |panel| panel.change_clean_each_stroke(row))
-            });
+        group.clean_each_row.connect_active_notify(move |row| {
+            with_panel(&panel, |panel| panel.change_clean_each_stroke(row))
+        });
     }
 
     pub(super) fn connect_refresh_on_map(self: &Rc<Self>) {

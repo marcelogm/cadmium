@@ -67,9 +67,13 @@ pub(super) fn param_groups(root: &gtk::Box) -> Vec<ParamControl> {
     for (group, title) in PARAM_GROUPS {
         let preferences = adw::PreferencesGroup::builder().title(title).build();
         for spec in SimParams::specs().iter().filter(|spec| spec.group == group) {
-            let (row, scale, label) = param_row(spec);
-            preferences.add(&row);
-            params.push(ParamControl { spec, scale, label });
+            let slider = param_row(spec);
+            preferences.add(&slider.row);
+            params.push(ParamControl {
+                spec,
+                scale: slider.scale,
+                label: slider.value_label,
+            });
         }
         root.append(&preferences);
     }

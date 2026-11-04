@@ -1,13 +1,13 @@
 use cadmium_engine::pigments::{MAX_SLOTS, PigmentDb};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PigmentSelection {
+pub(super) struct PigmentSelection {
     available: Vec<&'static str>,
     chosen: Vec<&'static str>,
 }
 
 impl PigmentSelection {
-    pub fn new(db: &PigmentDb, initial: &[String]) -> Self {
+    pub(super) fn new(db: &PigmentDb, initial: &[String]) -> Self {
         let mut selection = PigmentSelection {
             available: db.all().iter().map(|pigment| pigment.id).collect(),
             chosen: Vec::new(),
@@ -18,15 +18,15 @@ impl PigmentSelection {
         selection
     }
 
-    pub fn contains(&self, id: &str) -> bool {
+    pub(super) fn contains(&self, id: &str) -> bool {
         self.chosen.contains(&id)
     }
 
-    pub fn count(&self) -> usize {
+    pub(super) fn count(&self) -> usize {
         self.chosen.len()
     }
 
-    pub fn set(&mut self, id: &str, chosen: bool) -> bool {
+    pub(super) fn set(&mut self, id: &str, chosen: bool) -> bool {
         let Some(&id) = self.available.iter().find(|known| **known == id) else {
             return !chosen;
         };
@@ -44,14 +44,14 @@ impl PigmentSelection {
         }
     }
 
-    pub fn apply_preset(&mut self, pigments: &[&str]) {
+    pub(super) fn apply_preset(&mut self, pigments: &[&str]) {
         self.chosen.clear();
         for id in pigments {
             self.set(id, true);
         }
     }
 
-    pub fn slots(&self) -> Vec<String> {
+    pub(super) fn slots(&self) -> Vec<String> {
         self.available
             .iter()
             .filter(|id| self.contains(id))
@@ -60,7 +60,7 @@ impl PigmentSelection {
     }
 }
 
-pub fn counter_text(count: usize) -> String {
+pub(super) fn counter_text(count: usize) -> String {
     format!("{count} de {MAX_SLOTS}")
 }
 

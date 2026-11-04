@@ -10,6 +10,7 @@ use gtk::{gdk, glib, graphene, gsk};
 use self::geometry::{is_on_tray, tray_height_for_width, tray_point, tray_screen_zoom};
 use self::ring::{ShownRing, append_load_ring};
 use crate::cursor_outline::CursorOutline;
+use crate::handlers::run_handlers;
 use crate::input::PaintSurfaceWidget;
 use crate::presenter::{FramePresenter, PresentSource};
 use crate::state::SharedState;
@@ -168,11 +169,5 @@ fn wake_tray(tray: &glib::WeakRef<TrayView>) {
     if let Some(tray) = tray.upgrade() {
         tray.request_frame();
         tray.queue_draw();
-    }
-}
-
-fn run_handlers(handlers: &RefCell<Vec<TrayHandler>>, tray: &TrayView) {
-    for handler in handlers.borrow().iter() {
-        handler(tray);
     }
 }

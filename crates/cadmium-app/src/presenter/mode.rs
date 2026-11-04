@@ -7,13 +7,13 @@ const PRESENT_MODE_VARIABLE: &str = "CADMIUM_PRESENT";
 const VULKAN_RENDERER_MARK: &str = "Vulkan";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PresentMode {
+pub(crate) enum PresentMode {
     Readback,
     Dmabuf(ModifierPolicy),
 }
 
 impl PresentMode {
-    pub fn from_name(name: &str) -> Option<PresentMode> {
+    pub(crate) fn from_name(name: &str) -> Option<PresentMode> {
         match name {
             "readback" => Some(PresentMode::Readback),
             "dmabuf" => Some(PresentMode::Dmabuf(ModifierPolicy::Any)),
@@ -23,7 +23,7 @@ impl PresentMode {
         }
     }
 
-    pub fn name(self) -> &'static str {
+    pub(super) fn name(self) -> &'static str {
         match self {
             PresentMode::Readback => "readback",
             PresentMode::Dmabuf(ModifierPolicy::Any) => "dmabuf",
@@ -42,7 +42,7 @@ impl PresentMode {
     }
 }
 
-pub fn choose_mode(
+pub(super) fn choose_mode(
     forced: Option<PresentMode>,
     gpu_exports_dmabuf: bool,
     renderer_name: &str,

@@ -115,27 +115,33 @@ impl BrushPanel {
 
     fn show_sliders(&self, snapshot: &Snapshot) {
         let group = &self.tool_group;
-        if slider_needs_sync(group.size.1.value(), snapshot.diameter_px) {
-            group.size.1.set_value(size_to_slider(snapshot.diameter_px));
+        if slider_needs_sync(group.size.scale.value(), snapshot.diameter_px) {
+            group
+                .size
+                .scale
+                .set_value(size_to_slider(snapshot.diameter_px));
         }
         group
             .size
-            .2
+            .value_label
             .set_label(&format!("{:.0} px", snapshot.diameter_px));
-        group.load.1.set_value(f64::from(snapshot.load));
+        group.load.scale.set_value(f64::from(snapshot.load));
         group
             .load
-            .2
+            .value_label
             .set_label(&percent_text(f64::from(snapshot.load)));
-        group.plate_gap.1.set_value(f64::from(snapshot.plate_gap));
         group
             .plate_gap
-            .2
+            .scale
+            .set_value(f64::from(snapshot.plate_gap));
+        group
+            .plate_gap
+            .value_label
             .set_label(&plate_gap_text(snapshot.plate_gap));
-        group.medium.1.set_value(f64::from(snapshot.medium));
+        group.medium.scale.set_value(f64::from(snapshot.medium));
         group
             .medium
-            .2
+            .value_label
             .set_label(&percent_text(f64::from(snapshot.medium)));
     }
 
@@ -169,14 +175,14 @@ impl BrushPanel {
         group
             .reserve_bar
             .update_property(&[gtk::accessible::Property::Label(wording.level_tooltip)]);
-        group.size.0.set_title(wording.size_title);
+        group.size.row.set_title(wording.size_title);
         group
             .size
-            .1
+            .scale
             .update_property(&[gtk::accessible::Property::Label(wording.size_title)]);
         group
             .size
-            .0
+            .row
             .set_subtitle(wording.size_subtitle.unwrap_or_default());
         group.reload_row.set_subtitle(wording.reload_hint);
         group.clean_each_row.set_subtitle(wording.clean_each_hint);
@@ -192,10 +198,10 @@ impl BrushPanel {
         group.group.set_title(tool.label());
         group.group.set_description(group_description);
         group.loaded_row.set_visible(shown.loaded);
-        group.size.0.set_visible(shown.size);
-        group.load.0.set_visible(shown.load);
-        group.medium.0.set_visible(shown.medium);
-        group.plate_gap.0.set_visible(shown.plate_gap);
+        group.size.row.set_visible(shown.size);
+        group.load.row.set_visible(shown.load);
+        group.medium.row.set_visible(shown.medium);
+        group.plate_gap.row.set_visible(shown.plate_gap);
         group.shape_row.set_visible(shown.shape);
         group.reload_row.set_visible(shown.stroke_loading);
         group.clean_each_row.set_visible(shown.stroke_loading);

@@ -3,8 +3,9 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
+use super::TrayView;
 use super::geometry::tray_screen_zoom;
-use super::{TrayView, run_handlers};
+use crate::handlers::run_handlers;
 use crate::presenter::FramePresenter;
 use crate::state::AppState;
 use crate::surface_scale::viewport_px;

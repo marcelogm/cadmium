@@ -4,7 +4,7 @@ pub(super) const MIN_SIDE: u32 = 64;
 pub(super) const SIDE_STEP: u32 = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PaintingFormat {
+pub(super) enum PaintingFormat {
     Landscape4x3,
     Portrait3x4,
     Square,
@@ -13,7 +13,7 @@ pub enum PaintingFormat {
 }
 
 impl PaintingFormat {
-    pub const ALL: [PaintingFormat; 5] = [
+    pub(super) const ALL: [PaintingFormat; 5] = [
         PaintingFormat::Landscape4x3,
         PaintingFormat::Portrait3x4,
         PaintingFormat::Square,
@@ -21,7 +21,7 @@ impl PaintingFormat {
         PaintingFormat::Custom,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             PaintingFormat::Landscape4x3 => "Paisagem 4:3",
             PaintingFormat::Portrait3x4 => "Retrato 3:4",
@@ -41,7 +41,7 @@ impl PaintingFormat {
         }
     }
 
-    pub fn size_keeping_long_side(self, width: u32, height: u32) -> Option<(u32, u32)> {
+    pub(super) fn size_keeping_long_side(self, width: u32, height: u32) -> Option<(u32, u32)> {
         let (aspect_width, aspect_height) = self.aspect()?;
         let long = width.max(height).clamp(MIN_SIDE, MAX_CANVAS_SIZE);
         let short = |long_part: u32, short_part: u32| {
@@ -55,7 +55,7 @@ impl PaintingFormat {
         })
     }
 
-    pub fn matching(width: u32, height: u32) -> PaintingFormat {
+    pub(super) fn matching(width: u32, height: u32) -> PaintingFormat {
         PaintingFormat::ALL
             .into_iter()
             .find(|format| format.size_keeping_long_side(width, height) == Some((width, height)))

@@ -10,6 +10,7 @@ mod dmabuf;
 #[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
 mod dmabuf_selftest;
 mod files;
+mod handlers;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;

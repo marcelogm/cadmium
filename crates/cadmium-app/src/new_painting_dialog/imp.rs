@@ -3,7 +3,7 @@ use super::*;
 #[derive(Default)]
 pub struct NewPaintingDialog {
     pub(super) widgets: OnceCell<Widgets>,
-    pub selection: RefCell<Option<PigmentSelection>>,
+    pub(super) selection: RefCell<Option<PigmentSelection>>,
     pub syncing_size: Cell<bool>,
     pub counter_flash: RefCell<Option<glib::SourceId>>,
     pub create_handlers: RefCell<Vec<CreateHandler>>,

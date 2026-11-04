@@ -9,7 +9,11 @@ const WHOLE_NUMBER_PARAMS: [&str; 1] = ["bristle_count"];
 const WHOLE_STEP: f64 = 1.0;
 const STEP_DECIMALS_SLACK: f64 = 1e-6;
 
-pub(crate) type SliderRow = (adw::ActionRow, gtk::Scale, gtk::Label);
+pub(crate) struct SliderRow {
+    pub(crate) row: adw::ActionRow,
+    pub(crate) scale: gtk::Scale,
+    pub(crate) value_label: gtk::Label,
+}
 
 fn value_label() -> gtk::Label {
     gtk::Label::builder()
@@ -28,11 +32,15 @@ pub(crate) fn slider_row(title: &str, lower: f64, upper: f64, step: f64, page: f
         .valign(gtk::Align::Center)
         .build();
     scale.update_property(&[gtk::accessible::Property::Label(title)]);
-    let label = value_label();
+    let value_label = value_label();
     let row = adw::ActionRow::builder().title(title).build();
     row.add_suffix(&scale);
-    row.add_suffix(&label);
-    (row, scale, label)
+    row.add_suffix(&value_label);
+    SliderRow {
+        row,
+        scale,
+        value_label,
+    }
 }
 
 fn is_whole_number_param(spec: &ParamSpec) -> bool {
@@ -61,7 +69,7 @@ pub(crate) fn format_param(spec: &ParamSpec, value: f32) -> String {
 
 pub(crate) fn param_row(spec: &ParamSpec) -> SliderRow {
     let range = f64::from(spec.max - spec.min);
-    let (row, scale, label) = slider_row(
+    let slider = slider_row(
         spec.label,
         f64::from(spec.min),
         f64::from(spec.max),
@@ -69,9 +77,9 @@ pub(crate) fn param_row(spec: &ParamSpec) -> SliderRow {
         range / PARAM_PAGES,
     );
     if is_whole_number_param(spec) {
-        scale.set_round_digits(0);
+        slider.scale.set_round_digits(0);
     }
-    (row, scale, label)
+    slider
 }
 
 #[cfg(test)]

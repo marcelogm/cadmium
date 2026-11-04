@@ -2,8 +2,9 @@ use cadmium_engine::present::ViewTransform;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use super::{CadmiumCanvas, run_handlers};
+use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
+use crate::handlers::run_handlers;
 use crate::surface_scale::device_scale;
 use crate::view;
 

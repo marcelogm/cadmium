@@ -89,10 +89,10 @@ pub(super) fn tool_group() -> ToolGroup {
     let clean_each_row = adw::SwitchRow::builder().title(CLEAN_EACH_STROKE).build();
     let group = adw::PreferencesGroup::builder().title("Pincel").build();
     group.add(&loaded_row);
-    group.add(&size.0);
-    group.add(&load.0);
-    group.add(&plate_gap.0);
-    group.add(&medium.0);
+    group.add(&size.row);
+    group.add(&load.row);
+    group.add(&plate_gap.row);
+    group.add(&medium.row);
     group.add(&shape_row);
     group.add(&reload_row);
     group.add(&clean_each_row);
@@ -164,9 +164,9 @@ fn size_row() -> SliderRow {
 
 fn plate_gap_row() -> SliderRow {
     let plate_gap = param_row(plate_gap_spec());
-    plate_gap.0.set_title(PLATE_GAP_TITLE);
+    plate_gap.row.set_title(PLATE_GAP_TITLE);
     plate_gap
-        .1
+        .scale
         .update_property(&[gtk::accessible::Property::Label(PLATE_GAP_TITLE)]);
     plate_gap
 }

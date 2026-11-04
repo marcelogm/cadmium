@@ -15,11 +15,11 @@ pub(super) const MAX_SIZE_PX: f64 = 500.0;
 pub(super) const SIZE_STEP: f64 = 0.01;
 pub(super) const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_UNIT: &str = "µm";
-pub const EYEDROPPER_HINT: &str = "Clique na tela para pegar a tinta que está nela. \
+pub(super) const EYEDROPPER_HINT: &str = "Clique na tela para pegar a tinta que está nela. \
 O botão direito do mouse e o botão inferior da caneta pegam a cor com qualquer ferramenta.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PanelTool {
+pub(super) enum PanelTool {
     Paint(Tool),
     Tube,
 }
@@ -32,16 +32,16 @@ impl PanelTool {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         self.ui_tool().label()
     }
 
-    pub fn holds_knife(self) -> bool {
+    pub(super) fn holds_knife(self) -> bool {
         matches!(self, PanelTool::Paint(tool) if tool.profile().holds_on_blade())
     }
 }
 
-pub fn panel_tool(ui_tool: UiTool, tool_in_hand: Tool) -> PanelTool {
+pub(super) fn panel_tool(ui_tool: UiTool, tool_in_hand: Tool) -> PanelTool {
     match ui_tool {
         UiTool::Paint(tool) => PanelTool::Paint(tool),
         UiTool::Move => PanelTool::Paint(tool_in_hand),
@@ -49,19 +49,19 @@ pub fn panel_tool(ui_tool: UiTool, tool_in_hand: Tool) -> PanelTool {
     }
 }
 
-pub fn tool_wording(tool: PanelTool) -> ToolWording {
+pub(super) fn tool_wording(tool: PanelTool) -> ToolWording {
     tool.ui_tool().profile().wording
 }
 
-pub fn tool_hint(tool: PanelTool) -> &'static str {
+pub(super) fn tool_hint(tool: PanelTool) -> &'static str {
     tool.ui_tool().handling().unwrap_or(EYEDROPPER_HINT)
 }
 
-pub fn visible_controls(tool: PanelTool) -> VisibleControls {
+pub(super) fn visible_controls(tool: PanelTool) -> VisibleControls {
     tool.ui_tool().profile().controls
 }
 
-pub fn pile_is_highlighted(
+pub(super) fn pile_is_highlighted(
     tool: PanelTool,
     slot: usize,
     tube_slot: usize,
@@ -75,7 +75,7 @@ pub fn pile_is_highlighted(
     }
 }
 
-pub fn tool_group_description<'a>(
+pub(super) fn tool_group_description<'a>(
     tool: PanelTool,
     slot_names: &[&'a str],
     tube_slot: usize,
@@ -86,7 +86,7 @@ pub fn tool_group_description<'a>(
     }
 }
 
-pub fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String {
+pub(super) fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String {
     let mut shares: Vec<(&str, f32)> = recipe
         .iter()
         .filter(|(_, parts)| *parts > 0.0)

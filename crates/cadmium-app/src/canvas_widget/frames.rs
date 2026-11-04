@@ -3,7 +3,8 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use super::{CadmiumCanvas, run_handlers};
+use super::CadmiumCanvas;
+use crate::handlers::run_handlers;
 use crate::presenter::FramePresenter;
 use crate::state::AppState;
 use crate::surface_scale::viewport_px;

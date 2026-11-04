@@ -7,6 +7,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
+use crate::handlers::run_handlers;
 use crate::input::PaintSurfaceWidget;
 use crate::presenter::FramePresenter;
 use crate::state::SharedState;
@@ -151,11 +152,5 @@ fn wake_canvas(canvas: &glib::WeakRef<CadmiumCanvas>) {
     if let Some(canvas) = canvas.upgrade() {
         canvas.request_frame();
         canvas.queue_draw();
-    }
-}
-
-fn run_handlers(handlers: &RefCell<Vec<CanvasHandler>>, canvas: &CadmiumCanvas) {
-    for handler in handlers.borrow().iter() {
-        handler(canvas);
     }
 }
