@@ -5,6 +5,11 @@ use gtk::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
 use crate::dmabuf::{DmabufPool, ModifierPolicy};
+use pattern::{FramePattern, PatternPass};
+
+mod pattern;
+#[cfg(test)]
+mod tests;
 
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 128;
@@ -17,176 +22,6 @@ const MAX_STEADY_FD_GROWTH: usize = 32;
 const SYNC_FILE_LINK: &str = "anon_inode:sync_file";
 const DMABUF_LINK_PREFIX: &str = "/dmabuf:";
 const CHANNEL_TOLERANCE: u8 = 1;
-const WORKGROUP_SIZE: u32 = 8;
-const BUSY_ITERATIONS: u32 = 20000;
-
-const PATTERN_SHADER: &str = r#"
-struct Pattern { base: vec4<u32> };
-@group(0) @binding(0) var<uniform> pattern: Pattern;
-@group(0) @binding(1) var target_image: texture_storage_2d<rgba8unorm, write>;
-
-@compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    let size = textureDimensions(target_image);
-    if (id.x >= size.x || id.y >= size.y) {
-        return;
-    }
-    let red = pattern.base.x;
-    let green = (id.x + pattern.base.y) % 256u;
-    let blue = (id.y * 2u + pattern.base.z) % 256u;
-    var channels = vec3<f32>(f32(red), f32(green), f32(blue)) / 255.0;
-    var busy = f32(id.x + id.y) * 0.001;
-    for (var step = 0u; step < pattern.base.w; step++) {
-        busy = fract(busy * 1.618 + 0.31);
-    }
-    if (busy < 0.0) {
-        channels = vec3<f32>(0.0);
-    }
-    textureStore(target_image, vec2<i32>(id.xy), vec4<f32>(channels, 1.0));
-}
-"#;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct FramePattern {
-    red: u32,
-    green_shift: u32,
-    blue_shift: u32,
-}
-
-impl FramePattern {
-    fn for_frame(frame: u32) -> FramePattern {
-        FramePattern {
-            red: (40 + frame * 37) % 256,
-            green_shift: (120 + frame * 11) % 256,
-            blue_shift: (200 + frame * 53) % 256,
-        }
-    }
-
-    fn expected(&self, x: u32, y: u32) -> [u8; 4] {
-        [
-            self.red as u8,
-            ((x + self.green_shift) % 256) as u8,
-            ((y * 2 + self.blue_shift) % 256) as u8,
-            255,
-        ]
-    }
-
-    fn uniform(&self) -> [u32; 4] {
-        [self.red, self.green_shift, self.blue_shift, BUSY_ITERATIONS]
-    }
-}
-
-struct PatternPass {
-    pipeline: wgpu::ComputePipeline,
-    layout: wgpu::BindGroupLayout,
-    uniform: wgpu::Buffer,
-}
-
-impl PatternPass {
-    #[expect(clippy::too_many_lines)]
-    fn new(gpu: &GpuContext) -> PatternPass {
-        let module = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("dmabuf_selftest_pattern"),
-                source: wgpu::ShaderSource::Wgsl(PATTERN_SHADER.into()),
-            });
-        let layout = gpu
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("dmabuf_selftest_pattern"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: wgpu::TextureFormat::Rgba8Unorm,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-        let pipeline_layout = gpu
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("dmabuf_selftest_pattern"),
-                bind_group_layouts: &[Some(&layout)],
-                immediate_size: 0,
-            });
-        let pipeline = gpu
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("dmabuf_selftest_pattern"),
-                layout: Some(&pipeline_layout),
-                module: &module,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let uniform = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("dmabuf_selftest_pattern"),
-            size: std::mem::size_of::<[u32; 4]>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        PatternPass {
-            pipeline,
-            layout,
-            uniform,
-        }
-    }
-
-    fn encode(
-        &self,
-        gpu: &GpuContext,
-        pattern: FramePattern,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::Texture,
-    ) {
-        let words = pattern.uniform();
-        let bytes: Vec<u8> = words.iter().flat_map(|word| word.to_le_bytes()).collect();
-        gpu.queue.write_buffer(&self.uniform, 0, &bytes);
-        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("dmabuf_selftest_pattern"),
-            layout: &self.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
-        });
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("dmabuf_selftest_pattern"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        let size = target.size();
-        pass.dispatch_workgroups(
-            size.width.div_ceil(WORKGROUP_SIZE),
-            size.height.div_ceil(WORKGROUP_SIZE),
-            1,
-        );
-    }
-}
 
 enum Phase {
     Presenting,
@@ -518,33 +353,5 @@ impl std::fmt::Display for FdCensus {
             "{} total/{} sync_file/{} dmabuf",
             self.total, self.sync_files, self.dmabufs
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn consecutive_frames_use_distinct_patterns() {
-        let patterns: Vec<FramePattern> = (0..FRAMES).map(FramePattern::for_frame).collect();
-        for pair in patterns.windows(2) {
-            assert_ne!(pair[0], pair[1]);
-        }
-    }
-
-    #[test]
-    fn first_frame_starts_from_the_reference_colour() {
-        assert_eq!(
-            FramePattern::for_frame(0).expected(0, 0),
-            [40, 120, 200, 255]
-        );
-    }
-
-    #[test]
-    fn pattern_varies_along_both_axes() {
-        let pattern = FramePattern::for_frame(3);
-        assert_ne!(pattern.expected(0, 0), pattern.expected(1, 0));
-        assert_ne!(pattern.expected(0, 0), pattern.expected(0, 1));
     }
 }
