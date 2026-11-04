@@ -25,9 +25,7 @@ fn refill_texel(id: vec3<u32>) -> vec2<u32> {
 }
 
 fn inside_footprint(texel: vec2<u32>) -> bool {
-    let offset = vec2<f32>(vec2<i32>(texel) - vec2<i32>(TIP_HALF));
-    let semi_axes = vec2<f32>(dab.radius * dab.elongation, dab.radius);
-    return length(offset / semi_axes) <= 1.0;
+    return inside_outline(vec2<f32>(vec2<i32>(texel) - vec2<i32>(TIP_HALF)));
 }
 
 @compute @workgroup_size(8, 8)

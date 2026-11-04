@@ -28,6 +28,10 @@ const DAB_APRON_PX: f32 = 2.0;
 const TIP_APRON_TEXELS: f32 = 1.0;
 const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
 const WORKGROUP_SIZE: u32 = 8;
+const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
+const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
+const KNIFE_ADVECTION: f32 = 1.0;
+const KNIFE_SQUEEZE_GAIN: f32 = 2.0;
 
 const TOOL_MODE_BRUSH: u32 = 0;
 const TOOL_MODE_KNIFE: u32 = 1;
@@ -75,10 +79,14 @@ struct DabRecord {
     bristle_count: f32,
     refill_rate: f32,
     loaded_thickness_um: f32,
+    advection: f32,
+    squeeze: f32,
+    diffusion: f32,
+    knife_flatten: f32,
 }
 
 const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 112 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+const _: () = assert!(DAB_RECORD_SIZE == 128 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -99,20 +107,120 @@ struct Placement {
     canvas_rect: [f32; 4],
     canvas_groups: [u32; 2],
     tip_groups: [u32; 2],
+    spreads: bool,
+    refills: bool,
+}
+
+struct ScratchSurface {
+    _texture: wgpu::Texture,
+    view: wgpu::TextureView,
+}
+
+struct Scratch {
+    size: [u32; 2],
+    pig0: ScratchSurface,
+    pig1: ScratchSurface,
+    vol: ScratchSurface,
+}
+
+impl Scratch {
+    fn new(gpu: &GpuContext, size: [u32; 2]) -> Scratch {
+        Scratch {
+            size,
+            pig0: scratch_surface(gpu, "scratch_pig0", size, wgpu::TextureFormat::Rgba16Float),
+            pig1: scratch_surface(gpu, "scratch_pig1", size, wgpu::TextureFormat::Rgba16Float),
+            vol: scratch_surface(gpu, "scratch_vol", size, wgpu::TextureFormat::R32Float),
+        }
+    }
+}
+
+fn scratch_surface(
+    gpu: &GpuContext,
+    label: &str,
+    [width, height]: [u32; 2],
+    format: wgpu::TextureFormat,
+) -> ScratchSurface {
+    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::STORAGE_BINDING,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    ScratchSurface {
+        _texture: texture,
+        view,
+    }
 }
 
 struct Footprint {
     radius: f32,
     elongation: f32,
     orientation: f32,
+    rectangular: bool,
+}
+
+struct Spreading {
+    advection: f32,
+    squeeze: f32,
+    diffusion: f32,
+}
+
+impl Spreading {
+    fn of(tool: Tool, params: &SimParams) -> Spreading {
+        let advection = params.get("advection");
+        let squeeze = params.get("squeeze");
+        match tool {
+            Tool::Knife => Spreading {
+                advection: KNIFE_ADVECTION,
+                squeeze: KNIFE_SQUEEZE_GAIN * squeeze,
+                diffusion: 0.0,
+            },
+            Tool::Blender => Spreading {
+                advection,
+                squeeze,
+                diffusion: params.get("blend_diffusion"),
+            },
+            _ => Spreading {
+                advection,
+                squeeze,
+                diffusion: 0.0,
+            },
+        }
+    }
+}
+
+fn spreads(tool: Tool) -> bool {
+    matches!(tool, Tool::Brush | Tool::Knife | Tool::Blender)
+}
+
+fn refills(tool: Tool) -> bool {
+    tool != Tool::Blender
 }
 
 impl Footprint {
     fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
         let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+        if brush.tool == Tool::Knife {
+            let half_width = (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX);
+            return Footprint {
+                radius,
+                elongation: half_width / radius,
+                orientation: dab.direction,
+                rectangular: true,
+            };
+        }
         let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
         let elongation = (1.0 + params.get("tilt_elongation") * tilt).min(MAX_TIP_RADIUS / radius);
-        let follows_stroke = brush.shape == BrushShape::Flat || brush.tool == Tool::Knife;
+        let follows_stroke = brush.shape == BrushShape::Flat;
         let orientation = if follows_stroke {
             dab.direction
         } else {
@@ -122,6 +230,7 @@ impl Footprint {
             radius,
             elongation,
             orientation,
+            rectangular: false,
         }
     }
 
@@ -132,6 +241,12 @@ impl Footprint {
     fn canvas_half_extents(&self) -> [f32; 2] {
         let [along, across] = self.semi_axes();
         let (sin, cos) = self.orientation.sin_cos();
+        if self.rectangular {
+            return [
+                along * cos.abs() + across * sin.abs(),
+                along * sin.abs() + across * cos.abs(),
+            ];
+        }
         [
             (along * along * cos * cos + across * across * sin * sin).sqrt(),
             (along * along * sin * sin + across * across * cos * cos).sqrt(),
@@ -177,6 +292,7 @@ fn place(
     let canvas_size = [(x1 - x0) as u32, (y1 - y0) as u32];
     let (tip_origin, tip_size) = tip_window(footprint.semi_axes());
     let (sin, cos) = footprint.orientation.sin_cos();
+    let spreading = Spreading::of(brush.tool, params);
     let record = DabRecord {
         center: [dab.x, dab.y],
         radius: footprint.radius,
@@ -202,12 +318,18 @@ fn place(
             .min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
         refill_rate: params.get("refill_rate"),
         loaded_thickness_um,
+        advection: spreading.advection,
+        squeeze: spreading.squeeze,
+        diffusion: spreading.diffusion,
+        knife_flatten: params.get("knife_flatten"),
     };
     Some(Placement {
         record,
         canvas_rect: [x0, y0, x1 - 1.0, y1 - 1.0],
         canvas_groups: canvas_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
         tip_groups: tip_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
+        spreads: spreads(brush.tool),
+        refills: refills(brush.tool),
     })
 }
 
@@ -219,9 +341,11 @@ fn shader_source(body: &str) -> String {
          const PIGMENT_CHANNELS: u32 = {PIGMENT_CHANNELS}u;\n\
          const VOLUME_CHANNEL: u32 = {VOLUME_CHANNEL}u;\n\
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
-         {}\n{}\n{body}",
+         const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
+         {}\n{}\n{}\n{body}",
         include_str!("shaders/brush_tip.wgsl"),
-        include_str!("shaders/nearest_half.wgsl")
+        include_str!("shaders/nearest_half.wgsl"),
+        include_str!("shaders/footprint.wgsl")
     )
 }
 
@@ -374,17 +498,21 @@ pub struct WetOilEngine {
     exchange_layout: wgpu::BindGroupLayout,
     apply_layout: wgpu::BindGroupLayout,
     refill_layout: wgpu::BindGroupLayout,
+    spreading_layout: wgpu::BindGroupLayout,
+    scratch: Option<Scratch>,
     reference_pipeline: wgpu::ComputePipeline,
     exchange_pipeline: wgpu::ComputePipeline,
     apply_pipeline: wgpu::ComputePipeline,
     gather_pipeline: wgpu::ComputePipeline,
     settle_pipeline: wgpu::ComputePipeline,
     distribute_pipeline: wgpu::ComputePipeline,
+    copy_pipeline: wgpu::ComputePipeline,
+    advect_pipeline: wgpu::ComputePipeline,
 }
 
 impl WetOilEngine {
     pub fn new(gpu: &GpuContext) -> Self {
-        use wgpu::StorageTextureAccess::{ReadOnly, ReadWrite};
+        use wgpu::StorageTextureAccess::{ReadOnly, ReadWrite, WriteOnly};
         use wgpu::TextureFormat::{R32Float, Rgba16Float};
 
         let (exchange_layout, exchange_pipeline_layout) = layouts(
@@ -421,6 +549,19 @@ impl WetOilEngine {
                 storage_entry(4, false),
             ],
         );
+        let (spreading_layout, spreading_pipeline_layout) = layouts(
+            gpu,
+            "spreading",
+            &[
+                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                texture_entry(1, ReadOnly, Rgba16Float),
+                texture_entry(2, ReadOnly, Rgba16Float),
+                texture_entry(3, ReadOnly, R32Float),
+                texture_entry(4, WriteOnly, Rgba16Float),
+                texture_entry(5, WriteOnly, Rgba16Float),
+                texture_entry(6, WriteOnly, R32Float),
+            ],
+        );
 
         let exchange = shader_module(
             gpu,
@@ -429,6 +570,8 @@ impl WetOilEngine {
         );
         let apply = shader_module(gpu, "tip_apply", include_str!("shaders/tip_apply.wgsl"));
         let refill = shader_module(gpu, "tip_refill", include_str!("shaders/tip_refill.wgsl"));
+        let copy = shader_module(gpu, "region_copy", include_str!("shaders/region_copy.wgsl"));
+        let advect = shader_module(gpu, "advect", include_str!("shaders/advect.wgsl"));
 
         WetOilEngine {
             params: SimParams::default(),
@@ -485,9 +628,25 @@ impl WetOilEngine {
                 &refill_pipeline_layout,
                 "distribute",
             ),
+            copy_pipeline: compute_pipeline(
+                gpu,
+                "region_copy",
+                &copy,
+                &spreading_pipeline_layout,
+                "main",
+            ),
+            advect_pipeline: compute_pipeline(
+                gpu,
+                "advect",
+                &advect,
+                &spreading_pipeline_layout,
+                "main",
+            ),
             exchange_layout,
             apply_layout,
             refill_layout,
+            spreading_layout,
+            scratch: None,
         }
     }
 
@@ -586,6 +745,62 @@ impl WetOilEngine {
         })
     }
 
+    fn fit_scratch(&mut self, gpu: &GpuContext, canvas: &Canvas) {
+        let size = [canvas.spec.width, canvas.spec.height];
+        if self
+            .scratch
+            .as_ref()
+            .is_none_or(|scratch| scratch.size != size)
+        {
+            self.scratch = Some(Scratch::new(gpu, size));
+        }
+    }
+
+    fn spreading_bind_groups(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        dabs: &wgpu::Buffer,
+    ) -> (wgpu::BindGroup, wgpu::BindGroup) {
+        let scratch = self
+            .scratch
+            .as_ref()
+            .expect("scratch surfaces are fitted before spreading");
+        let scratch_views = [&scratch.pig0.view, &scratch.pig1.view, &scratch.vol.view];
+        let wet_views = [
+            canvas.view(StateTexture::WetPig0),
+            canvas.view(StateTexture::WetPig1),
+            canvas.view(StateTexture::WetVol),
+        ];
+        let group = |label, layout, from: [&wgpu::TextureView; 3], to: [&wgpu::TextureView; 3]| {
+            let views = from.into_iter().chain(to);
+            let entries: Vec<wgpu::BindGroupEntry> = std::iter::once(dab_binding(0, dabs))
+                .chain(
+                    (1..)
+                        .zip(views)
+                        .map(|(binding, view)| wgpu::BindGroupEntry {
+                            binding,
+                            resource: wgpu::BindingResource::TextureView(view),
+                        }),
+                )
+                .collect();
+            gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(label),
+                layout,
+                entries: &entries,
+            })
+        };
+        (
+            group(
+                "region_copy",
+                &self.spreading_layout,
+                wet_views,
+                scratch_views,
+            ),
+            group("advect", &self.spreading_layout, scratch_views, wet_views),
+        )
+    }
+
     fn apply_bind_group(&self, gpu: &GpuContext, dabs: &wgpu::Buffer) -> wgpu::BindGroup {
         gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("tip_apply"),
@@ -682,6 +897,8 @@ impl PaintEngine for WetOilEngine {
         let exchange_group = self.exchange_bind_group(gpu, canvas, &dab_buffer);
         let apply_group = self.apply_bind_group(gpu, &dab_buffer);
         let refill_group = self.refill_bind_group(gpu, &dab_buffer);
+        self.fit_scratch(gpu, canvas);
+        let (copy_group, advect_group) = self.spreading_bind_groups(gpu, canvas, &dab_buffer);
 
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("dab_exchange"),
@@ -697,13 +914,23 @@ impl PaintEngine for WetOilEngine {
             pass.set_bind_group(0, &apply_group, &[offset]);
             pass.set_pipeline(&self.apply_pipeline);
             pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
-            pass.set_bind_group(0, &refill_group, &[offset]);
-            pass.set_pipeline(&self.gather_pipeline);
-            pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
-            pass.set_pipeline(&self.settle_pipeline);
-            pass.dispatch_workgroups(1, 1, 1);
-            pass.set_pipeline(&self.distribute_pipeline);
-            pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+            if placement.refills {
+                pass.set_bind_group(0, &refill_group, &[offset]);
+                pass.set_pipeline(&self.gather_pipeline);
+                pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+                pass.set_pipeline(&self.settle_pipeline);
+                pass.dispatch_workgroups(1, 1, 1);
+                pass.set_pipeline(&self.distribute_pipeline);
+                pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+            }
+            if placement.spreads {
+                pass.set_bind_group(0, &copy_group, &[offset]);
+                pass.set_pipeline(&self.copy_pipeline);
+                pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
+                pass.set_bind_group(0, &advect_group, &[offset]);
+                pass.set_pipeline(&self.advect_pipeline);
+                pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
+            }
         }
         drop(pass);
 

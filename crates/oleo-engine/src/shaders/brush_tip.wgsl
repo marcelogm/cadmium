@@ -21,6 +21,10 @@ struct Dab {
     bristle_count: f32,
     refill_rate: f32,
     loaded_thickness_um: f32,
+    advection: f32,
+    squeeze: f32,
+    diffusion: f32,
+    knife_flatten: f32,
 };
 
 fn tip_index(texel: vec2<u32>) -> u32 {

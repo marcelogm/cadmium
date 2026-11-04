@@ -2,14 +2,14 @@ struct ContactReference {
     height: f32,
 };
 
-const TAU: f32 = 6.283185307;
-const EDGE_SOFTNESS_PX: f32 = 1.5;
 const MAX_DEPOSIT_SHARE: f32 = 0.45;
 const SLOW_TRANSFER_SHARE: f32 = 0.3;
 const MIN_VELOCITY_CUTOFF: f32 = 1e-6;
 const MIN_CONTACT_DEPTH_UM: f32 = 1.0;
 const EMPTY_VOLUME_UM: f32 = 1e-4;
 const QUANTIZE_LIMIT: f32 = 2.0e9;
+const KNIFE_LAID_ALTITUDE: f32 = radians(45.0);
+const KNIFE_UPRIGHT_ALTITUDE: f32 = radians(80.0);
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var wet_pig0: texture_storage_2d<rgba16float, read_write>;
@@ -36,21 +36,6 @@ fn surface_height(pixel: vec2<i32>) -> f32 {
     return textureLoad(dry_height, pixel).x + textureLoad(wet_vol, pixel).x;
 }
 
-fn brush_space(pixel: vec2<i32>) -> vec2<f32> {
-    let offset = vec2<f32>(pixel) + vec2<f32>(0.5) - dab.center;
-    let axis = dab.orientation;
-    return vec2<f32>(dot(offset, axis), dot(offset, vec2<f32>(-axis.y, axis.x)));
-}
-
-fn footprint(position: vec2<f32>) -> f32 {
-    let semi_axes = vec2<f32>(dab.radius * dab.elongation, dab.radius);
-    let normalized_distance = length(position / semi_axes);
-    let edge = smoothstep(0.0, EDGE_SOFTNESS_PX, (1.0 - normalized_distance) * dab.radius);
-    let phase = TAU * dab.bristle_count * position.y / (2.0 * dab.radius);
-    let bristles = 1.0 - dab.bristle_contrast * 0.5 * (1.0 + sin(phase));
-    return edge * bristles;
-}
-
 fn contact(height: f32) -> f32 {
     let depth = dab.penetration_um * dab.pressure;
     let plane = contact_reference.height - depth;
@@ -60,6 +45,27 @@ fn contact(height: f32) -> f32 {
 fn velocity_share() -> f32 {
     let ramp = smoothstep(0.0, max(dab.velocity_cutoff, MIN_VELOCITY_CUTOFF), dab.speed);
     return mix(SLOW_TRANSFER_SHARE, 1.0, ramp);
+}
+
+struct Transfer {
+    deposit: f32,
+    pickup: f32,
+};
+
+fn bristle_transfer(mask: f32, volume: f32, height: f32, tip_volume: f32) -> Transfer {
+    let rate = dab.transfer_fraction * mask * contact(height) * velocity_share();
+    let deposit = min(rate * tip_volume, MAX_DEPOSIT_SHARE * tip_volume);
+    let pickup = rate * max(volume - dab.residual_um, 0.0);
+    return Transfer(deposit, pickup);
+}
+
+fn blade_transfer(mask: f32, volume: f32, dry: f32, tip_volume: f32) -> Transfer {
+    let surface = dry + volume;
+    let scrape = smoothstep(KNIFE_LAID_ALTITUDE, KNIFE_UPRIGHT_ALTITUDE, dab.altitude);
+    let plane = mix(contact_reference.height, dry + dab.residual_um, scrape);
+    let pickup = mask * min(max(surface - plane, 0.0), max(volume - dab.residual_um, 0.0));
+    let deposit = min(dab.knife_flatten * mask * max(plane - surface, 0.0), MAX_DEPOSIT_SHARE * tip_volume);
+    return Transfer(deposit, pickup);
 }
 
 fn read_fractions(pixel: vec2<i32>) -> array<f32, 8> {
@@ -94,15 +100,16 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
     let volume = textureLoad(wet_vol, pixel).x;
     let fractions = read_fractions(pixel);
-    let height = textureLoad(dry_height, pixel).x + volume;
-    let rate = dab.transfer_fraction * mask * contact(height) * velocity_share();
-    if (rate <= 0.0) {
-        return;
-    }
-
+    let dry = textureLoad(dry_height, pixel).x;
     let tip_volume = tip[base + VOLUME_CHANNEL];
-    let deposit = min(rate * tip_volume, MAX_DEPOSIT_SHARE * tip_volume);
-    let pickup = rate * max(volume - dab.residual_um, 0.0);
+    var transfer: Transfer;
+    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+        transfer = blade_transfer(mask, volume, dry, tip_volume);
+    } else {
+        transfer = bristle_transfer(mask, volume, dry + volume, tip_volume);
+    }
+    let deposit = transfer.deposit;
+    let pickup = transfer.pickup;
     let deposit_q = max(quantize(deposit), 0);
     let pickup_q = clamp(quantize(pickup), 0, max(quantize_down(volume), 0));
     if (deposit_q == 0 && pickup_q == 0) {
