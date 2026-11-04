@@ -73,9 +73,8 @@ pub trait PaintSurfaceWidget:
 }
 
 #[derive(Default)]
-pub struct Contact {
+struct Contact {
     pans: PanFlags,
-    touching: Cell<bool>,
     stroking_device: RefCell<Option<gdk::Device>>,
 }
 
@@ -83,28 +82,17 @@ impl Contact {
     fn is_stroking_device(&self, device: Option<&gdk::Device>) -> bool {
         event_belongs_to_stroke(self.stroking_device.borrow().as_ref(), device)
     }
-
-    fn touch(&self, device: Option<gdk::Device>) {
-        self.touching.set(true);
-        self.stroking_device.replace(device);
-    }
-
-    fn lift(&self) -> bool {
-        self.stroking_device.replace(None);
-        self.touching.replace(false)
-    }
 }
 
-pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) -> Rc<Contact> {
-    let contact = Rc::new(Contact::default());
-    widget.add_controller(stylus_gesture(widget, &contact));
+fn attach_stylus_sharing<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) {
+    widget.add_controller(stylus_gesture(widget, contact));
     widget.add_controller(eyedropper_click(widget));
-    widget.add_controller(hover_controller(widget, &contact));
-    contact
+    widget.add_controller(hover_controller(widget, contact));
 }
 
 pub fn attach(canvas: &CadmiumCanvas) {
-    let contact = attach_stylus(canvas);
+    let contact = Rc::new(Contact::default());
+    attach_stylus_sharing(canvas, &contact);
     canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Primary));
     canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Middle));
     canvas.add_controller(scroll_controller(canvas));
@@ -258,7 +246,9 @@ fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> g
             if !state.borrow_mut().press(widget.surface(), sample, eraser) {
                 return;
             }
-            contact.touch(stylus.current_event_device());
+            contact
+                .stroking_device
+                .replace(stylus.current_event_device());
             widget.set_hover(Some((x, y)));
         }
     ));
@@ -273,7 +263,7 @@ fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> g
                 return;
             };
             let state = widget.state();
-            if !contact.touching.get() || !state.borrow().is_stroking() {
+            if !state.borrow().contact_on(widget.surface()) {
                 if comes_from_a_pen(&event) {
                     widget.observe_hover_pen(&event_sample(&widget, &event, x, y));
                 }
@@ -333,10 +323,12 @@ fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> g
 }
 
 fn release<W: PaintSurfaceWidget>(widget: &W, contact: &Contact) {
-    if !contact.lift() {
+    contact.stroking_device.replace(None);
+    let state = widget.state();
+    if !state.borrow().contact_on(widget.surface()) {
         return;
     }
-    widget.state().borrow_mut().release();
+    state.borrow_mut().release();
     widget.contact_released();
 }
 
@@ -598,15 +590,6 @@ mod tests {
         assert!(!pans.is_panning(PanGesture::Middle));
         pans.set(PanGesture::Primary, false);
         assert!(!pans.any());
-    }
-
-    #[test]
-    fn only_the_widget_that_was_touched_releases_the_contact() {
-        let contact = Contact::default();
-        assert!(!contact.lift());
-        contact.touch(None);
-        assert!(contact.lift());
-        assert!(!contact.lift());
     }
 
     #[test]

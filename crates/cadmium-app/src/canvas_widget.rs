@@ -293,12 +293,6 @@ impl CadmiumCanvas {
         self.imp().hover.get()
     }
 
-    pub fn set_hover(&self, position: Option<(f64, f64)>) {
-        if self.imp().hover.replace(position) != position {
-            self.queue_draw();
-        }
-    }
-
     pub fn connect_view_changed(&self, handler: impl Fn(&CadmiumCanvas) + 'static) {
         self.imp()
             .view_changed_handlers
@@ -320,13 +314,6 @@ impl CadmiumCanvas {
             .push(Box::new(handler));
     }
 
-    pub fn observe_hover_pen(&self, sample: &StrokeSample) {
-        self.state().borrow_mut().observe_hover_pen(sample);
-        for handler in self.imp().pen_observed_handlers.borrow().iter() {
-            handler(self);
-        }
-    }
-
     pub fn connect_presented(&self, handler: impl Fn(&CadmiumCanvas) + 'static) {
         self.imp()
             .presented_handlers
@@ -346,17 +333,6 @@ impl CadmiumCanvas {
             .gpu_lost_handlers
             .borrow_mut()
             .push(Box::new(handler));
-    }
-
-    pub fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
-        let (x, y) = self.canvas_point(widget_x, widget_y);
-        let found_paint =
-            self.state()
-                .borrow_mut()
-                .pick_colour_on(Surface::Painting, x as f32, y as f32);
-        for handler in self.imp().colour_picked_handlers.borrow().iter() {
-            handler(self, found_paint);
-        }
     }
 
     fn zoom_around_center(&self, zoom: f32) {
@@ -540,14 +516,26 @@ impl PaintSurfaceWidget for CadmiumCanvas {
     }
 
     fn set_hover(&self, position: Option<(f64, f64)>) {
-        CadmiumCanvas::set_hover(self, position);
+        if self.imp().hover.replace(position) != position {
+            self.queue_draw();
+        }
     }
 
     fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
-        CadmiumCanvas::pick_colour_at(self, widget_x, widget_y);
+        let (x, y) = self.canvas_point(widget_x, widget_y);
+        let found_paint =
+            self.state()
+                .borrow_mut()
+                .pick_colour_on(Surface::Painting, x as f32, y as f32);
+        for handler in self.imp().colour_picked_handlers.borrow().iter() {
+            handler(self, found_paint);
+        }
     }
 
     fn observe_hover_pen(&self, sample: &StrokeSample) {
-        CadmiumCanvas::observe_hover_pen(self, sample);
+        self.state().borrow_mut().observe_hover_pen(sample);
+        for handler in self.imp().pen_observed_handlers.borrow().iter() {
+            handler(self);
+        }
     }
 }

@@ -290,7 +290,8 @@ impl FramePresenter {
         if self.debug_timing && texture.is_some() {
             glib::g_message!(
                 LOG_DOMAIN,
-                "frame {width_px}×{height_px} by {} in {:.2} ms, {} pen samples",
+                "{:?} frame {width_px}×{height_px} by {} in {:.2} ms, {} pen samples",
+                self.source,
                 self.mode.unwrap_or(mode).name(),
                 started.elapsed().as_secs_f64() * MILLISECONDS_PER_SECOND,
                 state.pen.samples_last_frame

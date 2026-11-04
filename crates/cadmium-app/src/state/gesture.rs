@@ -27,7 +27,9 @@ pub struct LoadRing {
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Contact {
-    Stroke,
+    Stroke {
+        surface: Surface,
+    },
     Loading {
         tool: Tool,
         origin: (f64, f64),
@@ -48,13 +50,6 @@ impl AppState {
         self.contact.is_some()
     }
 
-    pub fn is_holding(&self) -> bool {
-        matches!(
-            self.contact,
-            Some(Contact::Loading { .. } | Contact::Squeezing { .. })
-        )
-    }
-
     pub fn set_tray_zoom(&mut self, zoom: f32) {
         if zoom.is_finite() && zoom > 0.0 {
             self.tray_zoom = zoom;
@@ -65,11 +60,21 @@ impl AppState {
         self.hold_surface() == Some(surface)
     }
 
+    pub fn contact_on(&self, surface: Surface) -> bool {
+        self.contact_surface() == Some(surface)
+    }
+
     fn hold_surface(&self) -> Option<Surface> {
         match self.contact? {
-            Contact::Stroke => None,
+            Contact::Stroke { .. } => None,
+            _ => self.contact_surface(),
+        }
+    }
+
+    fn contact_surface(&self) -> Option<Surface> {
+        match self.contact? {
+            Contact::Stroke { surface } | Contact::Squeezing { surface, .. } => Some(surface),
             Contact::Loading { .. } => Some(Surface::Tray),
-            Contact::Squeezing { surface, .. } => Some(surface),
         }
     }
 
@@ -137,7 +142,7 @@ impl AppState {
             StrokePreparation::CleanAndLoad => self.clean_and_load(),
         }
         self.session.begin_stroke_on(&self.gpu, surface, sample);
-        self.contact = Some(Contact::Stroke);
+        self.contact = Some(Contact::Stroke { surface });
         self.last_sample_time_ms = None;
         self.note_samples(std::slice::from_ref(&sample));
         self.wake();
@@ -153,7 +158,7 @@ impl AppState {
     }
 
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {
-        if !matches!(self.contact, Some(Contact::Stroke)) || samples.is_empty() {
+        if !matches!(self.contact, Some(Contact::Stroke { .. })) || samples.is_empty() {
             return;
         }
         self.session.add_samples(samples);
@@ -167,7 +172,7 @@ impl AppState {
         };
         match self.contact {
             None => return,
-            Some(Contact::Stroke) => {
+            Some(Contact::Stroke { .. }) => {
                 self.add_samples(samples);
                 return;
             }
@@ -275,7 +280,7 @@ impl AppState {
                     level: Some(drawn.level),
                 });
             }
-            Some(Contact::Stroke) | None => return,
+            Some(Contact::Stroke { .. }) | None => return,
         }
         self.wake();
     }
@@ -331,7 +336,7 @@ impl AppState {
             return;
         };
         match contact {
-            Contact::Stroke => self.finish_stroke(),
+            Contact::Stroke { .. } => self.finish_stroke(),
             Contact::Squeezing { squeezed, .. } => {
                 self.session.end_hold();
                 if squeezed {
@@ -574,6 +579,32 @@ mod tests {
     }
 
     #[test]
+    fn a_contact_is_on_the_surface_it_began_on() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        assert!(state.contact_on(Surface::Tray));
+        assert!(!state.contact_on(Surface::Painting));
+        state.release();
+        state.press(Surface::Painting, sample_at(100.0, 100.0, 0.9), false);
+        assert!(state.contact_on(Surface::Painting));
+        assert!(!state.contact_on(Surface::Tray));
+        state.release();
+        assert!(!state.contact_on(Surface::Painting));
+    }
+
+    #[test]
+    fn touching_the_tray_during_a_painting_stroke_leaves_only_the_tray_contact() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Painting, sample_at(100.0, 100.0, 0.9), false);
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        assert!(state.contact_on(Surface::Tray));
+        assert!(!state.contact_on(Surface::Painting));
+        state.release();
+    }
+
+    #[test]
     fn a_stroke_is_not_a_hold_on_any_surface() {
         let mut state = painting_state();
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
@@ -589,10 +620,10 @@ mod tests {
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         assert!(state.is_stroking());
-        assert!(state.is_holding());
+        assert!(state.holds_on(Surface::Tray));
         state.release();
         assert!(!state.is_stroking());
-        assert!(!state.is_holding());
+        assert!(!state.holds_on(Surface::Tray));
     }
 
     #[test]
@@ -716,7 +747,7 @@ mod tests {
         state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
         state.advance_hold(0.1);
         assert!(state.undo());
-        assert!(!state.is_holding());
+        assert!(!state.holds_on(Surface::Painting));
         assert_eq!(wet_volume(&state), 0.0);
     }
 
