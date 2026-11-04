@@ -1,0 +1,113 @@
+use crate::canvas::{Canvas, PaintTotals, tiles_in_rect};
+use crate::draw_up::{DrawUp, DrawUpRegion, DrawUpRequest, DrawnUp, draw_up_region};
+use crate::engine::PaintEngine;
+use crate::gpu::{GpuContext, GpuLost};
+use crate::history::History;
+use crate::surface::Surface;
+use crate::tube::{Dwell, Nozzle, SqueezeRecord, dwell_after, squeeze_region};
+
+use super::{PaintSession, new_encoder, surface_canvas};
+
+pub(super) struct Hold {
+    surface: Surface,
+    dwell: Option<Dwell>,
+}
+
+impl PaintSession {
+    pub fn begin_hold(&mut self, gpu: &GpuContext, surface: Surface) {
+        self.settle_pending_step(gpu);
+        self.history.begin_step(surface);
+        self.hold = Some(Hold {
+            surface,
+            dwell: None,
+        });
+    }
+
+    pub fn end_hold(&mut self) {
+        if self.hold.take().is_some() {
+            self.history.commit_step();
+        }
+    }
+
+    pub fn is_holding(&self) -> bool {
+        self.hold.is_some()
+    }
+
+    pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) -> bool {
+        let Some(hold) = self.hold.as_mut() else {
+            return false;
+        };
+        let dwell = dwell_after(hold.dwell, &nozzle);
+        let canvas = surface_canvas(hold.surface, &mut self.canvas, &mut self.tray);
+        let params = self.engine.params();
+        let Some(region) = squeeze_region(canvas, params, &nozzle, dwell) else {
+            return false;
+        };
+        hold.dwell = Some(dwell);
+        let [x0, y0, x1, y1] = region.rect();
+        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+        let mut encoder = new_encoder(gpu, "squeeze");
+        self.history
+            .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
+        let record = SqueezeRecord::new(&nozzle, &region, params);
+        self.tube.encode_squeeze(gpu, canvas, &record, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        true
+    }
+
+    #[expect(clippy::excessive_nesting)]
+    pub fn draw_up(
+        &mut self,
+        gpu: &GpuContext,
+        request: DrawUpRequest,
+    ) -> Result<DrawnUp, GpuLost> {
+        self.flush(gpu);
+        let Some(Hold { surface, .. }) = self.hold else {
+            return Ok(DrawnUp::default());
+        };
+        if self.brush.tool.profile().holder.is_none() {
+            return Ok(DrawnUp::default());
+        }
+        self.resize_tip();
+        let into_knife = self.holds_knife();
+        let region = draw_up_region(self.canvas_of(surface), self.engine.params(), &request);
+        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
+        let (drawer, history) = (&self.drawer, &mut self.history);
+        let (taken, level) = self.engine.draw_up(gpu, into_knife, |room_um| {
+            let Some(region) = region else {
+                return Ok(PaintTotals::default());
+            };
+            take_from(gpu, drawer, history, canvas, &region, room_um)
+        })?;
+        Ok(DrawnUp { taken, level })
+    }
+}
+
+#[expect(clippy::too_many_arguments)]
+fn take_from(
+    gpu: &GpuContext,
+    drawer: &DrawUp,
+    history: &mut History,
+    canvas: &mut Canvas,
+    region: &DrawUpRegion,
+    room_um: f32,
+) -> Result<PaintTotals, GpuLost> {
+    let nothing = PaintTotals::default();
+    if room_um.is_nan() || room_um <= 0.0 {
+        return Ok(nothing);
+    }
+    let [x0, y0, x1, y1] = region.rect();
+    let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+    if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
+        return Ok(nothing);
+    }
+    let measured = drawer.measure(gpu, canvas, region, room_um)?;
+    if measured.taken.volume.is_nan() || measured.taken.volume <= 0.0 {
+        return Ok(nothing);
+    }
+    let mut encoder = new_encoder(gpu, "draw_up");
+    history.encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
+    drawer.encode_take(canvas, &measured, &mut encoder);
+    gpu.queue.submit([encoder.finish()]);
+    Ok(measured.taken)
+}

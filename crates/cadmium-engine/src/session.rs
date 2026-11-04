@@ -1,38 +1,34 @@
-use std::collections::BTreeSet;
-
 use crate::brush::BrushSettings;
-use crate::canvas::{
-    Canvas, CanvasError, CanvasSpec, PaintTotals, StateTexture, TILE_SIZE, TileCoord, tiles_in_rect,
-};
-use crate::draw_up::{DrawUp, DrawUpRegion, DrawUpRequest, DrawnUp, draw_up_region};
-use crate::engine::{BrushOutline, BrushReadout, PaintEngine, PickRequest, WetOilEngine};
+use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
+use crate::draw_up::DrawUp;
+use crate::engine::{PaintEngine, PickRequest, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
-use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
+use crate::stroke::{Dab, StrokeBuilder};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::{Dwell, Nozzle, SqueezeRecord, Tube, dwell_after, squeeze_region};
+use crate::tube::Tube;
 
-const DRY_TILES_PER_SUBMIT: usize = 64;
+mod brush;
+mod hold;
+mod removal;
+mod replacement;
+mod stroke;
+
+use hold::Hold;
+
 const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
 const HISTORY_PAINTING_COPIES: u64 = 4;
 const HISTORY_TRAY_COPIES: u64 = 1;
-const PLACEHOLDER_SIZE_PX: u32 = 1;
-const SAVE_MARGIN_PX: f32 = 4.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClearOutcome {
     NothingWet,
     Cleared { undoable: bool },
-}
-
-struct Hold {
-    surface: Surface,
-    dwell: Option<Dwell>,
 }
 
 pub struct PaintSession {
@@ -84,56 +80,6 @@ impl PaintSession {
         Ok(session)
     }
 
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
-    pub fn replace_document(
-        &mut self,
-        gpu: &GpuContext,
-        spec: CanvasSpec,
-    ) -> Result<(), CanvasError> {
-        self.end_hold();
-        self.stroke = None;
-        self.queued.clear();
-        self.step_open = false;
-        self.history.clear();
-        let previous = self.canvas.spec.clone();
-        let placeholder = Canvas::new(gpu, &self.db, placeholder_spec(&previous))?;
-        let tray_placeholder = Canvas::new(gpu, &self.db, placeholder_spec(&self.tray.spec))?;
-        drop(std::mem::replace(&mut self.canvas, placeholder));
-        drop(std::mem::replace(&mut self.tray, tray_placeholder));
-        gpu.queue.submit([]);
-        let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
-        let replaced = match Canvas::new(gpu, &self.db, spec) {
-            Ok(canvas) => {
-                self.canvas = canvas;
-                Ok(())
-            }
-            Err(error) => {
-                if let Ok(blank) = Canvas::new(gpu, &self.db, previous) {
-                    self.canvas = blank;
-                }
-                Err(error)
-            }
-        };
-        let painting_tray = tray_spec(&self.canvas.spec.pigment_slots);
-        let tray_rebuilt = match Canvas::new(gpu, &self.db, painting_tray.clone()) {
-            Ok(tray) => {
-                self.tray = tray;
-                Ok(())
-            }
-            Err(error) => {
-                if let Ok(blank) = Canvas::new(gpu, &self.db, placeholder_spec(&painting_tray)) {
-                    self.tray = blank;
-                }
-                Err(error)
-            }
-        };
-        self.history.refit(gpu, history_budget(&self.canvas.spec));
-        self.view_mode = ViewMode::Color;
-        self.engine.clean_brush(gpu);
-        self.engine.clean_knife(gpu);
-        replaced.and(tray_rebuilt)
-    }
-
     pub fn canvas_of(&self, surface: Surface) -> &Canvas {
         match surface {
             Surface::Painting => &self.canvas,
@@ -149,109 +95,6 @@ impl PaintSession {
         let slot = self.canvas.add_slot(gpu, &self.db, id)?;
         self.tray.add_slot(gpu, &self.db, id)?;
         Ok(slot)
-    }
-
-    pub fn begin_stroke(&mut self, gpu: &GpuContext, sample: StrokeSample) {
-        self.begin_stroke_on(gpu, Surface::Painting, sample);
-    }
-
-    pub fn begin_stroke_on(&mut self, gpu: &GpuContext, surface: Surface, sample: StrokeSample) {
-        self.settle_pending_step(gpu);
-        self.history.begin_step(surface);
-        self.stroke_surface = surface;
-        self.step_open = true;
-        self.stroke_brush = self.brush.clone();
-        self.engine.begin_stroke();
-        let mut builder = StrokeBuilder::new(self.stroke_brush.stroke_geometry());
-        self.queued.extend(builder.push(sample));
-        self.stroke = Some(builder);
-    }
-
-    pub fn begin_hold(&mut self, gpu: &GpuContext, surface: Surface) {
-        self.settle_pending_step(gpu);
-        self.history.begin_step(surface);
-        self.hold = Some(Hold {
-            surface,
-            dwell: None,
-        });
-    }
-
-    pub fn end_hold(&mut self) {
-        if self.hold.take().is_some() {
-            self.history.commit_step();
-        }
-    }
-
-    pub fn is_holding(&self) -> bool {
-        self.hold.is_some()
-    }
-
-    pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) -> bool {
-        let Some(hold) = self.hold.as_mut() else {
-            return false;
-        };
-        let dwell = dwell_after(hold.dwell, &nozzle);
-        let canvas = surface_canvas(hold.surface, &mut self.canvas, &mut self.tray);
-        let params = self.engine.params();
-        let Some(region) = squeeze_region(canvas, params, &nozzle, dwell) else {
-            return false;
-        };
-        hold.dwell = Some(dwell);
-        let [x0, y0, x1, y1] = region.rect();
-        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
-        let mut encoder = new_encoder(gpu, "squeeze");
-        self.history
-            .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
-        let record = SqueezeRecord::new(&nozzle, &region, params);
-        self.tube.encode_squeeze(gpu, canvas, &record, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-        true
-    }
-
-    #[expect(clippy::excessive_nesting)]
-    pub fn draw_up(
-        &mut self,
-        gpu: &GpuContext,
-        request: DrawUpRequest,
-    ) -> Result<DrawnUp, GpuLost> {
-        self.flush(gpu);
-        let Some(Hold { surface, .. }) = self.hold else {
-            return Ok(DrawnUp::default());
-        };
-        if self.brush.tool.profile().holder.is_none() {
-            return Ok(DrawnUp::default());
-        }
-        self.resize_tip();
-        let into_knife = self.holds_knife();
-        let region = draw_up_region(self.canvas_of(surface), self.engine.params(), &request);
-        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
-        let (drawer, history) = (&self.drawer, &mut self.history);
-        let (taken, level) = self.engine.draw_up(gpu, into_knife, |room_um| {
-            let Some(region) = region else {
-                return Ok(PaintTotals::default());
-            };
-            take_from(gpu, drawer, history, canvas, &region, room_um)
-        })?;
-        Ok(DrawnUp { taken, level })
-    }
-
-    pub fn add_samples(&mut self, samples: &[StrokeSample]) {
-        let Some(builder) = self.stroke.as_mut() else {
-            return;
-        };
-        for sample in samples {
-            self.queued.extend(builder.push(*sample));
-        }
-    }
-
-    pub fn end_stroke(&mut self) {
-        let Some(mut builder) = self.stroke.take() else {
-            return;
-        };
-        self.queued.extend(builder.finish());
-        if self.queued.is_empty() {
-            self.commit_open_step();
-        }
     }
 
     pub fn encode_frame(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
@@ -276,42 +119,6 @@ impl PaintSession {
         );
     }
 
-    pub fn dry(&mut self, gpu: &GpuContext) -> bool {
-        self.settle_pending_step(gpu);
-        let tiles = self.canvas.wet_tiles.take();
-        self.history
-            .begin_removal_step(Surface::Painting, tiles.len());
-        for chunk in tiles.chunks(DRY_TILES_PER_SUBMIT) {
-            let mut encoder = new_encoder(gpu, "dry");
-            self.history
-                .encode_save_tiles(gpu, &self.canvas, chunk, &mut encoder);
-            self.engine
-                .encode_dry_tiles(gpu, &mut self.canvas, chunk, &mut encoder);
-            gpu.queue.submit([encoder.finish()]);
-        }
-        self.history.commit_step()
-    }
-
-    pub fn clear_tray(&mut self, gpu: &GpuContext) -> ClearOutcome {
-        self.settle_pending_step(gpu);
-        let tiles = self.tray.wet_tiles.take();
-        if tiles.is_empty() {
-            return ClearOutcome::NothingWet;
-        }
-        self.history.begin_removal_step(Surface::Tray, tiles.len());
-        let mut encoder = new_encoder(gpu, "clear_tray");
-        self.history
-            .encode_save_tiles(gpu, &self.tray, &tiles, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-        let texels = (self.tray.spec.width * self.tray.spec.height) as usize;
-        self.tray
-            .write_f32(gpu, StateTexture::WetVol, &vec![0.0; texels]);
-        self.tray.dirty.mark_all();
-        ClearOutcome::Cleared {
-            undoable: self.history.commit_step(),
-        }
-    }
-
     pub fn undo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
         self.history.commit_step();
@@ -329,10 +136,6 @@ impl PaintSession {
         };
         let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
         self.history.redo(gpu, canvas)
-    }
-
-    pub fn brush_outline(&self, pen: &StrokeSample) -> Option<BrushOutline> {
-        self.engine.brush_outline(&self.brush, pen)
     }
 
     pub fn pick_colour(
@@ -362,176 +165,6 @@ impl PaintSession {
         gpu.queue.submit([encoder.finish()]);
         self.engine.picked_mixture(gpu)
     }
-
-    pub fn resize_tip(&mut self) {
-        self.engine
-            .resize_tip(self.brush.geometry.max_diameter_px / 2.0);
-    }
-
-    pub fn reload_brush(&mut self, gpu: &GpuContext) {
-        self.flush(gpu);
-        self.resize_tip();
-        let mixture = self.recipe_mixture();
-        if mixture.is_empty() {
-            self.engine.clean_brush(gpu);
-        } else {
-            self.engine.load_reservoir(gpu, &mixture);
-        }
-    }
-
-    pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) -> Result<(), GpuLost> {
-        self.flush(gpu);
-        if self.holds_knife() {
-            self.resize_tip();
-            self.engine.dip_knife(gpu, mixture, amount)
-        } else {
-            self.engine.dip(gpu, mixture, amount);
-            Ok(())
-        }
-    }
-
-    pub fn restore_reserve(&mut self, gpu: &GpuContext) {
-        self.flush(gpu);
-        let mixture = self.recipe_mixture();
-        if !mixture.is_empty() {
-            self.engine.restore_reserve(gpu, &mixture);
-        }
-    }
-
-    pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
-        self.flush(gpu);
-        self.engine.tip_mean_mixture(gpu)
-    }
-
-    pub fn read_brush(&mut self, gpu: &GpuContext) -> Result<BrushReadout, GpuLost> {
-        self.flush(gpu);
-        self.engine.read_brush(gpu)
-    }
-
-    pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        self.flush(gpu);
-        if self.holds_knife() {
-            self.engine.clean_knife(gpu);
-        } else {
-            self.engine.clean_brush(gpu);
-        }
-    }
-
-    fn holds_knife(&self) -> bool {
-        self.brush.tool.profile().holds_on_blade()
-    }
-
-    pub fn has_pending_work(&self) -> bool {
-        self.has_pending_work_on(Surface::Painting)
-    }
-
-    pub fn tray_has_pending_work(&self) -> bool {
-        self.has_pending_work_on(Surface::Tray)
-    }
-
-    fn has_pending_work_on(&self, surface: Surface) -> bool {
-        let stroke_pending = !self.queued.is_empty() || self.step_awaits_commit();
-        (self.stroke_surface == surface && stroke_pending)
-            || !self.canvas_of(surface).dirty.is_empty()
-    }
-
-    fn step_awaits_commit(&self) -> bool {
-        self.step_open && self.stroke.is_none()
-    }
-
-    pub fn flush(&mut self, gpu: &GpuContext) {
-        if self.queued.is_empty() && !self.step_awaits_commit() {
-            return;
-        }
-        let mut encoder = new_encoder(gpu, "flush_queued_dabs");
-        self.encode_queued_dabs(gpu, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-    }
-
-    fn recipe_mixture(&self) -> Mixture {
-        self.brush
-            .reservoir_mixture(self.canvas.spec.pigment_slots.len())
-    }
-
-    fn settle_pending_step(&mut self, gpu: &GpuContext) {
-        self.end_hold();
-        self.end_stroke();
-        self.flush(gpu);
-    }
-
-    fn encode_queued_dabs(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
-        if !self.queued.is_empty() {
-            let touched = self.tiles_touched_by_queued_dabs();
-            let canvas = surface_canvas(self.stroke_surface, &mut self.canvas, &mut self.tray);
-            self.history
-                .encode_save_tiles(gpu, canvas, &touched, encoder);
-            self.engine
-                .encode_dabs(gpu, canvas, &self.stroke_brush, &self.queued, encoder);
-            self.queued.clear();
-        }
-        if self.stroke.is_none() {
-            self.commit_open_step();
-        }
-    }
-
-    fn commit_open_step(&mut self) {
-        if self.step_open {
-            self.history.commit_step();
-            self.step_open = false;
-        }
-    }
-
-    #[expect(clippy::excessive_nesting)]
-    fn tiles_touched_by_queued_dabs(&self) -> Vec<TileCoord> {
-        let canvas = self.canvas_of(self.stroke_surface);
-        let width = canvas.spec.width;
-        let height = canvas.spec.height;
-        let mut touched = BTreeSet::new();
-        for dab in &self.queued {
-            let Some([x0, y0, x1, y1]) = self.engine.dab_bounds(canvas, &self.stroke_brush, dab)
-            else {
-                continue;
-            };
-            touched.extend(tiles_in_rect(
-                width,
-                height,
-                x0 - SAVE_MARGIN_PX,
-                y0 - SAVE_MARGIN_PX,
-                x1 + SAVE_MARGIN_PX,
-                y1 + SAVE_MARGIN_PX,
-            ));
-        }
-        touched.into_iter().collect()
-    }
-}
-
-#[expect(clippy::too_many_arguments)]
-fn take_from(
-    gpu: &GpuContext,
-    drawer: &DrawUp,
-    history: &mut History,
-    canvas: &mut Canvas,
-    region: &DrawUpRegion,
-    room_um: f32,
-) -> Result<PaintTotals, GpuLost> {
-    let nothing = PaintTotals::default();
-    if room_um.is_nan() || room_um <= 0.0 {
-        return Ok(nothing);
-    }
-    let [x0, y0, x1, y1] = region.rect();
-    let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
-    if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
-        return Ok(nothing);
-    }
-    let measured = drawer.measure(gpu, canvas, region, room_um)?;
-    if measured.taken.volume.is_nan() || measured.taken.volume <= 0.0 {
-        return Ok(nothing);
-    }
-    let mut encoder = new_encoder(gpu, "draw_up");
-    history.encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
-    drawer.encode_take(canvas, &measured, &mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-    Ok(measured.taken)
 }
 
 fn surface_canvas<'a>(
@@ -542,14 +175,6 @@ fn surface_canvas<'a>(
     match surface {
         Surface::Painting => painting,
         Surface::Tray => tray,
-    }
-}
-
-fn placeholder_spec(spec: &CanvasSpec) -> CanvasSpec {
-    CanvasSpec {
-        width: PLACEHOLDER_SIZE_PX,
-        height: PLACEHOLDER_SIZE_PX,
-        ..spec.clone()
     }
 }
 

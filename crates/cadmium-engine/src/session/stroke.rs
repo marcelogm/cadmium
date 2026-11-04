@@ -1,0 +1,130 @@
+use std::collections::BTreeSet;
+
+use crate::canvas::{TileCoord, tiles_in_rect};
+use crate::engine::PaintEngine;
+use crate::gpu::GpuContext;
+use crate::stroke::{StrokeBuilder, StrokeSample};
+use crate::surface::Surface;
+
+use super::{PaintSession, new_encoder, surface_canvas};
+
+const SAVE_MARGIN_PX: f32 = 4.0;
+
+impl PaintSession {
+    pub fn begin_stroke(&mut self, gpu: &GpuContext, sample: StrokeSample) {
+        self.begin_stroke_on(gpu, Surface::Painting, sample);
+    }
+
+    pub fn begin_stroke_on(&mut self, gpu: &GpuContext, surface: Surface, sample: StrokeSample) {
+        self.settle_pending_step(gpu);
+        self.history.begin_step(surface);
+        self.stroke_surface = surface;
+        self.step_open = true;
+        self.stroke_brush = self.brush.clone();
+        self.engine.begin_stroke();
+        let mut builder = StrokeBuilder::new(self.stroke_brush.stroke_geometry());
+        self.queued.extend(builder.push(sample));
+        self.stroke = Some(builder);
+    }
+
+    pub fn add_samples(&mut self, samples: &[StrokeSample]) {
+        let Some(builder) = self.stroke.as_mut() else {
+            return;
+        };
+        for sample in samples {
+            self.queued.extend(builder.push(*sample));
+        }
+    }
+
+    pub fn end_stroke(&mut self) {
+        let Some(mut builder) = self.stroke.take() else {
+            return;
+        };
+        self.queued.extend(builder.finish());
+        if self.queued.is_empty() {
+            self.commit_open_step();
+        }
+    }
+
+    pub fn has_pending_work(&self) -> bool {
+        self.has_pending_work_on(Surface::Painting)
+    }
+
+    pub fn tray_has_pending_work(&self) -> bool {
+        self.has_pending_work_on(Surface::Tray)
+    }
+
+    fn has_pending_work_on(&self, surface: Surface) -> bool {
+        let stroke_pending = !self.queued.is_empty() || self.step_awaits_commit();
+        (self.stroke_surface == surface && stroke_pending)
+            || !self.canvas_of(surface).dirty.is_empty()
+    }
+
+    fn step_awaits_commit(&self) -> bool {
+        self.step_open && self.stroke.is_none()
+    }
+
+    pub fn flush(&mut self, gpu: &GpuContext) {
+        if self.queued.is_empty() && !self.step_awaits_commit() {
+            return;
+        }
+        let mut encoder = new_encoder(gpu, "flush_queued_dabs");
+        self.encode_queued_dabs(gpu, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+    }
+
+    pub(super) fn settle_pending_step(&mut self, gpu: &GpuContext) {
+        self.end_hold();
+        self.end_stroke();
+        self.flush(gpu);
+    }
+
+    pub(super) fn encode_queued_dabs(
+        &mut self,
+        gpu: &GpuContext,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if !self.queued.is_empty() {
+            let touched = self.tiles_touched_by_queued_dabs();
+            let canvas = surface_canvas(self.stroke_surface, &mut self.canvas, &mut self.tray);
+            self.history
+                .encode_save_tiles(gpu, canvas, &touched, encoder);
+            self.engine
+                .encode_dabs(gpu, canvas, &self.stroke_brush, &self.queued, encoder);
+            self.queued.clear();
+        }
+        if self.stroke.is_none() {
+            self.commit_open_step();
+        }
+    }
+
+    fn commit_open_step(&mut self) {
+        if self.step_open {
+            self.history.commit_step();
+            self.step_open = false;
+        }
+    }
+
+    #[expect(clippy::excessive_nesting)]
+    fn tiles_touched_by_queued_dabs(&self) -> Vec<TileCoord> {
+        let canvas = self.canvas_of(self.stroke_surface);
+        let width = canvas.spec.width;
+        let height = canvas.spec.height;
+        let mut touched = BTreeSet::new();
+        for dab in &self.queued {
+            let Some([x0, y0, x1, y1]) = self.engine.dab_bounds(canvas, &self.stroke_brush, dab)
+            else {
+                continue;
+            };
+            touched.extend(tiles_in_rect(
+                width,
+                height,
+                x0 - SAVE_MARGIN_PX,
+                y0 - SAVE_MARGIN_PX,
+                x1 + SAVE_MARGIN_PX,
+                y1 + SAVE_MARGIN_PX,
+            ));
+        }
+        touched.into_iter().collect()
+    }
+}
