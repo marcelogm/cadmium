@@ -104,10 +104,22 @@ impl History {
         canvas: &'a Canvas,
         tile: TileCoord,
         slot: Slot,
-    ) -> Vec<TileCopy<'a>> {
-        let (Some(extent), Some(atlas)) = (tile_extent(canvas, tile), self.atlas.as_ref()) else {
-            return Vec::new();
-        };
+    ) -> impl Iterator<Item = TileCopy<'a>> {
+        tile_extent(canvas, tile)
+            .zip(self.atlas.as_ref())
+            .into_iter()
+            .flat_map(move |(extent, atlas)| atlas.tile_copies(canvas, tile, slot, extent))
+    }
+}
+
+impl Atlas {
+    fn tile_copies<'a>(
+        &'a self,
+        canvas: &'a Canvas,
+        tile: TileCoord,
+        slot: Slot,
+        extent: wgpu::Extent3d,
+    ) -> impl Iterator<Item = TileCopy<'a>> {
         let canvas_origin = wgpu::Origin3d {
             x: tile.x * TILE_SIZE,
             y: tile.y * TILE_SIZE,
@@ -120,13 +132,12 @@ impl History {
         };
         StateTexture::PAINT_STATE
             .iter()
-            .zip(&atlas.textures)
-            .map(|(which, atlas_texture)| TileCopy {
+            .zip(&self.textures)
+            .map(move |(which, atlas_texture)| TileCopy {
                 canvas: texel_copy(canvas.texture(*which), canvas_origin),
                 slot: texel_copy(atlas_texture, slot_origin),
                 extent,
             })
-            .collect()
     }
 }
 

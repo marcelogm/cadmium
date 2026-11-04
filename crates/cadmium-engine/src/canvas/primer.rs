@@ -88,10 +88,10 @@ impl Canvas {
 }
 
 fn init_params_buffer(gpu: &GpuContext, db: &PigmentDb, primer: Primer) -> wgpu::Buffer {
-    let primer = primer_reflectance(db, primer);
+    let reflectance = primer_reflectance(db, primer);
     let params = InitParams {
-        primer_bands_low: std::array::from_fn(|band| primer[band]),
-        primer_bands_high: std::array::from_fn(|band| primer[BANDS_PER_VEC4 + band]),
+        primer_bands_low: std::array::from_fn(|band| reflectance[band]),
+        primer_bands_high: std::array::from_fn(|band| reflectance[BANDS_PER_VEC4 + band]),
     };
     gpu.device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {

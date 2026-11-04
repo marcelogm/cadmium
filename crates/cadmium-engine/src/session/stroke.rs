@@ -105,26 +105,25 @@ impl PaintSession {
         }
     }
 
-    #[expect(clippy::excessive_nesting)]
     fn tiles_touched_by_queued_dabs(&self) -> Vec<TileCoord> {
         let canvas = self.canvas_of(self.stroke_surface);
         let width = canvas.spec.width;
         let height = canvas.spec.height;
-        let mut touched = BTreeSet::new();
-        for dab in &self.queued {
-            let Some([x0, y0, x1, y1]) = self.engine.dab_bounds(canvas, &self.stroke_brush, dab)
-            else {
-                continue;
-            };
-            touched.extend(tiles_in_rect(
-                width,
-                height,
-                x0 - SAVE_MARGIN_PX,
-                y0 - SAVE_MARGIN_PX,
-                x1 + SAVE_MARGIN_PX,
-                y1 + SAVE_MARGIN_PX,
-            ));
-        }
+        let touched: BTreeSet<TileCoord> = self
+            .queued
+            .iter()
+            .filter_map(|dab| self.engine.dab_bounds(canvas, &self.stroke_brush, dab))
+            .flat_map(|[x0, y0, x1, y1]| {
+                tiles_in_rect(
+                    width,
+                    height,
+                    x0 - SAVE_MARGIN_PX,
+                    y0 - SAVE_MARGIN_PX,
+                    x1 + SAVE_MARGIN_PX,
+                    y1 + SAVE_MARGIN_PX,
+                )
+            })
+            .collect();
         touched.into_iter().collect()
     }
 }

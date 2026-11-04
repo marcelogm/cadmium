@@ -55,7 +55,6 @@ impl PaintSession {
         true
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn draw_up(
         &mut self,
         gpu: &GpuContext,
@@ -72,42 +71,54 @@ impl PaintSession {
         let into_knife = self.holds_knife();
         let region = draw_up_region(self.canvas_of(surface), self.engine.params(), &request);
         let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
-        let (drawer, history) = (&self.drawer, &mut self.history);
-        let (taken, level) = self.engine.draw_up(gpu, into_knife, |room_um| {
-            let Some(region) = region else {
-                return Ok(PaintTotals::default());
-            };
-            take_from(gpu, drawer, history, canvas, &region, room_um)
-        })?;
+        let source = region.map(|region| DrawUpSource {
+            drawer: &self.drawer,
+            history: &mut self.history,
+            canvas,
+            region,
+        });
+        let (taken, level) = self
+            .engine
+            .draw_up(gpu, into_knife, |room_um| match source {
+                Some(source) => source.take(gpu, room_um),
+                None => Ok(PaintTotals::default()),
+            })?;
         Ok(DrawnUp { taken, level })
     }
 }
 
-#[expect(clippy::too_many_arguments)]
-fn take_from(
-    gpu: &GpuContext,
-    drawer: &DrawUp,
-    history: &mut History,
-    canvas: &mut Canvas,
-    region: &DrawUpRegion,
-    room_um: f32,
-) -> Result<PaintTotals, GpuLost> {
-    let nothing = PaintTotals::default();
-    if room_um.is_nan() || room_um <= 0.0 {
-        return Ok(nothing);
+struct DrawUpSource<'a> {
+    drawer: &'a DrawUp,
+    history: &'a mut History,
+    canvas: &'a mut Canvas,
+    region: DrawUpRegion,
+}
+
+impl DrawUpSource<'_> {
+    fn take(self, gpu: &GpuContext, room_um: f32) -> Result<PaintTotals, GpuLost> {
+        let DrawUpSource {
+            drawer,
+            history,
+            canvas,
+            region,
+        } = self;
+        let nothing = PaintTotals::default();
+        if room_um.is_nan() || room_um <= 0.0 {
+            return Ok(nothing);
+        }
+        let [x0, y0, x1, y1] = region.rect();
+        let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
+        if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
+            return Ok(nothing);
+        }
+        let measured = drawer.measure(gpu, canvas, &region, room_um)?;
+        if measured.taken.volume.is_nan() || measured.taken.volume <= 0.0 {
+            return Ok(nothing);
+        }
+        let mut encoder = new_encoder(gpu, "draw_up");
+        history.encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
+        drawer.encode_take(canvas, &measured, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        Ok(measured.taken)
     }
-    let [x0, y0, x1, y1] = region.rect();
-    let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
-    if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
-        return Ok(nothing);
-    }
-    let measured = drawer.measure(gpu, canvas, region, room_um)?;
-    if measured.taken.volume.is_nan() || measured.taken.volume <= 0.0 {
-        return Ok(nothing);
-    }
-    let mut encoder = new_encoder(gpu, "draw_up");
-    history.encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
-    drawer.encode_take(canvas, &measured, &mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-    Ok(measured.taken)
 }
