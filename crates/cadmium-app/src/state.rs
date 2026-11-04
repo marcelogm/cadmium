@@ -13,7 +13,7 @@ use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::render::ViewMode;
 use cadmium_engine::session::{ClearOutcome, PaintSession};
-use cadmium_engine::stroke::{StrokeSample, Tool};
+use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 
 use crate::presets::{STARTING_LOAD, starting_recipe};
@@ -21,11 +21,11 @@ use crate::tools::UiTool;
 use crate::writes::{EditCounter, EditMark};
 use gesture::Contact;
 pub use gesture::LoadRing;
+pub use pen::PenReadout;
 
 mod gesture;
+mod pen;
 
-const RATE_SMOOTHING: f32 = 0.2;
-const MILLISECONDS_PER_SECOND: f32 = 1000.0;
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
 pub const PARTIAL_DIP: f32 = 0.25;
 const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
@@ -175,40 +175,6 @@ pub fn stroke_preparation(
         Some(_) if clean_each_stroke => StrokePreparation::CleanAndLoad,
         Some(_) if reload_each_stroke => StrokePreparation::TopUp,
         _ => StrokePreparation::None,
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct PenReadout {
-    pub pressure: f32,
-    pub tilt_x: f32,
-    pub tilt_y: f32,
-    pub samples_last_frame: u32,
-    pub rate_hz: f32,
-}
-
-impl PenReadout {
-    pub fn observe_hover(&mut self, sample: &StrokeSample) {
-        self.record(sample, None);
-    }
-
-    pub fn record(&mut self, sample: &StrokeSample, previous_time_ms: Option<u32>) {
-        self.pressure = sample.pressure;
-        self.tilt_x = sample.tilt_x_deg;
-        self.tilt_y = sample.tilt_y_deg;
-        let Some(previous) = previous_time_ms else {
-            return;
-        };
-        let interval_ms = sample.time_ms.wrapping_sub(previous);
-        if interval_ms == 0 || interval_ms > u32::MAX / 2 {
-            return;
-        }
-        let instant_rate = MILLISECONDS_PER_SECOND / interval_ms as f32;
-        self.rate_hz = if self.rate_hz > 0.0 {
-            self.rate_hz + (instant_rate - self.rate_hz) * RATE_SMOOTHING
-        } else {
-            instant_rate
-        };
     }
 }
 
@@ -617,10 +583,6 @@ impl AppState {
         self.wake();
     }
 
-    pub fn observe_hover_pen(&mut self, sample: &StrokeSample) {
-        self.pen.observe_hover(sample);
-    }
-
     pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
         self.advance_hold_by_clock(Surface::Painting);
         self.session.encode_frame(&self.gpu, encoder);
@@ -655,14 +617,6 @@ impl AppState {
 
     pub fn gpu_is_lost(&self) -> bool {
         self.gpu.is_lost()
-    }
-
-    fn note_samples(&mut self, samples: &[StrokeSample]) {
-        for sample in samples {
-            self.pen.record(sample, self.last_sample_time_ms);
-            self.last_sample_time_ms = Some(sample.time_ms);
-        }
-        self.samples_since_frame += samples.len() as u32;
     }
 }
 
@@ -1203,17 +1157,6 @@ mod tests {
         assert_eq!(reserve_level(1.0, 0.0), 0.0);
     }
 
-    fn sample_timed(time_ms: u32) -> StrokeSample {
-        StrokeSample {
-            x: 0.0,
-            y: 0.0,
-            pressure: 0.5,
-            tilt_x_deg: 10.0,
-            tilt_y_deg: -20.0,
-            time_ms,
-        }
-    }
-
     #[test]
     fn pigment_view_beyond_the_palette_shows_the_last_slot() {
         assert_eq!(
@@ -1251,31 +1194,5 @@ mod tests {
         assert!(is_render_param(render.key));
         assert!(!is_render_param(transfer.key));
         assert!(!is_render_param("no_such_param"));
-    }
-
-    #[test]
-    fn pen_rate_follows_the_sample_interval() {
-        let mut readout = PenReadout::default();
-        readout.record(&sample_timed(0), None);
-        readout.record(&sample_timed(5), Some(0));
-        assert!((readout.rate_hz - 200.0).abs() < 1e-3);
-        assert_eq!(readout.tilt_y, -20.0);
-    }
-
-    #[test]
-    fn samples_with_the_same_timestamp_leave_the_rate_alone() {
-        let mut readout = PenReadout {
-            rate_hz: 120.0,
-            ..PenReadout::default()
-        };
-        readout.record(&sample_timed(7), Some(7));
-        assert_eq!(readout.rate_hz, 120.0);
-    }
-
-    #[test]
-    fn clock_going_backwards_does_not_spike_the_rate() {
-        let mut readout = PenReadout::default();
-        readout.record(&sample_timed(3), Some(10));
-        assert_eq!(readout.rate_hz, 0.0);
     }
 }
