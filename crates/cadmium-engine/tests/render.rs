@@ -16,6 +16,7 @@ fn blank(gpu: &GpuContext) -> Canvas {
             pigment_slots: vec!["ultramarine_blue".into()],
         },
     )
+    .unwrap()
 }
 
 fn shade_and_present(

@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE, weave_heights};
+use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, weave_heights};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, read_all_mapped, staging_buffer};
 use crate::pigments::PigmentDb;
 use crate::present::{ViewTransform, readback_rgba8};
@@ -36,6 +36,7 @@ pub enum DocumentError {
     Format(String),
     UnsupportedVersion(u32),
     GpuLost,
+    OutOfVideoMemory,
 }
 
 impl fmt::Display for DocumentError {
@@ -48,6 +49,7 @@ impl fmt::Display for DocumentError {
                 "painting uses file format {version}, this version of Cadmium reads formats up to {FORMAT_VERSION}"
             ),
             DocumentError::GpuLost => write!(f, "{GpuLost}"),
+            DocumentError::OutOfVideoMemory => write!(f, "{}", CanvasError::OutOfVideoMemory),
         }
     }
 }
@@ -70,6 +72,14 @@ impl From<std::io::Error> for DocumentError {
 impl From<GpuLost> for DocumentError {
     fn from(_: GpuLost) -> Self {
         DocumentError::GpuLost
+    }
+}
+
+impl From<CanvasError> for DocumentError {
+    fn from(error: CanvasError) -> Self {
+        match error {
+            CanvasError::OutOfVideoMemory => DocumentError::OutOfVideoMemory,
+        }
     }
 }
 
@@ -183,19 +193,33 @@ impl DocumentSnapshot {
         Ok(DocumentSnapshot { spec, states })
     }
 
-    pub fn into_session(self, gpu: &GpuContext) -> PaintSession {
-        let mut session = PaintSession::new(gpu, self.spec);
+    pub fn into_session(self, gpu: &GpuContext) -> Result<PaintSession, CanvasError> {
+        let mut session = PaintSession::new(gpu, self.spec.clone())?;
+        self.upload(gpu, &mut session.canvas);
+        Ok(session)
+    }
+
+    pub fn restore_into(
+        self,
+        gpu: &GpuContext,
+        session: &mut PaintSession,
+    ) -> Result<(), CanvasError> {
+        session.replace_document(gpu, self.spec.clone())?;
+        self.upload(gpu, &mut session.canvas);
+        Ok(())
+    }
+
+    fn upload(self, gpu: &GpuContext, canvas: &mut Canvas) {
         for state in self.states {
             let (which, raw) = (state.which, state.texels());
-            session.canvas.write_bytes(gpu, which, &raw);
+            canvas.write_bytes(gpu, which, &raw);
             gpu.queue.submit([]);
             let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
             if which == StateTexture::WetVol {
-                mark_wet_tiles(&mut session.canvas, &raw);
+                mark_wet_tiles(canvas, &raw);
             }
         }
-        session.canvas.dirty.mark_all();
-        session
+        canvas.dirty.mark_all();
     }
 
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
@@ -297,7 +321,7 @@ pub fn save(
 }
 
 pub fn open(gpu: &GpuContext, path: &Path) -> Result<PaintSession, DocumentError> {
-    Ok(DocumentSnapshot::read(path)?.into_session(gpu))
+    Ok(DocumentSnapshot::read(path)?.into_session(gpu)?)
 }
 
 pub fn export_png(

@@ -13,6 +13,9 @@ use crate::state::AppState;
 use crate::window::CadmiumWindow;
 
 const ICON_RESOURCE_PATH: &str = "/io/github/marcelogm/Cadmium/icons";
+const MISSING_GPU_HEADING: &str = "Nenhuma GPU Vulkan disponível";
+const MISSING_GPU_BODY: &str = "O Cadmium precisa de uma GPU com Vulkan para simular a tinta.";
+const OUT_OF_VIDEO_MEMORY_HEADING: &str = "Memória de vídeo insuficiente";
 
 pub const ACCELERATORS: [(&str, &[&str]); 14] = [
     ("win.undo", &["<Control>z"]),
@@ -63,11 +66,21 @@ impl CadmiumApplication {
             let gpu = match GpuContext::new() {
                 Ok(gpu) => Rc::new(gpu),
                 Err(error) => {
-                    report_missing_gpu(app, &error);
+                    report_startup_failure(
+                        app,
+                        MISSING_GPU_HEADING,
+                        &format!("{MISSING_GPU_BODY}\n\n{error}"),
+                    );
                     return;
                 }
             };
-            let state = Rc::new(RefCell::new(AppState::new(gpu, starting_canvas_spec())));
+            let state = match AppState::new(gpu, starting_canvas_spec()) {
+                Ok(state) => Rc::new(RefCell::new(state)),
+                Err(error) => {
+                    report_startup_failure(app, OUT_OF_VIDEO_MEMORY_HEADING, &error.to_string());
+                    return;
+                }
+            };
             let window = CadmiumWindow::new(app, state);
             if let Some(smoke) = smoke.borrow_mut().take() {
                 smoke.run(app, &window);
@@ -82,14 +95,12 @@ impl CadmiumApplication {
     }
 }
 
-fn report_missing_gpu(app: &adw::Application, error: &cadmium_engine::gpu::GpuError) {
-    glib::g_critical!(LOG_DOMAIN, "no usable GPU: {error}");
+fn report_startup_failure(app: &adw::Application, heading: &str, body: &str) {
+    glib::g_critical!(LOG_DOMAIN, "{heading}: {body}");
     let hold = app.hold();
     let alert = adw::AlertDialog::builder()
-        .heading("Nenhuma GPU Vulkan disponível")
-        .body(format!(
-            "O Cadmium precisa de uma GPU com Vulkan para simular a tinta.\n\n{error}"
-        ))
+        .heading(heading)
+        .body(body)
         .default_response("close")
         .close_response("close")
         .build();

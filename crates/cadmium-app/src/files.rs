@@ -44,6 +44,7 @@ const UNREADABLE_DATA: &str = "o arquivo está corrompido ou incompleto";
 const INPUT_OUTPUT_FAILED: &str = "falha de leitura ou gravação";
 const NOT_A_PAINTING: &str = "o arquivo não é uma pintura do Cadmium válida";
 const GPU_LOST: &str = "a GPU foi reiniciada";
+pub const OUT_OF_VIDEO_MEMORY: &str = "memória de vídeo insuficiente";
 
 struct Failure {
     shown: String,
@@ -58,6 +59,7 @@ pub fn describe_document_error(error: &DocumentError) -> String {
             format!("a pintura usa o formato {version}, que esta versão do Cadmium não sabe ler")
         }
         DocumentError::GpuLost => GPU_LOST.to_string(),
+        DocumentError::OutOfVideoMemory => OUT_OF_VIDEO_MEMORY.to_string(),
     }
 }
 
@@ -288,9 +290,12 @@ impl CadmiumWindow {
             if window.work_would_be_lost() && !painting_discard_confirmed(&window).await {
                 return false;
             }
-            window.state().borrow_mut().open_painting(snapshot, path);
+            let opened = window.state().borrow_mut().open_painting(snapshot, path);
             window.after_document_replaced();
-            true
+            if opened.is_err() {
+                window.show_toast(&format!("{CANNOT_OPEN}: {OUT_OF_VIDEO_MEMORY}"));
+            }
+            opened.is_ok()
         }
     }
 

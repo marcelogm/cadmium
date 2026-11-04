@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
-use cadmium_engine::canvas::{CanvasSpec, PaintTotals};
+use cadmium_engine::canvas::{CanvasError, CanvasSpec, PaintTotals};
 use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
 use cadmium_engine::engine::{PaintEngine, TIP_MARGIN, TIP_SIZE};
 use cadmium_engine::gpu::{GpuContext, GpuLost};
@@ -245,8 +245,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(gpu: Rc<GpuContext>, spec: CanvasSpec) -> AppState {
-        let mut session = PaintSession::new(&gpu, spec);
+    pub fn new(gpu: Rc<GpuContext>, spec: CanvasSpec) -> Result<AppState, CanvasError> {
+        let mut session = PaintSession::new(&gpu, spec)?;
         session.brush.recipe = starting_recipe(&session.canvas.spec.pigment_slots);
         session.brush.load = STARTING_LOAD;
         let resting_tool = session.brush.tool;
@@ -275,7 +275,7 @@ impl AppState {
             waker: None,
         };
         state.reload_brush();
-        state
+        Ok(state)
     }
 
     pub fn set_waker(&mut self, waker: Waker) {
@@ -288,16 +288,24 @@ impl AppState {
         }
     }
 
-    pub fn start_painting(&mut self, spec: CanvasSpec) {
+    pub fn start_painting(&mut self, spec: CanvasSpec) -> Result<(), CanvasError> {
         self.end_stroke();
-        let session = PaintSession::new(&self.gpu, spec);
-        self.adopt_session(session, None);
+        let old_palette = self.session.canvas.spec.pigment_slots.clone();
+        let replaced = self.session.replace_document(&self.gpu, spec);
+        self.adopt_document(&old_palette, replaced.map(|()| None));
+        replaced
     }
 
-    pub fn open_painting(&mut self, snapshot: DocumentSnapshot, path: PathBuf) {
+    pub fn open_painting(
+        &mut self,
+        snapshot: DocumentSnapshot,
+        path: PathBuf,
+    ) -> Result<(), CanvasError> {
         self.end_stroke();
-        let session = snapshot.into_session(&self.gpu);
-        self.adopt_session(session, Some(path));
+        let old_palette = self.session.canvas.spec.pigment_slots.clone();
+        let restored = snapshot.restore_into(&self.gpu, &mut self.session);
+        self.adopt_document(&old_palette, restored.map(|()| Some(path)));
+        restored
     }
 
     pub fn capture_document(&mut self) -> Result<DocumentSnapshot, GpuLost> {
@@ -321,25 +329,26 @@ impl AppState {
         self.file = Some(path);
     }
 
-    fn adopt_session(&mut self, session: PaintSession, file: Option<PathBuf>) {
-        let mut brush = self.session.brush.clone();
+    fn adopt_document(
+        &mut self,
+        old_palette: &[String],
+        file: Result<Option<PathBuf>, CanvasError>,
+    ) {
+        let palette = &self.session.canvas.spec.pigment_slots;
+        let brush = &mut self.session.brush;
         brush.tool = self.resting_tool;
-        let params = self.session.engine.params().clone();
-        let old_palette = self.session.canvas.spec.pigment_slots.clone();
-        self.session = session;
-        brush.recipe = recipe_for_palette(
-            &brush.recipe,
-            &old_palette,
-            &self.session.canvas.spec.pigment_slots,
-        );
+        brush.recipe = recipe_for_palette(&brush.recipe, old_palette, palette);
         if brush.recipe.is_empty() {
-            brush.recipe = starting_recipe(&self.session.canvas.spec.pigment_slots);
+            brush.recipe = starting_recipe(palette);
         }
-        self.session.brush = brush;
-        *self.session.engine.params_mut() = params;
         self.reload_brush();
-        self.edits.forget_unsaved();
-        self.file = file;
+        match file {
+            Ok(file) => {
+                self.edits.forget_unsaved();
+                self.file = file;
+            }
+            Err(_) => self.file = None,
+        }
         self.wake();
     }
 
@@ -670,7 +679,7 @@ mod tests {
             height: TEST_CANVAS.1,
             ..starting_canvas_spec()
         };
-        let mut state = AppState::new(gpu, spec);
+        let mut state = AppState::new(gpu, spec).unwrap();
         state.session.brush.geometry.max_diameter_px = TEST_BRUSH_DIAMETER_PX;
         state.reload_brush();
         state
@@ -772,7 +781,7 @@ mod tests {
         let reversed_palette = saved.session.canvas.spec.pigment_slots.clone();
         let snapshot = saved.capture_document().unwrap();
         let path = PathBuf::from("opened.cadmium");
-        current.open_painting(snapshot, path.clone());
+        current.open_painting(snapshot, path.clone()).unwrap();
 
         assert_eq!(current.session.canvas.spec.pigment_slots, reversed_palette);
         let new_slot = reversed_palette
@@ -787,6 +796,26 @@ mod tests {
         assert_eq!(current.session.engine.params().get(spec.key), tuned);
         assert_eq!(current.file, Some(path));
         assert!(!current.has_unsaved_edits());
+    }
+
+    #[test]
+    fn a_new_painting_keeps_the_lab_and_starts_untitled_without_undo() {
+        const TUNED_PARAM_VALUE_SHARE: f32 = 0.75;
+        let mut state = painting_state();
+        let spec = &SimParams::specs()[0];
+        let tuned = spec.min + (spec.max - spec.min) * TUNED_PARAM_VALUE_SHARE;
+        state.set_param(spec.key, tuned);
+        stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+        let mark = state.edit_mark();
+        state.saved_to(PathBuf::from("antiga.cadmium"), mark);
+        let blank = state.session.canvas.spec.clone();
+        state.start_painting(blank).unwrap();
+        assert_eq!(state.file, None);
+        assert!(!state.can_undo());
+        assert!(!state.has_unsaved_edits());
+        assert_eq!(wet_volume(&state), 0.0);
+        assert_eq!(state.session.engine.params().get(spec.key), tuned);
+        assert!(!state.brush_is_clean());
     }
 
     const WHITE_SLOT: usize = 0;

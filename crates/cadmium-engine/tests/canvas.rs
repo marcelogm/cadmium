@@ -19,7 +19,8 @@ fn new_canvas_has_no_wet_paint() {
         &gpu,
         &PigmentDb::builtin(),
         spec(Primer::WhiteGesso, Weave::Smooth),
-    );
+    )
+    .unwrap();
     assert_eq!(c.wet_totals(&gpu).unwrap(), PaintTotals::default());
 }
 
@@ -27,7 +28,7 @@ fn new_canvas_has_no_wet_paint() {
 fn white_gesso_primer_reflects_like_titanium_white() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
-    let c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth));
+    let c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth)).unwrap();
     let refl = c.read_f32(&gpu, StateTexture::DryRefl0).unwrap();
     let w = db.get("titanium_white").unwrap();
     let expected = cadmium_engine::spectral::km_infinite(w.absorption[0], w.scattering[0]);
@@ -39,10 +40,12 @@ fn smooth_weave_is_flat_and_linen_is_not() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
     let flat = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth))
+        .unwrap()
         .read_f32(&gpu, StateTexture::DryHeight)
         .unwrap();
     assert!(flat.iter().all(|h| *h == 0.0));
     let linen = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Linen))
+        .unwrap()
         .read_f32(&gpu, StateTexture::DryHeight)
         .unwrap();
     let max = linen.iter().cloned().fold(0.0, f32::max);
@@ -56,7 +59,8 @@ fn write_then_read_roundtrips_half_floats() {
         &gpu,
         &PigmentDb::builtin(),
         spec(Primer::WhiteGesso, Weave::Smooth),
-    );
+    )
+    .unwrap();
     let data: Vec<f32> = (0..256 * 128 * 4).map(|i| (i % 7) as f32 * 0.125).collect();
     c.write_f32(&gpu, StateTexture::WetPig0, &data);
     assert_eq!(c.read_f32(&gpu, StateTexture::WetPig0).unwrap(), data);
@@ -86,6 +90,7 @@ fn cotton_weave_stays_within_its_amplitude() {
         &PigmentDb::builtin(),
         spec(Primer::WhiteGesso, Weave::Cotton),
     )
+    .unwrap()
     .read_f32(&gpu, StateTexture::DryHeight)
     .unwrap();
     assert!(cotton.iter().all(|h| (0.0..=6.0).contains(h)));
@@ -96,8 +101,8 @@ fn cotton_weave_stays_within_its_amplitude() {
 fn sienna_imprimatura_is_warm_and_darker_than_gesso() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
-    let gesso = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth));
-    let sienna = Canvas::new(&gpu, &db, spec(Primer::SiennaImprimatura, Weave::Smooth));
+    let gesso = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth)).unwrap();
+    let sienna = Canvas::new(&gpu, &db, spec(Primer::SiennaImprimatura, Weave::Smooth)).unwrap();
     let blue_band = sienna.read_f32(&gpu, StateTexture::DryRefl0).unwrap()[0];
     let red_band = sienna.read_f32(&gpu, StateTexture::DryRefl1).unwrap()[3];
     let gesso_blue_band = gesso.read_f32(&gpu, StateTexture::DryRefl0).unwrap()[0];
@@ -112,7 +117,8 @@ fn new_canvas_starts_fully_dirty_with_no_wet_tiles() {
         &gpu,
         &PigmentDb::builtin(),
         spec(Primer::WhiteGesso, Weave::Smooth),
-    );
+    )
+    .unwrap();
     assert_eq!(c.dirty.tiles().len(), 4 * 2);
     assert!(c.wet_tiles.is_empty());
 }
@@ -124,7 +130,8 @@ fn new_canvas_clears_wet_dry_top_and_display_textures() {
         &gpu,
         &PigmentDb::builtin(),
         spec(Primer::SiennaImprimatura, Weave::Linen),
-    );
+    )
+    .unwrap();
     for which in [
         StateTexture::WetPig0,
         StateTexture::WetPig1,
@@ -146,7 +153,7 @@ fn raw_bytes_roundtrip_with_unpadded_rows() {
     let mut odd = spec(Primer::WhiteGesso, Weave::Smooth);
     odd.width = 37;
     odd.height = 5;
-    let c = Canvas::new(&gpu, &PigmentDb::builtin(), odd);
+    let c = Canvas::new(&gpu, &PigmentDb::builtin(), odd).unwrap();
     let bytes: Vec<u8> = (0..37 * 5 * 4).map(|i| (i % 251) as u8).collect();
     c.write_bytes(&gpu, StateTexture::DryHeight, &bytes);
     assert_eq!(c.read_bytes(&gpu, StateTexture::DryHeight).unwrap(), bytes);
@@ -162,7 +169,7 @@ fn wet_totals_weigh_concentrations_by_volume() {
     let mut small = spec(Primer::WhiteGesso, Weave::Smooth);
     small.width = 2;
     small.height = 1;
-    let c = Canvas::new(&gpu, &PigmentDb::builtin(), small);
+    let c = Canvas::new(&gpu, &PigmentDb::builtin(), small).unwrap();
     c.write_f32(&gpu, StateTexture::WetVol, &[10.0, 30.0]);
     c.write_f32(
         &gpu,
@@ -359,7 +366,7 @@ fn read_slot_table(gpu: &GpuContext, canvas: &Canvas) -> Vec<u8> {
 fn adding_a_slot_grows_the_palette_and_rewrites_the_slot_table() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
-    let mut c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth));
+    let mut c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth)).unwrap();
     assert_eq!(c.add_slot(&gpu, &db, "cadmium_red"), Ok(2));
     assert_eq!(
         c.spec.pigment_slots,
@@ -374,7 +381,7 @@ fn adding_a_slot_grows_the_palette_and_rewrites_the_slot_table() {
 fn adding_an_unknown_duplicate_or_ninth_slot_is_refused() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();
-    let mut c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth));
+    let mut c = Canvas::new(&gpu, &db, spec(Primer::WhiteGesso, Weave::Smooth)).unwrap();
     assert!(c.add_slot(&gpu, &db, "unobtainium").is_err());
     assert!(c.add_slot(&gpu, &db, "ultramarine_blue").is_err());
     for id in [

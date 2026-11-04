@@ -39,6 +39,7 @@ fn session(gpu: &GpuContext) -> PaintSession {
                 ],
             },
         )
+        .unwrap()
     })
 }
 

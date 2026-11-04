@@ -11,6 +11,7 @@ use crate::LOG_DOMAIN;
 use crate::brush_panel::BrushPanel;
 use crate::canvas_widget::CadmiumCanvas;
 use crate::dialogs::{announce_gpu_lost, confirm_discard};
+use crate::files::OUT_OF_VIDEO_MEMORY;
 use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::{DryOutcome, SharedState};
@@ -116,6 +117,7 @@ const DRIED_TOAST: &str = "Tela seca";
 const UNDO_LABEL: &str = "Desfazer";
 const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indisponível)";
 const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
+const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
@@ -422,8 +424,11 @@ impl CadmiumWindow {
     }
 
     fn start_painting(&self, spec: CanvasSpec) {
-        self.state().borrow_mut().start_painting(spec);
+        let started = self.state().borrow_mut().start_painting(spec);
         self.after_document_replaced();
+        if started.is_err() {
+            self.show_toast(&format!("{CANNOT_START_PAINTING}: {OUT_OF_VIDEO_MEMORY}"));
+        }
     }
 
     pub fn after_document_replaced(&self) {

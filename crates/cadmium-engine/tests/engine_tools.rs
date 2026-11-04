@@ -63,7 +63,8 @@ fn session_of_width(gpu: &GpuContext, width: u32) -> PaintSession {
                 "titanium_white".into(),
             ],
         },
-    );
+    )
+    .unwrap();
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "wgpu error: {error:?}");
     session

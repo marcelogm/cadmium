@@ -388,6 +388,21 @@ struct StateSurface {
     view: wgpu::TextureView,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CanvasError {
+    OutOfVideoMemory,
+}
+
+impl std::fmt::Display for CanvasError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CanvasError::OutOfVideoMemory => write!(f, "not enough video memory for the canvas"),
+        }
+    }
+}
+
+impl std::error::Error for CanvasError {}
+
 pub struct Canvas {
     pub spec: CanvasSpec,
     pub dirty: DirtyTiles,
@@ -397,10 +412,19 @@ pub struct Canvas {
 }
 
 impl Canvas {
-    pub fn new(gpu: &GpuContext, db: &PigmentDb, spec: CanvasSpec) -> Canvas {
+    pub fn new(gpu: &GpuContext, db: &PigmentDb, spec: CanvasSpec) -> Result<Canvas, CanvasError> {
         if let Err(reason) = spec.validate(db) {
             panic!("invalid canvas spec: {reason}");
         }
+        let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let canvas = Canvas::allocate(gpu, db, spec);
+        match pollster::block_on(scope.pop()) {
+            None => Ok(canvas),
+            Some(_) => Err(CanvasError::OutOfVideoMemory),
+        }
+    }
+
+    fn allocate(gpu: &GpuContext, db: &PigmentDb, spec: CanvasSpec) -> Canvas {
         let surfaces = StateTexture::ALL
             .iter()
             .map(|which| create_surface(gpu, &spec, *which))

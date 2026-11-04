@@ -42,7 +42,8 @@ fn session(gpu: &GpuContext) -> PaintSession {
             weave: Weave::Smooth,
             pigment_slots: vec!["ultramarine_blue".into(), "titanium_white".into()],
         },
-    );
+    )
+    .unwrap();
     s.brush.geometry.max_diameter_px = MAX_DIAMETER_PX;
     s.brush.recipe = vec![(0, 0.6), (1, 0.4)];
     s.reload_brush(gpu);

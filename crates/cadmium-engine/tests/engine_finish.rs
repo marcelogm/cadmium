@@ -33,6 +33,7 @@ fn session(gpu: &GpuContext) -> PaintSession {
                 ],
             },
         )
+        .unwrap()
     })
 }
 
@@ -241,6 +242,7 @@ fn drying_a_large_canvas_in_chunks_dries_every_wet_tile() {
                 pigment_slots: vec!["ultramarine_blue".into()],
             },
         )
+        .unwrap()
     });
     s.canvas
         .write_f32(&gpu, StateTexture::WetVol, &vec![10.0; 1024 * 1024]);

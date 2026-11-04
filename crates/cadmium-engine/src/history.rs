@@ -97,6 +97,10 @@ enum CopyDirection {
     SlotToCanvas,
 }
 
+fn slots_for_budget(budget_bytes: u64) -> u32 {
+    (budget_bytes / bytes_per_tile_all_textures()).min(u64::from(ATLAS_SLOTS)) as u32
+}
+
 pub fn bytes_per_tile_all_textures() -> u64 {
     StateTexture::PAINT_STATE
         .iter()
@@ -105,6 +109,7 @@ pub fn bytes_per_tile_all_textures() -> u64 {
 }
 
 pub struct History {
+    wanted_slots: u32,
     slot_capacity: u32,
     max_steps: usize,
     atlas: Option<Atlas>,
@@ -116,21 +121,40 @@ pub struct History {
 
 impl History {
     pub fn new(gpu: &GpuContext, budget_bytes: u64, max_steps: usize) -> Self {
-        let affordable = budget_bytes / bytes_per_tile_all_textures();
-        let wanted_slots = affordable.min(u64::from(ATLAS_SLOTS)) as u32;
+        let mut history = History {
+            wanted_slots: 0,
+            slot_capacity: 0,
+            max_steps,
+            atlas: None,
+            free_slots: Vec::new(),
+            undo_steps: VecDeque::new(),
+            redo_steps: Vec::new(),
+            current: None,
+        };
+        history.allocate_atlas(gpu, slots_for_budget(budget_bytes));
+        history
+    }
+
+    pub fn refit(&mut self, gpu: &GpuContext, budget_bytes: u64) {
+        self.clear();
+        let wanted_slots = slots_for_budget(budget_bytes);
+        if wanted_slots != self.wanted_slots {
+            self.atlas = None;
+            gpu.queue.submit([]);
+            let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+            self.allocate_atlas(gpu, wanted_slots);
+        }
+    }
+
+    fn allocate_atlas(&mut self, gpu: &GpuContext, wanted_slots: u32) {
         let (atlas, slot_capacity) = match Atlas::allocate_largest(gpu, wanted_slots) {
             Some((atlas, slot_capacity)) => (Some(atlas), slot_capacity),
             None => (None, 0),
         };
-        History {
-            slot_capacity,
-            max_steps,
-            atlas,
-            free_slots: (0..slot_capacity).rev().collect(),
-            undo_steps: VecDeque::new(),
-            redo_steps: Vec::new(),
-            current: None,
-        }
+        self.wanted_slots = wanted_slots;
+        self.slot_capacity = slot_capacity;
+        self.atlas = atlas;
+        self.free_slots = (0..slot_capacity).rev().collect();
     }
 
     pub fn slot_capacity(&self) -> u32 {

@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 
 use crate::brush::BrushSettings;
-use crate::canvas::{Canvas, CanvasSpec, TileCoord, tiles_in_rect};
+use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE, TileCoord, tiles_in_rect};
 use crate::engine::{BrushReadout, PaintEngine, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
-use crate::history::History;
+use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
@@ -14,6 +14,8 @@ const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
+const HISTORY_CANVAS_COPIES: u64 = 4;
+const PLACEHOLDER_SIZE_PX: u32 = 1;
 const SAVE_MARGIN_PX: f32 = 4.0;
 
 pub struct PaintSession {
@@ -32,15 +34,16 @@ pub struct PaintSession {
 }
 
 impl PaintSession {
-    pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> PaintSession {
+    pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
-        let canvas = Canvas::new(gpu, &db, spec);
+        let history_budget = history_budget(&spec);
+        let canvas = Canvas::new(gpu, &db, spec)?;
         let mut session = PaintSession {
             canvas,
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
-            history: History::new(gpu, HISTORY_BUDGET_BYTES, HISTORY_MAX_STEPS),
+            history: History::new(gpu, history_budget, HISTORY_MAX_STEPS),
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
             db,
@@ -50,7 +53,45 @@ impl PaintSession {
             step_open: false,
         };
         session.reload_brush(gpu);
-        session
+        Ok(session)
+    }
+
+    pub fn replace_document(
+        &mut self,
+        gpu: &GpuContext,
+        spec: CanvasSpec,
+    ) -> Result<(), CanvasError> {
+        self.stroke = None;
+        self.queued.clear();
+        self.step_open = false;
+        self.history.clear();
+        let previous = self.canvas.spec.clone();
+        let placeholder = CanvasSpec {
+            width: PLACEHOLDER_SIZE_PX,
+            height: PLACEHOLDER_SIZE_PX,
+            ..previous.clone()
+        };
+        let placeholder = Canvas::new(gpu, &self.db, placeholder)?;
+        drop(std::mem::replace(&mut self.canvas, placeholder));
+        gpu.queue.submit([]);
+        let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+        let replaced = match Canvas::new(gpu, &self.db, spec) {
+            Ok(canvas) => {
+                self.canvas = canvas;
+                Ok(())
+            }
+            Err(error) => {
+                if let Ok(blank) = Canvas::new(gpu, &self.db, previous) {
+                    self.canvas = blank;
+                }
+                Err(error)
+            }
+        };
+        self.history.refit(gpu, history_budget(&self.canvas.spec));
+        self.view_mode = ViewMode::Color;
+        self.engine.clean_brush(gpu);
+        self.engine.clean_knife(gpu);
+        replaced
     }
 
     pub fn begin_stroke(&mut self, gpu: &GpuContext, sample: StrokeSample) {
@@ -267,6 +308,12 @@ impl PaintSession {
         }
         touched.into_iter().collect()
     }
+}
+
+fn history_budget(spec: &CanvasSpec) -> u64 {
+    let tiles =
+        u64::from(spec.width.div_ceil(TILE_SIZE)) * u64::from(spec.height.div_ceil(TILE_SIZE));
+    HISTORY_BUDGET_BYTES.min(tiles * HISTORY_CANVAS_COPIES * bytes_per_tile_all_textures())
 }
 
 fn is_pigment_free(mixture: &Mixture) -> bool {

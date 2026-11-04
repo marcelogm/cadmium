@@ -30,6 +30,7 @@ fn session(gpu: &GpuContext) -> PaintSession {
             ],
         },
     )
+    .unwrap()
 }
 
 fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {

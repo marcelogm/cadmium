@@ -35,7 +35,8 @@ fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> 
             weave: Weave::Linen,
             pigment_slots: vec!["titanium_white".into(), "ultramarine_blue".into()],
         },
-    );
+    )
+    .unwrap();
     if let Some(reserve_factor) = reserve_factor {
         session
             .engine

@@ -1,6 +1,6 @@
 use cadmium_engine::{
-    canvas::*, gpu::GpuContext, history::History, pigments::PigmentDb, session::PaintSession,
-    stroke::StrokeSample,
+    canvas::*, engine::PaintEngine, gpu::GpuContext, history::History, pigments::PigmentDb,
+    session::PaintSession, stroke::StrokeSample,
 };
 
 const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 2 * 4);
@@ -28,7 +28,7 @@ fn spec(width: u32, height: u32) -> CanvasSpec {
 }
 
 fn session(gpu: &GpuContext) -> PaintSession {
-    without_wgpu_errors(gpu, || PaintSession::new(gpu, spec(512, 256)))
+    without_wgpu_errors(gpu, || PaintSession::new(gpu, spec(512, 256)).unwrap())
 }
 
 fn frame(gpu: &GpuContext, s: &mut PaintSession) {
@@ -152,7 +152,7 @@ fn undoing_twice_returns_to_the_blank_canvas() {
 #[test]
 fn undo_restores_partial_tiles_at_the_canvas_edge() {
     let gpu = GpuContext::new().unwrap();
-    let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(150, 90)));
+    let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(150, 90)).unwrap());
     let blank = snapshot(&gpu, &s);
     stroke(&gpu, &mut s, 80.0, 10.0, 145.0);
     assert_ne!(snapshot(&gpu, &s), blank);
@@ -174,7 +174,7 @@ fn undo_marks_restored_tiles_for_shading() {
 #[test]
 fn history_keeps_at_most_max_steps() {
     let gpu = GpuContext::new().unwrap();
-    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 64 * TILE_BYTES_ALL_TEXTURES, 2);
     for _ in 0..3 {
         save_step(&gpu, &mut history, &canvas, &tiles(1));
@@ -187,7 +187,7 @@ fn history_keeps_at_most_max_steps() {
 #[test]
 fn running_out_of_slots_evicts_the_oldest_steps() {
     let gpu = GpuContext::new().unwrap();
-    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(2));
@@ -200,7 +200,7 @@ fn running_out_of_slots_evicts_the_oldest_steps() {
 #[test]
 fn a_step_larger_than_the_budget_is_dropped() {
     let gpu = GpuContext::new().unwrap();
-    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 2 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(3));
     assert!(!history.can_undo());
@@ -209,7 +209,7 @@ fn a_step_larger_than_the_budget_is_dropped() {
 #[test]
 fn saving_the_same_tile_twice_in_a_step_keeps_the_first_copy() {
     let gpu = GpuContext::new().unwrap();
-    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES, 100);
     without_wgpu_errors(&gpu, || {
         history.begin_step();
@@ -248,7 +248,7 @@ fn history_capacity_follows_the_budget() {
 #[test]
 fn a_budget_below_one_tile_disables_history() {
     let gpu = GpuContext::new().unwrap();
-    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES - 1, 100);
     assert_eq!(history.slot_capacity(), 0);
     assert!(!history.is_enabled());
@@ -259,7 +259,7 @@ fn a_budget_below_one_tile_disables_history() {
 #[test]
 fn a_step_too_large_for_the_history_clears_earlier_steps() {
     let gpu = GpuContext::new().unwrap();
-    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(5));
@@ -270,7 +270,7 @@ fn a_step_too_large_for_the_history_clears_earlier_steps() {
 #[test]
 fn after_an_unrecorded_step_the_full_capacity_is_free_again() {
     let gpu = GpuContext::new().unwrap();
-    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(5));
@@ -282,7 +282,7 @@ fn after_an_unrecorded_step_the_full_capacity_is_free_again() {
 #[test]
 fn clearing_the_history_forgets_undo_and_redo() {
     let gpu = GpuContext::new().unwrap();
-    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(1));
     save_step(&gpu, &mut history, &canvas, &tiles(1));
@@ -297,7 +297,7 @@ fn clearing_the_history_forgets_undo_and_redo() {
 #[test]
 fn a_dry_too_large_for_the_history_clears_earlier_steps_and_is_not_undoable() {
     let gpu = GpuContext::new().unwrap();
-    let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(1024, 640)));
+    let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(1024, 640)).unwrap());
     s.history = History::new(&gpu, 64 * TILE_BYTES_ALL_TEXTURES, 100);
     stroke(&gpu, &mut s, 20.0, 10.0, 30.0);
     assert!(s.history.can_undo());
@@ -310,7 +310,7 @@ fn a_dry_too_large_for_the_history_clears_earlier_steps_and_is_not_undoable() {
 #[test]
 fn an_action_that_saves_no_tiles_keeps_redo() {
     let gpu = GpuContext::new().unwrap();
-    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(1));
     assert!(history.undo(&gpu, &mut canvas));
@@ -340,4 +340,41 @@ fn redoing_a_stroke_marks_its_tiles_wet() {
     s.canvas.wet_tiles.clear();
     s.redo(&gpu);
     assert!(!s.canvas.wet_tiles.is_empty());
+}
+
+#[test]
+fn a_small_canvas_keeps_only_a_few_copies_of_itself_for_undo() {
+    const CANVAS_COPIES: u32 = 4;
+    let gpu = GpuContext::new().unwrap();
+    let s = session(&gpu);
+    let tiles = 512u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
+    assert_eq!(s.history.slot_capacity(), tiles * CANVAS_COPIES);
+}
+
+#[test]
+fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_tools() {
+    const TUNED_KEY: &str = "wet_gloss";
+    const TUNED_VALUE: f32 = 0.0;
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.engine.params_mut().set(TUNED_KEY, TUNED_VALUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.undo(&gpu);
+    stroke(&gpu, &mut s, 64.0, 40.0, 470.0);
+    let wider = spec(1024, 256);
+    without_wgpu_errors(&gpu, || s.replace_document(&gpu, wider.clone())).unwrap();
+    assert_eq!(s.canvas.spec, wider);
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert!(!s.history.can_undo());
+    assert!(!s.history.can_redo());
+    let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
+    assert_eq!(s.history.slot_capacity(), tiles * 4);
+    assert_eq!(s.engine.params().get(TUNED_KEY), TUNED_VALUE);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
+    assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, 128.0, 600.0, 1000.0);
+    assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
 }

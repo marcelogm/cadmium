@@ -78,7 +78,7 @@ fn painted_spec() -> CanvasSpec {
 }
 
 fn session_with_ended_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64)) -> PaintSession {
-    let mut s = PaintSession::new(gpu, painted_spec());
+    let mut s = PaintSession::new(gpu, painted_spec()).unwrap();
     s.begin_stroke(gpu, sample(from.0, from.1, 0));
     s.add_samples(&[sample(to.0, to.1, 200)]);
     s.end_stroke(gpu);
@@ -351,7 +351,7 @@ fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
         height: UNALIGNED_HEIGHT,
         ..painted_spec()
     };
-    let mut s = PaintSession::new(&gpu, spec);
+    let mut s = PaintSession::new(&gpu, spec).unwrap();
     s.begin_stroke(&gpu, sample(10.0, 30.0, 0));
     s.add_samples(&[sample(90.0, 32.0, 200)]);
     s.end_stroke(&gpu);
@@ -414,7 +414,10 @@ fn a_format_1_painting_opens_with_the_dry_height_it_stored() {
             zstd::encode_all(raw.as_slice(), 3).unwrap(),
         ));
     }
-    let opened = read_entries(Entries(entries)).unwrap().into_session(&gpu);
+    let opened = read_entries(Entries(entries))
+        .unwrap()
+        .into_session(&gpu)
+        .unwrap();
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
             opened.canvas.read_bytes(&gpu, t).unwrap(),
@@ -436,7 +439,8 @@ fn a_large_painting_with_one_stroke_saves_without_its_weave() {
             weave: Weave::Linen,
             pigment_slots: vec!["ultramarine_blue".into()],
         },
-    );
+    )
+    .unwrap();
     s.begin_stroke(&gpu, sample(300.0, 700.0, 0));
     s.add_samples(&[sample(1700.0, 800.0, 400)]);
     s.end_stroke(&gpu);
@@ -506,7 +510,7 @@ fn a_snapshot_read_off_the_main_thread_becomes_a_session() {
         .join()
         .unwrap()
         .unwrap();
-    let opened = snapshot.into_session(&gpu);
+    let opened = snapshot.into_session(&gpu).unwrap();
     assert_eq!(
         opened
             .canvas
@@ -579,7 +583,8 @@ fn export_png_has_canvas_dimensions() {
             weave: Weave::Smooth,
             pigment_slots: vec!["titanium_white".into()],
         },
-    );
+    )
+    .unwrap();
     let dir = TempDir::new("export");
     let path = dir.file("export.png");
     document::export_png(&gpu, &mut s, &path).unwrap();
@@ -614,4 +619,30 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
         s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap(),
         height_display
     );
+}
+
+#[test]
+fn a_snapshot_restored_into_a_running_session_replaces_its_painting() {
+    let gpu = GpuContext::new().unwrap();
+    let mut saved = painted_session(&gpu);
+    let snapshot = DocumentSnapshot::capture(&gpu, &mut saved).unwrap();
+    let mut running = PaintSession::new(
+        &gpu,
+        CanvasSpec {
+            width: BLANK_WIDTH,
+            height: BLANK_HEIGHT,
+            ..painted_spec()
+        },
+    )
+    .unwrap();
+    snapshot.restore_into(&gpu, &mut running).unwrap();
+    assert_eq!(running.canvas.spec, saved.canvas.spec);
+    assert!(!running.canvas.wet_tiles.is_empty());
+    for t in StateTexture::PAINT_STATE {
+        assert_eq!(
+            running.canvas.read_bytes(&gpu, t).unwrap(),
+            saved.canvas.read_bytes(&gpu, t).unwrap(),
+            "{t:?}"
+        );
+    }
 }
