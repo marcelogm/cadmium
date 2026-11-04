@@ -1,6 +1,7 @@
 use oleo_engine::{canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample};
 
 const WIDTH: u32 = 1280;
+const PEN_TILT_DEG: f32 = 25.0;
 const HEIGHT: u32 = 128;
 const STROKE_FROM_PX: f64 = 100.0;
 const STROKE_LENGTH_PX: f64 = 1000.0;
@@ -18,7 +19,7 @@ fn encode_frame(gpu: &GpuContext, session: &mut PaintSession) {
 }
 
 #[test]
-fn default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into_the_stroke() {
+fn tilted_default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into_the_stroke() {
     let gpu = GpuContext::new().unwrap();
     let mut session = PaintSession::new(
         &gpu,
@@ -26,7 +27,7 @@ fn default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into_the_st
             width: WIDTH,
             height: HEIGHT,
             primer: Primer::WhiteGesso,
-            weave: Weave::Smooth,
+            weave: Weave::Linen,
             pigment_slots: vec!["titanium_white".into(), "ultramarine_blue".into()],
         },
     );
@@ -37,8 +38,8 @@ fn default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into_the_st
             x: STROKE_FROM_PX + STROKE_LENGTH_PX * f64::from(index) / f64::from(SAMPLES),
             y: ROW,
             pressure: 1.0,
-            tilt_x_deg: 20.0,
-            tilt_y_deg: 0.0,
+            tilt_x_deg: PEN_TILT_DEG,
+            tilt_y_deg: PEN_TILT_DEG,
             time_ms: index * 8,
         };
         if index == 0 {
