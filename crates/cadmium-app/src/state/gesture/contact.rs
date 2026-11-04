@@ -40,8 +40,8 @@ impl AppState {
         match self.contact {
             None => {}
             Some(Contact::Stroke { .. }) => self.add_samples(samples),
-            Some(Contact::Squeezing(squeezing)) => self.squeezing_motion(squeezing, pen, samples),
-            Some(Contact::Loading(loading)) => self.loading_motion(loading, pen, samples),
+            Some(Contact::Squeezing(squeezing)) => self.follow_squeezing(squeezing, pen, samples),
+            Some(Contact::Loading(loading)) => self.follow_loading(loading, pen, samples),
         }
     }
 

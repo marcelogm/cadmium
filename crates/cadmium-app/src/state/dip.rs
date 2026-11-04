@@ -11,7 +11,7 @@ use super::{AppState, EMPTY_MIXTURE};
 
 const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
 
-fn reserve_level(volume: f32, capacity: f32) -> f32 {
+fn fill_level(volume: f32, capacity: f32) -> f32 {
     if capacity > 0.0 && volume.is_finite() {
         (volume / capacity).clamp(0.0, 1.0)
     } else {
@@ -43,7 +43,7 @@ impl AppState {
     }
 
     pub fn reserve_level(&self) -> f32 {
-        reserve_level(
+        fill_level(
             self.reserve_volume,
             self.session.engine.full_reserve_volume(),
         )
@@ -58,7 +58,7 @@ impl AppState {
             .session
             .engine
             .knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
-        reserve_level(self.knife_volume, capacity)
+        fill_level(self.knife_volume, capacity)
     }
 
     pub fn knife_is_clean(&self) -> bool {

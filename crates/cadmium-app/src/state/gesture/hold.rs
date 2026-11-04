@@ -50,7 +50,7 @@ impl AppState {
         }
     }
 
-    pub(super) fn squeezing_motion(
+    pub(super) fn follow_squeezing(
         &mut self,
         squeezing: Squeezing,
         pen: StrokeSample,
@@ -61,7 +61,7 @@ impl AppState {
         self.wake();
     }
 
-    pub(super) fn loading_motion(
+    pub(super) fn follow_loading(
         &mut self,
         loading: Loading,
         pen: StrokeSample,

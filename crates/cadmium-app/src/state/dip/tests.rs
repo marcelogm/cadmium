@@ -182,7 +182,7 @@ fn cleaning_the_knife_keeps_the_palette_pile_and_the_brush() {
 #[test]
 fn reserve_level_is_a_share_of_the_full_reserve() {
     let small = 100.0;
-    assert_eq!(reserve_level(small / 2.0, small), 0.5);
-    assert_eq!(reserve_level(small * 2.0, small), 1.0);
-    assert_eq!(reserve_level(1.0, 0.0), 0.0);
+    assert_eq!(fill_level(small / 2.0, small), 0.5);
+    assert_eq!(fill_level(small * 2.0, small), 1.0);
+    assert_eq!(fill_level(1.0, 0.0), 0.0);
 }
