@@ -186,7 +186,7 @@ impl PigmentDb {
     }
 
     pub fn tint_srgb8(&self, id: &str, white_parts: f32) -> [u8; 3] {
-        let pigment_fraction = 1.0 / (1.0 + white_parts);
+        let pigment_fraction = 1.0 / (1.0 + white_parts.max(0.0));
         let white_fraction = 1.0 - pigment_fraction;
         let pigment = self.expect_pigment(id);
         let white = self.expect_pigment(TINT_WHITE_ID);

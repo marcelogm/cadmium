@@ -101,8 +101,8 @@ pub fn km_infinite(absorption: f32, scattering: f32) -> f32 {
     if scattering <= NEGLIGIBLE_SCATTERING {
         return 0.0;
     }
-    let ratio = absorption.max(0.0) / scattering;
-    1.0 + ratio - (ratio * ratio + 2.0 * ratio).sqrt()
+    let ratio = (absorption / scattering).max(0.0);
+    1.0 / (1.0 + ratio + (ratio * ratio + 2.0 * ratio).sqrt())
 }
 
 pub fn composite_over(top: &Layer, below_reflectance: f32) -> f32 {

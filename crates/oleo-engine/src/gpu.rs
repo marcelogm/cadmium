@@ -59,6 +59,13 @@ impl GpuContext {
                 "TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES",
             ));
         }
+        if !adapter
+            .get_texture_format_features(wgpu::TextureFormat::Rgba16Float)
+            .flags
+            .contains(wgpu::TextureFormatFeatureFlags::STORAGE_READ_WRITE)
+        {
+            return Err(GpuError::MissingFeature("rgba16float storage read-write"));
+        }
         let supports_dmabuf_export = adapter_features.contains(DMABUF_EXPORT_FEATURES)
             && supports_dmabuf_sync_extensions(&adapter);
         let supports_timestamps = adapter_features.contains(TIMESTAMP_FEATURES);
@@ -70,11 +77,10 @@ impl GpuContext {
         if supports_timestamps {
             required_features |= TIMESTAMP_FEATURES;
         }
-        let required_limits = adapter.limits();
         let descriptor = wgpu::DeviceDescriptor {
             label: Some("oleo"),
             required_features,
-            required_limits: required_limits.clone(),
+            required_limits: adapter.limits(),
             memory_hints: wgpu::MemoryHints::Performance,
             ..Default::default()
         };
@@ -98,7 +104,7 @@ impl GpuContext {
     }
 }
 
-fn is_usable(adapter: &wgpu::Adapter) -> bool {
+fn is_hardware_vulkan(adapter: &wgpu::Adapter) -> bool {
     let info = adapter.get_info();
     info.backend == wgpu::Backend::Vulkan && info.device_type != wgpu::DeviceType::Cpu
 }
@@ -121,7 +127,7 @@ async fn select_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, GpuE
         })
         .await;
     if let Ok(adapter) = preferred
-        && is_usable(&adapter)
+        && is_hardware_vulkan(&adapter)
     {
         return Ok(adapter);
     }
@@ -129,7 +135,7 @@ async fn select_adapter(instance: &wgpu::Instance) -> Result<wgpu::Adapter, GpuE
         .enumerate_adapters(wgpu::Backends::VULKAN)
         .await
         .into_iter()
-        .filter(is_usable)
+        .filter(is_hardware_vulkan)
         .min_by_key(|adapter| device_type_preference(adapter.get_info().device_type))
         .ok_or(GpuError::NoVulkanAdapter)
 }
@@ -151,7 +157,7 @@ fn open_device_with_dmabuf_sync(
     let open = unsafe {
         let hal_adapter = adapter
             .as_hal::<Vulkan>()
-            .ok_or(GpuError::NoVulkanAdapter)?;
+            .ok_or_else(|| GpuError::DeviceCreation("adapter is not Vulkan".into()))?;
         hal_adapter.open_with_callback(
             descriptor.required_features,
             &descriptor.required_limits,

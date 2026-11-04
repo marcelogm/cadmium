@@ -17,6 +17,10 @@ fn burnt_sienna_and_burnt_umber_share_a_colour_index_but_not_an_id() {
         db.get("burnt_sienna").unwrap().colour_index,
         db.get("burnt_umber").unwrap().colour_index
     );
+    assert_ne!(
+        db.get("burnt_sienna").unwrap().id,
+        db.get("burnt_umber").unwrap().id
+    );
 }
 
 #[test]
@@ -55,4 +59,20 @@ fn phthalo_blue_tint_stays_blue() {
 fn cadmium_yellow_masstone_is_yellow() {
     let [r, g, b] = PigmentDb::builtin().masstone_srgb8("cadmium_yellow");
     assert!(r > 200 && g > 150 && b < 40);
+}
+
+#[test]
+fn quinacridone_glaze_over_black_is_darker_than_over_white() {
+    let db = PigmentDb::builtin();
+    let over_black: u32 = db
+        .glaze_srgb8("quinacridone_magenta", true)
+        .iter()
+        .map(|&c| c as u32)
+        .sum();
+    let over_white: u32 = db
+        .glaze_srgb8("quinacridone_magenta", false)
+        .iter()
+        .map(|&c| c as u32)
+        .sum();
+    assert!(over_black < over_white);
 }
