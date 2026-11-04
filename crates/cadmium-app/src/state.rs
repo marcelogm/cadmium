@@ -5,9 +5,8 @@ use std::time::Instant;
 
 use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
 use cadmium_engine::canvas::{CanvasError, CanvasSpec, PaintTotals};
-use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
 use cadmium_engine::engine::{BrushReadout, FULL_DIP};
-use cadmium_engine::gpu::{GpuContext, GpuLost};
+use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::{ClearOutcome, PaintSession};
@@ -16,12 +15,13 @@ use cadmium_engine::surface::Surface;
 
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
-use crate::writes::{EditCounter, EditMark};
+use crate::writes::EditCounter;
 use gesture::Contact;
 pub use gesture::LoadRing;
 pub use history::DryOutcome;
 pub use pen::PenReadout;
 
+mod document;
 mod gesture;
 mod history;
 mod lab;
@@ -233,73 +233,6 @@ impl AppState {
         for waker in &self.wakers {
             waker();
         }
-    }
-
-    pub fn start_painting(&mut self, spec: CanvasSpec) -> Result<(), CanvasError> {
-        self.release();
-        let old_palette = self.session.canvas.spec.pigment_slots.clone();
-        let replaced = self.session.replace_document(&self.gpu, spec);
-        self.adopt_document(&old_palette, replaced.map(|()| None));
-        replaced
-    }
-
-    pub fn open_painting(
-        &mut self,
-        snapshot: DocumentSnapshot,
-        path: PathBuf,
-    ) -> Result<(), CanvasError> {
-        self.release();
-        let old_palette = self.session.canvas.spec.pigment_slots.clone();
-        let restored = snapshot.restore_into(&self.gpu, &mut self.session);
-        self.adopt_document(&old_palette, restored.map(|()| Some(path)));
-        restored
-    }
-
-    pub fn capture_document(&mut self) -> Result<DocumentSnapshot, GpuLost> {
-        DocumentSnapshot::capture(&self.gpu, &mut self.session)
-    }
-
-    pub fn render_export(&mut self) -> Result<ExportedImage, GpuLost> {
-        ExportedImage::render(&self.gpu, &mut self.session)
-    }
-
-    pub fn has_unsaved_edits(&self) -> bool {
-        self.edits.has_unsaved_edits()
-    }
-
-    pub fn edit_mark(&self) -> EditMark {
-        self.edits.mark()
-    }
-
-    pub fn saved_to(&mut self, path: PathBuf, mark: EditMark) {
-        self.edits.saved_at(mark);
-        self.file = Some(path);
-    }
-
-    fn adopt_document(
-        &mut self,
-        old_palette: &[String],
-        file: Result<Option<PathBuf>, CanvasError>,
-    ) {
-        let palette = &self.session.canvas.spec.pigment_slots;
-        let brush = &mut self.session.brush;
-        brush.tool = self.resting_tool;
-        brush.recipe = recipe_for_palette(&brush.recipe, old_palette, palette);
-        if brush.recipe.is_empty() {
-            brush.recipe = starting_recipe(palette);
-        }
-        if self.tube_slot >= palette.len() {
-            self.tube_slot = 0;
-        }
-        self.reload_brush();
-        match file {
-            Ok(file) => {
-                self.edits.forget_unsaved();
-                self.file = file;
-            }
-            Err(_) => self.file = None,
-        }
-        self.wake();
     }
 
     pub fn slot_count(&self) -> usize {
@@ -533,8 +466,6 @@ mod test_support;
 
 #[cfg(test)]
 mod tests {
-    use cadmium_engine::engine::PaintEngine;
-    use cadmium_engine::params::SimParams;
 
     use super::*;
     use crate::state::test_support::{
@@ -577,69 +508,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn opened_painting_keeps_the_brush_and_lab_and_remembers_its_file() {
-        const PIGMENT: &str = "ultramarine_blue";
-        const TUNED_PARAM_VALUE_SHARE: f32 = 0.25;
-        let mut current = painting_state();
-        let slot = current
-            .session
-            .canvas
-            .spec
-            .pigment_slots
-            .iter()
-            .position(|id| id == PIGMENT)
-            .unwrap();
-        current.session.brush.recipe = vec![(slot, 1.0)];
-        let spec = &SimParams::specs()[0];
-        let tuned = spec.min + (spec.max - spec.min) * TUNED_PARAM_VALUE_SHARE;
-        current.set_param(spec.key, tuned);
-        current.edits.record();
-
-        let mut saved = painting_state();
-        saved.session.canvas.spec.pigment_slots.reverse();
-        let reversed_palette = saved.session.canvas.spec.pigment_slots.clone();
-        let snapshot = saved.capture_document().unwrap();
-        let path = PathBuf::from("opened.cadmium");
-        current.open_painting(snapshot, path.clone()).unwrap();
-
-        assert_eq!(current.session.canvas.spec.pigment_slots, reversed_palette);
-        let new_slot = reversed_palette
-            .iter()
-            .position(|id| id == PIGMENT)
-            .unwrap();
-        assert_eq!(current.session.brush.recipe, [(new_slot, 1.0)]);
-        assert_eq!(
-            current.session.brush.geometry.max_diameter_px,
-            TEST_BRUSH_DIAMETER_PX
-        );
-        assert_eq!(current.session.engine.params().get(spec.key), tuned);
-        assert_eq!(current.file, Some(path));
-        assert!(!current.has_unsaved_edits());
-    }
-
-    #[test]
-    fn a_new_painting_keeps_the_lab_and_starts_untitled_without_undo() {
-        const TUNED_PARAM_VALUE_SHARE: f32 = 0.75;
-        let mut state = painting_state();
-        let spec = &SimParams::specs()[0];
-        let tuned = spec.min + (spec.max - spec.min) * TUNED_PARAM_VALUE_SHARE;
-        state.set_param(spec.key, tuned);
-        stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
-        let mark = state.edit_mark();
-        state.saved_to(PathBuf::from("antiga.cadmium"), mark);
-        let blank = state.session.canvas.spec.clone();
-        state.start_painting(blank).unwrap();
-        assert_eq!(state.file, None);
-        assert!(!state.can_undo());
-        assert!(!state.has_unsaved_edits());
-        assert_eq!(wet_volume(&state), 0.0);
-        assert_eq!(state.session.engine.params().get(spec.key), tuned);
-        assert!(!state.brush_is_clean());
-    }
-
     const YELLOW_SLOT: usize = 1;
+
     const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
+
     const DIRT_DIP: f32 = 0.1;
 
     fn single_pigment(state: &AppState, slot: usize) -> Mixture {
