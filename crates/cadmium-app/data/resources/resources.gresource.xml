@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/io/github/marcelogm/Cadmium">
+    <file preprocess="xml-stripblanks">window.ui</file>
+    <file>style.css</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-move-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-brush-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-knife-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-blender-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-rag-symbolic.svg</file>
+  </gresource>
+</gresources>

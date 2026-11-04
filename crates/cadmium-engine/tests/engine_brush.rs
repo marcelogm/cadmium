@@ -1,0 +1,234 @@
+use std::path::PathBuf;
+
+use cadmium_engine::{
+    canvas::*,
+    gpu::GpuContext,
+    present::{ViewTransform, readback_rgba8},
+    session::PaintSession,
+    stroke::StrokeSample,
+};
+
+const PREVIEW_WIDTH: u32 = 512;
+const PREVIEW_HEIGHT: u32 = 256;
+
+fn session(gpu: &GpuContext) -> PaintSession {
+    PaintSession::new(
+        gpu,
+        CanvasSpec {
+            width: 512,
+            height: 256,
+            primer: Primer::WhiteGesso,
+            weave: Weave::Linen,
+            pigment_slots: vec![
+                "ultramarine_blue".into(),
+                "cadmium_yellow".into(),
+                "titanium_white".into(),
+            ],
+        },
+    )
+}
+
+fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
+    let steps = 60;
+    for i in 0..=steps {
+        let x = from + (to - from) * i as f64 / steps as f64;
+        let sample = StrokeSample {
+            x,
+            y,
+            pressure: 0.8,
+            tilt_x_deg: 20.0,
+            tilt_y_deg: 0.0,
+            time_ms: i * 4,
+        };
+        if i == 0 {
+            s.begin_stroke(gpu, sample)
+        } else {
+            s.add_samples(&[sample])
+        }
+        if i % 4 == 0 {
+            let mut e = gpu.device.create_command_encoder(&Default::default());
+            s.encode_frame(gpu, &mut e);
+            gpu.queue.submit([e.finish()]);
+        }
+    }
+    s.end_stroke(gpu);
+    let mut e = gpu.device.create_command_encoder(&Default::default());
+    s.encode_frame(gpu, &mut e);
+    gpu.queue.submit([e.finish()]);
+}
+
+fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
+    let c = s.canvas.wet_totals(gpu);
+    let b = s.engine.brush_totals(gpu);
+    let mut t = c;
+    t.volume += b.volume;
+    for i in 0..8 {
+        t.pigment[i] += b.pigment[i];
+    }
+    t
+}
+
+fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
+    let target = s
+        .presenter
+        .create_target(gpu, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    let mut e = gpu.device.create_command_encoder(&Default::default());
+    s.presenter.encode_present(
+        gpu,
+        &s.canvas,
+        ViewTransform {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            zoom: 1.0,
+        },
+        &target,
+        &mut e,
+    );
+    gpu.queue.submit([e.finish()]);
+    let rgba = readback_rgba8(gpu, &target);
+    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .parent()
+        .expect("cargo target tmpdir lives inside the target directory")
+        .to_path_buf();
+    let file = std::fs::File::create(target_dir.join(name)).unwrap();
+    let mut encoder =
+        png::Encoder::new(std::io::BufWriter::new(file), PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&rgba)
+        .unwrap();
+}
+
+#[test]
+fn a_stroke_deposits_paint_on_the_canvas() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    write_preview(&gpu, &s, "engine-brush.png");
+    let wet = s.canvas.wet_totals(&gpu);
+    assert!(wet.volume > 1000.0 && wet.pigment[0] > 0.0);
+}
+
+#[test]
+fn brush_and_canvas_together_conserve_volume_and_each_pigment() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let before = total(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let first = total(&gpu, &s);
+    assert!(
+        ((first.volume - before.volume) / before.volume).abs() < 1e-4,
+        "{before:?} {first:?}"
+    );
+    s.brush.recipe = vec![(1, 1.0)];
+    s.reload_brush(&gpu);
+    let reloaded = total(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
+    stroke(&gpu, &mut s, 140.0, 40.0, 470.0);
+    let after = total(&gpu, &s);
+    eprintln!(
+        "volume drift {:e}, pigment drift {:?}",
+        (after.volume - reloaded.volume) / reloaded.volume,
+        (0..3)
+            .map(|i| (after.pigment[i] - reloaded.pigment[i]) / reloaded.volume)
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        ((after.volume - reloaded.volume) / reloaded.volume).abs() < 1e-4,
+        "{before:?} {after:?}"
+    );
+    for i in 0..3 {
+        assert!(
+            ((after.pigment[i] - reloaded.pigment[i]) / reloaded.volume).abs() < 5e-3,
+            "pigment {i}"
+        );
+    }
+}
+
+#[test]
+fn half_precision_fractions_round_to_nearest_so_pigment_does_not_drift() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let before = total(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    stroke(&gpu, &mut s, 132.0, 470.0, 40.0);
+    let after = total(&gpu, &s);
+    let drift = (after.pigment[0] - before.pigment[0]) / before.volume;
+    assert!(drift.abs() < 2e-4, "{drift:e}");
+}
+
+#[test]
+fn painting_yellow_over_wet_blue_picks_blue_into_the_brush() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.brush.recipe = vec![(1, 1.0)];
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
+    assert!(s.engine.brush_totals(&gpu).pigment[0] > 0.0);
+}
+
+#[test]
+fn canvas_never_gets_negative_volume() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    for k in 0..5 {
+        stroke(&gpu, &mut s, 128.0 + k as f64 * 3.0, 40.0, 470.0);
+    }
+    assert!(
+        s.canvas
+            .read_f32(&gpu, StateTexture::WetVol)
+            .iter()
+            .all(|v| *v >= 0.0)
+    );
+}
+
+#[test]
+fn a_finished_frame_leaves_no_pending_work() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    assert!(s.has_pending_work());
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    assert!(!s.has_pending_work());
+}
+
+#[test]
+fn a_dab_marks_its_tiles_wet_and_dirty_including_the_apron() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let mut e = gpu.device.create_command_encoder(&Default::default());
+    s.encode_frame(&gpu, &mut e);
+    gpu.queue.submit([e.finish()]);
+    s.begin_stroke(
+        &gpu,
+        StrokeSample {
+            x: 64.0 + 0.5,
+            y: 100.0,
+            pressure: 1.0,
+            tilt_x_deg: 0.0,
+            tilt_y_deg: 0.0,
+            time_ms: 0,
+        },
+    );
+    s.end_stroke(&gpu);
+    assert!(s.has_pending_work());
+    let mut e = gpu.device.create_command_encoder(&Default::default());
+    s.encode_frame(&gpu, &mut e);
+    gpu.queue.submit([e.finish()]);
+    let wet = s.canvas.wet_tiles.tiles();
+    assert!(wet.contains(&TileCoord { x: 0, y: 1 }));
+    assert!(wet.contains(&TileCoord { x: 1, y: 1 }));
+    assert!(!wet.contains(&TileCoord { x: 3, y: 1 }));
+}
+
+#[test]
+fn clean_brush_empties_tip_and_body() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    assert!(s.engine.brush_totals(&gpu).volume > 0.0);
+    s.clean_brush(&gpu);
+    assert_eq!(s.engine.brush_totals(&gpu).volume, 0.0);
+}

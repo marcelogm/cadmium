@@ -119,6 +119,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "cadmium-app"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "async-channel",
+ "cadmium-engine",
+ "drm-fourcc",
+ "glib-build-tools",
+ "gtk4",
+ "libadwaita",
+ "libc",
+ "pollster",
+ "wgpu",
+ "wgpu-hal",
+]
+
+[[package]]
+name = "cadmium-engine"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "bytemuck",
+ "libc",
+ "png",
+ "pollster",
+ "serde",
+ "serde_json",
+ "wgpu",
+ "wgpu-hal",
+ "zip",
+ "zstd",
+]
+
+[[package]]
 name = "cairo-rs"
 version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -945,40 +979,6 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-metal",
-]
-
-[[package]]
-name = "oleo-app"
-version = "0.1.0"
-dependencies = [
- "ash",
- "async-channel",
- "drm-fourcc",
- "glib-build-tools",
- "gtk4",
- "libadwaita",
- "libc",
- "oleo-engine",
- "pollster",
- "wgpu",
- "wgpu-hal",
-]
-
-[[package]]
-name = "oleo-engine"
-version = "0.1.0"
-dependencies = [
- "ash",
- "bytemuck",
- "libc",
- "png",
- "pollster",
- "serde",
- "serde_json",
- "wgpu",
- "wgpu-hal",
- "zip",
- "zstd",
 ]
 
 [[package]]

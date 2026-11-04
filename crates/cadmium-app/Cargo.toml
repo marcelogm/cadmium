@@ -1,0 +1,24 @@
+[package]
+name = "cadmium-app"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "cadmium"
+path = "src/main.rs"
+
+[dependencies]
+cadmium-engine = { path = "../cadmium-engine" }
+gtk = { workspace = true }
+adw = { workspace = true }
+wgpu = { workspace = true }
+wgpu-hal = { workspace = true }
+ash = { workspace = true }
+libc = { workspace = true }
+drm-fourcc = { workspace = true }
+async-channel = { workspace = true }
+pollster = { workspace = true }
+
+[build-dependencies]
+glib-build-tools = { workspace = true }

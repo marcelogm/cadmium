@@ -1,0 +1,18 @@
+[package]
+name = "cadmium-engine"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+wgpu = { workspace = true }
+wgpu-hal = { workspace = true }
+ash = { workspace = true }
+bytemuck = { workspace = true }
+pollster = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zip = { workspace = true }
+zstd = { workspace = true }
+png = { workspace = true }
+libc = { workspace = true }
