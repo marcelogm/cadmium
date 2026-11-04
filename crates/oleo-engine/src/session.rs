@@ -1,6 +1,6 @@
-use crate::brush::BrushSettings;
 use std::collections::BTreeSet;
 
+use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasSpec, TileCoord, tiles_in_rect};
 use crate::engine::{PaintEngine, WetOilEngine};
 use crate::gpu::GpuContext;
@@ -76,6 +76,9 @@ impl PaintSession {
         };
         self.queued.extend(builder.finish());
         self.engine.end_stroke(gpu, &self.canvas);
+        if self.queued.is_empty() {
+            self.commit_open_step();
+        }
     }
 
     pub fn encode_frame(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
@@ -89,21 +92,19 @@ impl PaintSession {
         );
     }
 
-    pub fn dry(&mut self, gpu: &GpuContext) {
+    pub fn dry(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
         let tiles = self.canvas.wet_tiles.take();
-        self.history.begin_step();
-        let mut encoder = new_encoder(gpu, "dry_history");
-        self.history
-            .encode_save_tiles(gpu, &self.canvas, &tiles, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
+        self.history.begin_drying_step(tiles.len());
         for chunk in tiles.chunks(DRY_TILES_PER_SUBMIT) {
             let mut encoder = new_encoder(gpu, "dry");
+            self.history
+                .encode_save_tiles(gpu, &self.canvas, chunk, &mut encoder);
             self.engine
                 .encode_dry_tiles(gpu, &mut self.canvas, chunk, &mut encoder);
             gpu.queue.submit([encoder.finish()]);
         }
-        self.history.commit_step();
+        self.history.commit_step()
     }
 
     pub fn undo(&mut self, gpu: &GpuContext) -> bool {
@@ -139,7 +140,9 @@ impl PaintSession {
     }
 
     pub fn has_pending_work(&self) -> bool {
-        !self.queued.is_empty() || !self.canvas.dirty.is_empty()
+        !self.queued.is_empty()
+            || !self.canvas.dirty.is_empty()
+            || (self.step_open && self.stroke.is_none())
     }
 
     fn settle_pending_step(&mut self, gpu: &GpuContext) {
@@ -161,7 +164,13 @@ impl PaintSession {
                 .encode_dabs(gpu, &mut self.canvas, &self.brush, &self.queued, encoder);
             self.queued.clear();
         }
-        if self.step_open && self.stroke.is_none() {
+        if self.stroke.is_none() {
+            self.commit_open_step();
+        }
+    }
+
+    fn commit_open_step(&mut self) {
+        if self.step_open {
             self.history.commit_step();
             self.step_open = false;
         }

@@ -121,7 +121,7 @@ fn dry_is_one_undoable_step() {
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let wet = snapshot(&gpu, &s);
-    without_wgpu_errors(&gpu, || s.dry(&gpu));
+    assert!(without_wgpu_errors(&gpu, || s.dry(&gpu)));
     s.undo(&gpu);
     assert_eq!(snapshot(&gpu, &s), wet);
 }
@@ -221,4 +221,96 @@ fn saving_the_same_tile_twice_in_a_step_keeps_the_first_copy() {
     });
     assert!(history.can_undo());
     assert!(history.undo(&gpu, &mut canvas));
+}
+
+#[test]
+fn lifting_the_pen_after_every_dab_was_painted_makes_the_stroke_undoable() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let samples = line(128.0, 40.0, 470.0, 0.8, 20.0);
+    s.begin_stroke(&gpu, samples[0]);
+    s.add_samples(&samples[1..]);
+    frame(&gpu, &mut s);
+    s.end_stroke(&gpu);
+    assert!(s.history.can_undo());
+}
+
+#[test]
+fn history_capacity_follows_the_budget() {
+    let gpu = GpuContext::new().unwrap();
+    let history = without_wgpu_errors(&gpu, || {
+        History::new(&gpu, 3 * TILE_BYTES_ALL_TEXTURES, 100)
+    });
+    assert_eq!(history.slot_capacity(), 3);
+    assert!(history.is_enabled());
+}
+
+#[test]
+fn a_budget_below_one_tile_disables_history() {
+    let gpu = GpuContext::new().unwrap();
+    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES - 1, 100);
+    assert_eq!(history.slot_capacity(), 0);
+    assert!(!history.is_enabled());
+    save_step(&gpu, &mut history, &canvas, &tiles(1));
+    assert!(!history.can_undo());
+}
+
+#[test]
+fn a_step_too_large_for_the_history_keeps_earlier_steps() {
+    let gpu = GpuContext::new().unwrap();
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    save_step(&gpu, &mut history, &canvas, &tiles(2));
+    save_step(&gpu, &mut history, &canvas, &tiles(5));
+    assert!(history.undo(&gpu, &mut canvas));
+    assert!(!history.can_undo());
+}
+
+#[test]
+fn a_dry_too_large_for_the_history_keeps_earlier_steps_and_is_not_undoable() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(1024, 640)));
+    s.history = History::new(&gpu, 64 * TILE_BYTES_ALL_TEXTURES, 100);
+    stroke(&gpu, &mut s, 20.0, 10.0, 30.0);
+    assert!(s.history.can_undo());
+    s.canvas.wet_tiles.mark_all();
+    assert!(!without_wgpu_errors(&gpu, || s.dry(&gpu)));
+    assert!(s.history.can_undo());
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+}
+
+#[test]
+fn an_action_that_saves_no_tiles_keeps_redo() {
+    let gpu = GpuContext::new().unwrap();
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    save_step(&gpu, &mut history, &canvas, &tiles(1));
+    assert!(history.undo(&gpu, &mut canvas));
+    save_step(&gpu, &mut history, &canvas, &[]);
+    save_step(&gpu, &mut history, &canvas, &[TileCoord { x: 100, y: 100 }]);
+    assert!(history.can_redo());
+}
+
+#[test]
+fn redoing_a_dry_leaves_its_tiles_dry() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.dry(&gpu);
+    s.undo(&gpu);
+    assert!(!s.canvas.wet_tiles.is_empty());
+    assert!(without_wgpu_errors(&gpu, || s.redo(&gpu)));
+    assert!(s.canvas.wet_tiles.is_empty());
+}
+
+#[test]
+fn redoing_a_stroke_marks_its_tiles_wet() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.undo(&gpu);
+    s.canvas.wet_tiles.clear();
+    s.redo(&gpu);
+    assert!(!s.canvas.wet_tiles.is_empty());
 }

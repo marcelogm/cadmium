@@ -5,6 +5,7 @@ use crate::gpu::GpuContext;
 
 pub const ATLAS_TILES_PER_SIDE: u32 = 48;
 pub const ATLAS_SLOTS: u32 = ATLAS_TILES_PER_SIDE * ATLAS_TILES_PER_SIDE;
+pub const MIN_SLOTS_AFTER_OUT_OF_MEMORY: u32 = 64;
 
 type Slot = u32;
 
@@ -18,14 +19,16 @@ struct Step {
     tiles: Vec<SavedTile>,
     saved: HashSet<TileCoord>,
     complete: bool,
+    dries_paint: bool,
 }
 
 impl Step {
-    fn new() -> Step {
+    fn new(dries_paint: bool) -> Step {
         Step {
             tiles: Vec::new(),
             saved: HashSet::new(),
             complete: true,
+            dries_paint,
         }
     }
 
@@ -41,6 +44,27 @@ struct Atlas {
 }
 
 impl Atlas {
+    fn allocate_largest(gpu: &GpuContext, wanted_slots: u32) -> Option<(Atlas, u32)> {
+        let mut slot_capacity = wanted_slots;
+        while slot_capacity > 0 {
+            if let Some(atlas) = Atlas::try_new(gpu, slot_capacity) {
+                return Some((atlas, slot_capacity));
+            }
+            slot_capacity = if slot_capacity > MIN_SLOTS_AFTER_OUT_OF_MEMORY {
+                (slot_capacity / 2).max(MIN_SLOTS_AFTER_OUT_OF_MEMORY)
+            } else {
+                0
+            };
+        }
+        None
+    }
+
+    fn try_new(gpu: &GpuContext, slot_capacity: u32) -> Option<Atlas> {
+        let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let atlas = Atlas::new(gpu, slot_capacity);
+        pollster::block_on(scope.pop()).is_none().then_some(atlas)
+    }
+
     fn new(gpu: &GpuContext, slot_capacity: u32) -> Atlas {
         let columns = slot_capacity.min(ATLAS_TILES_PER_SIDE);
         let rows = slot_capacity.div_ceil(ATLAS_TILES_PER_SIDE);
@@ -91,13 +115,17 @@ pub struct History {
 }
 
 impl History {
-    pub fn new(_gpu: &GpuContext, budget_bytes: u64, max_steps: usize) -> Self {
+    pub fn new(gpu: &GpuContext, budget_bytes: u64, max_steps: usize) -> Self {
         let affordable = budget_bytes / bytes_per_tile_all_textures();
-        let slot_capacity = affordable.min(u64::from(ATLAS_SLOTS)) as u32;
+        let wanted_slots = affordable.min(u64::from(ATLAS_SLOTS)) as u32;
+        let (atlas, slot_capacity) = match Atlas::allocate_largest(gpu, wanted_slots) {
+            Some((atlas, slot_capacity)) => (Some(atlas), slot_capacity),
+            None => (None, 0),
+        };
         History {
             slot_capacity,
             max_steps,
-            atlas: None,
+            atlas,
             free_slots: (0..slot_capacity).rev().collect(),
             undo_steps: VecDeque::new(),
             redo_steps: Vec::new(),
@@ -109,15 +137,32 @@ impl History {
         self.slot_capacity
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.slot_capacity > 0
+    }
+
     pub fn begin_step(&mut self) {
+        self.open_step(false);
+    }
+
+    pub fn begin_drying_step(&mut self, wet_tile_count: usize) {
+        self.open_step(true);
+        if wet_tile_count > self.slot_capacity as usize {
+            self.drop_redo_steps();
+            if let Some(step) = self.current.as_mut() {
+                step.complete = false;
+            }
+        }
+    }
+
+    fn open_step(&mut self, dries_paint: bool) {
         self.commit_step();
-        self.drop_redo_steps();
-        self.current = Some(Step::new());
+        self.current = Some(Step::new(dries_paint));
     }
 
     pub fn encode_save_tiles(
         &mut self,
-        gpu: &GpuContext,
+        _gpu: &GpuContext,
         canvas: &Canvas,
         tiles: &[TileCoord],
         encoder: &mut wgpu::CommandEncoder,
@@ -125,25 +170,32 @@ impl History {
         let Some(mut step) = self.current.take() else {
             return;
         };
+        let mut unsaved = Vec::new();
+        let mut seen = HashSet::new();
         for tile in tiles {
-            if !step.complete {
-                break;
+            if !step.saved.contains(tile)
+                && tile_extent(canvas, *tile).is_some()
+                && seen.insert(*tile)
+            {
+                unsaved.push(*tile);
             }
-            if step.saved.contains(tile) || tile_extent(canvas, *tile).is_none() {
-                continue;
-            }
+        }
+        if unsaved.is_empty() || !step.complete {
+            self.current = Some(step);
+            return;
+        }
+        self.drop_redo_steps();
+        if step.tiles.len() + unsaved.len() > self.slot_capacity as usize {
+            step.complete = false;
+            self.current = Some(step);
+            return;
+        }
+        for tile in &unsaved {
             let Some(slot) = self.allocate() else {
                 step.complete = false;
                 break;
             };
-            self.copy_tile(
-                gpu,
-                canvas,
-                *tile,
-                slot,
-                CopyDirection::CanvasToSlot,
-                encoder,
-            );
+            self.copy_tile(canvas, *tile, slot, CopyDirection::CanvasToSlot, encoder);
             step.saved.insert(*tile);
             step.tiles.push(SavedTile {
                 tile: *tile,
@@ -154,16 +206,18 @@ impl History {
         self.current = Some(step);
     }
 
-    pub fn commit_step(&mut self) {
+    pub fn commit_step(&mut self) -> bool {
         let Some(step) = self.current.take() else {
-            return;
+            return true;
         };
-        if !step.complete || step.tiles.is_empty() {
+        let complete = step.complete;
+        if !complete || step.tiles.is_empty() {
             self.release(step);
-            return;
+            return complete;
         }
         self.undo_steps.push_back(step);
         self.trim_to_max_steps();
+        true
     }
 
     pub fn undo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
@@ -184,7 +238,6 @@ impl History {
         for saved in &step.tiles {
             if let Some(after) = saved.after {
                 self.copy_tile(
-                    gpu,
                     canvas,
                     saved.tile,
                     after,
@@ -193,7 +246,6 @@ impl History {
                 );
             }
             self.copy_tile(
-                gpu,
                 canvas,
                 saved.tile,
                 saved.before,
@@ -201,6 +253,7 @@ impl History {
                 &mut encoder,
             );
             mark_restored(canvas, saved.tile);
+            mark_wet(canvas, saved.tile);
         }
         gpu.queue.submit([encoder.finish()]);
         if redoable {
@@ -223,7 +276,6 @@ impl History {
         for saved in &step.tiles {
             if let Some(after) = saved.after {
                 self.copy_tile(
-                    gpu,
                     canvas,
                     saved.tile,
                     after,
@@ -231,9 +283,15 @@ impl History {
                     &mut encoder,
                 );
                 mark_restored(canvas, saved.tile);
+                if !step.dries_paint {
+                    mark_wet(canvas, saved.tile);
+                }
             }
         }
         gpu.queue.submit([encoder.finish()]);
+        if step.dries_paint {
+            forget_wet(canvas, &step.saved);
+        }
         self.undo_steps.push_back(step);
         self.trim_to_max_steps();
         true
@@ -286,8 +344,7 @@ impl History {
     }
 
     fn copy_tile(
-        &mut self,
-        gpu: &GpuContext,
+        &self,
         canvas: &Canvas,
         tile: TileCoord,
         slot: Slot,
@@ -297,10 +354,9 @@ impl History {
         let Some(extent) = tile_extent(canvas, tile) else {
             return;
         };
-        let slot_capacity = self.slot_capacity;
-        let atlas = self
-            .atlas
-            .get_or_insert_with(|| Atlas::new(gpu, slot_capacity));
+        let Some(atlas) = self.atlas.as_ref() else {
+            return;
+        };
         let canvas_origin = wgpu::Origin3d {
             x: tile.x * TILE_SIZE,
             y: tile.y * TILE_SIZE,
@@ -354,14 +410,38 @@ fn tile_extent(canvas: &Canvas, tile: TileCoord) -> Option<wgpu::Extent3d> {
     })
 }
 
-fn mark_restored(canvas: &mut Canvas, tile: TileCoord) {
-    let Some(extent) = tile_extent(canvas, tile) else {
-        return;
-    };
+fn tile_rect(canvas: &Canvas, tile: TileCoord) -> Option<[f32; 4]> {
+    let extent = tile_extent(canvas, tile)?;
     let x0 = (tile.x * TILE_SIZE) as f32;
     let y0 = (tile.y * TILE_SIZE) as f32;
-    let x1 = x0 + (extent.width - 1) as f32;
-    let y1 = y0 + (extent.height - 1) as f32;
-    canvas.dirty.mark_rect(x0, y0, x1, y1);
-    canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
+    Some([
+        x0,
+        y0,
+        x0 + (extent.width - 1) as f32,
+        y0 + (extent.height - 1) as f32,
+    ])
+}
+
+fn mark_restored(canvas: &mut Canvas, tile: TileCoord) {
+    if let Some([x0, y0, x1, y1]) = tile_rect(canvas, tile) {
+        canvas.dirty.mark_rect(x0, y0, x1, y1);
+    }
+}
+
+fn mark_wet(canvas: &mut Canvas, tile: TileCoord) {
+    if let Some([x0, y0, x1, y1]) = tile_rect(canvas, tile) {
+        canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
+    }
+}
+
+fn forget_wet(canvas: &mut Canvas, dried: &HashSet<TileCoord>) {
+    let still_wet: Vec<TileCoord> = canvas
+        .wet_tiles
+        .take()
+        .into_iter()
+        .filter(|tile| !dried.contains(tile))
+        .collect();
+    for tile in still_wet {
+        mark_wet(canvas, tile);
+    }
 }
