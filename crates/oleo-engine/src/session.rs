@@ -1,7 +1,10 @@
 use crate::brush::BrushSettings;
-use crate::canvas::{Canvas, CanvasSpec};
+use std::collections::BTreeSet;
+
+use crate::canvas::{Canvas, CanvasSpec, TileCoord, tiles_in_rect};
 use crate::engine::{PaintEngine, WetOilEngine};
 use crate::gpu::GpuContext;
+use crate::history::History;
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
@@ -9,17 +12,22 @@ use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
+const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
+const HISTORY_MAX_STEPS: usize = 100;
+const SAVE_MARGIN_PX: f32 = 4.0;
 
 pub struct PaintSession {
     pub canvas: Canvas,
     pub engine: WetOilEngine,
     pub renderer: Renderer,
     pub presenter: Presenter,
+    pub history: History,
     pub brush: BrushSettings,
     pub view_mode: ViewMode,
     pub db: PigmentDb,
     stroke: Option<StrokeBuilder>,
     queued: Vec<Dab>,
+    step_open: bool,
 }
 
 impl PaintSession {
@@ -31,18 +39,22 @@ impl PaintSession {
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
+            history: History::new(gpu, HISTORY_BUDGET_BYTES, HISTORY_MAX_STEPS),
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
             db,
             stroke: None,
             queued: Vec::new(),
+            step_open: false,
         };
         session.reload_brush(gpu);
         session
     }
 
     pub fn begin_stroke(&mut self, gpu: &GpuContext, sample: StrokeSample) {
-        self.end_stroke(gpu);
+        self.settle_pending_step(gpu);
+        self.history.begin_step();
+        self.step_open = true;
         self.engine.begin_stroke(gpu, &self.canvas, &self.brush);
         let mut builder = StrokeBuilder::new(self.brush.geometry);
         self.queued.extend(builder.push(sample));
@@ -78,16 +90,30 @@ impl PaintSession {
     }
 
     pub fn dry(&mut self, gpu: &GpuContext) {
-        let mut encoder = new_encoder(gpu, "dry");
-        self.encode_queued_dabs(gpu, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
+        self.settle_pending_step(gpu);
         let tiles = self.canvas.wet_tiles.take();
+        self.history.begin_step();
+        let mut encoder = new_encoder(gpu, "dry_history");
+        self.history
+            .encode_save_tiles(gpu, &self.canvas, &tiles, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
         for chunk in tiles.chunks(DRY_TILES_PER_SUBMIT) {
             let mut encoder = new_encoder(gpu, "dry");
             self.engine
                 .encode_dry_tiles(gpu, &mut self.canvas, chunk, &mut encoder);
             gpu.queue.submit([encoder.finish()]);
         }
+        self.history.commit_step();
+    }
+
+    pub fn undo(&mut self, gpu: &GpuContext) -> bool {
+        self.settle_pending_step(gpu);
+        self.history.undo(gpu, &mut self.canvas)
+    }
+
+    pub fn redo(&mut self, gpu: &GpuContext) -> bool {
+        self.settle_pending_step(gpu);
+        self.history.redo(gpu, &mut self.canvas)
     }
 
     pub fn pick_color(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Mixture {
@@ -116,13 +142,50 @@ impl PaintSession {
         !self.queued.is_empty() || !self.canvas.dirty.is_empty()
     }
 
-    fn encode_queued_dabs(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
-        if self.queued.is_empty() {
+    fn settle_pending_step(&mut self, gpu: &GpuContext) {
+        self.end_stroke(gpu);
+        if !self.step_open && self.queued.is_empty() {
             return;
         }
-        self.engine
-            .encode_dabs(gpu, &mut self.canvas, &self.brush, &self.queued, encoder);
-        self.queued.clear();
+        let mut encoder = new_encoder(gpu, "settle_stroke");
+        self.encode_queued_dabs(gpu, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+    }
+
+    fn encode_queued_dabs(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
+        if !self.queued.is_empty() {
+            let touched = self.tiles_touched_by_queued_dabs();
+            self.history
+                .encode_save_tiles(gpu, &self.canvas, &touched, encoder);
+            self.engine
+                .encode_dabs(gpu, &mut self.canvas, &self.brush, &self.queued, encoder);
+            self.queued.clear();
+        }
+        if self.step_open && self.stroke.is_none() {
+            self.history.commit_step();
+            self.step_open = false;
+        }
+    }
+
+    fn tiles_touched_by_queued_dabs(&self) -> Vec<TileCoord> {
+        let width = self.canvas.spec.width;
+        let height = self.canvas.spec.height;
+        let mut touched = BTreeSet::new();
+        for dab in &self.queued {
+            let Some([x0, y0, x1, y1]) = self.engine.dab_bounds(&self.canvas, &self.brush, dab)
+            else {
+                continue;
+            };
+            touched.extend(tiles_in_rect(
+                width,
+                height,
+                x0 - SAVE_MARGIN_PX,
+                y0 - SAVE_MARGIN_PX,
+                x1 + SAVE_MARGIN_PX,
+                y1 + SAVE_MARGIN_PX,
+            ));
+        }
+        touched.into_iter().collect()
     }
 }
 

@@ -928,6 +928,16 @@ impl WetOilEngine {
         pass.dispatch_workgroups(TIP_GROUPS, TIP_GROUPS, 1);
     }
 
+    pub fn dab_bounds(
+        &self,
+        canvas: &Canvas,
+        brush: &BrushSettings,
+        dab: &Dab,
+    ) -> Option<[f32; 4]> {
+        place(dab, brush, &self.params, self.loaded_thickness_um, canvas)
+            .map(|placement| placement.canvas_rect)
+    }
+
     pub fn encode_dry_tiles(
         &mut self,
         gpu: &GpuContext,
