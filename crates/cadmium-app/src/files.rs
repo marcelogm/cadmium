@@ -160,6 +160,7 @@ impl CadmiumWindow {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn save_as(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(SAVE_AS_TITLE, &painting_filter(), file.as_deref());
@@ -180,6 +181,7 @@ impl CadmiumWindow {
         });
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn open(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(OPEN_TITLE, &painting_filter(), file.as_deref());
@@ -202,6 +204,7 @@ impl CadmiumWindow {
         });
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn export(&self) {
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(EXPORT_TITLE, &image_filter(), file.as_deref());
@@ -221,6 +224,7 @@ impl CadmiumWindow {
         });
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn save_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
         let generation = self.imp().document_generation.get();
         let captured = self.begin_write(&path, WriteKind::Painting).then(|| {
@@ -266,6 +270,7 @@ impl CadmiumWindow {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn open_path(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
         let window = self.downgrade();
         async move {
@@ -299,6 +304,7 @@ impl CadmiumWindow {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn export_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
         let image = self
             .begin_write(&path, WriteKind::Image)
@@ -340,6 +346,7 @@ impl CadmiumWindow {
         work_would_be_lost(unsaved_edits, &self.imp().writes_in_flight.borrow())
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn may_close(&self) -> bool {
         let imp = self.imp();
         if imp.abandon_writes.get() {
@@ -408,6 +415,7 @@ impl CadmiumWindow {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn offer_to_quit_if_writes_hang(&self) {
         let imp = self.imp();
         if imp.write_wait_timeout.borrow().is_some() || imp.write_wait_alert.borrow().is_some() {
@@ -427,6 +435,7 @@ impl CadmiumWindow {
         imp.write_wait_timeout.replace(Some(timeout));
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn ask_to_quit_while_writing(&self) {
         let window = self.downgrade();
         let alert = ask_to_quit_while_writing(self, move || {
@@ -444,6 +453,7 @@ impl CadmiumWindow {
         self.imp().write_wait_alert.replace(Some(alert));
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn chosen_path(&self, chosen: Result<gio::File, glib::Error>) -> Option<PathBuf> {
         match chosen {
             Ok(file) => {

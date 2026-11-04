@@ -126,6 +126,7 @@ const NO_CONTROLS: VisibleControls = VisibleControls {
     hint: false,
 };
 
+#[expect(clippy::too_many_lines)]
 pub fn visible_controls(tool: PanelTool) -> VisibleControls {
     match tool {
         PanelTool::Paint(Tool::Brush) => VisibleControls {

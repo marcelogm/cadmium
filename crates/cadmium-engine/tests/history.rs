@@ -365,6 +365,7 @@ fn a_small_canvas_keeps_a_few_copies_of_itself_and_one_of_the_tray_for_undo() {
 }
 
 #[test]
+#[expect(clippy::cognitive_complexity)]
 fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_tools() {
     const TUNED_KEY: &str = "wet_gloss";
     const TUNED_VALUE: f32 = 0.0;

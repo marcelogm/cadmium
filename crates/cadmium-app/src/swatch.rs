@@ -39,6 +39,7 @@ mod imp {
     }
 
     impl ObjectImpl for Swatch {
+        #[expect(clippy::excessive_nesting)]
         fn constructed(&self) {
             self.parent_constructed();
             let swatch = self.obj();
@@ -55,6 +56,7 @@ mod imp {
             self.accent_colour_handler.replace(Some(handler));
         }
 
+        #[expect(clippy::excessive_nesting)]
         fn dispose(&self) {
             if let Some(handler) = self.accent_colour_handler.take() {
                 adw::StyleManager::default().disconnect(handler);

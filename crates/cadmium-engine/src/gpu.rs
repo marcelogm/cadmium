@@ -56,6 +56,7 @@ const DMABUF_SYNC_EXTENSIONS: [&std::ffi::CStr; 2] = [
 ];
 
 impl GpuContext {
+    #[expect(clippy::too_many_lines)]
     pub fn new() -> Result<GpuContext, GpuError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,

@@ -260,6 +260,7 @@ impl FramePresenter {
         std::mem::take(&mut self.fallback_pending_notice)
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn present(
         &mut self,
         state: &mut AppState,
@@ -315,6 +316,7 @@ impl FramePresenter {
         mode
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_arguments)]
     fn present_by_dmabuf(
         &mut self,
         state: &mut AppState,

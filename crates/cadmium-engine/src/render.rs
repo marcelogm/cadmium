@@ -64,6 +64,7 @@ struct ShadeParams {
 }
 
 impl ShadeParams {
+    #[expect(clippy::excessive_nesting)]
     fn new(params: &SimParams, mode: ViewMode) -> Self {
         let weights = band_xyz_weights();
         let mut xyz_weights = [[0.0; 4]; XYZ_WEIGHT_VEC4S];
@@ -112,6 +113,7 @@ impl Renderer {
         Renderer { pipeline }
     }
 
+    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub fn encode_shade(
         &self,
         gpu: &GpuContext,

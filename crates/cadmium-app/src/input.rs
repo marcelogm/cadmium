@@ -227,6 +227,7 @@ fn is_eraser(event: &gdk::Event) -> bool {
         .is_some_and(|tool| tool.tool_type() == gdk::DeviceToolType::Eraser)
 }
 
+#[expect(clippy::too_many_lines)]
 fn stylus_gesture<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact>) -> gtk::GestureStylus {
     let stylus = gtk::GestureStylus::new();
     stylus.set_stylus_only(false);
@@ -348,6 +349,7 @@ fn release<W: PaintSurfaceWidget>(widget: &W, contact: &Contact) {
     widget.contact_released();
 }
 
+#[expect(clippy::too_many_lines)]
 fn pan_gesture(
     canvas: &CadmiumCanvas,
     contact: &Rc<Contact>,

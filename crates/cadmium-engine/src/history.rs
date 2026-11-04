@@ -47,6 +47,7 @@ struct Atlas {
 }
 
 impl Atlas {
+    #[expect(clippy::excessive_nesting)]
     fn allocate_largest(gpu: &GpuContext, wanted_slots: u32) -> Option<(Atlas, u32)> {
         let mut slot_capacity = wanted_slots;
         while slot_capacity > 0 {
@@ -187,6 +188,7 @@ impl History {
         self.current = Some(Step::new(removes_wet_paint, surface));
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn encode_save_tiles(
         &mut self,
         _gpu: &GpuContext,
@@ -247,6 +249,7 @@ impl History {
         true
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn undo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
         self.commit_step();
         let Some(mut step) = self.undo_steps.pop_back() else {
@@ -291,6 +294,7 @@ impl History {
         true
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn redo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
         let Some(step) = self.redo_steps.pop() else {
             return false;
@@ -344,6 +348,7 @@ impl History {
         !self.redo_steps.is_empty()
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn allocate(&mut self) -> Option<Slot> {
         loop {
             if let Some(slot) = self.free_slots.pop() {
@@ -354,6 +359,7 @@ impl History {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn reserve_after_slots(&mut self, step: &mut Step) -> bool {
         for saved in step.tiles.iter_mut().filter(|saved| saved.after.is_none()) {
             let Some(slot) = self.allocate() else {
@@ -399,6 +405,7 @@ impl History {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn trim_to_max_steps(&mut self) {
         while self.undo_steps.len() > self.max_steps {
             if let Some(oldest) = self.undo_steps.pop_front() {
@@ -407,6 +414,7 @@ impl History {
         }
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_arguments)]
     fn copy_tile(
         &self,
         canvas: &Canvas,

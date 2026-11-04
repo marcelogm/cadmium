@@ -144,6 +144,7 @@ struct Window {
     relative_ripple: f64,
 }
 
+#[expect(clippy::excessive_nesting)]
 fn windows(lum: &[f64]) -> Vec<Window> {
     let at = |x: usize, y: usize| lum[y * WIDTH as usize + x];
     let primer = at(4, 4);

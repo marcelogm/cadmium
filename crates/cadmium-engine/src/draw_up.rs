@@ -132,6 +132,7 @@ impl DrawUp {
         }
     }
 
+    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn measure(
         &self,
         gpu: &GpuContext,

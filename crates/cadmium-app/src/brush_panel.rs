@@ -181,6 +181,7 @@ pub struct BrushPanel {
 }
 
 impl BrushPanel {
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
         let root = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -316,6 +317,7 @@ impl BrushPanel {
         &self.root
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn refresh(self: &Rc<Self>) {
         let snapshot = self.snapshot();
         self.syncing.set(true);
@@ -373,6 +375,7 @@ impl BrushPanel {
         self.syncing.set(false);
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn snapshot(&self) -> Snapshot {
         let state = self.state.borrow();
         let session = &state.session;
@@ -438,6 +441,7 @@ impl BrushPanel {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn rebuild_pigments(self: &Rc<Self>, snapshot: &Snapshot) {
         self.pigment_box.remove_all();
         let mut swatches = Vec::with_capacity(snapshot.slots.len());
@@ -478,6 +482,7 @@ impl BrushPanel {
         self.shown_slots.replace(Some(snapshot.slots.clone()));
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn add_pigment_button(self: &Rc<Self>, addable: &[PigmentChoice]) -> gtk::MenuButton {
         let list = gtk::ListBox::builder()
             .selection_mode(gtk::SelectionMode::None)
@@ -571,6 +576,7 @@ impl BrushPanel {
         self.hint.set_visible(shown.hint);
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn connect_controls(self: &Rc<Self>) {
         let panel = Rc::downgrade(self);
         self.size.1.connect_value_changed(move |scale| {

@@ -133,6 +133,7 @@ mod imp {
             gtk::SizeRequestMode::HeightForWidth
         }
 
+        #[expect(clippy::excessive_nesting)]
         fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {
             if orientation == gtk::Orientation::Horizontal {
                 return (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1);
@@ -175,6 +176,7 @@ mod imp {
             self.obj().follow_scale_change();
         }
 
+        #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let tray = self.obj();
             let scale = tray.device_scale();
@@ -244,6 +246,7 @@ fn paint_colour([red, green, blue]: [u8; 3], alpha: f32) -> gdk::RGBA {
 }
 
 impl TrayView {
+    #[expect(clippy::excessive_nesting)]
     pub fn new(state: SharedState) -> Self {
         let tray: TrayView = glib::Object::new();
         let weak = tray.downgrade();
@@ -308,6 +311,7 @@ impl TrayView {
         self.request_frame();
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn request_frame(&self) {
         let imp = self.imp();
         if imp.tick.borrow().is_some() {
@@ -410,6 +414,7 @@ impl TrayView {
         self.frame_needed(&state, &presenter)
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn present_frame(&self) {
         let imp = self.imp();
         if !self.present_texture() {

@@ -39,6 +39,7 @@ pub struct CadmiumApplication {
 }
 
 impl CadmiumApplication {
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn new(app_id: &str) -> Self {
         let smoke = SmokeConfig::from_env();
         let flags = if smoke.is_some() {

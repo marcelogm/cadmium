@@ -156,6 +156,7 @@ impl Tube {
         Tube { layout, pipeline }
     }
 
+    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn encode_squeeze(
         &self,
         gpu: &GpuContext,

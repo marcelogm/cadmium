@@ -171,6 +171,7 @@ impl StrokeBuilder {
         Vec::new()
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn walk_segment(&mut self, from: &StrokeSample, to: &StrokeSample) -> Option<Vec<Dab>> {
         let dx = to.x - from.x;
         let dy = to.y - from.y;

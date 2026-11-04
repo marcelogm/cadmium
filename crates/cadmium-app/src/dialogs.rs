@@ -69,6 +69,7 @@ pub fn about_dialog() -> adw::AboutDialog {
     about
 }
 
+#[expect(clippy::excessive_nesting)]
 pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     let dialog = adw::ShortcutsDialog::new();
     let tools = adw::ShortcutsSection::new(Some("Ferramentas"));
@@ -221,6 +222,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(clippy::excessive_nesting)]
     fn every_listed_action_has_an_accelerator() {
         for (_, entries) in ACTION_SHORTCUTS {
             for (label, action) in entries {

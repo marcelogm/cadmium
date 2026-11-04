@@ -61,6 +61,7 @@ pub struct CanvasSpec {
 }
 
 impl CanvasSpec {
+    #[expect(clippy::excessive_nesting)]
     pub fn validate(&self, db: &PigmentDb) -> Result<(), String> {
         let allowed = 1..=MAX_CANVAS_SIZE;
         if !allowed.contains(&self.width) || !allowed.contains(&self.height) {
@@ -209,6 +210,7 @@ impl DirtyTiles {
         tiles
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn tiles(&self) -> Vec<TileCoord> {
         let mut tiles = Vec::new();
         for x in 0..self.columns {
@@ -239,6 +241,7 @@ impl DirtyTiles {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 pub fn tiles_in_rect(
     width: u32,
     height: u32,
@@ -547,6 +550,7 @@ impl Canvas {
         );
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn wet_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         let volume = self.read_f32(gpu, StateTexture::WetVol)?;
         let low = self.read_f32(gpu, StateTexture::WetPig0)?;
@@ -574,6 +578,7 @@ impl Canvas {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn initialise(&self, gpu: &GpuContext, db: &PigmentDb) {
         let primer = primer_reflectance(db, self.spec.primer);
         let params = InitParams {

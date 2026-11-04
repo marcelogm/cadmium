@@ -113,6 +113,7 @@ const TOOL_MODE_EYEDROPPER: u32 = 4;
 
 pub trait PaintEngine {
     fn begin_stroke(&mut self);
+    #[expect(clippy::too_many_arguments)]
     fn encode_dabs(
         &mut self,
         gpu: &GpuContext,
@@ -519,6 +520,7 @@ fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
     (origin, size)
 }
 
+#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
 fn place(
     dab: &Dab,
     step_px: f32,
@@ -879,6 +881,7 @@ pub struct WetOilEngine {
 }
 
 impl WetOilEngine {
+    #[expect(clippy::too_many_lines)]
     pub fn new(gpu: &GpuContext) -> Self {
         use wgpu::StorageTextureAccess::{ReadOnly, ReadWrite, WriteOnly};
         use wgpu::TextureFormat::{R32Float, Rgba16Float, Rgba32Float};
@@ -1244,6 +1247,7 @@ impl WetOilEngine {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn draw_up_into_reserve(
         &mut self,
         gpu: &GpuContext,
@@ -1414,6 +1418,7 @@ impl WetOilEngine {
         gpu.queue.submit([encoder.finish()]);
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn dip_knife(
         &mut self,
         gpu: &GpuContext,
@@ -1506,6 +1511,7 @@ impl WetOilEngine {
         Ok(totals)
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         let body = read_buffer(gpu, &self.body)?;
         let volume = body[VOLUME_CHANNEL];
@@ -1522,6 +1528,7 @@ impl WetOilEngine {
         })
     }
 
+    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub fn encode_eyedropper(
         &self,
         gpu: &GpuContext,
@@ -1633,6 +1640,7 @@ impl WetOilEngine {
         .map(|placement| placement.canvas_rect)
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn encode_dry_tiles(
         &mut self,
         gpu: &GpuContext,
@@ -1957,6 +1965,11 @@ impl PaintEngine for WetOilEngine {
         self.previous_dab = None;
     }
 
+    #[expect(
+        clippy::cognitive_complexity,
+        clippy::excessive_nesting,
+        clippy::too_many_lines
+    )]
     fn encode_dabs(
         &mut self,
         gpu: &GpuContext,

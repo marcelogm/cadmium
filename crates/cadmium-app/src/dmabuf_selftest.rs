@@ -83,6 +83,7 @@ struct PatternPass {
 }
 
 impl PatternPass {
+    #[expect(clippy::too_many_lines)]
     fn new(gpu: &GpuContext) -> PatternPass {
         let module = gpu
             .device
@@ -272,6 +273,7 @@ impl DmabufSelftest {
         }
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn present_frame(&mut self, native: &gtk::Native) -> SelftestProgress {
         let Some(pool) = self.pool.as_mut() else {
             return SelftestProgress::Failed("pool vanished".into());
@@ -354,6 +356,7 @@ impl DmabufSelftest {
         SelftestProgress::Running
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn expect_exhausted_pool(&mut self, display: &gdk::Display) -> Result<(), String> {
         let Some(pool) = self.pool.as_mut() else {
             return Err("pool vanished".into());
@@ -449,6 +452,7 @@ fn render_through_gsk(native: &gtk::Native, texture: &gdk::Texture) -> Result<Pi
     Ok(download(&rendered))
 }
 
+#[expect(clippy::excessive_nesting)]
 fn check_pixels(pixels: &Pixels, pattern: FramePattern) -> Result<u8, String> {
     let data: &[u8] = &pixels.bytes;
     let mut worst = 0u8;
@@ -485,6 +489,7 @@ struct FdCensus {
 }
 
 impl FdCensus {
+    #[expect(clippy::excessive_nesting)]
     fn take() -> FdCensus {
         let mut census = FdCensus::default();
         let Ok(entries) = std::fs::read_dir("/proc/self/fd") else {

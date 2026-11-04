@@ -199,6 +199,7 @@ mod imp {
     }
 
     impl ObjectImpl for NewPaintingDialog {
+        #[expect(clippy::excessive_nesting)]
         fn dispose(&self) {
             if let Some(source) = self.counter_flash.take() {
                 source.remove();
@@ -282,6 +283,7 @@ impl NewPaintingDialog {
         )
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn build(&self, db: &PigmentDb, initial: &CanvasSpec) {
         let cancel_button = gtk::Button::with_label("Cancelar");
         let create_button = gtk::Button::builder()
@@ -403,6 +405,7 @@ impl NewPaintingDialog {
         self.connect_signals(&cancel_button);
     }
 
+    #[expect(clippy::too_many_lines)]
     fn connect_signals(&self, cancel_button: &gtk::Button) {
         let widgets = self.widgets();
         cancel_button.connect_clicked(glib::clone!(

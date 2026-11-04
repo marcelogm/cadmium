@@ -94,6 +94,7 @@ mod imp {
             self.obj().grab_focus();
         }
 
+        #[expect(clippy::excessive_nesting)]
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
             let canvas = self.obj();
@@ -104,6 +105,7 @@ mod imp {
             canvas.queue_present();
         }
 
+        #[expect(clippy::excessive_nesting)]
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let canvas = self.obj();
             if let Some(texture) = self.texture.borrow().as_ref() {
@@ -191,6 +193,7 @@ impl CursorOutline {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 pub(crate) fn append_ring(
     snapshot: &gtk::Snapshot,
     (x, y): (f32, f32),
@@ -233,6 +236,7 @@ pub struct SurfaceScaleWatch {
 }
 
 impl SurfaceScaleWatch {
+    #[expect(clippy::excessive_nesting)]
     pub(crate) fn start<W: IsA<gtk::Widget>>(&self, widget: &W, on_change: fn(&W)) {
         self.stop();
         let Some(surface) = widget.native().and_then(|native| native.surface()) else {
@@ -257,6 +261,7 @@ impl SurfaceScaleWatch {
 }
 
 impl CadmiumCanvas {
+    #[expect(clippy::excessive_nesting)]
     pub fn new(state: SharedState) -> Self {
         let canvas: CadmiumCanvas = glib::Object::new();
         let weak = canvas.downgrade();
@@ -290,6 +295,7 @@ impl CadmiumCanvas {
         self.request_frame();
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn request_frame(&self) {
         let imp = self.imp();
         if imp.tick.borrow().is_some() {
@@ -512,6 +518,7 @@ impl CadmiumCanvas {
         self.frame_needed(&state, &presenter)
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn announce_if_gpu_lost(&self) {
         let imp = self.imp();
         let lost = imp
@@ -526,6 +533,7 @@ impl CadmiumCanvas {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn present_if_needed(&self) {
         self.fit_if_a_stroke_held_it_back();
         let presented = self.present_frame();

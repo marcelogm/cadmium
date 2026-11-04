@@ -17,6 +17,7 @@ pub struct ParamSpec {
     pub default: f32,
 }
 
+#[expect(clippy::too_many_arguments)]
 const fn spec(
     key: &'static str,
     label: &'static str,

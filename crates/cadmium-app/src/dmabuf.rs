@@ -139,6 +139,7 @@ pub struct DmabufPool {
 }
 
 impl DmabufPool {
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn new(
         gpu: &GpuContext,
         display: &gdk::Display,
@@ -255,6 +256,7 @@ impl DmabufPool {
             .inspect_err(|error| self.poisoned = Some(error.to_string()))
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn present_into(
         &self,
         index: usize,
@@ -541,6 +543,7 @@ impl SlotExporter<'_> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn wrap_texture(&self, image: vk::Image, memory: vk::DeviceMemory) -> wgpu::Texture {
         let size = wgpu::Extent3d {
             width: self.width,

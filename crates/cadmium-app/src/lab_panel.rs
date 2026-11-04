@@ -142,6 +142,7 @@ pub struct LabPanel {
 }
 
 impl LabPanel {
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn new(state: SharedState) -> Rc<LabPanel> {
         let root = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -246,6 +247,7 @@ impl LabPanel {
         &self.root
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn refresh(&self) {
         let (slots, infos, mode, values) = {
             let state = self.state.borrow();
@@ -323,6 +325,7 @@ impl LabPanel {
         self.pigment_rows.replace(rows);
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn connect_controls(self: &Rc<Self>, reset: &gtk::Button) {
         let panel = Rc::downgrade(self);
         self.view_group.connect_active_name_notify(move |_| {
@@ -366,6 +369,7 @@ impl LabPanel {
         self.state.borrow_mut().set_view_mode(mode);
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn show_pen(&self) {
         if !self.root.is_mapped() {
             return;

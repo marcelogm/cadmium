@@ -84,6 +84,7 @@ impl PaintSession {
         Ok(session)
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn replace_document(
         &mut self,
         gpu: &GpuContext,
@@ -207,6 +208,7 @@ impl PaintSession {
         true
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn draw_up(
         &mut self,
         gpu: &GpuContext,
@@ -481,6 +483,7 @@ impl PaintSession {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn tiles_touched_by_queued_dabs(&self) -> Vec<TileCoord> {
         let canvas = self.canvas_of(self.stroke_surface);
         let width = canvas.spec.width;
@@ -504,6 +507,7 @@ impl PaintSession {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn take_from(
     gpu: &GpuContext,
     drawer: &DrawUp,

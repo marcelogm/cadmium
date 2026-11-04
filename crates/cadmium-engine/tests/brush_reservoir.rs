@@ -24,6 +24,7 @@ fn encode_frame(gpu: &GpuContext, session: &mut PaintSession) {
     gpu.queue.submit([encoder.finish()]);
 }
 
+#[expect(clippy::too_many_lines)]
 fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> {
     let gpu = GpuContext::new().unwrap();
     let mut session = PaintSession::new(

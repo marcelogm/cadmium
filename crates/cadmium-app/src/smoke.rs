@@ -121,6 +121,7 @@ impl SmokeStep {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn run(
         &self,
         app: &glib::WeakRef<adw::Application>,
@@ -171,6 +172,7 @@ struct FileWork {
 }
 
 impl FileWork {
+    #[expect(clippy::excessive_nesting)]
     fn advance<F: Future<Output = bool> + 'static>(
         &self,
         start: impl FnOnce() -> F,
@@ -224,6 +226,7 @@ impl SmokeConfig {
         SmokeConfig::from_lookup(|name| std::env::var_os(name))
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn from_lookup(lookup: impl Fn(&str) -> Option<OsString>) -> Option<SmokeConfig> {
         let exit_after_frames = lookup(EXIT_AFTER_FRAMES);
         let screenshot = lookup(SCREENSHOT)
@@ -312,6 +315,7 @@ impl SmokeConfig {
         steps
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn run(self, app: &adw::Application, window: &CadmiumWindow) {
         if let Some(mode) = self.dmabuf_selftest {
             run_dmabuf_selftest(app, window, mode);
@@ -411,6 +415,7 @@ fn choose_tool(window: &CadmiumWindow, tool: UiTool) {
     }
 }
 
+#[expect(clippy::excessive_nesting)]
 fn run_dmabuf_selftest(app: &adw::Application, window: &CadmiumWindow, policy: ModifierPolicy) {
     let app = app.downgrade();
     let selftest: RefCell<Option<DmabufSelftest>> = RefCell::new(None);

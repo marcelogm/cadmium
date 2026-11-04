@@ -180,6 +180,7 @@ impl AppState {
         self.wake();
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn motion(&mut self, samples: &[StrokeSample]) {
         let Some(&pen) = samples.last() else {
             return;
@@ -237,6 +238,7 @@ impl AppState {
         self.wake();
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn advance_hold(&mut self, seconds: f32) {
         if seconds.is_nan() || seconds <= 0.0 {
             return;
@@ -367,6 +369,7 @@ impl AppState {
         })
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn release(&mut self) {
         let Some(contact) = self.contact.take() else {
             return;
@@ -872,6 +875,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(clippy::excessive_nesting)]
     fn a_tube_on_a_zoomed_out_painting_keeps_growing_through_a_trembling_hand() {
         let mut state = painting_state();
         state.set_brush_size(10.0);

@@ -160,6 +160,7 @@ impl Entries {
         self
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn in_format_2(mut self) -> Entries {
         for (entry, _) in &mut self.0 {
             if entry == FORMAT_1_DRY_HEIGHT {

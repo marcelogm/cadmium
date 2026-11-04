@@ -75,6 +75,7 @@ impl Presenter {
         })
     }
 
+    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub fn encode_present(
         &self,
         gpu: &GpuContext,

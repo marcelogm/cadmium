@@ -129,6 +129,7 @@ fn shading_consumes_dirty_tiles() {
 }
 
 #[test]
+#[expect(clippy::excessive_nesting)]
 fn impasto_edge_facing_the_light_is_brighter_than_the_edge_in_shadow() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = blank(&gpu);

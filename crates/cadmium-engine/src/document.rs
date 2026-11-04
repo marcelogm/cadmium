@@ -207,6 +207,7 @@ impl DocumentSnapshot {
         }
     }
 
+    #[expect(clippy::excessive_nesting)]
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
         let format = self.file_format();
         let manifest = Manifest {
@@ -242,6 +243,7 @@ impl DocumentSnapshot {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn write_states<W: Write + std::io::Seek>(
     archive: &mut zip::ZipWriter<W>,
     options: zip::write::SimpleFileOptions,

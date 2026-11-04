@@ -84,6 +84,7 @@ fn pure(slot: usize, volume_um: f32) -> Mixture {
     }
 }
 
+#[expect(clippy::excessive_nesting)]
 fn disk_texels(radius: f32) -> f64 {
     let half = (TIP_SIZE / 2) as i32;
     let mut count = 0u32;

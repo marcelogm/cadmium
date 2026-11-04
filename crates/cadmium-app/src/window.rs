@@ -100,6 +100,7 @@ mod imp {
 
     impl WidgetImpl for CadmiumWindow {}
     impl WindowImpl for CadmiumWindow {
+        #[expect(clippy::excessive_nesting)]
         fn close_request(&self) -> glib::Propagation {
             if self.obj().may_close() {
                 self.parent_close_request()
@@ -166,6 +167,7 @@ impl CadmiumWindow {
             .clone()
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn attach_state(&self, state: SharedState) {
         state.borrow_mut().set_ui_tool(self.tool());
         let canvas = CadmiumCanvas::new(state);
@@ -312,6 +314,7 @@ impl CadmiumWindow {
         imp.tray_sheet.set_open(true);
     }
 
+    #[expect(clippy::excessive_nesting)]
     fn sync_history_actions(&self) {
         let state = self.state();
         let Ok(state) = state.try_borrow() else {
@@ -377,6 +380,7 @@ impl CadmiumWindow {
         self.imp().toast_overlay.add_toast(adw::Toast::new(title));
     }
 
+    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     fn setup_actions(&self) {
         let tool = gio::ActionEntry::builder("tool")
             .parameter_type(Some(glib::VariantTy::STRING))

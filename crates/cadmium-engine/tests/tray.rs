@@ -150,6 +150,7 @@ fn the_tip_dirtied_on_the_tray_carries_that_paint_to_the_painting() {
 }
 
 #[test]
+#[expect(clippy::cognitive_complexity)]
 fn undo_follows_one_order_across_tray_and_painting() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -366,6 +367,7 @@ fn a_held_tube_keeps_growing_through_a_trembling_hand() {
 const FRAME_SECONDS: f32 = 1.0 / 60.0;
 const CORD_RADIUS: f32 = 8.0;
 
+#[expect(clippy::too_many_arguments)]
 fn drag_tube(
     gpu: &GpuContext,
     s: &mut PaintSession,
@@ -377,6 +379,7 @@ fn drag_tube(
     drag_tube_of(gpu, s, 0, from, to, frames, pressure);
 }
 
+#[expect(clippy::too_many_arguments)]
 fn drag_tube_of(
     gpu: &GpuContext,
     s: &mut PaintSession,
