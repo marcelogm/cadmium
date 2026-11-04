@@ -2,7 +2,10 @@ use gtk::gdk;
 
 use super::brush::BRUSH_WORDING;
 use super::panel::{NO_CONTROLS, ToolWording, VisibleControls};
-use super::{KNIFE_HANDLING, Press, Tool, UiToolProfile};
+use super::{Press, Tool, UiToolProfile};
+
+pub(crate) const KNIFE_HANDLING: &str = "Deitada (caneta inclinada) assenta placas; em pé raspa e abre sulco; \
+pressão leve deixa a placa mais grossa";
 
 pub(super) const KNIFE: UiToolProfile = UiToolProfile {
     name: "knife",

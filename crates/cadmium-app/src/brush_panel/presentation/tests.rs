@@ -1,5 +1,5 @@
 use super::*;
-use crate::tools::KNIFE_HANDLING;
+use crate::tools::knife::KNIFE_HANDLING;
 
 #[test]
 fn recipe_description_names_a_single_pigment() {

@@ -8,14 +8,11 @@ mod blender;
 mod brush;
 mod eyedropper;
 pub(crate) mod keys;
-mod knife;
+pub(crate) mod knife;
 mod moving;
 pub(crate) mod panel;
 mod rag;
 mod tube;
-
-pub const KNIFE_HANDLING: &str = "Deitada (caneta inclinada) assenta placas; em pé raspa e abre sulco; \
-pressão leve deixa a placa mais grossa";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
