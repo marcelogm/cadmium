@@ -14,7 +14,7 @@ mod steps;
 #[cfg(test)]
 mod tests;
 
-use steps::{FileWork, SmokeDialog, quit};
+use steps::{FileWork, SmokeDialog, SmokeStep, quit};
 
 const SETTLE_FRAMES_AFTER_FILE_WORK: u32 = 10;
 
@@ -34,39 +34,66 @@ pub struct SmokeConfig {
 }
 
 impl SmokeConfig {
-    #[expect(clippy::excessive_nesting)]
     pub fn run(self, app: &adw::Application, window: &CadmiumWindow) {
         if let Some(mode) = self.dmabuf_selftest {
             run_dmabuf_selftest(app, window, mode);
             return;
         }
-        let app = app.downgrade();
-        let steps = self.steps();
-        let drawn = Cell::new(0u32);
-        let next_step = Cell::new(0usize);
-        let earliest_end_frame = Cell::new(self.exit_after_frames);
-        let file_work = FileWork::default();
-        window.add_tick_callback(move |window, _| {
-            drawn.set(drawn.get() + 1);
-            while let Some(step) = steps.get(next_step.get()) {
-                if !step.is_ready(drawn.get(), earliest_end_frame.get(), window) {
-                    return glib::ControlFlow::Continue;
-                }
-                let frames_late = drawn.get().saturating_sub(earliest_end_frame.get());
-                if !step.run(&app, window, frames_late, &file_work) {
-                    return glib::ControlFlow::Continue;
-                }
-                if FileWork::is_file_step(step) {
-                    earliest_end_frame.set(
-                        earliest_end_frame
-                            .get()
-                            .max(drawn.get() + SETTLE_FRAMES_AFTER_FILE_WORK),
-                    );
-                }
-                next_step.set(next_step.get() + 1);
-            }
+        let run = SmokeRun {
+            app: app.downgrade(),
+            steps: self.steps(),
+            drawn: Cell::new(0),
+            next_step: Cell::new(0),
+            earliest_end_frame: Cell::new(self.exit_after_frames),
+            file_work: FileWork::default(),
+        };
+        window.add_tick_callback(move |window, _| run.tick(window));
+    }
+}
+
+struct SmokeRun {
+    app: glib::WeakRef<adw::Application>,
+    steps: Vec<SmokeStep>,
+    drawn: Cell<u32>,
+    next_step: Cell<usize>,
+    earliest_end_frame: Cell<u32>,
+    file_work: FileWork,
+}
+
+impl SmokeRun {
+    fn tick(&self, window: &CadmiumWindow) -> glib::ControlFlow {
+        self.drawn.set(self.drawn.get() + 1);
+        while let Some(step) = self.steps.get(self.next_step.get())
+            && self.run_step(step, window)
+        {
+            self.next_step.set(self.next_step.get() + 1);
+        }
+        if self.next_step.get() < self.steps.len() {
+            glib::ControlFlow::Continue
+        } else {
             glib::ControlFlow::Break
-        });
+        }
+    }
+
+    fn run_step(&self, step: &SmokeStep, window: &CadmiumWindow) -> bool {
+        if !step.is_ready(self.drawn.get(), self.earliest_end_frame.get(), window) {
+            return false;
+        }
+        let frames_late = self
+            .drawn
+            .get()
+            .saturating_sub(self.earliest_end_frame.get());
+        if !step.run(&self.app, window, frames_late, &self.file_work) {
+            return false;
+        }
+        if FileWork::is_file_step(step) {
+            self.earliest_end_frame.set(
+                self.earliest_end_frame
+                    .get()
+                    .max(self.drawn.get() + SETTLE_FRAMES_AFTER_FILE_WORK),
+            );
+        }
+        true
     }
 }
 
