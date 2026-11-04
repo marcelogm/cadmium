@@ -26,7 +26,7 @@ impl TrayView {
     }
 
     fn advance_frame(&self) -> glib::ControlFlow {
-        self.present_frame();
+        self.present_if_needed();
         let ring_moving = self.follow_load_ring();
         if ring_moving || self.wants_frame() {
             return glib::ControlFlow::Continue;
@@ -57,11 +57,14 @@ impl TrayView {
         self.frame_needed(&state, &presenter)
     }
 
-    fn present_frame(&self) {
-        let imp = self.imp();
-        if !self.present_texture() {
-            return;
+    fn present_if_needed(&self) {
+        if self.present_texture() {
+            self.announce_presented();
         }
+    }
+
+    fn announce_presented(&self) {
+        let imp = self.imp();
         let fell_back = imp.presenter.borrow_mut().take_fallback_notice();
         if fell_back {
             run_handlers(&imp.fallback_handlers, self);

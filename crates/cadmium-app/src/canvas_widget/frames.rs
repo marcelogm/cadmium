@@ -33,12 +33,8 @@ impl CadmiumCanvas {
         glib::ControlFlow::Break
     }
 
-    fn viewport_px(&self) -> (u32, u32) {
-        viewport_px(self)
-    }
-
     fn frame_needed(&self, state: &AppState, presenter: &FramePresenter) -> bool {
-        let (width_px, height_px) = self.viewport_px();
+        let (width_px, height_px) = viewport_px(self);
         if width_px == 0 || height_px == 0 || state.gpu_is_lost() {
             return false;
         }
@@ -73,11 +69,14 @@ impl CadmiumCanvas {
 
     fn present_if_needed(&self) {
         self.fit_if_a_stroke_held_it_back();
-        let presented = self.present_frame();
+        let presented = self.present_texture();
         self.announce_if_gpu_lost();
-        if !presented {
-            return;
+        if presented {
+            self.announce_presented();
         }
+    }
+
+    fn announce_presented(&self) {
         let imp = self.imp();
         let fell_back = imp.presenter.borrow_mut().take_fallback_notice();
         if fell_back {
@@ -86,7 +85,7 @@ impl CadmiumCanvas {
         run_handlers(&imp.presented_handlers, self);
     }
 
-    fn present_frame(&self) -> bool {
+    fn present_texture(&self) -> bool {
         let imp = self.imp();
         let Some(state) = imp.state.get() else {
             return false;
@@ -101,7 +100,7 @@ impl CadmiumCanvas {
         if !self.frame_needed(&state, &presenter) {
             return false;
         }
-        let (width_px, height_px) = self.viewport_px();
+        let (width_px, height_px) = viewport_px(self);
         let Some(texture) = presenter.present(&mut state, &native, width_px, height_px) else {
             return false;
         };
