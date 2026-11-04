@@ -702,23 +702,6 @@ mod tests {
     }
 
     #[test]
-    fn a_render_param_reshades_both_surfaces() {
-        let mut state = painting_state();
-        settle_both_surfaces(&mut state);
-        let render = cadmium_engine::params::SimParams::specs()
-            .iter()
-            .find(|spec| spec.group == cadmium_engine::params::ParamGroup::Render)
-            .unwrap();
-        state.set_param(render.key, render.default);
-        assert!(state.session.has_pending_work());
-        assert!(state.session.tray_has_pending_work());
-        settle_both_surfaces(&mut state);
-        state.reset_params();
-        assert!(state.session.has_pending_work());
-        assert!(state.session.tray_has_pending_work());
-    }
-
-    #[test]
     fn an_eraser_stroke_on_the_tray_puts_the_rag_down_after_the_tray_frame() {
         let mut state = painting_state();
         state.set_ui_tool(UiTool::Paint(Tool::Brush));

@@ -6,12 +6,10 @@ use std::time::Instant;
 use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
 use cadmium_engine::canvas::{CanvasError, CanvasSpec, PaintTotals};
 use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
-use cadmium_engine::engine::{BrushReadout, FULL_DIP, PaintEngine};
+use cadmium_engine::engine::{BrushReadout, FULL_DIP};
 use cadmium_engine::gpu::{GpuContext, GpuLost};
-use cadmium_engine::params::{ParamGroup, SimParams};
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
-use cadmium_engine::render::ViewMode;
 use cadmium_engine::session::{ClearOutcome, PaintSession};
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
@@ -26,6 +24,7 @@ pub use pen::PenReadout;
 
 mod gesture;
 mod history;
+mod lab;
 mod pen;
 
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
@@ -36,16 +35,6 @@ const EMPTY_MIXTURE: Mixture = Mixture {
     volume_um: 0.0,
     fractions: [0.0; MAX_SLOTS],
 };
-
-pub fn clamp_view_mode(mode: ViewMode, slot_count: usize) -> ViewMode {
-    match mode {
-        ViewMode::Pigment(slot) if usize::from(slot) >= slot_count => match slot_count {
-            0 => ViewMode::Color,
-            count => ViewMode::Pigment((count.min(MAX_SLOTS) - 1) as u8),
-        },
-        other => other,
-    }
-}
 
 pub fn recipe_from_fractions(fractions: &[f32; MAX_SLOTS]) -> Vec<(usize, f32)> {
     fractions
@@ -69,12 +58,6 @@ pub fn recipe_for_palette(
             Some((slot, *share))
         })
         .collect()
-}
-
-pub fn is_render_param(key: &str) -> bool {
-    SimParams::specs()
-        .iter()
-        .any(|spec| spec.key == key && spec.group == ParamGroup::Render)
 }
 
 pub fn reserve_level(volume: f32, capacity: f32) -> f32 {
@@ -476,33 +459,6 @@ impl AppState {
         Ok(slot)
     }
 
-    pub fn set_view_mode(&mut self, mode: ViewMode) {
-        let mode = clamp_view_mode(mode, self.slot_count());
-        if self.session.view_mode != mode {
-            self.session.view_mode = mode;
-            self.session.canvas.dirty.mark_all();
-            self.wake();
-        }
-    }
-
-    pub fn set_param(&mut self, key: &str, value: f32) {
-        self.session.engine.params_mut().set(key, value);
-        if is_render_param(key) {
-            self.reshade_both_surfaces();
-        }
-    }
-
-    pub fn reset_params(&mut self) {
-        *self.session.engine.params_mut() = SimParams::default();
-        self.reshade_both_surfaces();
-    }
-
-    fn reshade_both_surfaces(&mut self) {
-        self.session.canvas.dirty.mark_all();
-        self.session.tray.dirty.mark_all();
-        self.wake();
-    }
-
     pub fn set_ui_tool(&mut self, tool: UiTool) {
         self.ui_tool = tool;
         let UiTool::Paint(paint_tool) = tool else {
@@ -577,6 +533,9 @@ mod test_support;
 
 #[cfg(test)]
 mod tests {
+    use cadmium_engine::engine::PaintEngine;
+    use cadmium_engine::params::SimParams;
+
     use super::*;
     use crate::state::test_support::{
         PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, TEST_BRUSH_DIAMETER_PX, ULTRAMARINE_SLOT,
@@ -1092,20 +1051,6 @@ mod tests {
     }
 
     #[test]
-    fn pigment_view_beyond_the_palette_shows_the_last_slot() {
-        assert_eq!(
-            clamp_view_mode(ViewMode::Pigment(6), 4),
-            ViewMode::Pigment(3)
-        );
-        assert_eq!(
-            clamp_view_mode(ViewMode::Pigment(2), 4),
-            ViewMode::Pigment(2)
-        );
-        assert_eq!(clamp_view_mode(ViewMode::Pigment(0), 0), ViewMode::Color);
-        assert_eq!(clamp_view_mode(ViewMode::Height, 0), ViewMode::Height);
-    }
-
-    #[test]
     fn picked_paint_becomes_a_recipe_of_the_pigments_present() {
         let mut fractions = [0.0; MAX_SLOTS];
         fractions[1] = 0.6;
@@ -1113,20 +1058,5 @@ mod tests {
         fractions[5] = 1e-5;
         assert_eq!(recipe_from_fractions(&fractions), [(1, 0.6), (4, 0.3)]);
         assert!(recipe_from_fractions(&[0.0; MAX_SLOTS]).is_empty());
-    }
-
-    #[test]
-    fn only_render_params_repaint_the_whole_canvas() {
-        let render = SimParams::specs()
-            .iter()
-            .find(|spec| spec.group == ParamGroup::Render)
-            .unwrap();
-        let transfer = SimParams::specs()
-            .iter()
-            .find(|spec| spec.group == ParamGroup::Transfer)
-            .unwrap();
-        assert!(is_render_param(render.key));
-        assert!(!is_render_param(transfer.key));
-        assert!(!is_render_param("no_such_param"));
     }
 }
