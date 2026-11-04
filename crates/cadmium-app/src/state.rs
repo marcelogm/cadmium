@@ -9,7 +9,7 @@ use cadmium_engine::engine::{BrushReadout, FULL_DIP};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
-use cadmium_engine::session::{ClearOutcome, PaintSession};
+use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 
@@ -26,6 +26,7 @@ mod gesture;
 mod history;
 mod lab;
 mod pen;
+mod tray;
 
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
 pub const PARTIAL_DIP: f32 = 0.25;
@@ -235,10 +236,6 @@ impl AppState {
         }
     }
 
-    pub fn slot_count(&self) -> usize {
-        self.session.canvas.spec.pigment_slots.len()
-    }
-
     pub fn palette_mixture(&self) -> Mixture {
         self.session.brush.reservoir_mixture(self.slot_count())
     }
@@ -384,14 +381,6 @@ impl AppState {
         true
     }
 
-    pub fn add_pile(&mut self, id: &str) -> Result<usize, String> {
-        let slot = self.session.add_slot(&self.gpu, id)?;
-        self.edits.record();
-        self.click_pile(slot, PigmentClick::CleanAndLoad);
-        self.wake();
-        Ok(slot)
-    }
-
     pub fn set_ui_tool(&mut self, tool: UiTool) {
         self.ui_tool = tool;
         let UiTool::Paint(paint_tool) = tool else {
@@ -401,27 +390,6 @@ impl AppState {
         if !self.is_stroking() {
             self.session.brush.tool = paint_tool;
         }
-    }
-
-    pub fn click_pile(&mut self, slot: usize, click: PigmentClick) {
-        match self.ui_tool {
-            UiTool::Tube => self.set_tube_slot(slot),
-            UiTool::Move | UiTool::Paint(_) => self.choose_pigment(slot, click),
-        }
-    }
-
-    pub fn set_tube_slot(&mut self, slot: usize) {
-        if slot < self.slot_count() {
-            self.tube_slot = slot;
-        }
-    }
-
-    pub fn clear_tray(&mut self) {
-        self.release();
-        if let ClearOutcome::Cleared { .. } = self.session.clear_tray(&self.gpu) {
-            self.edits.record();
-        }
-        self.wake();
     }
 
     pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
@@ -466,7 +434,6 @@ mod test_support;
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::state::test_support::{
         PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, TEST_BRUSH_DIAMETER_PX, ULTRAMARINE_SLOT,
@@ -508,8 +475,6 @@ mod tests {
         );
     }
 
-    const YELLOW_SLOT: usize = 1;
-
     const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
 
     const DIRT_DIP: f32 = 0.1;
@@ -548,55 +513,6 @@ mod tests {
         assert_eq!(totals.pigment[ULTRAMARINE_SLOT], 0.0);
         assert!(totals.pigment[WHITE_SLOT] > 0.0);
         assert_eq!(state.session.brush.recipe, [(WHITE_SLOT, 1.0)]);
-    }
-
-    #[test]
-    fn a_pile_click_with_the_tube_only_chooses_the_tube() {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Tube);
-        let before = brush_totals(&state);
-        let recipe = state.session.brush.recipe.clone();
-        state.click_pile(ULTRAMARINE_SLOT, PigmentClick::Mix);
-        assert_eq!(state.tube_slot, ULTRAMARINE_SLOT);
-        assert_eq!(state.session.brush.recipe, recipe);
-        assert_eq!(brush_totals(&state), before);
-    }
-
-    #[test]
-    fn a_pile_click_with_the_brush_loads_the_brush_and_leaves_the_tube() {
-        let mut state = painting_state();
-        state.click_pile(YELLOW_SLOT, PigmentClick::Choose);
-        assert_eq!(state.session.brush.recipe, [(YELLOW_SLOT, 1.0)]);
-        assert!(brush_totals(&state).pigment[YELLOW_SLOT] > 0.0);
-        assert_eq!(state.tube_slot, WHITE_SLOT);
-    }
-
-    #[test]
-    fn adding_a_pigment_while_holding_the_tube_makes_it_the_tube_and_leaves_the_brush_unloaded() {
-        let mut state = painting_state();
-        let mut spec = state.session.canvas.spec.clone();
-        spec.pigment_slots.truncate(ULTRAMARINE_SLOT + 1);
-        state.start_painting(spec).unwrap();
-        state.set_ui_tool(UiTool::Tube);
-        let before = brush_totals(&state);
-        let recipe = state.session.brush.recipe.clone();
-        let slot = state.add_pile("burnt_umber").unwrap();
-        assert_eq!(slot, ULTRAMARINE_SLOT + 1);
-        assert_eq!(state.tube_slot, slot);
-        assert_eq!(state.session.brush.recipe, recipe);
-        assert_eq!(brush_totals(&state), before);
-    }
-
-    #[test]
-    fn adding_a_pigment_with_the_brush_loads_it_clean() {
-        let mut state = painting_state();
-        let mut spec = state.session.canvas.spec.clone();
-        spec.pigment_slots.truncate(ULTRAMARINE_SLOT + 1);
-        state.start_painting(spec).unwrap();
-        let slot = state.add_pile("burnt_umber").unwrap();
-        assert_eq!(state.session.brush.recipe, [(slot, 1.0)]);
-        assert_eq!(brush_totals(&state).pigment[ULTRAMARINE_SLOT], 0.0);
-        assert_eq!(state.tube_slot, WHITE_SLOT);
     }
 
     #[test]
