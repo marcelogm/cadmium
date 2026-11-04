@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -18,10 +18,26 @@ const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
 
 impl CadmiumWindow {
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub(super) fn attach_state(&self, state: SharedState) {
         state.borrow_mut().set_ui_tool(self.tool());
         let canvas = CadmiumCanvas::new(state);
+        self.follow_canvas(&canvas);
+        self.imp().canvas_slot.append(&canvas);
+        let state = canvas.state();
+        if self.imp().canvas.set(canvas).is_err() {
+            unreachable!("the canvas is attached once");
+        }
+        let tray = self.attach_tray(state.clone());
+        self.attach_brush_panel(state.clone());
+        let lab_panel = LabPanel::new(state);
+        self.imp().lab_panel_slot.append(lab_panel.widget());
+        self.show_pen_readouts(&lab_panel, &tray);
+        self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
+        self.sync_history_actions();
+        self.announce_if_history_disabled();
+    }
+
+    fn follow_canvas(&self, canvas: &CadmiumCanvas) {
         canvas.connect_view_changed(glib::clone!(
             #[weak(rename_to = window)]
             self,
@@ -52,24 +68,18 @@ impl CadmiumWindow {
             self,
             move |_| window.announce_copy_presentation()
         ));
-        self.imp().canvas_slot.append(&canvas);
-        let state = canvas.state();
-        if self.imp().canvas.set(canvas).is_err() {
-            unreachable!("the canvas is attached once");
-        }
-        let tray = self.attach_tray(state.clone());
-        let brush_panel = BrushPanel::new(self, state.clone());
+    }
+
+    fn attach_brush_panel(&self, state: SharedState) {
+        let brush_panel = BrushPanel::new(self, state);
         self.imp().brush_panel_slot.append(brush_panel.widget());
         self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
-        let lab_panel = LabPanel::new(state);
-        self.imp().lab_panel_slot.append(lab_panel.widget());
+    }
+
+    fn show_pen_readouts(&self, lab_panel: &Rc<LabPanel>, tray: &TrayView) {
         let canvas = self.canvas();
-        let pen_panel = Rc::downgrade(&lab_panel);
-        let show_pen: Rc<dyn Fn()> = Rc::new(move || {
-            if let Some(panel) = pen_panel.upgrade() {
-                panel.show_pen();
-            }
-        });
+        let pen_panel = Rc::downgrade(lab_panel);
+        let show_pen: Rc<dyn Fn()> = Rc::new(move || show_pen_of(&pen_panel));
         canvas.connect_presented(glib::clone!(
             #[strong]
             show_pen,
@@ -86,9 +96,6 @@ impl CadmiumWindow {
             move |_| show_pen()
         ));
         tray.connect_pen_observed(move |_| show_pen());
-        self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
-        self.sync_history_actions();
-        self.announce_if_history_disabled();
     }
 
     fn attach_tray(&self, state: SharedState) -> TrayView {
@@ -158,5 +165,11 @@ impl CadmiumWindow {
         if label.label() != text {
             label.set_label(&text);
         }
+    }
+}
+
+fn show_pen_of(panel: &Weak<LabPanel>) {
+    if let Some(panel) = panel.upgrade() {
+        panel.show_pen();
     }
 }

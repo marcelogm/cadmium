@@ -24,28 +24,30 @@ impl CadmiumWindow {
         dialog.connect_create(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |dialog, spec| {
-                if !window.work_would_be_lost() {
-                    dialog.close();
-                    window.start_painting(spec);
-                    return;
-                }
-                confirm_discard(
-                    dialog,
-                    glib::clone!(
-                        #[weak]
-                        window,
-                        #[weak]
-                        dialog,
-                        move || {
-                            dialog.close();
-                            window.start_painting(spec.clone());
-                        }
-                    ),
-                );
-            }
+            move |dialog, spec| window.create_painting(dialog, spec)
         ));
         dialog.present(Some(self));
+    }
+
+    fn create_painting(&self, dialog: &NewPaintingDialog, spec: CanvasSpec) {
+        if !self.work_would_be_lost() {
+            dialog.close();
+            self.start_painting(spec);
+            return;
+        }
+        confirm_discard(
+            dialog,
+            glib::clone!(
+                #[weak(rename_to = window)]
+                self,
+                #[weak]
+                dialog,
+                move || {
+                    dialog.close();
+                    window.start_painting(spec.clone());
+                }
+            ),
+        );
     }
 
     fn start_painting(&self, spec: CanvasSpec) {

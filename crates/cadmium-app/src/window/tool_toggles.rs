@@ -8,6 +8,16 @@ use crate::tools::UiTool;
 use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS};
 
 impl CadmiumWindow {
+    pub(super) fn change_tool_state(
+        &self,
+        action: &gio::SimpleAction,
+        value: Option<&glib::Variant>,
+    ) {
+        if let Some(name) = value.and_then(|value| value.str()) {
+            self.select_tool(action, name);
+        }
+    }
+
     pub(super) fn select_tool(&self, action: &gio::SimpleAction, name: &str) {
         let Some(tool) = UiTool::from_name(name) else {
             glib::g_warning!(LOG_DOMAIN, "unknown tool {name:?}");
@@ -31,15 +41,17 @@ impl CadmiumWindow {
             .connect_active_name_notify(glib::clone!(
                 #[weak(rename_to = window)]
                 self,
-                move |tool_group| {
-                    let Some(name) = tool_group.active_name() else {
-                        return;
-                    };
-                    if window.imp().tool.get().name() != name {
-                        window.change_action_state("tool", &name.to_variant());
-                    }
-                }
+                move |tool_group| window.follow_active_toggle(tool_group)
             ));
+    }
+
+    fn follow_active_toggle(&self, tool_group: &adw::ToggleGroup) {
+        let Some(name) = tool_group.active_name() else {
+            return;
+        };
+        if self.imp().tool.get().name() != name {
+            self.change_action_state("tool", &name.to_variant());
+        }
     }
 
     pub(super) fn setup_tool_shortcuts(&self) {
