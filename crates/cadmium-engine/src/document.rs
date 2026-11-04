@@ -11,9 +11,14 @@ use crate::present::{ViewTransform, readback_rgba8};
 use crate::render::ViewMode;
 use crate::session::PaintSession;
 use crate::spectral::BANDS;
+use crate::surface::tray_spec;
 
-const FORMAT_VERSION: u32 = 2;
+const FORMAT_VERSION: u32 = 3;
 const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
+const TRAYLESS_FORMAT: u32 = 2;
+const TRAY_FORMAT: u32 = 3;
+const PAINTING_PREFIX: &str = "";
+const TRAY_PREFIX: &str = "tray/";
 const OLDEST_READABLE_FORMAT: u32 = ABSOLUTE_DRY_HEIGHT_FORMAT;
 const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
@@ -135,6 +140,7 @@ impl StateBytes {
 pub struct DocumentSnapshot {
     spec: CanvasSpec,
     states: Vec<StateBytes>,
+    tray: Vec<StateBytes>,
 }
 
 impl DocumentSnapshot {
@@ -143,60 +149,33 @@ impl DocumentSnapshot {
         session: &mut PaintSession,
     ) -> Result<DocumentSnapshot, GpuLost> {
         session.flush(gpu);
-        let canvas = &session.canvas;
-        let stagings: Vec<wgpu::Buffer> = StateTexture::PAINT_STATE
-            .iter()
-            .map(|which| {
-                staging_buffer(
-                    gpu,
-                    "document_capture",
-                    canvas.texel_rows(*which).padded_size(),
-                )
-            })
-            .collect();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("document_capture"),
-            });
-        for (which, staging) in StateTexture::PAINT_STATE.iter().zip(&stagings) {
-            canvas.encode_copy_out(*which, staging, &mut encoder);
-        }
-        gpu.queue.submit([encoder.finish()]);
-        let stagings: Vec<&wgpu::Buffer> = stagings.iter().collect();
-        let states = read_all_mapped(gpu, &stagings, |index, padded| {
-            let which = StateTexture::PAINT_STATE[index];
-            StateBytes {
-                which,
-                rows: canvas.texel_rows(which),
-                bytes: padded.to_vec(),
-            }
-        })?;
         Ok(DocumentSnapshot {
-            spec: canvas.spec.clone(),
-            states,
+            spec: session.canvas.spec.clone(),
+            states: capture_canvas(gpu, &session.canvas)?,
+            tray: capture_canvas(gpu, &session.tray)?,
         })
     }
 
     pub fn read(path: &Path) -> Result<DocumentSnapshot, DocumentError> {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
         let (format, spec) = read_manifest(&mut archive)?;
-        let states = StateTexture::PAINT_STATE
-            .iter()
-            .map(|which| {
-                Ok(StateBytes {
-                    which: *which,
-                    rows: TexelRows::unpadded(spec.width * which.bytes_per_texel(), spec.height),
-                    bytes: read_state(&mut archive, format, &spec, *which)?,
-                })
-            })
-            .collect::<Result<_, DocumentError>>()?;
-        Ok(DocumentSnapshot { spec, states })
+        let states = read_states(&mut archive, format, PAINTING_PREFIX, &spec)?;
+        let tray = if format >= TRAY_FORMAT {
+            read_states(
+                &mut archive,
+                format,
+                TRAY_PREFIX,
+                &tray_spec(&spec.pigment_slots),
+            )?
+        } else {
+            Vec::new()
+        };
+        Ok(DocumentSnapshot { spec, states, tray })
     }
 
     pub fn into_session(self, gpu: &GpuContext) -> Result<PaintSession, CanvasError> {
         let mut session = PaintSession::new(gpu, self.spec.clone())?;
-        self.upload(gpu, &mut session.canvas);
+        self.upload(gpu, &mut session);
         Ok(session)
     }
 
@@ -206,26 +185,29 @@ impl DocumentSnapshot {
         session: &mut PaintSession,
     ) -> Result<(), CanvasError> {
         session.replace_document(gpu, self.spec.clone())?;
-        self.upload(gpu, &mut session.canvas);
+        self.upload(gpu, session);
         Ok(())
     }
 
-    fn upload(self, gpu: &GpuContext, canvas: &mut Canvas) {
-        for state in self.states {
-            let (which, raw) = (state.which, state.texels());
-            canvas.write_bytes(gpu, which, &raw);
-            gpu.queue.submit([]);
-            let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
-            if which == StateTexture::WetVol {
-                mark_wet_tiles(canvas, &raw);
-            }
+    fn upload(self, gpu: &GpuContext, session: &mut PaintSession) {
+        upload_states(gpu, &mut session.canvas, self.states);
+        if !self.tray.is_empty() {
+            upload_states(gpu, &mut session.tray, self.tray);
         }
-        canvas.dirty.mark_all();
+    }
+
+    fn format(&self) -> u32 {
+        if self.tray.is_empty() {
+            TRAYLESS_FORMAT
+        } else {
+            FORMAT_VERSION
+        }
     }
 
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
+        let format = self.format();
         let manifest = Manifest {
-            format: FORMAT_VERSION,
+            format,
             pigment_db: PigmentDb::VERSION,
             spec: self.spec.clone(),
             bands: BANDS,
@@ -233,27 +215,99 @@ impl DocumentSnapshot {
         };
         let manifest = serde_json::to_vec_pretty(&manifest)
             .map_err(|error| DocumentError::Format(error.to_string()))?;
+        let tray_spec = tray_spec(&self.spec.pigment_slots);
         write_replacing(path, |file| {
             let mut archive = zip::ZipWriter::new(file);
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
             archive.start_file(MANIFEST_ENTRY, options)?;
             archive.write_all(&manifest)?;
-            for state in &self.states {
-                let raw = state.texels();
-                let stored = if state.which == StateTexture::DryHeight {
-                    Cow::Owned(dry_relief(&self.spec, &raw))
-                } else {
-                    raw
-                };
-                let compressed = zstd::encode_all(stored.as_ref(), ZSTD_LEVEL)?;
-                archive.start_file(state_entry(state.which, FORMAT_VERSION), options)?;
-                archive.write_all(&compressed)?;
-            }
+            write_states(
+                &mut archive,
+                options,
+                format,
+                PAINTING_PREFIX,
+                &self.spec,
+                &self.states,
+            )?;
+            write_states(
+                &mut archive,
+                options,
+                format,
+                TRAY_PREFIX,
+                &tray_spec,
+                &self.tray,
+            )?;
             archive.finish()?;
             Ok(())
         })
     }
+}
+
+fn write_states<W: Write + std::io::Seek>(
+    archive: &mut zip::ZipWriter<W>,
+    options: zip::write::SimpleFileOptions,
+    format: u32,
+    prefix: &str,
+    spec: &CanvasSpec,
+    states: &[StateBytes],
+) -> Result<(), DocumentError> {
+    for state in states {
+        let raw = state.texels();
+        let stored = if state.which == StateTexture::DryHeight {
+            Cow::Owned(dry_relief(spec, &raw))
+        } else {
+            raw
+        };
+        let compressed = zstd::encode_all(stored.as_ref(), ZSTD_LEVEL)?;
+        archive.start_file(state_entry(prefix, state.which, format), options)?;
+        archive.write_all(&compressed)?;
+    }
+    Ok(())
+}
+
+fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, GpuLost> {
+    let stagings: Vec<wgpu::Buffer> = StateTexture::PAINT_STATE
+        .iter()
+        .map(|which| {
+            staging_buffer(
+                gpu,
+                "document_capture",
+                canvas.texel_rows(*which).padded_size(),
+            )
+        })
+        .collect();
+    let mut encoder = gpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("document_capture"),
+        });
+    for (which, staging) in StateTexture::PAINT_STATE.iter().zip(&stagings) {
+        canvas.encode_copy_out(*which, staging, &mut encoder);
+    }
+    gpu.queue.submit([encoder.finish()]);
+    let stagings: Vec<&wgpu::Buffer> = stagings.iter().collect();
+    read_all_mapped(gpu, &stagings, |index, padded| {
+        let which = StateTexture::PAINT_STATE[index];
+        StateBytes {
+            which,
+            rows: canvas.texel_rows(which),
+            bytes: padded.to_vec(),
+        }
+    })
+}
+
+fn upload_states(gpu: &GpuContext, canvas: &mut Canvas, states: Vec<StateBytes>) {
+    for state in states {
+        let (which, raw) = (state.which, state.texels());
+        canvas.write_bytes(gpu, which, &raw);
+        gpu.queue.submit([]);
+        let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+        if which == StateTexture::WetVol {
+            mark_wet_tiles(canvas, &raw);
+        }
+    }
+    canvas.dirty.mark_all();
 }
 
 pub struct ExportedImage {
@@ -376,13 +430,32 @@ fn read_manifest<R: Read + std::io::Seek>(
     Ok((manifest.format, manifest.spec))
 }
 
+fn read_states<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    format: u32,
+    prefix: &str,
+    spec: &CanvasSpec,
+) -> Result<Vec<StateBytes>, DocumentError> {
+    StateTexture::PAINT_STATE
+        .iter()
+        .map(|which| {
+            Ok(StateBytes {
+                which: *which,
+                rows: TexelRows::unpadded(spec.width * which.bytes_per_texel(), spec.height),
+                bytes: read_state(archive, format, prefix, spec, *which)?,
+            })
+        })
+        .collect()
+}
+
 fn read_state<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
     format: u32,
+    prefix: &str,
     spec: &CanvasSpec,
     which: StateTexture,
 ) -> Result<Vec<u8>, DocumentError> {
-    let name = state_entry(which, format);
+    let name = state_entry(prefix, which, format);
     let expected = spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize;
     let entry = entry(archive, &name)?;
     let corrupt = |error: std::io::Error| DocumentError::Format(format!("{name}: {error}"));
@@ -466,13 +539,13 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
     }
 }
 
-fn state_entry(which: StateTexture, format: u32) -> String {
+fn state_entry(prefix: &str, which: StateTexture, format: u32) -> String {
     let name = if which == StateTexture::DryHeight && format > ABSOLUTE_DRY_HEIGHT_FORMAT {
         DRY_RELIEF_NAME
     } else {
         which.label()
     };
-    format!("state/{name}.zst")
+    format!("{prefix}state/{name}.zst")
 }
 
 fn entry<'a, R: Read + std::io::Seek>(
