@@ -34,8 +34,10 @@ fn shade_and_present(
     renderer.encode_shade(
         gpu,
         canvas,
-        &SimParams::default(),
-        ViewMode::Color,
+        ShadeRequest {
+            params: &SimParams::default(),
+            mode: ViewMode::Color,
+        },
         &mut enc,
     );
     presenter.encode_present(gpu, canvas, view, &target, &mut enc);

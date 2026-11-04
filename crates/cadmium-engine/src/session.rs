@@ -6,7 +6,7 @@ use crate::gpu::{GpuContext, GpuLost};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
-use crate::render::{Renderer, ViewMode};
+use crate::render::{Renderer, ShadeRequest, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
 use crate::tube::Tube;
@@ -102,8 +102,10 @@ impl PaintSession {
         self.renderer.encode_shade(
             gpu,
             &mut self.canvas,
-            self.engine.params(),
-            self.view_mode,
+            ShadeRequest {
+                params: self.engine.params(),
+                mode: self.view_mode,
+            },
             encoder,
         );
     }
@@ -113,8 +115,10 @@ impl PaintSession {
         self.renderer.encode_shade(
             gpu,
             &mut self.tray,
-            self.engine.params(),
-            ViewMode::Color,
+            ShadeRequest {
+                params: self.engine.params(),
+                mode: ViewMode::Color,
+            },
             encoder,
         );
     }

@@ -96,6 +96,11 @@ pub struct Renderer {
     compute: AutoLayoutStage,
 }
 
+pub struct ShadeRequest<'a> {
+    pub params: &'a SimParams,
+    pub mode: ViewMode,
+}
+
 impl Renderer {
     pub fn new(gpu: &GpuContext) -> Self {
         Renderer {
@@ -103,13 +108,11 @@ impl Renderer {
         }
     }
 
-    #[expect(clippy::too_many_arguments)]
     pub fn encode_shade(
         &self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
-        params: &SimParams,
-        mode: ViewMode,
+        request: ShadeRequest<'_>,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         let tiles = canvas.dirty.take();
@@ -118,7 +121,7 @@ impl Renderer {
         }
         let tile_list: Vec<[u32; 2]> = tiles.iter().map(|tile| [tile.x, tile.y]).collect();
         let tile_buffer = shade_tile_buffer(gpu, &tile_list);
-        let params_buffer = shade_params_buffer(gpu, params, mode);
+        let params_buffer = shade_params_buffer(gpu, request.params, request.mode);
         let bind_group = self.shade_bind_group(gpu, canvas, &params_buffer, &tile_buffer);
         self.compute.encode(
             encoder,
