@@ -593,6 +593,13 @@ impl AppState {
         }
     }
 
+    pub fn click_pile(&mut self, slot: usize, click: PigmentClick) {
+        match self.ui_tool {
+            UiTool::Tube => self.set_tube_slot(slot),
+            UiTool::Move | UiTool::Paint(_) => self.choose_pigment(slot, click),
+        }
+    }
+
     pub fn set_tube_slot(&mut self, slot: usize) {
         if slot < self.slot_count() {
             self.tube_slot = slot;
@@ -868,6 +875,26 @@ mod tests {
         assert_eq!(totals.pigment[ULTRAMARINE_SLOT], 0.0);
         assert!(totals.pigment[WHITE_SLOT] > 0.0);
         assert_eq!(state.session.brush.recipe, [(WHITE_SLOT, 1.0)]);
+    }
+
+    #[test]
+    fn a_pile_click_with_the_tube_only_chooses_the_tube() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Tube);
+        let before = brush_totals(&state);
+        let recipe = state.session.brush.recipe.clone();
+        state.click_pile(WHITE_SLOT, PigmentClick::Mix);
+        assert_eq!(state.tube_slot, WHITE_SLOT);
+        assert_eq!(state.session.brush.recipe, recipe);
+        assert_eq!(brush_totals(&state), before);
+    }
+
+    #[test]
+    fn a_pile_click_with_the_brush_loads_the_brush() {
+        let mut state = painting_state();
+        state.click_pile(WHITE_SLOT, PigmentClick::Choose);
+        assert_eq!(state.session.brush.recipe, [(WHITE_SLOT, 1.0)]);
+        assert_eq!(state.tube_slot, 0);
     }
 
     #[test]

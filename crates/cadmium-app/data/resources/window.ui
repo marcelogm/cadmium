@@ -83,6 +83,13 @@
                         <property name="tooltip">Conta-gotas (5)</property>
                       </object>
                     </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">tube</property>
+                        <property name="icon-name">cadmium-tube-symbolic</property>
+                        <property name="tooltip">Tubo (6): espreme pigmento puro na bandeja ou na tela; a pressão aperta o tubo</property>
+                      </object>
+                    </child>
                   </object>
                 </property>
                 <child type="end">
