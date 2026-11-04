@@ -3,7 +3,7 @@ name: Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, feat/tray]
+    branches: [main]
     tags: ["v*"]
 
 permissions:
