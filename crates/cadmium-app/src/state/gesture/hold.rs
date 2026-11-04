@@ -3,21 +3,22 @@ use std::time::Instant;
 use cadmium_engine::canvas::PaintTotals;
 use cadmium_engine::draw_up::DrawUpRequest;
 use cadmium_engine::pigments::mixture_srgb8;
-use cadmium_engine::stroke::Tool;
+use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
 
+use super::stroke::StrokePreparation;
 use super::{Contact, LoadRing, Loading, Squeezing};
 use crate::state::AppState;
 use crate::state::dip::mean_mixture;
 use crate::state::recipe::recipe_from_fractions;
 
-pub(super) const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
+const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
 const STILL_TUBE_SCREEN_PX: f32 = 3.0;
 const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
 const FULL_LEVEL: f32 = 0.999;
 
-pub(super) fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
+fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
     (current.0 - origin.0).hypot(current.1 - origin.1) > threshold_px
 }
 
@@ -39,6 +40,42 @@ impl AppState {
             Surface::Tray => self.tray_zoom,
             Surface::Painting => self.view.zoom / self.painting_device_scale,
         }
+    }
+
+    pub(super) fn squeezing_motion(
+        &mut self,
+        squeezing: Squeezing,
+        pen: StrokeSample,
+        samples: &[StrokeSample],
+    ) {
+        self.contact = Some(Contact::Squeezing(Squeezing { pen, ..squeezing }));
+        self.note_samples(samples);
+        self.wake();
+    }
+
+    pub(super) fn loading_motion(
+        &mut self,
+        loading: Loading,
+        pen: StrokeSample,
+        samples: &[StrokeSample],
+    ) {
+        let threshold_px = LOAD_CANCEL_SCREEN_PX / f64::from(self.tray_zoom);
+        let cancelled_at = samples
+            .iter()
+            .position(|sample| load_cancelled(loading.origin, (sample.x, sample.y), threshold_px));
+        if let Some(index) = cancelled_at {
+            self.begin_prepared_stroke(
+                Surface::Tray,
+                loading.tool,
+                samples[index],
+                StrokePreparation::None,
+            );
+            self.add_samples(&samples[index + 1..]);
+            return;
+        }
+        self.contact = Some(Contact::Loading(Loading { pen, ..loading }));
+        self.note_samples(samples);
+        self.wake();
     }
 
     pub fn advance_hold(&mut self, seconds: f32) {
