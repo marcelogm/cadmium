@@ -177,14 +177,14 @@ impl PaintSession {
         self.hold.is_some()
     }
 
-    pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) {
+    pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) -> bool {
         let Some(surface) = self.hold else {
-            return;
+            return false;
         };
         let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
         let params = self.engine.params();
         let Some(region) = squeeze_region(canvas, params, &nozzle) else {
-            return;
+            return false;
         };
         let [x0, y0, x1, y1] = region.rect();
         let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
@@ -194,6 +194,7 @@ impl PaintSession {
         self.tube
             .encode_squeeze(gpu, canvas, params, &nozzle, &region, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
+        true
     }
 
     pub fn draw_up(

@@ -10,12 +10,12 @@ use cadmium_engine::tube::Nozzle;
 use super::{AppState, StrokePreparation, mean_mixture, recipe_from_fractions, stroke_preparation};
 use crate::tools::UiTool;
 
-pub const LOAD_CANCEL_PX: f64 = 4.0;
+pub const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
 const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
 const LOAD_RING_EMPTY_COLOUR: [u8; 3] = [128, 128, 128];
 
-pub fn load_cancelled(origin: (f64, f64), current: (f64, f64)) -> bool {
-    (current.0 - origin.0).hypot(current.1 - origin.1) > LOAD_CANCEL_PX
+pub fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
+    (current.0 - origin.0).hypot(current.1 - origin.1) > threshold_px
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -36,6 +36,7 @@ pub(super) enum Contact {
         level: Option<f32>,
     },
     Squeezing {
+        surface: Surface,
         pen: StrokeSample,
         nozzle_at: (f64, f64),
         squeezed: bool,
@@ -54,6 +55,20 @@ impl AppState {
         )
     }
 
+    pub fn set_tray_zoom(&mut self, zoom: f32) {
+        if zoom.is_finite() && zoom > 0.0 {
+            self.tray_zoom = zoom;
+        }
+    }
+
+    fn hold_surface(&self) -> Option<Surface> {
+        match self.contact? {
+            Contact::Stroke => None,
+            Contact::Loading { .. } => Some(Surface::Tray),
+            Contact::Squeezing { surface, .. } => Some(surface),
+        }
+    }
+
     pub fn press(&mut self, surface: Surface, sample: StrokeSample, eraser: bool) -> bool {
         let began = match (eraser, self.ui_tool) {
             (true, _) => {
@@ -63,6 +78,7 @@ impl AppState {
             (false, UiTool::Move | UiTool::Paint(Tool::Eyedropper)) => false,
             (false, UiTool::Tube) => {
                 let squeezing = Contact::Squeezing {
+                    surface,
                     pen: sample,
                     nozzle_at: (sample.x, sample.y),
                     squeezed: false,
@@ -152,11 +168,13 @@ impl AppState {
                 return;
             }
             Some(Contact::Squeezing {
+                surface,
                 nozzle_at,
                 squeezed,
                 ..
             }) => {
                 self.contact = Some(Contact::Squeezing {
+                    surface,
                     pen,
                     nozzle_at,
                     squeezed,
@@ -169,9 +187,10 @@ impl AppState {
                 level,
                 ..
             }) => {
+                let threshold_px = LOAD_CANCEL_SCREEN_PX / f64::from(self.tray_zoom);
                 let cancelled_at = samples
                     .iter()
-                    .position(|sample| load_cancelled(origin, (sample.x, sample.y)));
+                    .position(|sample| load_cancelled(origin, (sample.x, sample.y), threshold_px));
                 if let Some(index) = cancelled_at {
                     self.begin_prepared_stroke(
                         Surface::Tray,
@@ -196,14 +215,19 @@ impl AppState {
     }
 
     pub fn advance_hold(&mut self, seconds: f32) {
-        let seconds = seconds.min(MAX_HOLD_STEP_SECONDS);
         if seconds.is_nan() || seconds <= 0.0 {
             return;
         }
+        let seconds = seconds.min(MAX_HOLD_STEP_SECONDS);
         let radius = self.session.brush.geometry.max_diameter_px / 2.0;
         match self.contact {
-            Some(Contact::Squeezing { pen, nozzle_at, .. }) => {
-                self.session.squeeze(
+            Some(Contact::Squeezing {
+                surface,
+                pen,
+                nozzle_at,
+                squeezed,
+            }) => {
+                let squeezed_now = self.session.squeeze(
                     &self.gpu,
                     Nozzle {
                         from: [nozzle_at.0 as f32, nozzle_at.1 as f32],
@@ -215,9 +239,10 @@ impl AppState {
                     },
                 );
                 self.contact = Some(Contact::Squeezing {
+                    surface,
                     pen,
                     nozzle_at: (pen.x, pen.y),
-                    squeezed: true,
+                    squeezed: squeezed || squeezed_now,
                 });
             }
             Some(Contact::Loading {
@@ -234,9 +259,7 @@ impl AppState {
                     seconds,
                 };
                 let Ok(drawn) = self.session.draw_up(&self.gpu, request) else {
-                    self.session.end_hold();
-                    self.contact = None;
-                    self.wake();
+                    self.release();
                     return;
                 };
                 let taken = (drawn.taken.volume > 0.0).then(|| self.colour_of(&drawn.taken));
@@ -253,8 +276,8 @@ impl AppState {
         self.wake();
     }
 
-    pub(super) fn advance_hold_by_clock(&mut self) {
-        if !self.is_holding() {
+    pub(super) fn advance_hold_by_clock(&mut self, frame_surface: Surface) {
+        if self.hold_surface() != Some(frame_surface) {
             return;
         }
         let now = Instant::now();
@@ -262,9 +285,7 @@ impl AppState {
             .hold_clock
             .replace(now)
             .map_or(0.0, |last| now.duration_since(last).as_secs_f32());
-        if seconds > 0.0 {
-            self.advance_hold(seconds);
-        }
+        self.advance_hold(seconds);
     }
 
     fn colour_of(&self, totals: &PaintTotals) -> [u8; 3] {
@@ -355,7 +376,9 @@ mod tests {
 
     use super::*;
     use crate::presets::starting_canvas_spec;
-    use crate::state::tests::{WHITE_SLOT, brush_totals, painting_state, wet_volume};
+    use crate::state::tests::{
+        WHITE_SLOT, brush_totals, painting_state, present_one_frame, wet_volume,
+    };
 
     fn sample_at(x: f64, y: f64, pressure: f32) -> StrokeSample {
         StrokeSample {
@@ -386,10 +409,127 @@ mod tests {
     }
 
     #[test]
-    fn load_is_cancelled_past_four_pixels() {
-        assert!(!load_cancelled((10.0, 10.0), (14.0, 10.0)));
-        assert!(load_cancelled((10.0, 10.0), (14.01, 10.0)));
-        assert!(!load_cancelled((10.0, 10.0), (10.0, 10.0)));
+    fn load_is_cancelled_past_the_threshold() {
+        assert!(!load_cancelled((10.0, 10.0), (14.0, 10.0), 4.0));
+        assert!(load_cancelled((10.0, 10.0), (14.01, 10.0), 4.0));
+        assert!(!load_cancelled((10.0, 10.0), (10.0, 10.0), 4.0));
+    }
+
+    #[test]
+    fn the_cancel_distance_is_measured_on_screen() {
+        for (drag, cancels) in [(10.0, false), (20.0, true)] {
+            let mut state = painting_state();
+            state.set_tray_zoom(0.25);
+            state.set_ui_tool(UiTool::Paint(Tool::Brush));
+            state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+            state.motion(&[sample_at(300.0 + drag, 300.0, 0.9)]);
+            assert_eq!(state.load_ring().is_none(), cancels, "{drag}");
+            state.release();
+        }
+    }
+
+    #[test]
+    fn a_tray_zoom_that_is_not_a_scale_is_ignored() {
+        let mut state = painting_state();
+        for zoom in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            state.set_tray_zoom(zoom);
+        }
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        state.motion(&[sample_at(305.0, 300.0, 0.9)]);
+        assert!(state.load_ring().is_none());
+        state.release();
+    }
+
+    #[test]
+    fn a_hold_step_of_no_real_time_squeezes_nothing() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Tube);
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
+        state.advance_hold(f32::NAN);
+        state.release();
+        assert_eq!(
+            state.session.tray.wet_totals(&state.gpu).unwrap().volume,
+            0.0
+        );
+        assert!(!state.has_unsaved_edits());
+    }
+
+    #[test]
+    fn squeezing_off_the_canvas_is_not_an_edit() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Tube);
+        state.press(Surface::Painting, sample_at(-1000.0, -1000.0, 1.0), false);
+        state.advance_hold(MAX_HOLD_STEP_SECONDS);
+        state.release();
+        assert!(!state.has_unsaved_edits());
+    }
+
+    const FRAME_GAP: std::time::Duration = std::time::Duration::from_millis(20);
+
+    fn tray_volume(state: &AppState) -> f64 {
+        state.session.tray.wet_totals(&state.gpu).unwrap().volume
+    }
+
+    #[test]
+    fn a_hold_on_the_painting_advances_only_with_painting_frames() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Tube);
+        state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
+        for _ in 0..2 {
+            present_one_tray_frame(&mut state);
+            std::thread::sleep(FRAME_GAP);
+        }
+        assert_eq!(wet_volume(&state), 0.0);
+        for _ in 0..2 {
+            present_one_frame(&mut state);
+            std::thread::sleep(FRAME_GAP);
+        }
+        state.release();
+        assert!(wet_volume(&state) > 0.0);
+    }
+
+    #[test]
+    fn a_hold_on_the_tray_advances_only_with_tray_frames() {
+        let mut state = painting_state();
+        state.set_ui_tool(UiTool::Tube);
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
+        for _ in 0..2 {
+            present_one_frame(&mut state);
+            std::thread::sleep(FRAME_GAP);
+        }
+        assert_eq!(tray_volume(&state), 0.0);
+        for _ in 0..2 {
+            present_one_tray_frame(&mut state);
+            std::thread::sleep(FRAME_GAP);
+        }
+        state.release();
+        assert!(tray_volume(&state) > 0.0);
+    }
+
+    #[test]
+    fn a_still_touch_with_the_knife_names_the_pile_after_what_the_blade_took() {
+        let mut state = painting_state();
+        squeeze_blob_on_tray(&mut state, WHITE_SLOT);
+        state.set_ui_tool(UiTool::Paint(Tool::Knife));
+        state.clean_brush();
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        state.advance_hold(MAX_HOLD_STEP_SECONDS);
+        state.release();
+        assert!(state.knife_level() > 0.0);
+        assert_eq!(state.session.brush.recipe.len(), 1);
+        assert_eq!(state.session.brush.recipe[0].0, WHITE_SLOT);
+    }
+
+    #[test]
+    fn the_tube_falls_back_to_the_first_pigment_on_a_smaller_palette() {
+        let mut state = painting_state();
+        let last = state.slot_count() - 1;
+        state.set_tube_slot(last);
+        let mut spec = state.session.canvas.spec.clone();
+        spec.pigment_slots.truncate(2);
+        state.start_painting(spec).unwrap();
+        assert_eq!(state.tube_slot, 0);
     }
 
     #[test]

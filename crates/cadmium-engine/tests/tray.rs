@@ -278,6 +278,22 @@ fn the_tube_squeezes_pure_pigment_without_touching_the_brush() {
 }
 
 #[test]
+fn the_tube_says_whether_it_squeezed() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    assert!(!s.squeeze(&gpu, still_nozzle(0, 0.1)));
+    s.begin_hold(&gpu, Surface::Tray);
+    let off_the_tray = Nozzle {
+        from: [-500.0, -500.0],
+        to: [-500.0, -500.0],
+        ..still_nozzle(0, 0.1)
+    };
+    assert!(!s.squeeze(&gpu, off_the_tray));
+    assert!(s.squeeze(&gpu, still_nozzle(0, 0.1)));
+    s.end_hold();
+}
+
+#[test]
 fn a_still_tube_grows_its_blob() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);

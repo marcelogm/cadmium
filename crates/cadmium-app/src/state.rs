@@ -231,6 +231,7 @@ pub struct AppState {
     knife_volume: f32,
     contact: Option<Contact>,
     hold_clock: Option<Instant>,
+    tray_zoom: f32,
     resting_tool: Tool,
     samples_since_frame: u32,
     last_sample_time_ms: Option<u32>,
@@ -264,6 +265,7 @@ impl AppState {
             knife_volume: 0.0,
             contact: None,
             hold_clock: None,
+            tray_zoom: 1.0,
             resting_tool,
             samples_since_frame: 0,
             last_sample_time_ms: None,
@@ -607,7 +609,7 @@ impl AppState {
     }
 
     pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.advance_hold_by_clock();
+        self.advance_hold_by_clock(Surface::Painting);
         self.session.encode_frame(&self.gpu, encoder);
         if !self.is_stroking() {
             self.session.brush.tool = self.resting_tool;
@@ -616,7 +618,7 @@ impl AppState {
     }
 
     pub fn encode_tray_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.advance_hold_by_clock();
+        self.advance_hold_by_clock(Surface::Tray);
         self.session.encode_tray_frame(&self.gpu, encoder);
     }
 
