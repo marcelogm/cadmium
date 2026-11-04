@@ -20,7 +20,7 @@ const PARTIAL_SUFFIX: &str = ".part";
 const RGBA_CHANNELS: usize = 4;
 const ALPHA_CHANNEL: usize = 3;
 const OPAQUE_ALPHA: u8 = 255;
-const WET_VOLUME_BYTES: usize = 4;
+const THICKNESS_BYTES: usize = 4;
 const UNSCALED_VIEW: ViewTransform = ViewTransform {
     origin_x: 0.0,
     origin_y: 0.0,
@@ -100,7 +100,8 @@ pub struct DocumentSnapshot {
 }
 
 impl DocumentSnapshot {
-    pub fn capture(gpu: &GpuContext, session: &PaintSession) -> DocumentSnapshot {
+    pub fn capture(gpu: &GpuContext, session: &mut PaintSession) -> DocumentSnapshot {
+        session.flush(gpu);
         DocumentSnapshot {
             spec: session.canvas.spec.clone(),
             states: StateTexture::PAINT_STATE
@@ -108,6 +109,32 @@ impl DocumentSnapshot {
                 .map(|which| (*which, session.canvas.read_bytes(gpu, *which)))
                 .collect(),
         }
+    }
+
+    pub fn read(path: &Path) -> Result<DocumentSnapshot, DocumentError> {
+        let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
+        let spec = read_manifest(&mut archive)?;
+        let states = StateTexture::PAINT_STATE
+            .iter()
+            .map(|which| Ok((*which, read_state(&mut archive, &spec, *which)?)))
+            .collect::<Result<_, DocumentError>>()?;
+        Ok(DocumentSnapshot { spec, states })
+    }
+
+    pub fn into_session(self, gpu: &GpuContext) -> PaintSession {
+        let mut session = PaintSession::new(gpu, self.spec);
+        for (which, raw) in self.states {
+            session.canvas.write_bytes(gpu, which, &raw);
+            gpu.queue.submit([]);
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("GPU device lost while uploading the painting");
+            if which == StateTexture::WetVol {
+                mark_wet_tiles(&mut session.canvas, &raw);
+            }
+        }
+        session.canvas.dirty.mark_all();
+        session
     }
 
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
@@ -193,23 +220,16 @@ impl ExportedImage {
     }
 }
 
-pub fn save(gpu: &GpuContext, session: &PaintSession, path: &Path) -> Result<(), DocumentError> {
+pub fn save(
+    gpu: &GpuContext,
+    session: &mut PaintSession,
+    path: &Path,
+) -> Result<(), DocumentError> {
     DocumentSnapshot::capture(gpu, session).write(path)
 }
 
 pub fn open(gpu: &GpuContext, path: &Path) -> Result<PaintSession, DocumentError> {
-    let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
-    let spec = read_manifest(&mut archive)?;
-    let mut session = PaintSession::new(gpu, spec);
-    for which in StateTexture::PAINT_STATE {
-        let raw = read_state(&mut archive, &session.canvas.spec, which)?;
-        session.canvas.write_bytes(gpu, which, &raw);
-        if which == StateTexture::WetVol {
-            mark_wet_tiles(&mut session.canvas, &raw);
-        }
-    }
-    session.canvas.dirty.mark_all();
-    Ok(session)
+    Ok(DocumentSnapshot::read(path)?.into_session(gpu))
 }
 
 pub fn export_png(
@@ -224,11 +244,14 @@ fn read_manifest<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
 ) -> Result<CanvasSpec, DocumentError> {
     let mut bytes = Vec::new();
-    archive
-        .by_name(MANIFEST_ENTRY)
-        .map_err(|_| missing_entry(MANIFEST_ENTRY))?
-        .take(MAX_MANIFEST_BYTES)
+    entry(archive, MANIFEST_ENTRY)?
+        .take(MAX_MANIFEST_BYTES + 1)
         .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(DocumentError::Format(format!(
+            "{MANIFEST_ENTRY} is too large, the limit is {MAX_MANIFEST_BYTES} bytes"
+        )));
+    }
     let probe: FormatProbe = serde_json::from_slice(&bytes).map_err(manifest_error)?;
     if probe.format != FORMAT_VERSION {
         return Err(DocumentError::UnsupportedVersion(probe.format));
@@ -267,7 +290,7 @@ fn read_state<R: Read + std::io::Seek>(
 ) -> Result<Vec<u8>, DocumentError> {
     let name = state_entry(which);
     let expected = spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize;
-    let entry = archive.by_name(&name).map_err(|_| missing_entry(&name))?;
+    let entry = entry(archive, &name)?;
     let corrupt = |error: std::io::Error| DocumentError::Format(format!("{name}: {error}"));
     let mut raw = Vec::with_capacity(expected);
     zstd::stream::read::Decoder::new(entry)
@@ -281,7 +304,24 @@ fn read_state<R: Read + std::io::Seek>(
             raw.len()
         )));
     }
+    if holds_thickness(which) && !thicknesses_are_valid(&raw) {
+        return Err(DocumentError::Format(format!(
+            "{name} holds a negative or non-finite thickness"
+        )));
+    }
     Ok(raw)
+}
+
+fn holds_thickness(which: StateTexture) -> bool {
+    matches!(which, StateTexture::WetVol | StateTexture::DryHeight)
+}
+
+fn thicknesses_are_valid(raw: &[u8]) -> bool {
+    raw.as_chunks::<THICKNESS_BYTES>()
+        .0
+        .iter()
+        .map(|texel| f32::from_le_bytes(*texel))
+        .all(|thickness| thickness.is_finite() && thickness >= 0.0)
 }
 
 fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
@@ -291,7 +331,7 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
     let rows = (canvas.spec.height as usize).div_ceil(tile);
     let mut wet = vec![false; columns * rows];
     for (index, texel) in wet_volume
-        .as_chunks::<WET_VOLUME_BYTES>()
+        .as_chunks::<THICKNESS_BYTES>()
         .0
         .iter()
         .enumerate()
@@ -323,8 +363,14 @@ fn state_entry(which: StateTexture) -> String {
     format!("state/{name}.zst")
 }
 
-fn missing_entry(name: &str) -> DocumentError {
-    DocumentError::Format(format!("missing {name}"))
+fn entry<'a, R: Read + std::io::Seek>(
+    archive: &'a mut zip::ZipArchive<R>,
+    name: &str,
+) -> Result<zip::read::ZipFile<'a, R>, DocumentError> {
+    archive.by_name(name).map_err(|error| match error {
+        zip::result::ZipError::FileNotFound => DocumentError::Format(format!("missing {name}")),
+        other => other.into(),
+    })
 }
 
 fn manifest_error(error: serde_json::Error) -> DocumentError {
@@ -345,12 +391,19 @@ fn write_replacing(
                 .map_err(|error| error.into_error())?
                 .sync_all()?;
             std::fs::rename(&partial, path)?;
+            File::open(parent_dir(path))?.sync_all()?;
             Ok(())
         });
     if result.is_err() {
         let _ = std::fs::remove_file(&partial);
     }
     result
+}
+
+fn parent_dir(path: &Path) -> &Path {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
 }
 
 fn partial_path(path: &Path) -> Result<PathBuf, DocumentError> {
