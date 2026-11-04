@@ -245,17 +245,14 @@ fn tile_span(length: u32, a: f32, b: f32) -> Option<std::ops::RangeInclusive<u32
     if length == 0 || a.is_nan() || b.is_nan() {
         return None;
     }
-    let extent = length as f32;
-    let (low, high) = (a.min(b), a.max(b));
-    if high < 0.0 || low > extent {
+    let last_pixel = (length - 1) as f32;
+    let first_pixel = a.min(b).floor();
+    let final_pixel = a.max(b).floor();
+    if final_pixel < 0.0 || first_pixel > last_pixel {
         return None;
     }
-    let last_tile = (length - 1) / TILE_SIZE;
-    let tile = TILE_SIZE as f32;
-    let first = ((low.max(0.0) / tile).floor() as u32).min(last_tile);
-    let last = ((high.min(extent) / tile).ceil() as u32)
-        .saturating_sub(1)
-        .clamp(first, last_tile);
+    let first = first_pixel.max(0.0) as u32 / TILE_SIZE;
+    let last = final_pixel.min(last_pixel) as u32 / TILE_SIZE;
     Some(first..=last)
 }
 
@@ -273,6 +270,8 @@ pub struct PigmentSlotsUniform {
     pub count: u32,
     _pad: [u32; 3],
 }
+
+const _: () = assert!(std::mem::size_of::<PigmentSlotsUniform>() == 528);
 
 impl PigmentSlotsUniform {
     pub fn new(db: &PigmentDb, slots: &[String]) -> Self {
