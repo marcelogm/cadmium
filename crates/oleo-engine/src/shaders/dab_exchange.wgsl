@@ -180,6 +180,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             atomicAdd(&tip_delta[base + slot], tip_change);
         }
     }
+    if (new_volume >= EMPTY_VOLUME_UM) {
+        new_fractions = within_whole_volume(new_fractions);
+    }
     atomicAdd(&tip_delta[base + VOLUME_CHANNEL], pickup_q - deposit_q);
 
     textureStore(wet_vol, pixel, vec4<f32>(new_volume, 0.0, 0.0, 0.0));

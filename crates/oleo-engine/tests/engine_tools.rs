@@ -334,6 +334,32 @@ fn a_laid_knife_levels_to_the_mean_height_under_its_blade_not_to_its_centre() {
 }
 
 #[test]
+fn spread_mixtures_keep_their_fractions_within_the_volume() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.brush.medium = 0.0;
+    s.brush.recipe = vec![(0, 0.31), (1, 0.27), (2, 0.42)];
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, 120.0, 40.0, 470.0);
+    s.brush.recipe = vec![(1, 0.6), (2, 0.4)];
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, 132.0, 470.0, 40.0);
+    s.brush.tool = Tool::Blender;
+    s.clean_brush(&gpu);
+    drag(&gpu, &mut s, &column(256.0, 60.0, 200.0, 1.0, 20.0));
+    s.brush.tool = Tool::Knife;
+    drag(&gpu, &mut s, &line(126.0, 40.0, 470.0, 1.0, 60.0));
+    let low = s.canvas.read_f32(&gpu, StateTexture::WetPig0);
+    let high = s.canvas.read_f32(&gpu, StateTexture::WetPig1);
+    let worst = low
+        .chunks(4)
+        .zip(high.chunks(4))
+        .map(|(low, high)| low.iter().chain(high).sum::<f32>())
+        .fold(0.0, f32::max);
+    assert!(worst <= 1.0, "fractions sum to {worst}");
+}
+
+#[test]
 fn knife_previews_show_flattened_paint() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);

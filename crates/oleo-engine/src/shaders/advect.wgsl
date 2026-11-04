@@ -52,6 +52,7 @@ fn store_amounts(pixel: vec2<i32>, amounts: array<f32, 9>) {
         for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
             fractions[slot] = nearest_half(max(amounts[slot], 0.0) / volume);
         }
+        fractions = within_whole_volume(fractions);
     }
     textureStore(wet_vol, pixel, vec4<f32>(volume, 0.0, 0.0, 0.0));
     textureStore(wet_pig0, pixel, vec4<f32>(fractions[0], fractions[1], fractions[2], fractions[3]));
