@@ -5,7 +5,6 @@ use crate::brush::{
     FULL_RESERVOIR_VOLUME_UM,
 };
 use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
-use crate::draw_up::DrawnUp;
 use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
@@ -1237,7 +1236,7 @@ impl WetOilEngine {
         gpu: &GpuContext,
         into_knife: bool,
         take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
-    ) -> Result<DrawnUp, GpuLost> {
+    ) -> Result<(PaintTotals, f32), GpuLost> {
         if into_knife {
             self.draw_up_into_knife(gpu, take)
         } else {
@@ -1249,7 +1248,7 @@ impl WetOilEngine {
         &mut self,
         gpu: &GpuContext,
         take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
-    ) -> Result<DrawnUp, GpuLost> {
+    ) -> Result<(PaintTotals, f32), GpuLost> {
         let held = self.reserve_totals(gpu)?.volume as f32;
         let capacity = self.full_reserve_volume();
         let taken = take(capacity - held)?;
@@ -1259,7 +1258,7 @@ impl WetOilEngine {
                 self.loaded_thickness_um = self.loaded_thickness_um.max(DRAWN_LOADED_THICKNESS_UM);
             }
         }
-        Ok(DrawnUp::after(held, capacity, taken))
+        Ok((taken, level_after(held, capacity, &taken)))
     }
 
     fn add_to_reserve(&self, gpu: &GpuContext, taken: &PaintTotals) {
@@ -1279,18 +1278,19 @@ impl WetOilEngine {
         &mut self,
         gpu: &GpuContext,
         take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
-    ) -> Result<DrawnUp, GpuLost> {
+    ) -> Result<(PaintTotals, f32), GpuLost> {
         let mut load = read_buffer(gpu, &self.blade_load)?;
         let shares = blade_shares(self.tip_radius);
         let held = knife_from_load(&load).volume as f32;
-        let capacity = self.knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
-        let taken = take((capacity - held).min(blade_room(&load, &shares)))?;
+        let full_dip = self.knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
+        let room = (full_dip - held).min(blade_room(&load, &shares)).max(0.0);
+        let taken = take(room)?;
         if holds_paint(&taken) {
             add_to_blade(&mut load, &shares, &taken);
             gpu.queue
                 .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
         }
-        Ok(DrawnUp::after(held, capacity, taken))
+        Ok((taken, level_after(held, held + room, &taken)))
     }
 
     pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
@@ -1839,6 +1839,14 @@ fn add_to_blade(load: &mut [f32], shares: &[(usize, f32)], taken: &PaintTotals) 
             values[slot] += (amount * share) as f32;
         }
         values[VOLUME_CHANNEL] += (taken.volume * share) as f32;
+    }
+}
+
+fn level_after(held_um: f32, capacity_um: f32, taken: &PaintTotals) -> f32 {
+    if capacity_um > 0.0 {
+        ((held_um + taken.volume as f32) / capacity_um).clamp(0.0, 1.0)
+    } else {
+        0.0
     }
 }
 

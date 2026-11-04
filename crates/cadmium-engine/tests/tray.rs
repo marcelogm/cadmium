@@ -3,7 +3,7 @@ use cadmium_engine::{
     draw_up::DrawUpRequest,
     engine::PaintEngine,
     gpu::GpuContext,
-    pigments::{Mixture, PigmentDb},
+    pigments::{MAX_SLOTS, Mixture, PigmentDb},
     session::{ClearOutcome, PaintSession},
     stroke::{StrokeSample, Tool},
     surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec},
@@ -674,4 +674,31 @@ fn the_blender_and_the_rag_draw_up_nothing() {
         assert_eq!(taken.volume, 0.0);
     }
     assert_eq!(s.tray.wet_totals(&gpu).unwrap().volume, squeezed);
+}
+
+#[test]
+fn a_blade_full_at_its_middle_closes_the_loading_ring() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    blob(&gpu, &mut s, 1);
+    s.brush.tool = Tool::Knife;
+    s.clean_brush(&gpu);
+    s.brush.geometry.max_diameter_px = 10.0;
+    let mut fractions = [0.0; MAX_SLOTS];
+    fractions[0] = 1.0;
+    s.dip(
+        &gpu,
+        &Mixture {
+            volume_um: 200.0,
+            fractions,
+        },
+        1.0,
+    )
+    .unwrap();
+    s.brush.geometry.max_diameter_px = 40.0;
+    s.begin_hold(&gpu, Surface::Tray);
+    let drawn = s.draw_up(&gpu, touch(1.0, 0.1)).unwrap();
+    s.end_hold();
+    assert!(drawn.taken.volume < 1.0);
+    assert_eq!(drawn.level, 1.0);
 }

@@ -213,12 +213,13 @@ impl PaintSession {
         let region = draw_up_region(self.canvas_of(surface), self.engine.params(), &request);
         let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
         let (drawer, history) = (&self.drawer, &mut self.history);
-        self.engine.draw_up(gpu, into_knife, |room_um| {
+        let (taken, level) = self.engine.draw_up(gpu, into_knife, |room_um| {
             let Some(region) = region else {
                 return Ok(PaintTotals::default());
             };
             take_from(gpu, drawer, history, canvas, &request, &region, room_um)
-        })
+        })?;
+        Ok(DrawnUp { taken, level })
     }
 
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {

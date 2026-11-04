@@ -31,17 +31,6 @@ pub struct DrawnUp {
     pub level: f32,
 }
 
-impl DrawnUp {
-    pub(crate) fn after(held_um: f32, capacity_um: f32, taken: PaintTotals) -> DrawnUp {
-        let level = if capacity_um > 0.0 {
-            ((held_um + taken.volume as f32) / capacity_um).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        DrawnUp { taken, level }
-    }
-}
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct DrawUpRecord {
