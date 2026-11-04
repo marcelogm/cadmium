@@ -24,7 +24,8 @@ pub struct Nozzle {
     pub seconds: f32,
 }
 
-const STILL_NOZZLE_PX: f32 = 0.5;
+const STILL_REACH_OF_RADIUS: f32 = 0.25;
+const BLOB_SETTLE_SECONDS: f32 = 0.25;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -32,50 +33,53 @@ struct SqueezeRecord {
     segment_start: [f32; 2],
     segment_end: [f32; 2],
     radius: f32,
-    crest_um: f32,
-    grown_um: f32,
+    height_um: f32,
     max_um: f32,
     slot: u32,
-    blob: u32,
-    start_cap: u32,
-    _pad: u32,
     origin: [i32; 2],
     size: [u32; 2],
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Squeezed {
-    Blob { grown_um: f32 },
-    Cord { crest_um: f32, start_cap: bool },
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Dwell {
+    anchor: [f32; 2],
+    seconds: f32,
 }
 
-pub(crate) fn squeezed(
-    nozzle: &Nozzle,
-    params: &SimParams,
-    continues_cord_at: Option<[f32; 2]>,
-) -> Option<Squeezed> {
+pub(crate) fn dwell_after(previous: Option<Dwell>, nozzle: &Nozzle) -> Dwell {
+    let anchor = previous.map_or(nozzle.from, |dwell| dwell.anchor);
+    let seconds = previous.map_or(0.0, |dwell| dwell.seconds);
+    let away = (nozzle.to[0] - anchor[0]).hypot(nozzle.to[1] - anchor[1]);
+    if away < STILL_REACH_OF_RADIUS * nozzle.radius {
+        Dwell {
+            anchor,
+            seconds: seconds + nozzle.seconds.max(0.0),
+        }
+    } else {
+        Dwell {
+            anchor: nozzle.to,
+            seconds: 0.0,
+        }
+    }
+}
+
+pub(crate) fn squeezed_height_um(nozzle: &Nozzle, params: &SimParams, dwell: Dwell) -> f32 {
     let pressure = nozzle.pressure.clamp(0.0, 1.0);
     let seconds = nozzle.seconds.max(0.0);
-    if pressure.is_nan() || seconds.is_nan() || pressure <= 0.0 || seconds <= 0.0 {
-        return None;
+    if pressure.is_nan() || pressure <= 0.0 || seconds <= 0.0 {
+        return 0.0;
     }
-    let length = (nozzle.to[0] - nozzle.from[0]).hypot(nozzle.to[1] - nozzle.from[1]);
-    if length < STILL_NOZZLE_PX {
-        return Some(Squeezed::Blob {
-            grown_um: params.get("tube_flow_um_per_s") * pressure * seconds,
-        });
-    }
-    Some(Squeezed::Cord {
-        crest_um: params.get("tube_cord_um") * pressure,
-        start_cap: continues_cord_at != Some(nozzle.from),
-    })
+    let crest = params.get("tube_cord_um") * pressure;
+    let settled = (dwell.seconds - BLOB_SETTLE_SECONDS).max(0.0);
+    let grown = params.get("tube_flow_um_per_s") * pressure * settled;
+    (crest + grown).min(params.get("tube_max_um"))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct SqueezeRegion {
     pub origin: [i32; 2],
     pub size: [u32; 2],
-    pub squeezed: Squeezed,
+    pub height_um: f32,
 }
 
 impl SqueezeRegion {
@@ -88,7 +92,7 @@ pub(crate) fn squeeze_region(
     canvas: &Canvas,
     params: &SimParams,
     nozzle: &Nozzle,
-    continues_cord_at: Option<[f32; 2]>,
+    dwell: Dwell,
 ) -> Option<SqueezeRegion> {
     let finite =
         nozzle.from.iter().chain(&nozzle.to).all(|v| v.is_finite()) && nozzle.radius.is_finite();
@@ -96,7 +100,10 @@ pub(crate) fn squeeze_region(
     if !finite || !on_a_slot || nozzle.radius <= 0.0 {
         return None;
     }
-    let squeezed = squeezed(nozzle, params, continues_cord_at)?;
+    let height_um = squeezed_height_um(nozzle, params, dwell);
+    if height_um.is_nan() || height_um <= 0.0 {
+        return None;
+    }
     let first =
         [0, 1].map(|axis| (nozzle.from[axis].min(nozzle.to[axis]) - nozzle.radius).floor() as i32);
     let last =
@@ -106,7 +113,7 @@ pub(crate) fn squeeze_region(
     Some(SqueezeRegion {
         origin,
         size,
-        squeezed,
+        height_um,
     })
 }
 
@@ -148,24 +155,13 @@ impl Tube {
         region: &SqueezeRegion,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let (grown_um, crest_um, start_cap) = match region.squeezed {
-            Squeezed::Blob { grown_um } => (grown_um, 0.0, true),
-            Squeezed::Cord {
-                crest_um,
-                start_cap,
-            } => (0.0, crest_um, start_cap),
-        };
         let record = SqueezeRecord {
             segment_start: nozzle.from,
             segment_end: nozzle.to,
             radius: nozzle.radius,
-            crest_um,
-            grown_um,
+            height_um: region.height_um,
             max_um: params.get("tube_max_um"),
             slot: nozzle.slot as u32,
-            blob: u32::from(matches!(region.squeezed, Squeezed::Blob { .. })),
-            start_cap: u32::from(start_cap),
-            _pad: 0,
             origin: region.origin,
             size: region.size,
         };
@@ -208,72 +204,97 @@ impl Tube {
 mod tests {
     use super::*;
 
-    fn nozzle(length: f32, seconds: f32) -> Nozzle {
+    fn nozzle(to: [f32; 2], seconds: f32) -> Nozzle {
         Nozzle {
             from: [0.0, 0.0],
-            to: [length, 0.0],
-            radius: 10.0,
+            to,
+            radius: 8.0,
             slot: 0,
             pressure: 1.0,
             seconds,
         }
     }
 
-    fn crest(squeezed: Option<Squeezed>) -> f32 {
-        match squeezed {
-            Some(Squeezed::Cord { crest_um, .. }) => crest_um,
-            other => panic!("not a cord: {other:?}"),
+    fn held_for(seconds: f32) -> Dwell {
+        Dwell {
+            anchor: [0.0, 0.0],
+            seconds,
         }
     }
 
     #[test]
-    fn a_fast_and_a_slow_nozzle_raise_the_same_cord() {
+    fn a_nozzle_within_a_quarter_radius_of_its_anchor_keeps_dwelling() {
+        let dwell = dwell_after(Some(held_for(0.5)), &nozzle([1.9, 0.0], 0.1));
+        assert_eq!(dwell.anchor, [0.0, 0.0]);
+        assert!((dwell.seconds - 0.6).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_nozzle_that_leaves_its_anchor_starts_dwelling_afresh_where_it_is() {
+        let dwell = dwell_after(Some(held_for(0.5)), &nozzle([2.1, 0.0], 0.1));
+        assert_eq!(dwell.anchor, [2.1, 0.0]);
+        assert_eq!(dwell.seconds, 0.0);
+    }
+
+    #[test]
+    fn the_first_squeeze_of_a_hold_dwells_from_where_it_touched() {
+        let dwell = dwell_after(None, &nozzle([0.5, 0.0], 0.1));
+        assert_eq!(dwell.anchor, [0.0, 0.0]);
+        assert!((dwell.seconds - 0.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_moving_nozzle_raises_the_cord_whatever_its_speed() {
         let params = SimParams::default();
+        let cord = params.get("tube_cord_um");
+        for to in [[3.0, 0.0], [100.0, 0.0]] {
+            let moving = nozzle(to, 0.02);
+            let height = squeezed_height_um(&moving, &params, dwell_after(None, &moving));
+            assert_eq!(height, cord);
+        }
+    }
+
+    #[test]
+    fn a_blob_grows_only_after_the_nozzle_settles() {
+        let params = SimParams::default();
+        let still = nozzle([0.0, 0.0], 0.02);
+        let height = |seconds| squeezed_height_um(&still, &params, held_for(seconds));
+        assert_eq!(height(BLOB_SETTLE_SECONDS), params.get("tube_cord_um"));
+        assert!(height(BLOB_SETTLE_SECONDS + 0.2) > height(BLOB_SETTLE_SECONDS + 0.1));
+    }
+
+    #[test]
+    fn a_blob_never_rises_above_the_tube_height() {
+        let params = SimParams::default();
+        let still = nozzle([0.0, 0.0], 0.02);
         assert_eq!(
-            crest(squeezed(&nozzle(5.0, 0.1), &params, None)),
-            crest(squeezed(&nozzle(100.0, 0.01), &params, None))
+            squeezed_height_um(&still, &params, held_for(60.0)),
+            params.get("tube_max_um")
         );
     }
 
     #[test]
     fn pressing_harder_raises_the_cord() {
         let params = SimParams::default();
+        let hard = nozzle([20.0, 0.0], 0.1);
         let soft = Nozzle {
             pressure: 0.3,
-            ..nozzle(20.0, 0.1)
+            ..hard
         };
         assert!(
-            crest(squeezed(&nozzle(20.0, 0.1), &params, None))
-                > crest(squeezed(&soft, &params, None))
+            squeezed_height_um(&hard, &params, held_for(0.0))
+                > squeezed_height_um(&soft, &params, held_for(0.0))
         );
-    }
-
-    #[test]
-    fn a_nozzle_that_barely_moved_grows_a_blob_with_time() {
-        let params = SimParams::default();
-        let grown = |seconds| match squeezed(&nozzle(0.2, seconds), &params, None) {
-            Some(Squeezed::Blob { grown_um }) => grown_um,
-            other => panic!("not a blob: {other:?}"),
-        };
-        assert!(grown(0.2) > grown(0.1));
-    }
-
-    #[test]
-    fn a_cord_drops_its_start_cap_only_where_the_last_cord_ended() {
-        let params = SimParams::default();
-        let start_cap = |continues| match squeezed(&nozzle(20.0, 0.1), &params, continues) {
-            Some(Squeezed::Cord { start_cap, .. }) => start_cap,
-            other => panic!("not a cord: {other:?}"),
-        };
-        assert!(start_cap(None));
-        assert!(start_cap(Some([5.0, 0.0])));
-        assert!(!start_cap(Some([0.0, 0.0])));
     }
 
     #[test]
     fn no_time_squeezes_nothing() {
         let params = SimParams::default();
-        assert_eq!(squeezed(&nozzle(0.0, 0.0), &params, None), None);
-        assert_eq!(squeezed(&nozzle(30.0, 0.0), &params, None), None);
+        for to in [[0.0, 0.0], [30.0, 0.0]] {
+            assert_eq!(
+                squeezed_height_um(&nozzle(to, 0.0), &params, held_for(1.0)),
+                0.0
+            );
+        }
     }
 }

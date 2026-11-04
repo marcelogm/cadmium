@@ -138,7 +138,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     ),
     spec(
         "tube_flow_um_per_s",
-        "Vazão do tubo (µm/s)",
+        "Crescimento da gota (µm/s)",
         ParamGroup::Tools,
         20.0,
         2000.0,
@@ -149,7 +149,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         "Altura do cordão (µm)",
         ParamGroup::Tools,
         20.0,
-        800.0,
+        500.0,
         300.0,
     ),
     spec(

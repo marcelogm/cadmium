@@ -253,8 +253,8 @@ fn queued_dabs_land_on_the_surface_they_were_painted_on() {
 
 fn still_nozzle(slot: usize, seconds: f32) -> Nozzle {
     Nozzle {
-        from: [300.0, 300.0],
-        to: [300.0, 300.0],
+        from: [300.5, 300.5],
+        to: [300.5, 300.5],
         radius: 12.0,
         slot,
         pressure: 1.0,
@@ -298,11 +298,49 @@ fn a_still_tube_grows_its_blob() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     s.begin_hold(&gpu, Surface::Tray);
-    s.squeeze(&gpu, still_nozzle(0, 0.1));
-    let once = s.tray.wet_totals(&gpu).unwrap().volume;
-    s.squeeze(&gpu, still_nozzle(0, 0.1));
+    s.squeeze(&gpu, still_nozzle(0, 0.4));
+    let once = tray_heights(&gpu, &s)(300, 300);
+    s.squeeze(&gpu, still_nozzle(0, 0.2));
     s.end_hold();
-    assert!(s.tray.wet_totals(&gpu).unwrap().volume > 1.5 * once);
+    let cord = s.engine.params().get("tube_cord_um");
+    assert!(once > cord);
+    assert!(tray_heights(&gpu, &s)(300, 300) > once);
+}
+
+#[test]
+fn a_held_tube_keeps_growing_through_a_trembling_hand() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let trembling = |frame: usize| {
+        let shake = if frame.is_multiple_of(2) { 0.6 } else { -0.6 };
+        [300.5 + shake, 300.5 - shake]
+    };
+    let held = |s: &mut PaintSession, frames: std::ops::Range<usize>| {
+        for frame in frames {
+            s.squeeze(
+                &gpu,
+                Nozzle {
+                    from: trembling(frame),
+                    to: trembling(frame + 1),
+                    radius: CORD_RADIUS,
+                    slot: 0,
+                    pressure: 0.5,
+                    seconds: FRAME_SECONDS,
+                },
+            );
+        }
+    };
+    s.begin_hold(&gpu, Surface::Tray);
+    held(&mut s, 0..30);
+    let early = tray_heights(&gpu, &s)(300, 300);
+    held(&mut s, 30..60);
+    let later = tray_heights(&gpu, &s)(300, 300);
+    held(&mut s, 60..400);
+    s.end_hold();
+    let tallest = tray_heights(&gpu, &s)(300, 300);
+    let max = s.engine.params().get("tube_max_um");
+    assert!(later > early, "{early} -> {later}");
+    assert!(tallest <= max && tallest > 0.95 * max, "{tallest}");
 }
 
 const FRAME_SECONDS: f32 = 1.0 / 60.0;
@@ -311,6 +349,18 @@ const CORD_RADIUS: f32 = 8.0;
 fn drag_tube(
     gpu: &GpuContext,
     s: &mut PaintSession,
+    from: [f32; 2],
+    to: [f32; 2],
+    frames: usize,
+    pressure: f32,
+) {
+    drag_tube_of(gpu, s, 0, from, to, frames, pressure);
+}
+
+fn drag_tube_of(
+    gpu: &GpuContext,
+    s: &mut PaintSession,
+    slot: usize,
     from: [f32; 2],
     to: [f32; 2],
     frames: usize,
@@ -331,7 +381,7 @@ fn drag_tube(
                 from: at(frame),
                 to: at(frame + 1),
                 radius: CORD_RADIUS,
-                slot: 0,
+                slot,
                 pressure,
                 seconds: FRAME_SECONDS,
             },
@@ -355,7 +405,20 @@ fn a_moving_tube_lays_an_even_cord_without_beads_at_the_frame_joints() {
     let lowest = along.iter().copied().fold(f32::INFINITY, f32::min);
     let highest = along.iter().copied().fold(0.0, f32::max);
     assert!(lowest > 0.0);
-    assert!(highest / lowest <= 1.15, "{lowest}..{highest}");
+    assert!(highest / lowest <= 1.001, "{lowest}..{highest}");
+}
+
+#[test]
+fn a_very_slow_drag_lays_the_same_even_cord_as_a_brisk_one() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube(&gpu, &mut s, [200.0, 200.5], [260.0, 200.5], 300, 1.0);
+    drag_tube(&gpu, &mut s, [200.0, 400.5], [260.0, 400.5], 4, 1.0);
+    let height = tray_heights(&gpu, &s);
+    let brisk = height(230, 400);
+    for x in 205..255 {
+        assert!((height(x, 200) - brisk).abs() <= 1e-3 * brisk, "{x}");
+    }
 }
 
 #[test]
@@ -406,6 +469,19 @@ fn a_tube_crossing_its_own_cord_does_not_double_it() {
         (after - before).abs() < 0.01 * before,
         "{before} -> {after}"
     );
+}
+
+#[test]
+fn a_tube_crossing_another_pigment_lays_its_own_colour_there() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube_of(&gpu, &mut s, 1, [100.0, 200.5], [400.0, 200.5], 10, 1.0);
+    drag_tube_of(&gpu, &mut s, 0, [250.5, 100.0], [250.5, 300.0], 10, 0.5);
+    let height = tray_heights(&gpu, &s)(250, 200);
+    let low = s.tray.read_f32(&gpu, StateTexture::WetPig0).unwrap();
+    let ultramarine = low[(200 * TRAY_WIDTH as usize + 250) * 4] * height;
+    let crest = s.engine.params().get("tube_cord_um") * 0.5;
+    assert!(ultramarine > 0.98 * crest, "{ultramarine} of {crest}");
 }
 
 #[test]
@@ -533,6 +609,8 @@ fn a_long_still_squeeze_stops_at_the_tube_height() {
         .into_iter()
         .fold(0.0, f32::max);
     assert_eq!(tallest, s.engine.params().get("tube_max_um"));
+    let rim = tray_heights(&gpu, &s)(300, 310);
+    assert!(rim < 0.75 * tallest, "{rim}");
 }
 
 #[test]

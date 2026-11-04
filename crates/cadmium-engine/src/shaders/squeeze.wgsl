@@ -2,13 +2,9 @@ struct Squeeze {
     segment_start: vec2<f32>,
     segment_end: vec2<f32>,
     radius: f32,
-    crest_um: f32,
-    grown_um: f32,
+    height_um: f32,
     max_um: f32,
     slot: u32,
-    blob: u32,
-    start_cap: u32,
-    pad: u32,
     origin: vec2<i32>,
     size: vec2<u32>,
 };
@@ -20,24 +16,10 @@ const EMPTY_VOLUME_UM: f32 = 1e-4;
 @group(0) @binding(2) var wet_pig1: texture_storage_2d<rgba16float, read_write>;
 @group(0) @binding(3) var wet_vol: texture_storage_2d<r32float, read_write>;
 
-fn along_segment(point: vec2<f32>) -> f32 {
+fn distance_to_segment(point: vec2<f32>) -> f32 {
     let along = squeeze.segment_end - squeeze.segment_start;
-    return dot(point - squeeze.segment_start, along) / max(dot(along, along), 1e-6);
-}
-
-fn distance_to_segment(point: vec2<f32>, along: f32) -> f32 {
-    let nearest = mix(squeeze.segment_start, squeeze.segment_end, clamp(along, 0.0, 1.0));
-    return distance(point, nearest);
-}
-
-fn squeezed_um(along: f32, dome: f32, volume: f32) -> f32 {
-    if (squeeze.blob != 0u) {
-        return min(squeeze.grown_um * dome, max(squeeze.max_um - volume, 0.0));
-    }
-    if (squeeze.start_cap == 0u && along <= 0.0) {
-        return 0.0;
-    }
-    return max(min(squeeze.crest_um * dome, squeeze.max_um) - volume, 0.0);
+    let t = dot(point - squeeze.segment_start, along) / max(dot(along, along), 1e-6);
+    return distance(point, mix(squeeze.segment_start, squeeze.segment_end, clamp(t, 0.0, 1.0)));
 }
 
 @compute @workgroup_size(8, 8)
@@ -46,21 +28,20 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let pixel = squeeze.origin + vec2<i32>(id.xy);
-    let point = vec2<f32>(pixel) + vec2<f32>(0.5);
-    let along = along_segment(point);
-    let reach = distance_to_segment(point, along) / squeeze.radius;
+    let reach = distance_to_segment(vec2<f32>(pixel) + vec2<f32>(0.5)) / squeeze.radius;
     if (reach > 1.0) {
         return;
     }
     let dome = sqrt(max(1.0 - reach * reach, 0.0));
     let volume = max(textureLoad(wet_vol, pixel).x, 0.0);
-    let added = squeezed_um(along, dome, volume);
+    let low = textureLoad(wet_pig0, pixel);
+    let high = textureLoad(wet_pig1, pixel);
+    let own = max(slot_lane(low, high, squeeze.slot), 0.0) * volume;
+    let added = min(max(squeeze.height_um * dome - own, 0.0), max(squeeze.max_um - volume, 0.0));
     if (added <= 0.0) {
         return;
     }
     let total = volume + added;
-    let low = textureLoad(wet_pig0, pixel);
-    let high = textureLoad(wet_pig1, pixel);
     var fractions = array<f32, 8>();
     if (total >= EMPTY_VOLUME_UM) {
         for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {

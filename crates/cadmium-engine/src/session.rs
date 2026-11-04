@@ -13,7 +13,7 @@ use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::{Nozzle, Squeezed, Tube, squeeze_region};
+use crate::tube::{Dwell, Nozzle, Tube, dwell_after, squeeze_region};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -30,10 +30,9 @@ pub enum ClearOutcome {
     Cleared { undoable: bool },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
 struct Hold {
     surface: Surface,
-    cord_end: Option<[f32; 2]>,
+    dwell: Option<Dwell>,
 }
 
 pub struct PaintSession {
@@ -172,7 +171,7 @@ impl PaintSession {
         self.history.begin_step(surface);
         self.hold = Some(Hold {
             surface,
-            cord_end: None,
+            dwell: None,
         });
     }
 
@@ -187,20 +186,16 @@ impl PaintSession {
     }
 
     pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) -> bool {
-        let Some(Hold { surface, cord_end }) = self.hold else {
+        let Some(hold) = self.hold.as_mut() else {
             return false;
         };
-        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
+        let dwell = dwell_after(hold.dwell, &nozzle);
+        hold.dwell = Some(dwell);
+        let canvas = surface_canvas(hold.surface, &mut self.canvas, &mut self.tray);
         let params = self.engine.params();
-        let Some(region) = squeeze_region(canvas, params, &nozzle, cord_end) else {
+        let Some(region) = squeeze_region(canvas, params, &nozzle, dwell) else {
             return false;
         };
-        if let Squeezed::Cord { .. } = region.squeezed {
-            self.hold = Some(Hold {
-                surface,
-                cord_end: Some(nozzle.to),
-            });
-        }
         let [x0, y0, x1, y1] = region.rect();
         let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
         let mut encoder = new_encoder(gpu, "squeeze");
