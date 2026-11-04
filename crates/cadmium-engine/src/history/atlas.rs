@@ -108,12 +108,12 @@ impl History {
         tile_extent(canvas, tile)
             .zip(self.atlas.as_ref())
             .into_iter()
-            .flat_map(move |(extent, atlas)| atlas.tile_copies(canvas, tile, slot, extent))
+            .flat_map(move |(extent, atlas)| atlas.copies_at(canvas, tile, slot, extent))
     }
 }
 
 impl Atlas {
-    fn tile_copies<'a>(
+    fn copies_at<'a>(
         &'a self,
         canvas: &'a Canvas,
         tile: TileCoord,

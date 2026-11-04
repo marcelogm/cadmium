@@ -46,21 +46,15 @@ impl PaintSession {
         spec: CanvasSpec,
         previous: CanvasSpec,
     ) -> Result<(), CanvasError> {
-        let (canvas, replaced) = new_canvas_or_blank(gpu, &self.db, spec, previous);
-        if let Some(canvas) = canvas {
-            self.canvas = canvas;
-        }
-        replaced
+        let built = new_canvas_or_blank(gpu, &self.db, spec, previous);
+        replace_if_built(&mut self.canvas, built)
     }
 
     fn rebuild_tray(&mut self, gpu: &GpuContext) -> Result<(), CanvasError> {
         let painting_tray = tray_spec(&self.canvas.spec.pigment_slots);
         let blank = placeholder_spec(&painting_tray);
-        let (tray, rebuilt) = new_canvas_or_blank(gpu, &self.db, painting_tray, blank);
-        if let Some(tray) = tray {
-            self.tray = tray;
-        }
-        rebuilt
+        let built = new_canvas_or_blank(gpu, &self.db, painting_tray, blank);
+        replace_if_built(&mut self.tray, built)
     }
 }
 
@@ -74,6 +68,16 @@ fn new_canvas_or_blank(
         Ok(canvas) => (Some(canvas), Ok(())),
         Err(error) => (Canvas::new(gpu, db, blank).ok(), Err(error)),
     }
+}
+
+fn replace_if_built(
+    target: &mut Canvas,
+    (built, outcome): (Option<Canvas>, Result<(), CanvasError>),
+) -> Result<(), CanvasError> {
+    if let Some(canvas) = built {
+        *target = canvas;
+    }
+    outcome
 }
 
 fn placeholder_spec(spec: &CanvasSpec) -> CanvasSpec {

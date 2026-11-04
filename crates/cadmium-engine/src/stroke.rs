@@ -14,7 +14,8 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 5] = [
+    #[cfg(test)]
+    pub(crate) const ALL: [Tool; 5] = [
         Tool::Brush,
         Tool::Knife,
         Tool::Blender,

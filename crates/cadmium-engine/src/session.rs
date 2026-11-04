@@ -81,10 +81,7 @@ impl PaintSession {
     }
 
     pub fn canvas_of(&self, surface: Surface) -> &Canvas {
-        match surface {
-            Surface::Painting => &self.canvas,
-            Surface::Tray => &self.tray,
-        }
+        surface_canvas(surface, &self.canvas, &self.tray)
     }
 
     pub fn canvas_of_mut(&mut self, surface: Surface) -> &mut Canvas {
@@ -171,11 +168,7 @@ impl PaintSession {
     }
 }
 
-fn surface_canvas<'a>(
-    surface: Surface,
-    painting: &'a mut Canvas,
-    tray: &'a mut Canvas,
-) -> &'a mut Canvas {
+fn surface_canvas<C>(surface: Surface, painting: C, tray: C) -> C {
     match surface {
         Surface::Painting => painting,
         Surface::Tray => tray,
