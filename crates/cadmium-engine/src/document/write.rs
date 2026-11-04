@@ -18,7 +18,6 @@ const ZSTD_LEVEL: i32 = 3;
 const PARTIAL_SUFFIX: &str = ".part";
 
 impl DocumentSnapshot {
-    #[expect(clippy::excessive_nesting)]
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
         let format = self.file_format();
         let manifest = Manifest {
@@ -30,34 +29,40 @@ impl DocumentSnapshot {
         };
         let manifest = serde_json::to_vec_pretty(&manifest)
             .map_err(|error| DocumentError::Format(error.to_string()))?;
-        let tray_spec = tray_spec(&self.spec.pigment_slots);
-        write_replacing(path, |file| {
-            let mut archive = zip::ZipWriter::new(file);
-            let options = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
-            archive.start_file(MANIFEST_ENTRY, options)?;
-            archive.write_all(&manifest)?;
-            write_states(
-                &mut archive,
-                options,
-                format,
-                PAINTING_PREFIX,
-                &self.spec,
-                &self.states,
-            )?;
-            if let Some(tray) = &self.tray {
-                write_states(&mut archive, options, format, TRAY_PREFIX, &tray_spec, tray)?;
-            }
-            archive.finish()?;
-            Ok(())
-        })
+        write_replacing(path, |file| self.write_archive(file, format, &manifest))
+    }
+
+    fn write_archive(
+        &self,
+        file: &mut BufWriter<File>,
+        format: u32,
+        manifest: &[u8],
+    ) -> Result<(), DocumentError> {
+        let mut archive = zip::ZipWriter::new(file);
+        archive.start_file(MANIFEST_ENTRY, stored_entry())?;
+        archive.write_all(manifest)?;
+        write_states(
+            &mut archive,
+            format,
+            PAINTING_PREFIX,
+            &self.spec,
+            &self.states,
+        )?;
+        if let Some(tray) = &self.tray {
+            let tray_spec = tray_spec(&self.spec.pigment_slots);
+            write_states(&mut archive, format, TRAY_PREFIX, &tray_spec, tray)?;
+        }
+        archive.finish()?;
+        Ok(())
     }
 }
 
-#[expect(clippy::too_many_arguments)]
+fn stored_entry() -> zip::write::SimpleFileOptions {
+    zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored)
+}
+
 fn write_states<W: Write + std::io::Seek>(
     archive: &mut zip::ZipWriter<W>,
-    options: zip::write::SimpleFileOptions,
     format: u32,
     prefix: &str,
     spec: &CanvasSpec,
@@ -80,7 +85,7 @@ fn write_states<W: Write + std::io::Seek>(
             raw
         };
         let compressed = zstd::encode_all(stored.as_ref(), ZSTD_LEVEL)?;
-        archive.start_file(name, options)?;
+        archive.start_file(name, stored_entry())?;
         archive.write_all(&compressed)?;
     }
     Ok(())
