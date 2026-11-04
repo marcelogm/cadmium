@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -7,12 +7,16 @@ use gtk::{glib, graphene, gsk};
 use oleo_engine::stroke::StrokeSample;
 
 use crate::LOG_DOMAIN;
+use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
 use crate::window::OleoWindow;
 
 const EXIT_AFTER_FRAMES: &str = "OLEO_SMOKE_EXIT_AFTER_FRAMES";
 const SCREENSHOT: &str = "OLEO_SMOKE_SCREENSHOT";
 const DIALOG: &str = "OLEO_SMOKE_DIALOG";
 const STROKE: &str = "OLEO_SMOKE_STROKE";
+const DMABUF_SELFTEST: &str = "OLEO_SMOKE_DMABUF_SELFTEST";
+const PRESENT_MODE: &str = "OLEO_PRESENT";
+const LINEAR_PRESENT_MODE: &str = "linear";
 const DEFAULT_EXIT_AFTER_FRAMES: u32 = 30;
 const STROKE_PIGMENT: &str = "ultramarine_blue";
 const STROKE_SAMPLES: usize = 60;
@@ -69,6 +73,13 @@ pub struct SmokeConfig {
     pub screenshot: Option<PathBuf>,
     pub dialog: Option<SmokeDialog>,
     pub stroke: bool,
+    pub dmabuf_selftest: Option<DmabufSelftestMode>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DmabufSelftestMode {
+    AnyModifier,
+    OnlyLinear,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -147,7 +158,19 @@ impl SmokeConfig {
             .map(PathBuf::from);
         let dialog = lookup(DIALOG);
         let stroke = lookup(STROKE).is_some_and(|value| !value.is_empty() && value != "0");
-        if exit_after_frames.is_none() && screenshot.is_none() && dialog.is_none() && !stroke {
+        let dmabuf_selftest = lookup(DMABUF_SELFTEST).map(|_| {
+            if lookup(PRESENT_MODE).is_some_and(|mode| mode == LINEAR_PRESENT_MODE) {
+                DmabufSelftestMode::OnlyLinear
+            } else {
+                DmabufSelftestMode::AnyModifier
+            }
+        });
+        if exit_after_frames.is_none()
+            && screenshot.is_none()
+            && dialog.is_none()
+            && !stroke
+            && dmabuf_selftest.is_none()
+        {
             return None;
         }
         let dialog = dialog.and_then(|value| parse_or_warn(DIALOG, &value));
@@ -159,6 +182,7 @@ impl SmokeConfig {
             screenshot,
             dialog,
             stroke,
+            dmabuf_selftest,
         })
     }
 
@@ -174,6 +198,10 @@ impl SmokeConfig {
     }
 
     pub fn run(self, app: &adw::Application, window: &OleoWindow) {
+        if let Some(mode) = self.dmabuf_selftest {
+            run_dmabuf_selftest(app, window, mode);
+            return;
+        }
         let app = app.downgrade();
         let steps = self.steps();
         let drawn = Cell::new(0u32);
@@ -247,6 +275,39 @@ fn paint_stroke(window: &OleoWindow) {
     state.add_samples(&samples[1..]);
     state.end_stroke();
     canvas.queue_present();
+}
+
+fn run_dmabuf_selftest(app: &adw::Application, window: &OleoWindow, mode: DmabufSelftestMode) {
+    let app = app.downgrade();
+    let selftest: RefCell<Option<DmabufSelftest>> = RefCell::new(None);
+    window.add_tick_callback(move |window, _| {
+        let mut selftest = selftest.borrow_mut();
+        let progress = match selftest.as_mut() {
+            Some(running) => running.tick(window),
+            None => match DmabufSelftest::start(window, mode == DmabufSelftestMode::OnlyLinear) {
+                Ok(started) => {
+                    *selftest = Some(started);
+                    SelftestProgress::Running
+                }
+                Err(error) => SelftestProgress::Failed(error),
+            },
+        };
+        match progress {
+            SelftestProgress::Running => glib::ControlFlow::Continue,
+            SelftestProgress::Passed(summary) => {
+                println!("dmabuf selftest: ok {summary}");
+                *selftest = None;
+                if let Some(app) = app.upgrade() {
+                    app.quit();
+                }
+                glib::ControlFlow::Break
+            }
+            SelftestProgress::Failed(reason) => {
+                println!("dmabuf selftest: failed {reason}");
+                std::process::exit(1);
+            }
+        }
+    });
 }
 
 fn parse_or_warn<T: std::str::FromStr>(name: &str, value: &OsString) -> Option<T> {
@@ -370,6 +431,25 @@ mod tests {
                 .windows(2)
                 .all(|pair| pair[1].time_ms > pair[0].time_ms)
         );
+    }
+
+    #[test]
+    fn dmabuf_selftest_alone_starts_a_smoke_run() {
+        let config = SmokeConfig::from_lookup(lookup(&[(DMABUF_SELFTEST, "1")])).unwrap();
+        assert_eq!(
+            config.dmabuf_selftest,
+            Some(DmabufSelftestMode::AnyModifier)
+        );
+    }
+
+    #[test]
+    fn linear_present_mode_restricts_the_dmabuf_selftest_to_linear() {
+        let config = SmokeConfig::from_lookup(lookup(&[
+            (DMABUF_SELFTEST, "1"),
+            (PRESENT_MODE, LINEAR_PRESENT_MODE),
+        ]))
+        .unwrap();
+        assert_eq!(config.dmabuf_selftest, Some(DmabufSelftestMode::OnlyLinear));
     }
 
     #[test]

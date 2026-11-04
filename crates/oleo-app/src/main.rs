@@ -1,6 +1,8 @@
 mod application;
 mod canvas_widget;
 mod dialogs;
+mod dmabuf;
+mod dmabuf_selftest;
 mod input;
 mod new_painting_dialog;
 mod presenter;
