@@ -4,6 +4,10 @@ use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
     PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
 };
+use super::steps::{
+    STROKE_PRESSURE_END, STROKE_PRESSURE_START, STROKE_SAMPLES, SmokeDialog, SmokeStep,
+    smoke_stroke,
+};
 use super::*;
 
 fn lookup<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
