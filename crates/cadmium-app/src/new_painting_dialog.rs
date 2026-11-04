@@ -4,15 +4,20 @@ use std::time::Duration;
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use cadmium_engine::canvas::{CanvasSpec, MAX_CANVAS_SIZE, Primer, Weave, primer_srgb8};
-use cadmium_engine::pigments::{MAX_SLOTS, PigmentDb};
+use cadmium_engine::pigments::PigmentDb;
 use gtk::{gio, glib};
 
 use crate::LOG_DOMAIN;
 use crate::presets::PIGMENT_PRESETS;
 use crate::swatch::{Swatch, SwatchShape};
 
-pub const MIN_SIDE: u32 = 64;
-pub const SIDE_STEP: u32 = 64;
+mod format;
+mod imp;
+mod selection;
+
+use format::{MIN_SIDE, PaintingFormat, SIDE_STEP};
+use selection::{PigmentSelection, counter_text};
+
 const CONTENT_WIDTH: i32 = 560;
 const COUNTER_FLASH: Duration = Duration::from_millis(700);
 const CHIP_SWATCH_SIZE: i32 = 16;
@@ -33,137 +38,6 @@ pub const WEAVES: [(Weave, &str); 3] = [
     (Weave::Smooth, "Lisa"),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PaintingFormat {
-    Landscape4x3,
-    Portrait3x4,
-    Square,
-    Landscape16x9,
-    Custom,
-}
-
-impl PaintingFormat {
-    pub const ALL: [PaintingFormat; 5] = [
-        PaintingFormat::Landscape4x3,
-        PaintingFormat::Portrait3x4,
-        PaintingFormat::Square,
-        PaintingFormat::Landscape16x9,
-        PaintingFormat::Custom,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            PaintingFormat::Landscape4x3 => "Paisagem 4:3",
-            PaintingFormat::Portrait3x4 => "Retrato 3:4",
-            PaintingFormat::Square => "Quadrado",
-            PaintingFormat::Landscape16x9 => "Paisagem 16:9",
-            PaintingFormat::Custom => "Personalizado",
-        }
-    }
-
-    fn aspect(self) -> Option<(u32, u32)> {
-        match self {
-            PaintingFormat::Landscape4x3 => Some((4, 3)),
-            PaintingFormat::Portrait3x4 => Some((3, 4)),
-            PaintingFormat::Square => Some((1, 1)),
-            PaintingFormat::Landscape16x9 => Some((16, 9)),
-            PaintingFormat::Custom => None,
-        }
-    }
-
-    pub fn size_keeping_long_side(self, width: u32, height: u32) -> Option<(u32, u32)> {
-        let (aspect_width, aspect_height) = self.aspect()?;
-        let long = width.max(height).clamp(MIN_SIDE, MAX_CANVAS_SIZE);
-        let short = |long_part: u32, short_part: u32| {
-            ((long as f64 * short_part as f64 / long_part as f64).round() as u32)
-                .clamp(MIN_SIDE, MAX_CANVAS_SIZE)
-        };
-        Some(if aspect_width >= aspect_height {
-            (long, short(aspect_width, aspect_height))
-        } else {
-            (short(aspect_height, aspect_width), long)
-        })
-    }
-
-    pub fn matching(width: u32, height: u32) -> PaintingFormat {
-        PaintingFormat::ALL
-            .into_iter()
-            .find(|format| format.size_keeping_long_side(width, height) == Some((width, height)))
-            .unwrap_or(PaintingFormat::Custom)
-    }
-
-    fn index(self) -> u32 {
-        PaintingFormat::ALL
-            .iter()
-            .position(|format| *format == self)
-            .unwrap_or_default() as u32
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct PigmentSelection {
-    available: Vec<&'static str>,
-    chosen: Vec<&'static str>,
-}
-
-impl PigmentSelection {
-    pub fn new(db: &PigmentDb, initial: &[String]) -> Self {
-        let mut selection = PigmentSelection {
-            available: db.all().iter().map(|pigment| pigment.id).collect(),
-            chosen: Vec::new(),
-        };
-        for id in initial {
-            selection.set(id, true);
-        }
-        selection
-    }
-
-    pub fn contains(&self, id: &str) -> bool {
-        self.chosen.contains(&id)
-    }
-
-    pub fn count(&self) -> usize {
-        self.chosen.len()
-    }
-
-    pub fn set(&mut self, id: &str, chosen: bool) -> bool {
-        let Some(&id) = self.available.iter().find(|known| **known == id) else {
-            return !chosen;
-        };
-        match (chosen, self.contains(id)) {
-            (true, true) | (false, false) => true,
-            (false, true) => {
-                self.chosen.retain(|kept| *kept != id);
-                true
-            }
-            (true, false) if self.count() < MAX_SLOTS => {
-                self.chosen.push(id);
-                true
-            }
-            (true, false) => false,
-        }
-    }
-
-    pub fn apply_preset(&mut self, pigments: &[&str]) {
-        self.chosen.clear();
-        for id in pigments {
-            self.set(id, true);
-        }
-    }
-
-    pub fn slots(&self) -> Vec<String> {
-        self.available
-            .iter()
-            .filter(|id| self.contains(id))
-            .map(|id| id.to_string())
-            .collect()
-    }
-}
-
-pub fn counter_text(count: usize) -> String {
-    format!("{count} de {MAX_SLOTS}")
-}
-
 struct Widgets {
     format_row: adw::ComboRow,
     width_row: adw::SpinRow,
@@ -178,39 +52,6 @@ struct Widgets {
 }
 
 type CreateHandler = Box<dyn Fn(&NewPaintingDialog, CanvasSpec)>;
-
-mod imp {
-    use super::*;
-
-    #[derive(Default)]
-    pub struct NewPaintingDialog {
-        pub(super) widgets: OnceCell<Widgets>,
-        pub selection: RefCell<Option<PigmentSelection>>,
-        pub syncing_size: Cell<bool>,
-        pub counter_flash: RefCell<Option<glib::SourceId>>,
-        pub create_handlers: RefCell<Vec<CreateHandler>>,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for NewPaintingDialog {
-        const NAME: &'static str = "CadmiumNewPaintingDialog";
-        type Type = super::NewPaintingDialog;
-        type ParentType = adw::Dialog;
-    }
-
-    impl ObjectImpl for NewPaintingDialog {
-        #[expect(clippy::excessive_nesting)]
-        fn dispose(&self) {
-            if let Some(source) = self.counter_flash.take() {
-                source.remove();
-            }
-            self.create_handlers.borrow_mut().clear();
-        }
-    }
-
-    impl WidgetImpl for NewPaintingDialog {}
-    impl AdwDialogImpl for NewPaintingDialog {}
-}
 
 glib::wrapper! {
     pub struct NewPaintingDialog(ObjectSubclass<imp::NewPaintingDialog>)
@@ -631,156 +472,4 @@ fn pigment_chip(name: &str, colour_index: &str, colour: [u8; 3]) -> gtk::ToggleB
         .tooltip_text(format!("{name} ({colour_index})"))
         .css_classes(["card", "pigment-chip"])
         .build()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::presets::{ZORN, starting_canvas_spec};
-
-    #[test]
-    fn landscape_format_keeps_the_long_side_of_a_portrait_size() {
-        assert_eq!(
-            PaintingFormat::Landscape4x3.size_keeping_long_side(2304, 3072),
-            Some((3072, 2304))
-        );
-    }
-
-    #[test]
-    fn portrait_format_puts_the_long_side_vertically() {
-        assert_eq!(
-            PaintingFormat::Portrait3x4.size_keeping_long_side(2048, 1536),
-            Some((1536, 2048))
-        );
-    }
-
-    #[test]
-    fn square_and_widescreen_formats_derive_the_short_side() {
-        assert_eq!(
-            PaintingFormat::Square.size_keeping_long_side(2048, 1536),
-            Some((2048, 2048))
-        );
-        assert_eq!(
-            PaintingFormat::Landscape16x9.size_keeping_long_side(1536, 2048),
-            Some((2048, 1152))
-        );
-    }
-
-    #[test]
-    fn custom_format_leaves_the_size_alone() {
-        assert_eq!(
-            PaintingFormat::Custom.size_keeping_long_side(1000, 700),
-            None
-        );
-    }
-
-    #[test]
-    fn short_side_never_drops_below_the_minimum() {
-        assert_eq!(
-            PaintingFormat::Landscape16x9.size_keeping_long_side(64, 64),
-            Some((64, 64))
-        );
-    }
-
-    #[test]
-    fn size_with_a_known_aspect_is_recognised_as_that_format() {
-        assert_eq!(
-            PaintingFormat::matching(2048, 1536),
-            PaintingFormat::Landscape4x3
-        );
-        assert_eq!(
-            PaintingFormat::matching(1536, 2048),
-            PaintingFormat::Portrait3x4
-        );
-        assert_eq!(PaintingFormat::matching(1024, 1024), PaintingFormat::Square);
-        assert_eq!(PaintingFormat::matching(1000, 700), PaintingFormat::Custom);
-    }
-
-    #[test]
-    fn starting_painting_size_is_recognised_as_landscape() {
-        let spec = starting_canvas_spec();
-        assert_eq!(
-            PaintingFormat::matching(spec.width, spec.height),
-            PaintingFormat::Landscape4x3
-        );
-    }
-
-    #[test]
-    fn ninth_pigment_is_refused() {
-        let db = PigmentDb::builtin();
-        let mut selection = PigmentSelection::new(&db, &starting_canvas_spec().pigment_slots);
-        assert!(!selection.set("zinc_white", true));
-        assert!(!selection.contains("zinc_white"));
-        assert_eq!(selection.count(), MAX_SLOTS);
-    }
-
-    #[test]
-    fn rechoosing_a_pigment_in_a_full_selection_is_accepted() {
-        let db = PigmentDb::builtin();
-        let mut selection = PigmentSelection::new(&db, &starting_canvas_spec().pigment_slots);
-        assert!(selection.set("titanium_white", true));
-        assert_eq!(selection.count(), MAX_SLOTS);
-    }
-
-    #[test]
-    fn dropping_a_pigment_frees_a_slot() {
-        let db = PigmentDb::builtin();
-        let mut selection = PigmentSelection::new(&db, &starting_canvas_spec().pigment_slots);
-        assert!(selection.set("phthalo_blue", false));
-        assert!(selection.set("zinc_white", true));
-        assert_eq!(selection.count(), MAX_SLOTS);
-    }
-
-    #[test]
-    fn unknown_pigment_cannot_be_chosen() {
-        let db = PigmentDb::builtin();
-        let mut selection = PigmentSelection::new(&db, &[]);
-        assert!(!selection.set("mars_violet", true));
-        assert_eq!(selection.count(), 0);
-    }
-
-    #[test]
-    fn slots_follow_the_pigment_database_order() {
-        let db = PigmentDb::builtin();
-        let mut selection = PigmentSelection::new(&db, &[]);
-        selection.set("ivory_black", true);
-        selection.set("titanium_white", true);
-        assert_eq!(selection.slots(), ["titanium_white", "ivory_black"]);
-    }
-
-    #[test]
-    fn every_preset_yields_a_valid_canvas_spec() {
-        let db = PigmentDb::builtin();
-        for preset in &PIGMENT_PRESETS {
-            let mut selection = PigmentSelection::new(&db, &[]);
-            selection.apply_preset(preset.pigments);
-            assert_eq!(selection.count(), preset.pigments.len(), "{}", preset.name);
-            let spec = CanvasSpec {
-                pigment_slots: selection.slots(),
-                ..starting_canvas_spec()
-            };
-            assert!(spec.validate(&db).is_ok(), "{}", preset.name);
-        }
-    }
-
-    #[test]
-    fn applying_a_preset_replaces_the_selection() {
-        let db = PigmentDb::builtin();
-        let mut selection = PigmentSelection::new(&db, &starting_canvas_spec().pigment_slots);
-        selection.apply_preset(ZORN);
-        assert_eq!(
-            selection.slots(),
-            [
-                "titanium_white",
-                "yellow_ochre",
-                "cadmium_red",
-                "ivory_black"
-            ]
-        );
-    }
-
-    #[test]
-    fn counter_reads_n_of_eight() {
-        assert_eq!(counter_text(6), "6 de 8");
-    }
 }
