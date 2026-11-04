@@ -99,6 +99,7 @@ const PENDING_ACTIONS: [&str; 4] = ["open", "save", "save-as", "export"];
 const ZOOM_PERCENT: f32 = 100.0;
 const DRIED_TOAST: &str = "Tela seca";
 const UNDO_LABEL: &str = "Desfazer";
+const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indisponível)";
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
@@ -154,6 +155,16 @@ impl OleoWindow {
             #[weak(rename_to = window)]
             self,
             move |_| window.sync_history_actions()
+        ));
+        canvas.connect_presentation_fallback(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| {
+                window
+                    .imp()
+                    .toast_overlay
+                    .add_toast(adw::Toast::new(COPY_PRESENTATION_TOAST));
+            }
         ));
         self.imp().canvas_slot.append(&canvas);
         let state = canvas.state();

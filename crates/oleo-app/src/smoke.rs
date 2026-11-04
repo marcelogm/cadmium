@@ -7,7 +7,9 @@ use gtk::{glib, graphene, gsk};
 use oleo_engine::stroke::StrokeSample;
 
 use crate::LOG_DOMAIN;
+use crate::dmabuf::ModifierPolicy;
 use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
+use crate::presenter::PresentMode;
 use crate::window::OleoWindow;
 
 const EXIT_AFTER_FRAMES: &str = "OLEO_SMOKE_EXIT_AFTER_FRAMES";
@@ -17,7 +19,6 @@ const STROKE: &str = "OLEO_SMOKE_STROKE";
 const PAGE: &str = "OLEO_SMOKE_PAGE";
 const DMABUF_SELFTEST: &str = "OLEO_SMOKE_DMABUF_SELFTEST";
 const PRESENT_MODE: &str = "OLEO_PRESENT";
-const LINEAR_PRESENT_MODE: &str = "linear";
 const DEFAULT_EXIT_AFTER_FRAMES: u32 = 30;
 const STROKE_PIGMENT: &str = "ultramarine_blue";
 const STROKE_SAMPLES: usize = 60;
@@ -75,13 +76,7 @@ pub struct SmokeConfig {
     pub dialog: Option<SmokeDialog>,
     pub stroke: bool,
     pub page: Option<String>,
-    pub dmabuf_selftest: Option<DmabufSelftestMode>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DmabufSelftestMode {
-    AnyModifier,
-    OnlyLinear,
+    pub dmabuf_selftest: Option<ModifierPolicy>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,10 +161,11 @@ impl SmokeConfig {
             .filter(|value| !value.is_empty())
             .map(|value| value.to_string_lossy().into_owned());
         let dmabuf_selftest = lookup(DMABUF_SELFTEST).map(|_| {
-            if lookup(PRESENT_MODE).is_some_and(|mode| mode == LINEAR_PRESENT_MODE) {
-                DmabufSelftestMode::OnlyLinear
-            } else {
-                DmabufSelftestMode::AnyModifier
+            match lookup(PRESENT_MODE)
+                .and_then(|mode| mode.to_str().and_then(PresentMode::from_name))
+            {
+                Some(PresentMode::Dmabuf(policy)) => policy,
+                _ => ModifierPolicy::Any,
             }
         });
         if exit_after_frames.is_none()
@@ -289,14 +285,14 @@ fn paint_stroke(window: &OleoWindow) {
     window.refresh_panels();
 }
 
-fn run_dmabuf_selftest(app: &adw::Application, window: &OleoWindow, mode: DmabufSelftestMode) {
+fn run_dmabuf_selftest(app: &adw::Application, window: &OleoWindow, policy: ModifierPolicy) {
     let app = app.downgrade();
     let selftest: RefCell<Option<DmabufSelftest>> = RefCell::new(None);
     window.add_tick_callback(move |window, _| {
         let mut selftest = selftest.borrow_mut();
         let progress = match selftest.as_mut() {
             Some(running) => running.tick(window),
-            None => match DmabufSelftest::start(window, mode == DmabufSelftestMode::OnlyLinear) {
+            None => match DmabufSelftest::start(window, policy) {
                 Ok(started) => {
                     *selftest = Some(started);
                     SelftestProgress::Running
@@ -473,20 +469,25 @@ mod tests {
     #[test]
     fn dmabuf_selftest_alone_starts_a_smoke_run() {
         let config = SmokeConfig::from_lookup(lookup(&[(DMABUF_SELFTEST, "1")])).unwrap();
-        assert_eq!(
-            config.dmabuf_selftest,
-            Some(DmabufSelftestMode::AnyModifier)
-        );
+        assert_eq!(config.dmabuf_selftest, Some(ModifierPolicy::Any));
     }
 
     #[test]
     fn linear_present_mode_restricts_the_dmabuf_selftest_to_linear() {
+        let config =
+            SmokeConfig::from_lookup(lookup(&[(DMABUF_SELFTEST, "1"), (PRESENT_MODE, "linear")]))
+                .unwrap();
+        assert_eq!(config.dmabuf_selftest, Some(ModifierPolicy::LinearOnly));
+    }
+
+    #[test]
+    fn nodcc_present_mode_keeps_the_dmabuf_selftest_off_compressed_modifiers() {
         let config = SmokeConfig::from_lookup(lookup(&[
             (DMABUF_SELFTEST, "1"),
-            (PRESENT_MODE, LINEAR_PRESENT_MODE),
+            (PRESENT_MODE, "dmabuf-nodcc"),
         ]))
         .unwrap();
-        assert_eq!(config.dmabuf_selftest, Some(DmabufSelftestMode::OnlyLinear));
+        assert_eq!(config.dmabuf_selftest, Some(ModifierPolicy::NoCompression));
     }
 
     #[test]

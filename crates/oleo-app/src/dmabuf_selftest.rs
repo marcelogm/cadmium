@@ -4,7 +4,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 use oleo_engine::gpu::GpuContext;
 
-use crate::dmabuf::DmabufPool;
+use crate::dmabuf::{DmabufPool, ModifierPolicy};
 
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 128;
@@ -222,7 +222,7 @@ pub struct DmabufSelftest {
 impl DmabufSelftest {
     pub fn start(
         window: &impl IsA<gtk::Native>,
-        only_linear: bool,
+        policy: ModifierPolicy,
     ) -> Result<DmabufSelftest, String> {
         let gpu = GpuContext::new().map_err(|error| error.to_string())?;
         let pass = PatternPass::new(&gpu);
@@ -233,7 +233,7 @@ impl DmabufSelftest {
             .map(|renderer| renderer.type_().name().to_string())
             .unwrap_or_else(|| "none".into());
         let fds_before = FdCensus::take();
-        let pool = DmabufPool::new(&gpu, &display, WIDTH, HEIGHT, only_linear)
+        let pool = DmabufPool::new(&gpu, &display, WIDTH, HEIGHT, policy)
             .map_err(|error| error.to_string())?;
         if pool.size() != (WIDTH, HEIGHT) {
             return Err(format!("pool size {:?}", pool.size()));

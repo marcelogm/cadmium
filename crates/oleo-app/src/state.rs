@@ -43,6 +43,21 @@ pub fn recipe_from_fractions(fractions: &[f32; MAX_SLOTS]) -> Vec<(usize, f32)> 
         .collect()
 }
 
+pub fn recipe_for_palette(
+    recipe: &[(usize, f32)],
+    old_palette: &[String],
+    new_palette: &[String],
+) -> Vec<(usize, f32)> {
+    recipe
+        .iter()
+        .filter_map(|(slot, share)| {
+            let pigment = old_palette.get(*slot)?;
+            let slot = new_palette.iter().position(|id| id == pigment)?;
+            Some((slot, *share))
+        })
+        .collect()
+}
+
 pub fn is_render_param(key: &str) -> bool {
     SimParams::specs()
         .iter()
@@ -59,6 +74,10 @@ pub struct PenReadout {
 }
 
 impl PenReadout {
+    pub fn observe_hover(&mut self, sample: &StrokeSample) {
+        self.record(sample, None);
+    }
+
     pub fn record(&mut self, sample: &StrokeSample, previous_time_ms: Option<u32>) {
         self.pressure = sample.pressure;
         self.tilt_x = sample.tilt_x_deg;
@@ -80,6 +99,7 @@ impl PenReadout {
 }
 
 pub type SharedState = Rc<RefCell<AppState>>;
+pub type Waker = Rc<dyn Fn()>;
 
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
@@ -91,9 +111,10 @@ pub struct AppState {
     pub pen: PenReadout,
     pub loaded_mixture: Mixture,
     stroking: bool,
-    tool_after_stroke: Option<Tool>,
+    resting_tool: Tool,
     samples_since_frame: u32,
     last_sample_time_ms: Option<u32>,
+    waker: Option<Waker>,
 }
 
 impl AppState {
@@ -101,6 +122,7 @@ impl AppState {
         let mut session = PaintSession::new(&gpu, spec);
         session.brush.recipe = starting_recipe(&session.canvas.spec.pigment_slots);
         session.brush.load = STARTING_LOAD;
+        let resting_tool = session.brush.tool;
         let mut state = AppState {
             gpu,
             session,
@@ -115,21 +137,37 @@ impl AppState {
             pen: PenReadout::default(),
             loaded_mixture: EMPTY_MIXTURE,
             stroking: false,
-            tool_after_stroke: None,
+            resting_tool,
             samples_since_frame: 0,
             last_sample_time_ms: None,
+            waker: None,
         };
         state.reload_brush();
         state
     }
 
+    pub fn set_waker(&mut self, waker: Waker) {
+        self.waker = Some(waker);
+    }
+
+    fn wake(&self) {
+        if let Some(waker) = &self.waker {
+            waker();
+        }
+    }
+
     pub fn start_painting(&mut self, spec: CanvasSpec) {
         self.end_stroke();
         let mut brush = self.session.brush.clone();
+        brush.tool = self.resting_tool;
         let params = self.session.engine.params().clone();
+        let old_palette = self.session.canvas.spec.pigment_slots.clone();
         self.session = PaintSession::new(&self.gpu, spec);
-        let slot_count = self.slot_count();
-        brush.recipe.retain(|(slot, _)| *slot < slot_count);
+        brush.recipe = recipe_for_palette(
+            &brush.recipe,
+            &old_palette,
+            &self.session.canvas.spec.pigment_slots,
+        );
         if brush.recipe.is_empty() {
             brush.recipe = starting_recipe(&self.session.canvas.spec.pigment_slots);
         }
@@ -138,6 +176,7 @@ impl AppState {
         self.reload_brush();
         self.dirty_since_save = false;
         self.file = None;
+        self.wake();
     }
 
     pub fn slot_count(&self) -> usize {
@@ -161,6 +200,7 @@ impl AppState {
         let mixture = self.session.pick_color(&self.gpu, x, y);
         self.session.brush.recipe = recipe_from_fractions(&mixture.fractions);
         self.loaded_mixture = mixture;
+        self.wake();
     }
 
     pub fn brush_is_empty(&self) -> bool {
@@ -174,6 +214,7 @@ impl AppState {
         let session = &mut self.session;
         let slot = session.canvas.add_slot(&self.gpu, &session.db, id)?;
         self.dirty_since_save = true;
+        self.wake();
         Ok(slot)
     }
 
@@ -181,12 +222,14 @@ impl AppState {
         self.end_stroke();
         self.session.dry(&self.gpu);
         self.dirty_since_save = true;
+        self.wake();
     }
 
     pub fn undo(&mut self) -> bool {
         self.end_stroke();
         let undone = self.session.undo(&self.gpu);
         self.dirty_since_save |= undone;
+        self.wake();
         undone
     }
 
@@ -194,6 +237,7 @@ impl AppState {
         self.end_stroke();
         let redone = self.session.redo(&self.gpu);
         self.dirty_since_save |= redone;
+        self.wake();
         redone
     }
 
@@ -210,6 +254,7 @@ impl AppState {
         if self.session.view_mode != mode {
             self.session.view_mode = mode;
             self.session.canvas.dirty.mark_all();
+            self.wake();
         }
     }
 
@@ -217,12 +262,14 @@ impl AppState {
         self.session.engine.params_mut().set(key, value);
         if is_render_param(key) {
             self.session.canvas.dirty.mark_all();
+            self.wake();
         }
     }
 
     pub fn reset_params(&mut self) {
         *self.session.engine.params_mut() = SimParams::default();
         self.session.canvas.dirty.mark_all();
+        self.wake();
     }
 
     pub fn set_ui_tool(&mut self, tool: UiTool) {
@@ -230,11 +277,14 @@ impl AppState {
         let UiTool::Paint(paint_tool) = tool else {
             return;
         };
-        if self.tool_after_stroke.is_some() {
-            self.tool_after_stroke = Some(paint_tool);
-        } else {
+        self.resting_tool = paint_tool;
+        if !self.stroking {
             self.session.brush.tool = paint_tool;
         }
+    }
+
+    pub fn observe_hover_pen(&mut self, sample: &StrokeSample) {
+        self.pen.observe_hover(sample);
     }
 
     pub fn is_stroking(&self) -> bool {
@@ -243,14 +293,12 @@ impl AppState {
 
     pub fn begin_stroke(&mut self, tool: Tool, sample: StrokeSample) {
         self.end_stroke();
-        if self.session.brush.tool != tool {
-            self.tool_after_stroke = Some(self.session.brush.tool);
-            self.session.brush.tool = tool;
-        }
+        self.session.brush.tool = tool;
         self.session.begin_stroke(&self.gpu, sample);
         self.stroking = true;
         self.last_sample_time_ms = None;
         self.note_samples(std::slice::from_ref(&sample));
+        self.wake();
     }
 
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {
@@ -259,6 +307,7 @@ impl AppState {
         }
         self.session.add_samples(samples);
         self.note_samples(samples);
+        self.wake();
     }
 
     pub fn end_stroke(&mut self) {
@@ -268,14 +317,13 @@ impl AppState {
         self.session.end_stroke(&self.gpu);
         self.stroking = false;
         self.dirty_since_save = true;
+        self.wake();
     }
 
     pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
         self.session.encode_frame(&self.gpu, encoder);
-        if !self.stroking
-            && let Some(tool) = self.tool_after_stroke.take()
-        {
-            self.session.brush.tool = tool;
+        if !self.stroking {
+            self.session.brush.tool = self.resting_tool;
         }
         self.pen.samples_last_frame = std::mem::take(&mut self.samples_since_frame);
     }
@@ -291,7 +339,100 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
+    use oleo_engine::canvas::StateTexture;
+
     use super::*;
+    use crate::presets::starting_canvas_spec;
+
+    const TEST_CANVAS: (u32, u32) = (512, 256);
+    const TEST_BRUSH_DIAMETER_PX: f32 = 16.0;
+    const PAINT_ROW_Y: f64 = 60.0;
+    const RAG_ROW_Y: f64 = 200.0;
+    const STROKE_STEPS: u32 = 20;
+
+    fn painting_state() -> AppState {
+        let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
+        let spec = CanvasSpec {
+            width: TEST_CANVAS.0,
+            height: TEST_CANVAS.1,
+            ..starting_canvas_spec()
+        };
+        let mut state = AppState::new(gpu, spec);
+        state.session.brush.geometry.max_diameter_px = TEST_BRUSH_DIAMETER_PX;
+        state.reload_brush();
+        state
+    }
+
+    fn row_samples(y: f64) -> Vec<StrokeSample> {
+        (0..STROKE_STEPS)
+            .map(|step| StrokeSample {
+                x: 100.0 + f64::from(step) * 10.0,
+                y,
+                pressure: 1.0,
+                tilt_x_deg: 0.0,
+                tilt_y_deg: 0.0,
+                time_ms: step * 8,
+            })
+            .collect()
+    }
+
+    fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
+        state.begin_stroke(tool, samples[0]);
+        state.add_samples(&samples[1..]);
+        state.end_stroke();
+    }
+
+    fn present_one_frame(state: &mut AppState) {
+        let gpu = state.gpu.clone();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        state.encode_frame(&mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+    }
+
+    fn wet_volume(state: &AppState) -> f32 {
+        state
+            .session
+            .canvas
+            .read_f32(&state.gpu, StateTexture::WetVol)
+            .iter()
+            .sum()
+    }
+
+    #[test]
+    fn a_stroke_still_queued_when_the_eraser_comes_down_is_painted_with_its_own_brush() {
+        let mut state = painting_state();
+        stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+        stroke(&mut state, Tool::Rag, &row_samples(RAG_ROW_Y));
+        present_one_frame(&mut state);
+        assert!(wet_volume(&state) > 0.0);
+        assert_eq!(state.session.brush.tool, Tool::Brush);
+    }
+
+    #[test]
+    fn tool_chosen_mid_stroke_waits_for_the_stroke_to_end() {
+        let mut state = painting_state();
+        let samples = row_samples(PAINT_ROW_Y);
+        state.begin_stroke(Tool::Brush, samples[0]);
+        state.set_ui_tool(UiTool::Paint(Tool::Rag));
+        state.add_samples(&samples[1..]);
+        assert_eq!(state.session.brush.tool, Tool::Brush);
+        state.end_stroke();
+        present_one_frame(&mut state);
+        assert!(wet_volume(&state) > 0.0);
+        assert_eq!(state.session.brush.tool, Tool::Rag);
+    }
+
+    #[test]
+    fn recipe_follows_its_pigments_into_the_new_palette() {
+        let old: Vec<String> = ["white", "blue", "red"].map(String::from).to_vec();
+        let new: Vec<String> = ["red", "white"].map(String::from).to_vec();
+        assert_eq!(
+            recipe_for_palette(&[(0, 0.5), (1, 0.2), (2, 0.3)], &old, &new),
+            [(1, 0.5), (0, 0.3)]
+        );
+    }
 
     fn sample_at(time_ms: u32) -> StrokeSample {
         StrokeSample {

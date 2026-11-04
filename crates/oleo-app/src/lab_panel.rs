@@ -334,28 +334,45 @@ impl LabPanel {
     }
 
     fn follow_pen(self: &Rc<Self>) {
+        let ticking: Rc<RefCell<Option<gtk::TickCallbackId>>> = Rc::default();
         let panel = Rc::downgrade(self);
-        let shown = RefCell::new(None::<[String; 4]>);
-        self.root.add_tick_callback(move |root, _| {
-            let Some(panel) = panel.upgrade() else {
-                return glib::ControlFlow::Break;
-            };
-            if !root.is_mapped() {
-                return glib::ControlFlow::Continue;
-            }
-            let Ok(state) = panel.state.try_borrow() else {
-                return glib::ControlFlow::Continue;
-            };
-            let texts = pen_texts(&state.pen);
-            drop(state);
-            if shown.borrow().as_ref() != Some(&texts) {
-                for (label, text) in panel.pen_labels.iter().zip(&texts) {
-                    label.set_label(text);
+        self.root.connect_map(glib::clone!(
+            #[strong]
+            ticking,
+            move |root| {
+                let panel = panel.clone();
+                let shown = RefCell::new(None::<[String; 4]>);
+                let tick = root.add_tick_callback(move |_, _| {
+                    let Some(panel) = panel.upgrade() else {
+                        return glib::ControlFlow::Break;
+                    };
+                    panel.show_pen(&shown);
+                    glib::ControlFlow::Continue
+                });
+                if let Some(previous) = ticking.replace(Some(tick)) {
+                    previous.remove();
                 }
-                shown.replace(Some(texts));
             }
-            glib::ControlFlow::Continue
+        ));
+        self.root.connect_unmap(move |_| {
+            if let Some(tick) = ticking.take() {
+                tick.remove();
+            }
         });
+    }
+
+    fn show_pen(&self, shown: &RefCell<Option<[String; 4]>>) {
+        let Ok(state) = self.state.try_borrow() else {
+            return;
+        };
+        let texts = pen_texts(&state.pen);
+        drop(state);
+        if shown.borrow().as_ref() != Some(&texts) {
+            for (label, text) in self.pen_labels.iter().zip(&texts) {
+                label.set_label(text);
+            }
+            shown.replace(Some(texts));
+        }
     }
 }
 

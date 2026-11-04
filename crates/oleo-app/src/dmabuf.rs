@@ -1,7 +1,8 @@
 use std::fmt;
+use std::marker::PhantomData;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use ash::vk;
 use gtk::gdk;
@@ -14,20 +15,15 @@ const PRESENT_VK_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 const PRESENT_WGPU_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PRESENT_FOURCC: u32 = drm_fourcc::DrmFourcc::Abgr8888 as u32;
 const DRM_FORMAT_MOD_LINEAR: u64 = 0;
+const DRM_FORMAT_MOD_VENDOR_SHIFT: u64 = 56;
+const DRM_FORMAT_MOD_VENDOR_AMD: u64 = 0x02;
+const AMD_FMT_MOD_DCC_BIT: u64 = 1 << 13;
 
-const IMAGE_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::from_raw(
-    vk::ImageUsageFlags::STORAGE.as_raw()
-        | vk::ImageUsageFlags::TRANSFER_SRC.as_raw()
-        | vk::ImageUsageFlags::SAMPLED.as_raw(),
-);
-const TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::STORAGE_BINDING
-    .union(wgpu::TextureUsages::COPY_SRC)
-    .union(wgpu::TextureUsages::TEXTURE_BINDING);
+const IMAGE_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::STORAGE;
+const TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::STORAGE_BINDING;
 const HAL_TEXTURE_USES: wgpu::TextureUses = wgpu::TextureUses::STORAGE_READ_ONLY
     .union(wgpu::TextureUses::STORAGE_WRITE_ONLY)
-    .union(wgpu::TextureUses::STORAGE_READ_WRITE)
-    .union(wgpu::TextureUses::COPY_SRC)
-    .union(wgpu::TextureUses::RESOURCE);
+    .union(wgpu::TextureUses::STORAGE_READ_WRITE);
 
 const IOC_WRITE: u64 = 1;
 const IOC_READ: u64 = 2;
@@ -53,12 +49,35 @@ const fn ioctl_number(direction: u64, kind: u8, number: u8) -> u64 {
         | number as u64
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModifierPolicy {
+    Any,
+    NoCompression,
+    LinearOnly,
+}
+
+impl ModifierPolicy {
+    fn allows(self, modifier: u64) -> bool {
+        match self {
+            ModifierPolicy::Any => true,
+            ModifierPolicy::NoCompression => !is_compressed(modifier),
+            ModifierPolicy::LinearOnly => modifier == DRM_FORMAT_MOD_LINEAR,
+        }
+    }
+}
+
+fn is_compressed(modifier: u64) -> bool {
+    modifier >> DRM_FORMAT_MOD_VENDOR_SHIFT == DRM_FORMAT_MOD_VENDOR_AMD
+        && modifier & AMD_FMT_MOD_DCC_BIT != 0
+}
+
 #[derive(Debug)]
 pub enum DmabufError {
     Unsupported(String),
     Vulkan(String),
     Gdk(String),
     Io(std::io::Error),
+    Poisoned(String),
 }
 
 impl fmt::Display for DmabufError {
@@ -70,6 +89,9 @@ impl fmt::Display for DmabufError {
             DmabufError::Vulkan(reason) => write!(f, "dmabuf Vulkan failure: {reason}"),
             DmabufError::Gdk(reason) => write!(f, "dmabuf GDK failure: {reason}"),
             DmabufError::Io(error) => write!(f, "dmabuf ioctl failure: {error}"),
+            DmabufError::Poisoned(reason) => {
+                write!(f, "dmabuf pool stopped after an earlier failure: {reason}")
+            }
         }
     }
 }
@@ -112,6 +134,8 @@ pub struct DmabufPool {
     device: wgpu::Device,
     raw_device: ash::Device,
     semaphore_fd: ash::khr::external_semaphore_fd::Device,
+    poisoned: Option<String>,
+    single_submitter: PhantomData<*const ()>,
 }
 
 impl DmabufPool {
@@ -120,7 +144,7 @@ impl DmabufPool {
         display: &gdk::Display,
         width: u32,
         height: u32,
-        only_linear: bool,
+        policy: ModifierPolicy,
     ) -> Result<DmabufPool, DmabufError> {
         if !gpu.supports_dmabuf_export {
             return Err(DmabufError::Unsupported(
@@ -149,11 +173,11 @@ impl DmabufPool {
         let candidates = shared_modifiers(
             &vulkan_modifiers,
             |modifier| gtk_formats.contains(PRESENT_FOURCC, modifier),
-            only_linear,
+            policy,
         );
         if candidates.is_empty() {
             return Err(DmabufError::Unsupported(format!(
-                "no AB24 modifier shared by Vulkan {} and GTK (only_linear={only_linear})",
+                "no AB24 modifier shared by Vulkan {} and GTK under {policy:?}",
                 format_modifiers(&vulkan_modifiers)
             )));
         }
@@ -168,6 +192,8 @@ impl DmabufPool {
             device: gpu.device.clone(),
             raw_device: raw_device.clone(),
             semaphore_fd,
+            poisoned: None,
+            single_submitter: PhantomData,
         };
         let exporter = SlotExporter {
             gpu,
@@ -216,12 +242,26 @@ impl DmabufPool {
         display: &gdk::Display,
         encode: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::Texture),
     ) -> Result<Option<gdk::Texture>, DmabufError> {
+        if let Some(reason) = &self.poisoned {
+            return Err(DmabufError::Poisoned(reason.clone()));
+        }
         let _ = gpu.device.poll(wgpu::PollType::Poll);
         let Some(index) = self.slots.iter().position(DmabufSlot::is_free) else {
             return Ok(None);
         };
-        let slot = &self.slots[index];
+        self.present_into(index, gpu, display, encode)
+            .map(Some)
+            .inspect_err(|error| self.poisoned = Some(error.to_string()))
+    }
 
+    fn present_into(
+        &self,
+        index: usize,
+        gpu: &GpuContext,
+        display: &gdk::Display,
+        encode: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::Texture),
+    ) -> Result<gdk::Texture, DmabufError> {
+        let slot = &self.slots[index];
         let gtk_reads = export_sync_file(&slot.dmabuf)?;
         self.import_temporary_sync_file(slot.readers_done, gtk_reads)?;
 
@@ -233,16 +273,16 @@ impl DmabufPool {
         encode(&mut encoder, &slot.texture);
         let commands = encoder.finish();
 
-        {
-            let queue = hal_queue(gpu)?;
+        let fenced = hal_queue(gpu).map(|queue| {
             queue.add_wait_semaphore(
                 slot.readers_done,
                 None,
                 vk::PipelineStageFlags::ALL_COMMANDS,
             );
             queue.add_signal_semaphore(slot.frame_ready, None);
-        }
+        });
         gpu.queue.submit([commands]);
+        fenced?;
         {
             let queue = hal_queue(gpu)?;
             let wait_left_behind = queue.remove_wait_semaphore(slot.readers_done);
@@ -261,18 +301,10 @@ impl DmabufPool {
             .on_submitted_work_done(move || gpu_done.store(true, Ordering::Release));
 
         let frame_fence = self.export_frame_fence(slot.frame_ready)?;
-        if let Some(fence) = frame_fence
-            && let Err(error) = import_sync_file(&slot.dmabuf, &fence)
-        {
-            slot.released_by_gtk.store(true, Ordering::Release);
-            return Err(error);
+        if let Some(fence) = frame_fence {
+            import_sync_file(&slot.dmabuf, &fence)?;
         }
-
         self.build_texture(display, slot)
-            .map(Some)
-            .inspect_err(|_| {
-                slot.released_by_gtk.store(true, Ordering::Release);
-            })
     }
 
     fn import_temporary_sync_file(
@@ -307,7 +339,8 @@ impl DmabufPool {
         slot: &DmabufSlot,
     ) -> Result<gdk::Texture, DmabufError> {
         let released_by_gtk = Arc::clone(&slot.released_by_gtk);
-        let dmabuf = Arc::clone(&slot.dmabuf);
+        let lent_to_gtk = Arc::new(Mutex::new(Some(Arc::clone(&slot.dmabuf))));
+        let held_by_release = Arc::clone(&lent_to_gtk);
         let builder = gdk::DmabufTextureBuilder::new()
             .set_display(display)
             .set_width(self.width)
@@ -321,10 +354,13 @@ impl DmabufPool {
         unsafe {
             builder.build_with_release_func(move || {
                 released_by_gtk.store(true, Ordering::Release);
-                drop(dmabuf);
+                take_lent_dmabuf(&held_by_release);
             })
         }
-        .map_err(|error| DmabufError::Gdk(error.to_string()))
+        .map_err(|error| {
+            take_lent_dmabuf(&lent_to_gtk);
+            DmabufError::Gdk(error.to_string())
+        })
     }
 }
 
@@ -577,6 +613,10 @@ impl SlotExporter<'_> {
     }
 }
 
+fn take_lent_dmabuf(lent: &Mutex<Option<Arc<OwnedFd>>>) -> Option<Arc<OwnedFd>> {
+    lent.lock().unwrap_or_else(PoisonError::into_inner).take()
+}
+
 fn hal_queue(
     gpu: &GpuContext,
 ) -> Result<impl std::ops::Deref<Target = hal::vulkan::Queue>, DmabufError> {
@@ -587,12 +627,12 @@ fn hal_queue(
 fn shared_modifiers(
     vulkan_modifiers: &[u64],
     gtk_accepts: impl Fn(u64) -> bool,
-    only_linear: bool,
+    policy: ModifierPolicy,
 ) -> Vec<u64> {
     let mut shared: Vec<u64> = vulkan_modifiers
         .iter()
         .copied()
-        .filter(|&modifier| !only_linear || modifier == DRM_FORMAT_MOD_LINEAR)
+        .filter(|&modifier| policy.allows(modifier))
         .filter(|&modifier| gtk_accepts(modifier))
         .collect();
     shared.sort_by_key(|&modifier| modifier == DRM_FORMAT_MOD_LINEAR);
@@ -656,6 +696,15 @@ fn vulkan_exportable_storage_modifiers(
             )
         };
     }
+    single_plane_storage_modifiers(&entries, |modifier| {
+        is_exportable_at_size(instance, physical_device, modifier, width, height)
+    })
+}
+
+fn single_plane_storage_modifiers(
+    entries: &[vk::DrmFormatModifierPropertiesEXT],
+    exportable: impl Fn(u64) -> bool,
+) -> Vec<u64> {
     entries
         .iter()
         .filter(|entry| entry.drm_format_modifier_plane_count == 1)
@@ -665,9 +714,7 @@ fn vulkan_exportable_storage_modifiers(
                 .contains(vk::FormatFeatureFlags::STORAGE_IMAGE)
         })
         .map(|entry| entry.drm_format_modifier)
-        .filter(|&modifier| {
-            is_exportable_at_size(instance, physical_device, modifier, width, height)
-        })
+        .filter(|&modifier| exportable(modifier))
         .collect()
 }
 
@@ -769,6 +816,73 @@ mod tests {
 
     const AMD_DCC_MODIFIER: u64 = 0x0200_0000_0008_2305;
     const AMD_TILED_MODIFIER: u64 = 0x0200_0000_0000_0305;
+    const AMD_GFX10_DCC_MODIFIER: u64 = 0x0200_0000_0004_3b03;
+    const DCC_METADATA_PLANES: u32 = 2;
+
+    trait SendProbe<Marker> {
+        fn probe() {}
+    }
+    impl<T: ?Sized> SendProbe<()> for T {}
+    struct ImplementsSend;
+    impl<T: ?Sized + Send> SendProbe<ImplementsSend> for T {}
+
+    fn modifier_entry(
+        modifier: u64,
+        planes: u32,
+        features: vk::FormatFeatureFlags,
+    ) -> vk::DrmFormatModifierPropertiesEXT {
+        vk::DrmFormatModifierPropertiesEXT {
+            drm_format_modifier: modifier,
+            drm_format_modifier_plane_count: planes,
+            drm_format_modifier_tiling_features: features,
+        }
+    }
+
+    #[test]
+    fn pool_submits_stay_on_the_main_thread() {
+        <DmabufPool as SendProbe<_>>::probe();
+    }
+
+    #[test]
+    fn dcc_before_gfx12_needs_a_metadata_plane_and_cannot_be_one_dmabuf_plane() {
+        let storage = vk::FormatFeatureFlags::STORAGE_IMAGE;
+        let entries = [
+            modifier_entry(AMD_GFX10_DCC_MODIFIER, DCC_METADATA_PLANES, storage),
+            modifier_entry(AMD_DCC_MODIFIER, 1, storage),
+            modifier_entry(DRM_FORMAT_MOD_LINEAR, 1, storage),
+        ];
+        assert_eq!(
+            single_plane_storage_modifiers(&entries, |_| true),
+            vec![AMD_DCC_MODIFIER, DRM_FORMAT_MOD_LINEAR]
+        );
+    }
+
+    #[test]
+    fn modifiers_without_storage_or_export_are_not_presentable() {
+        let entries = [
+            modifier_entry(AMD_TILED_MODIFIER, 1, vk::FormatFeatureFlags::SAMPLED_IMAGE),
+            modifier_entry(AMD_DCC_MODIFIER, 1, vk::FormatFeatureFlags::STORAGE_IMAGE),
+            modifier_entry(
+                DRM_FORMAT_MOD_LINEAR,
+                1,
+                vk::FormatFeatureFlags::STORAGE_IMAGE,
+            ),
+        ];
+        assert_eq!(
+            single_plane_storage_modifiers(&entries, |modifier| modifier != AMD_DCC_MODIFIER),
+            vec![DRM_FORMAT_MOD_LINEAR]
+        );
+    }
+
+    #[test]
+    fn no_compression_policy_drops_amd_dcc_but_keeps_plain_tiling() {
+        let shared = shared_modifiers(
+            &[AMD_DCC_MODIFIER, AMD_TILED_MODIFIER, DRM_FORMAT_MOD_LINEAR],
+            |_| true,
+            ModifierPolicy::NoCompression,
+        );
+        assert_eq!(shared, vec![AMD_TILED_MODIFIER, DRM_FORMAT_MOD_LINEAR]);
+    }
 
     #[test]
     fn dma_buf_sync_file_ioctls_match_the_kernel_uapi() {
@@ -786,7 +900,7 @@ mod tests {
         let shared = shared_modifiers(
             &[DRM_FORMAT_MOD_LINEAR, AMD_DCC_MODIFIER, AMD_TILED_MODIFIER],
             |_| true,
-            false,
+            ModifierPolicy::Any,
         );
         assert_eq!(
             shared,
@@ -799,14 +913,18 @@ mod tests {
         let shared = shared_modifiers(
             &[AMD_DCC_MODIFIER, AMD_TILED_MODIFIER, DRM_FORMAT_MOD_LINEAR],
             |modifier| modifier != AMD_DCC_MODIFIER,
-            false,
+            ModifierPolicy::Any,
         );
         assert_eq!(shared, vec![AMD_TILED_MODIFIER, DRM_FORMAT_MOD_LINEAR]);
     }
 
     #[test]
-    fn only_linear_keeps_just_the_linear_modifier() {
-        let shared = shared_modifiers(&[AMD_DCC_MODIFIER, DRM_FORMAT_MOD_LINEAR], |_| true, true);
+    fn linear_only_policy_keeps_just_the_linear_modifier() {
+        let shared = shared_modifiers(
+            &[AMD_DCC_MODIFIER, DRM_FORMAT_MOD_LINEAR],
+            |_| true,
+            ModifierPolicy::LinearOnly,
+        );
         assert_eq!(shared, vec![DRM_FORMAT_MOD_LINEAR]);
     }
 }

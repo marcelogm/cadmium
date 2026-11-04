@@ -1,4 +1,5 @@
 use std::cell::{Cell, OnceCell, RefCell};
+use std::rc::Rc;
 
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
@@ -6,7 +7,7 @@ use gtk::{gdk, glib, graphene, gsk};
 use oleo_engine::present::ViewTransform;
 
 use crate::presenter::FramePresenter;
-use crate::state::SharedState;
+use crate::state::{AppState, SharedState};
 use crate::view;
 
 const FIT_MARGIN: f64 = 24.0;
@@ -28,6 +29,8 @@ mod imp {
         pub presenter: RefCell<FramePresenter>,
         pub texture: RefCell<Option<gdk::Texture>>,
         pub needs_present: Cell<bool>,
+        pub tick: RefCell<Option<gtk::TickCallbackId>>,
+        pub scale_watch: RefCell<Option<(glib::WeakRef<gdk::Surface>, glib::SignalHandlerId)>>,
         pub hover: Cell<Option<(f64, f64)>>,
         pub user_moved_view: Cell<bool>,
         pub allocated: Cell<(i32, i32)>,
@@ -35,6 +38,7 @@ mod imp {
         pub view_changed_handlers: RefCell<Vec<CanvasHandler>>,
         pub brush_changed_handlers: RefCell<Vec<CanvasHandler>>,
         pub presented_handlers: RefCell<Vec<CanvasHandler>>,
+        pub fallback_handlers: RefCell<Vec<CanvasHandler>>,
     }
 
     #[glib::object_subclass]
@@ -54,15 +58,37 @@ mod imp {
             canvas.set_focus_on_click(true);
             canvas.set_overflow(gtk::Overflow::Hidden);
             canvas.set_cursor_from_name(Some(CANVAS_CURSOR));
-            canvas.add_tick_callback(|canvas, _| {
-                canvas.present_if_needed();
-                glib::ControlFlow::Continue
-            });
-            canvas.connect_scale_factor_notify(|canvas| canvas.queue_present());
+            canvas.connect_scale_factor_notify(|canvas| canvas.follow_scale_change());
         }
     }
 
     impl WidgetImpl for OleoCanvas {
+        fn realize(&self) {
+            self.parent_realize();
+            let canvas = self.obj();
+            if let Some(surface) = canvas.native().and_then(|native| native.surface()) {
+                let handler = surface.connect_scale_notify(glib::clone!(
+                    #[weak]
+                    canvas,
+                    move |_| canvas.follow_scale_change()
+                ));
+                self.scale_watch
+                    .replace(Some((surface.downgrade(), handler)));
+            }
+            canvas.queue_present();
+        }
+
+        fn unrealize(&self) {
+            if let Some((surface, handler)) = self.scale_watch.take()
+                && let Some(surface) = surface.upgrade()
+            {
+                surface.disconnect(handler);
+            }
+            self.texture.replace(None);
+            self.presenter.borrow_mut().release();
+            self.parent_unrealize();
+        }
+
         fn map(&self) {
             self.parent_map();
             self.obj().grab_focus();
@@ -116,6 +142,12 @@ fn append_ring(snapshot: &gtk::Snapshot, x: f32, y: f32, radius: f32, colour: gd
 impl OleoCanvas {
     pub fn new(state: SharedState) -> Self {
         let canvas: OleoCanvas = glib::Object::new();
+        let weak = canvas.downgrade();
+        state.borrow_mut().set_waker(Rc::new(move || {
+            if let Some(canvas) = weak.upgrade() {
+                canvas.queue_present();
+            }
+        }));
         if canvas.imp().state.set(state).is_err() {
             unreachable!("a fresh canvas has no state yet");
         }
@@ -137,6 +169,23 @@ impl OleoCanvas {
 
     pub fn queue_present(&self) {
         self.imp().needs_present.set(true);
+        self.request_frame();
+    }
+
+    fn request_frame(&self) {
+        let imp = self.imp();
+        if imp.tick.borrow().is_some() {
+            return;
+        }
+        let tick = self.add_tick_callback(|canvas, _| {
+            canvas.present_if_needed();
+            if canvas.wants_frame() {
+                return glib::ControlFlow::Continue;
+            }
+            canvas.imp().tick.take();
+            glib::ControlFlow::Break
+        });
+        imp.tick.replace(Some(tick));
     }
 
     pub fn device_scale(&self) -> f64 {
@@ -234,6 +283,13 @@ impl OleoCanvas {
             .push(Box::new(handler));
     }
 
+    pub fn connect_presentation_fallback(&self, handler: impl Fn(&OleoCanvas) + 'static) {
+        self.imp()
+            .fallback_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     pub fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
         self.state().borrow_mut().pick_colour(x as f32, y as f32);
@@ -278,11 +334,46 @@ impl OleoCanvas {
         )
     }
 
+    fn follow_scale_change(&self) {
+        if !self.imp().user_moved_view.get() && self.width() > 0 && self.height() > 0 {
+            self.zoom_fit();
+        }
+        self.queue_present();
+    }
+
+    fn frame_needed(&self, state: &AppState, presenter: &FramePresenter) -> bool {
+        let (width_px, height_px) = self.viewport_px();
+        if width_px == 0 || height_px == 0 {
+            return false;
+        }
+        self.imp().needs_present.get()
+            || state.session.has_pending_work()
+            || !presenter.matches_size(width_px, height_px)
+    }
+
+    fn wants_frame(&self) -> bool {
+        let imp = self.imp();
+        let Some(state) = imp.state.get() else {
+            return false;
+        };
+        let (Ok(state), Ok(presenter)) = (state.try_borrow(), imp.presenter.try_borrow()) else {
+            return true;
+        };
+        self.frame_needed(&state, &presenter)
+    }
+
     fn present_if_needed(&self) {
         if !self.present_frame() {
             return;
         }
-        for handler in self.imp().presented_handlers.borrow().iter() {
+        let imp = self.imp();
+        let fell_back = imp.presenter.borrow_mut().take_fallback_notice();
+        if fell_back {
+            for handler in imp.fallback_handlers.borrow().iter() {
+                handler(self);
+            }
+        }
+        for handler in imp.presented_handlers.borrow().iter() {
             handler(self);
         }
     }
@@ -292,22 +383,21 @@ impl OleoCanvas {
         let Some(state) = imp.state.get() else {
             return false;
         };
-        let (width_px, height_px) = self.viewport_px();
-        if width_px == 0 || height_px == 0 {
+        let Some(native) = self.native() else {
             return false;
-        }
+        };
         let Ok(mut state) = state.try_borrow_mut() else {
             return false;
         };
         let mut presenter = imp.presenter.borrow_mut();
-        let needed = imp.needs_present.get()
-            || state.session.has_pending_work()
-            || !presenter.matches_size(width_px, height_px);
-        if !needed {
+        if !self.frame_needed(&state, &presenter) {
             return false;
         }
+        let (width_px, height_px) = self.viewport_px();
+        let Some(texture) = presenter.present(&mut state, &native, width_px, height_px) else {
+            return false;
+        };
         imp.needs_present.set(false);
-        let texture = presenter.present(&mut state, width_px, height_px);
         imp.texture.replace(Some(texture));
         imp.presented_frames.set(imp.presented_frames.get() + 1);
         self.queue_draw();
