@@ -20,6 +20,7 @@ const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
 const DIALOG: &str = "CADMIUM_SMOKE_DIALOG";
 const STROKE: &str = "CADMIUM_SMOKE_STROKE";
 const PAGE: &str = "CADMIUM_SMOKE_PAGE";
+const TRAY: &str = "CADMIUM_SMOKE_TRAY";
 const TOOL: &str = "CADMIUM_SMOKE_TOOL";
 const TOOL_ACTION: &str = "win.tool";
 const SAVE: &str = "CADMIUM_SMOKE_SAVE";
@@ -86,6 +87,7 @@ pub struct SmokeConfig {
     pub tool: Option<UiTool>,
     pub stroke: bool,
     pub page: Option<String>,
+    pub tray: bool,
     pub save: Option<PathBuf>,
     pub open: Option<PathBuf>,
     pub export: Option<PathBuf>,
@@ -101,6 +103,7 @@ enum SmokeStep {
     Open(PathBuf),
     Export(PathBuf),
     ShowPage(String),
+    ShowTray,
     Screenshot(PathBuf),
     Quit,
 }
@@ -108,7 +111,10 @@ enum SmokeStep {
 impl SmokeStep {
     fn is_ready(&self, frame: u32, earliest_end_frame: u32, window: &CadmiumWindow) -> bool {
         match self {
-            SmokeStep::ChooseTool(_) | SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
+            SmokeStep::ChooseTool(_)
+            | SmokeStep::OpenDialog(_)
+            | SmokeStep::ShowPage(_)
+            | SmokeStep::ShowTray => true,
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
             SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= earliest_end_frame,
@@ -136,6 +142,7 @@ impl SmokeStep {
                 return file_work.advance(|| window.export_to(path.clone()), path);
             }
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
+            SmokeStep::ShowTray => window.show_tray(),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
                     return false;
@@ -228,6 +235,7 @@ impl SmokeConfig {
         let page = lookup(PAGE)
             .filter(|value| !value.is_empty())
             .map(|value| value.to_string_lossy().into_owned());
+        let tray = lookup(TRAY).is_some_and(|value| !value.is_empty() && value != "0");
         let save = lookup(SAVE)
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
@@ -251,6 +259,7 @@ impl SmokeConfig {
             && tool.is_none()
             && !stroke
             && page.is_none()
+            && !tray
             && save.is_none()
             && open.is_none()
             && export.is_none()
@@ -276,6 +285,7 @@ impl SmokeConfig {
             tool,
             stroke,
             page,
+            tray,
             save,
             open,
             export,
@@ -294,6 +304,9 @@ impl SmokeConfig {
         steps.extend(self.open.clone().map(SmokeStep::Open));
         steps.extend(self.export.clone().map(SmokeStep::Export));
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
+        if self.tray {
+            steps.push(SmokeStep::ShowTray);
+        }
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));
         steps.push(SmokeStep::Quit);
         steps
@@ -384,7 +397,7 @@ fn paint_stroke(window: &CadmiumWindow) {
     let tool = state.session.brush.tool;
     state.begin_stroke(tool, samples[0]);
     state.add_samples(&samples[1..]);
-    state.end_stroke();
+    state.release();
     drop(state);
     canvas.queue_present();
     window.refresh_panels();
@@ -570,6 +583,30 @@ mod tests {
                 SmokeStep::Quit,
             ]
         );
+    }
+
+    #[test]
+    fn tray_opens_after_the_page_and_before_the_screenshot() {
+        let config = SmokeConfig::from_lookup(lookup(&[
+            (TRAY, "1"),
+            (PAGE, "lab"),
+            (SCREENSHOT, "/tmp/shot.png"),
+        ]))
+        .unwrap();
+        assert_eq!(
+            config.steps(),
+            [
+                SmokeStep::ShowPage("lab".to_string()),
+                SmokeStep::ShowTray,
+                SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+                SmokeStep::Quit,
+            ]
+        );
+    }
+
+    #[test]
+    fn tray_zero_does_not_open_the_tray() {
+        assert_eq!(SmokeConfig::from_lookup(lookup(&[(TRAY, "0")])), None);
     }
 
     #[test]

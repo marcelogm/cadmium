@@ -7,6 +7,7 @@ pressão leve deixa a placa mais grossa";
 pub enum UiTool {
     Move,
     Paint(Tool),
+    Tube,
 }
 
 impl Default for UiTool {
@@ -16,13 +17,14 @@ impl Default for UiTool {
 }
 
 impl UiTool {
-    pub const ALL: [UiTool; 6] = [
+    pub const ALL: [UiTool; 7] = [
         UiTool::Move,
         UiTool::Paint(Tool::Brush),
         UiTool::Paint(Tool::Knife),
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
         UiTool::Paint(Tool::Eyedropper),
+        UiTool::Tube,
     ];
 
     pub fn from_name(name: &str) -> Option<UiTool> {
@@ -37,6 +39,7 @@ impl UiTool {
             UiTool::Paint(Tool::Blender) => "blender",
             UiTool::Paint(Tool::Rag) => "rag",
             UiTool::Paint(Tool::Eyedropper) => "eyedropper",
+            UiTool::Tube => "tube",
         }
     }
 
@@ -48,6 +51,7 @@ impl UiTool {
             UiTool::Paint(Tool::Blender) => "Misturador",
             UiTool::Paint(Tool::Rag) => "Pano",
             UiTool::Paint(Tool::Eyedropper) => "Conta-gotas",
+            UiTool::Tube => "Tubo",
         }
     }
 
@@ -75,8 +79,22 @@ mod tests {
         let names: Vec<_> = UiTool::ALL.iter().map(|tool| tool.name()).collect();
         assert_eq!(
             names,
-            ["move", "brush", "knife", "blender", "rag", "eyedropper"]
+            [
+                "move",
+                "brush",
+                "knife",
+                "blender",
+                "rag",
+                "eyedropper",
+                "tube"
+            ]
         );
+    }
+
+    #[test]
+    fn the_tube_is_not_an_engine_tool() {
+        assert_eq!(UiTool::from_name(UiTool::Tube.name()), Some(UiTool::Tube));
+        assert_eq!(UiTool::Tube.label(), "Tubo");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 pub mod brush;
 pub mod canvas;
 pub mod document;
+pub mod draw_up;
 pub mod engine;
 pub mod gpu;
 pub mod history;
@@ -11,3 +12,5 @@ pub mod render;
 pub mod session;
 pub mod spectral;
 pub mod stroke;
+pub mod surface;
+pub mod tube;

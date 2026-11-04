@@ -76,7 +76,8 @@ impl GpuContext {
         {
             return Err(GpuError::MissingFeature("rgba16float storage read-write"));
         }
-        let supports_dmabuf_export = adapter_features.contains(DMABUF_EXPORT_FEATURES)
+        let supports_dmabuf_export = cfg!(target_os = "linux")
+            && adapter_features.contains(DMABUF_EXPORT_FEATURES)
             && supports_dmabuf_sync_extensions(&adapter);
 
         let mut required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;

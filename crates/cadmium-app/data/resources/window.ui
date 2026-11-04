@@ -83,6 +83,13 @@
                         <property name="tooltip">Conta-gotas (5)</property>
                       </object>
                     </child>
+                    <child>
+                      <object class="AdwToggle">
+                        <property name="name">tube</property>
+                        <property name="icon-name">cadmium-tube-symbolic</property>
+                        <property name="tooltip">Tubo (6): espreme pigmento puro na bandeja ou na tela; a pressão aperta o tubo</property>
+                      </object>
+                    </child>
                   </object>
                 </property>
                 <child type="end">
@@ -183,41 +190,95 @@
               </object>
             </child>
             <property name="content">
-              <object class="AdwViewStack" id="sidebar_stack">
-                <child>
-                  <object class="AdwViewStackPage">
-                    <property name="name">brush</property>
-                    <property name="title">Pincel</property>
-                    <property name="icon-name">cadmium-brush-symbolic</property>
-                    <property name="child">
-                      <object class="GtkScrolledWindow">
-                        <property name="hscrollbar-policy">never</property>
+              <object class="AdwBottomSheet" id="tray_sheet">
+                <property name="open">False</property>
+                <property name="modal">False</property>
+                <property name="content">
+                  <object class="AdwViewStack" id="sidebar_stack">
+                    <child>
+                      <object class="AdwViewStackPage">
+                        <property name="name">brush</property>
+                        <property name="title">Pincel</property>
+                        <property name="icon-name">cadmium-brush-symbolic</property>
                         <property name="child">
-                          <object class="GtkBox" id="brush_panel_slot">
-                            <property name="orientation">vertical</property>
+                          <object class="GtkScrolledWindow">
+                            <property name="hscrollbar-policy">never</property>
+                            <property name="child">
+                              <object class="GtkBox" id="brush_panel_slot">
+                                <property name="orientation">vertical</property>
+                              </object>
+                            </property>
                           </object>
                         </property>
                       </object>
-                    </property>
-                  </object>
-                </child>
-                <child>
-                  <object class="AdwViewStackPage">
-                    <property name="name">lab</property>
-                    <property name="title">Lab</property>
-                    <property name="icon-name">applications-science-symbolic</property>
-                    <property name="child">
-                      <object class="GtkScrolledWindow">
-                        <property name="hscrollbar-policy">never</property>
+                    </child>
+                    <child>
+                      <object class="AdwViewStackPage">
+                        <property name="name">lab</property>
+                        <property name="title">Lab</property>
+                        <property name="icon-name">applications-science-symbolic</property>
                         <property name="child">
-                          <object class="GtkBox" id="lab_panel_slot">
-                            <property name="orientation">vertical</property>
+                          <object class="GtkScrolledWindow">
+                            <property name="hscrollbar-policy">never</property>
+                            <property name="child">
+                              <object class="GtkBox" id="lab_panel_slot">
+                                <property name="orientation">vertical</property>
+                              </object>
+                            </property>
                           </object>
                         </property>
                       </object>
+                    </child>
+                  </object>
+                </property>
+                <property name="bottom-bar">
+                  <object class="GtkLabel">
+                    <property name="label">Bandeja</property>
+                    <property name="margin-top">12</property>
+                    <property name="margin-bottom">12</property>
+                    <style>
+                      <class name="heading"/>
+                    </style>
+                  </object>
+                </property>
+                <property name="sheet">
+                  <object class="AdwToolbarView">
+                    <child type="top">
+                      <object class="AdwHeaderBar">
+                        <property name="show-title">False</property>
+                        <property name="show-start-title-buttons">False</property>
+                        <property name="show-end-title-buttons">False</property>
+                        <child type="start">
+                          <object class="GtkLabel">
+                            <property name="label">Bandeja</property>
+                            <property name="margin-start">6</property>
+                            <style>
+                              <class name="heading"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child type="end">
+                          <object class="GtkButton">
+                            <property name="icon-name">edit-clear-all-symbolic</property>
+                            <property name="tooltip-text">Limpar bandeja</property>
+                            <property name="action-name">win.clear-tray</property>
+                            <style>
+                              <class name="flat"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <property name="content">
+                      <object class="GtkBox" id="tray_slot">
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                      </object>
                     </property>
                   </object>
-                </child>
+                </property>
               </object>
             </property>
           </object>

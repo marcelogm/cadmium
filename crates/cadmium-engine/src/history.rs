@@ -2,6 +2,7 @@ use std::collections::{HashSet, VecDeque};
 
 use crate::canvas::{Canvas, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::GpuContext;
+use crate::surface::Surface;
 
 pub const ATLAS_TILES_PER_SIDE: u32 = 48;
 pub const ATLAS_SLOTS: u32 = ATLAS_TILES_PER_SIDE * ATLAS_TILES_PER_SIDE;
@@ -19,16 +20,18 @@ struct Step {
     tiles: Vec<SavedTile>,
     saved: HashSet<TileCoord>,
     complete: bool,
-    dries_paint: bool,
+    removes_wet_paint: bool,
+    surface: Surface,
 }
 
 impl Step {
-    fn new(dries_paint: bool) -> Step {
+    fn new(removes_wet_paint: bool, surface: Surface) -> Step {
         Step {
             tiles: Vec::new(),
             saved: HashSet::new(),
             complete: true,
-            dries_paint,
+            removes_wet_paint,
+            surface,
         }
     }
 
@@ -165,12 +168,12 @@ impl History {
         self.slot_capacity > 0
     }
 
-    pub fn begin_step(&mut self) {
-        self.open_step(false);
+    pub fn begin_step(&mut self, surface: Surface) {
+        self.open_step(false, surface);
     }
 
-    pub fn begin_drying_step(&mut self, wet_tile_count: usize) {
-        self.open_step(true);
+    pub fn begin_removal_step(&mut self, surface: Surface, wet_tile_count: usize) {
+        self.open_step(true, surface);
         if wet_tile_count > self.slot_capacity as usize
             && let Some(mut step) = self.current.take()
         {
@@ -179,9 +182,9 @@ impl History {
         }
     }
 
-    fn open_step(&mut self, dries_paint: bool) {
+    fn open_step(&mut self, removes_wet_paint: bool, surface: Surface) {
         self.commit_step();
-        self.current = Some(Step::new(dries_paint));
+        self.current = Some(Step::new(removes_wet_paint, surface));
     }
 
     pub fn encode_save_tiles(
@@ -307,18 +310,30 @@ impl History {
                     &mut encoder,
                 );
                 mark_restored(canvas, saved.tile);
-                if !step.dries_paint {
+                if !step.removes_wet_paint {
                     mark_wet(canvas, saved.tile);
                 }
             }
         }
         gpu.queue.submit([encoder.finish()]);
-        if step.dries_paint {
+        if step.removes_wet_paint {
             forget_wet(canvas, &step.saved);
         }
         self.undo_steps.push_back(step);
         self.trim_to_max_steps();
         true
+    }
+
+    pub fn undo_surface(&self) -> Option<Surface> {
+        self.current
+            .as_ref()
+            .filter(|step| step.complete && !step.tiles.is_empty())
+            .or(self.undo_steps.back())
+            .map(|step| step.surface)
+    }
+
+    pub fn redo_surface(&self) -> Option<Surface> {
+        self.redo_steps.last().map(|step| step.surface)
     }
 
     pub fn can_undo(&self) -> bool {

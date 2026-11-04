@@ -16,6 +16,7 @@ use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::{DryOutcome, SharedState};
 use crate::tools::{Tool, UiTool};
+use crate::tray_view::TrayView;
 use crate::writes::WritesInFlight;
 
 pub type PanelRefresher = Rc<dyn Fn()>;
@@ -47,6 +48,10 @@ mod imp {
         #[template_child]
         pub sidebar_stack: TemplateChild<adw::ViewStack>,
         #[template_child]
+        pub tray_sheet: TemplateChild<adw::BottomSheet>,
+        #[template_child]
+        pub tray_slot: TemplateChild<gtk::Box>,
+        #[template_child]
         pub brush_panel_slot: TemplateChild<gtk::Box>,
         #[template_child]
         pub lab_panel_slot: TemplateChild<gtk::Box>,
@@ -62,6 +67,7 @@ mod imp {
         pub close_confirmed: Cell<bool>,
         pub asking_to_close: Cell<bool>,
         pub history_disabled_announced: Cell<bool>,
+        pub copy_presentation_announced: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -121,22 +127,24 @@ const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
 const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
 
-pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
+pub const TOOL_KEYS: [(gdk::Key, UiTool); 8] = [
     (gdk::Key::h, UiTool::Move),
     (gdk::Key::_1, UiTool::Paint(Tool::Brush)),
     (gdk::Key::_2, UiTool::Paint(Tool::Knife)),
     (gdk::Key::_3, UiTool::Paint(Tool::Blender)),
     (gdk::Key::_4, UiTool::Paint(Tool::Rag)),
     (gdk::Key::_5, UiTool::Paint(Tool::Eyedropper)),
+    (gdk::Key::_6, UiTool::Tube),
     (gdk::Key::r, UiTool::Paint(Tool::Rag)),
 ];
 
-const KEYPAD_TOOL_KEYS: [(gdk::Key, UiTool); 5] = [
+const KEYPAD_TOOL_KEYS: [(gdk::Key, UiTool); 6] = [
     (gdk::Key::KP_1, UiTool::Paint(Tool::Brush)),
     (gdk::Key::KP_2, UiTool::Paint(Tool::Knife)),
     (gdk::Key::KP_3, UiTool::Paint(Tool::Blender)),
     (gdk::Key::KP_4, UiTool::Paint(Tool::Rag)),
     (gdk::Key::KP_5, UiTool::Paint(Tool::Eyedropper)),
+    (gdk::Key::KP_6, UiTool::Tube),
 ];
 
 impl CadmiumWindow {
@@ -169,13 +177,12 @@ impl CadmiumWindow {
         canvas.connect_colour_picked(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |_, found_paint| {
-                if found_paint {
-                    window.refresh_panels();
-                } else {
-                    window.show_toast(NOTHING_TO_PICK_TOAST);
-                }
-            }
+            move |_, found_paint| window.after_colour_pick(found_paint)
+        ));
+        canvas.connect_released(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.after_contact()
         ));
         canvas.connect_presented(glib::clone!(
             #[weak(rename_to = window)]
@@ -190,18 +197,14 @@ impl CadmiumWindow {
         canvas.connect_presentation_fallback(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |_| {
-                window
-                    .imp()
-                    .toast_overlay
-                    .add_toast(adw::Toast::new(COPY_PRESENTATION_TOAST));
-            }
+            move |_| window.announce_copy_presentation()
         ));
         self.imp().canvas_slot.append(&canvas);
         let state = canvas.state();
         if self.imp().canvas.set(canvas).is_err() {
             unreachable!("the canvas is attached once");
         }
+        let tray = self.attach_tray(state.clone());
         let brush_panel = BrushPanel::new(self, state.clone());
         self.imp().brush_panel_slot.append(brush_panel.widget());
         self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
@@ -209,20 +212,70 @@ impl CadmiumWindow {
         self.imp().lab_panel_slot.append(lab_panel.widget());
         let canvas = self.canvas();
         let pen_panel = Rc::downgrade(&lab_panel);
-        canvas.connect_presented(move |_| {
+        let show_pen: Rc<dyn Fn()> = Rc::new(move || {
             if let Some(panel) = pen_panel.upgrade() {
                 panel.show_pen();
             }
         });
-        let pen_panel = Rc::downgrade(&lab_panel);
-        canvas.connect_pen_observed(move |_| {
-            if let Some(panel) = pen_panel.upgrade() {
-                panel.show_pen();
-            }
-        });
+        canvas.connect_presented(glib::clone!(
+            #[strong]
+            show_pen,
+            move |_| show_pen()
+        ));
+        canvas.connect_pen_observed(glib::clone!(
+            #[strong]
+            show_pen,
+            move |_| show_pen()
+        ));
+        tray.connect_presented(glib::clone!(
+            #[strong]
+            show_pen,
+            move |_| show_pen()
+        ));
+        tray.connect_pen_observed(move |_| show_pen());
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
         self.announce_if_history_disabled();
+    }
+
+    fn attach_tray(&self, state: SharedState) -> TrayView {
+        let tray = TrayView::new(state);
+        tray.connect_presentation_fallback(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.announce_copy_presentation()
+        ));
+        tray.connect_colour_picked(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_, found_paint| window.after_colour_pick(found_paint)
+        ));
+        tray.connect_released(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.after_contact()
+        ));
+        self.imp().tray_slot.append(&tray);
+        tray
+    }
+
+    fn announce_copy_presentation(&self) {
+        if !self.imp().copy_presentation_announced.replace(true) {
+            self.show_toast(COPY_PRESENTATION_TOAST);
+        }
+    }
+
+    fn after_colour_pick(&self, found_paint: bool) {
+        if found_paint {
+            self.refresh_panels();
+        } else {
+            self.show_toast(NOTHING_TO_PICK_TOAST);
+        }
+    }
+
+    fn after_contact(&self) {
+        self.refresh_panels();
+        self.sync_history_actions();
     }
 
     fn announce_if_history_disabled(&self) {
@@ -251,6 +304,12 @@ impl CadmiumWindow {
         } else {
             glib::g_warning!(LOG_DOMAIN, "no sidebar page named {name:?}");
         }
+    }
+
+    pub fn show_tray(&self) {
+        let imp = self.imp();
+        imp.split_view.set_show_sidebar(true);
+        imp.tray_sheet.set_open(true);
     }
 
     fn sync_history_actions(&self) {
@@ -358,6 +417,12 @@ impl CadmiumWindow {
         let dry = gio::ActionEntry::builder("dry")
             .activate(|window: &Self, _, _| window.dry())
             .build();
+        let clear_tray = gio::ActionEntry::builder("clear-tray")
+            .activate(|window: &Self, _, _| {
+                window.state().borrow_mut().clear_tray();
+                window.after_contact();
+            })
+            .build();
         let zoom_in = gio::ActionEntry::builder("zoom-in")
             .activate(|window: &Self, _, _| window.canvas().zoom_in())
             .build();
@@ -387,6 +452,7 @@ impl CadmiumWindow {
             undo,
             redo,
             dry,
+            clear_tray,
             zoom_in,
             zoom_out,
             zoom_fit,
@@ -513,5 +579,30 @@ impl CadmiumWindow {
             .invert_boolean()
             .sync_create()
             .build();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keypad_digits_choose_the_same_tools_as_the_number_row() {
+        for (keypad, tool) in KEYPAD_TOOL_KEYS {
+            let digit = keypad.name().unwrap().replace("KP_", "");
+            assert!(
+                TOOL_KEYS
+                    .iter()
+                    .any(|(key, bound)| key.name().as_deref() == Some(digit.as_str())
+                        && *bound == tool),
+                "{keypad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn six_chooses_the_tube_on_both_rows() {
+        assert!(TOOL_KEYS.contains(&(gdk::Key::_6, UiTool::Tube)));
+        assert!(KEYPAD_TOOL_KEYS.contains(&(gdk::Key::KP_6, UiTool::Tube)));
     }
 }

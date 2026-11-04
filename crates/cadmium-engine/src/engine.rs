@@ -1,7 +1,8 @@
 use wgpu::util::DeviceExt;
 
 use crate::brush::{
-    BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING, FULL_RESERVOIR_VOLUME_UM,
+    BrushSettings, BrushShape, DEFAULT_LOAD, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING,
+    FULL_RESERVOIR_VOLUME_UM,
 };
 use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
@@ -51,7 +52,7 @@ const CAPILLARY_POOL_GROUPS: u32 = (CAPILLARY_POOLS as u32).div_ceil(CAPILLARY_P
 const SPREAD_APRON_PX: i32 = 1;
 const TIP_APRON_TEXELS: f32 = 1.0;
 const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
-const WORKGROUP_SIZE: u32 = 8;
+pub(crate) const WORKGROUP_SIZE: u32 = 8;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
 const KNIFE_DRAG: f32 = 0.15;
@@ -60,6 +61,7 @@ const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
 const KNIFE_DIP_LENGTH_PX: f32 = 380.0;
 const KNIFE_LAID_CAPACITY_UM: f32 = MAX_TIP_THICKNESS_UM * KNIFE_DIP_LENGTH_PX;
 const KNIFE_UPRIGHT_CAPACITY_UM: f32 = 200.0;
+const DRAWN_LOADED_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM * DEFAULT_LOAD;
 const KNIFE_SPILL_SHARE: f32 = 0.5;
 const KNIFE_REST_FOLLOW: f32 = 0.25;
 const CONTACT_REST_FOLLOW: f32 = 0.25;
@@ -617,7 +619,16 @@ fn max_dab_region_side() -> u32 {
     2 * (half_extent + 1 + DAB_APRON_PX as u32) + 2 * MAX_SWEEP_PX as u32
 }
 
-fn clamped_region(
+pub(crate) fn region_rect(origin: [i32; 2], size: [u32; 2]) -> [f32; 4] {
+    [
+        origin[0] as f32,
+        origin[1] as f32,
+        (origin[0] + size[0] as i32 - 1) as f32,
+        (origin[1] + size[1] as i32 - 1) as f32,
+    ]
+}
+
+pub(crate) fn clamped_region(
     first: [i32; 2],
     last: [i32; 2],
     apron: i32,
@@ -659,7 +670,7 @@ fn shader_source(snippets: &[&str], body: &str) -> String {
     source
 }
 
-fn compute_pipeline(
+pub(crate) fn compute_pipeline(
     gpu: &GpuContext,
     label: &str,
     module: &wgpu::ShaderModule,
@@ -677,7 +688,7 @@ fn compute_pipeline(
         })
 }
 
-fn shader_module(
+pub(crate) fn shader_module(
     gpu: &GpuContext,
     label: &str,
     snippets: &[&str],
@@ -690,7 +701,7 @@ fn shader_module(
         })
 }
 
-fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -703,7 +714,7 @@ fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayo
     }
 }
 
-fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -716,7 +727,7 @@ fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-fn texture_entry(
+pub(crate) fn texture_entry(
     binding: u32,
     access: wgpu::StorageTextureAccess,
     format: wgpu::TextureFormat,
@@ -733,7 +744,7 @@ fn texture_entry(
     }
 }
 
-fn layouts(
+pub(crate) fn layouts(
     gpu: &GpuContext,
     label: &str,
     entries: &[wgpu::BindGroupLayoutEntry],
@@ -754,7 +765,7 @@ fn layouts(
     (bind_group_layout, pipeline_layout)
 }
 
-fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
+pub(crate) fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
     gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size,
@@ -765,7 +776,7 @@ fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
     })
 }
 
-fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
+pub(crate) fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
     let staging = staging_buffer(gpu, "brush_readback", buffer.size());
     let mut encoder = gpu
         .device
@@ -1218,6 +1229,68 @@ impl WetOilEngine {
         };
         self.submit_fill(gpu, &record, false);
         self.loaded_thickness_um = thickness;
+    }
+
+    pub(crate) fn draw_up(
+        &mut self,
+        gpu: &GpuContext,
+        into_knife: bool,
+        take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
+    ) -> Result<(PaintTotals, f32), GpuLost> {
+        if into_knife {
+            self.draw_up_into_knife(gpu, take)
+        } else {
+            self.draw_up_into_reserve(gpu, take)
+        }
+    }
+
+    fn draw_up_into_reserve(
+        &mut self,
+        gpu: &GpuContext,
+        take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
+    ) -> Result<(PaintTotals, f32), GpuLost> {
+        let held = self.reserve_totals(gpu)?.volume as f32;
+        let capacity = self.full_reserve_volume();
+        let taken = take(capacity - held)?;
+        if holds_paint(&taken) {
+            self.add_to_reserve(gpu, &taken);
+            if held <= 0.0 {
+                self.loaded_thickness_um = self.loaded_thickness_um.max(DRAWN_LOADED_THICKNESS_UM);
+            }
+        }
+        Ok((taken, level_after(held, capacity, &taken)))
+    }
+
+    fn add_to_reserve(&self, gpu: &GpuContext, taken: &PaintTotals) {
+        let record = DipRecord {
+            fractions: std::array::from_fn(|slot| (taken.pigment[slot] / taken.volume) as f32),
+            tip_radius: self.tip_radius,
+            tip_add_um: 0.0,
+            tip_limit_um: 0.0,
+            body_add_um: taken.volume as f32,
+            body_limit_um: f32::MAX,
+            _pad: [0.0; 3],
+        };
+        self.submit_fill(gpu, &record, false);
+    }
+
+    fn draw_up_into_knife(
+        &mut self,
+        gpu: &GpuContext,
+        take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
+    ) -> Result<(PaintTotals, f32), GpuLost> {
+        let mut load = read_buffer(gpu, &self.blade_load)?;
+        let shares = blade_shares(self.tip_radius);
+        let held = knife_from_load(&load).volume as f32;
+        let full_dip = self.knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
+        let room = (full_dip - held).min(blade_room(&load, &shares)).max(0.0);
+        let taken = take(room)?;
+        if holds_paint(&taken) {
+            add_to_blade(&mut load, &shares, &taken);
+            gpu.queue
+                .write_buffer(&self.blade_load, 0, bytemuck::cast_slice(&load));
+        }
+        Ok((taken, level_after(held, held + room, &taken)))
     }
 
     pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
@@ -1733,6 +1806,54 @@ impl WetOilEngine {
     }
 }
 
+fn blade_shares(half_length: f32) -> Vec<(usize, f32)> {
+    let reach = half_length.ceil() as i32 + 1;
+    let covers: Vec<(usize, f32)> = (-reach..=reach)
+        .map(|offset| {
+            let cell = (TIP_HALF as i32 + offset).clamp(0, BLADE_CELLS as i32 - 1) as usize;
+            (cell, blade_cell_cover(offset, half_length))
+        })
+        .filter(|(_, cover)| *cover > 0.0)
+        .collect();
+    let total_cover: f32 = covers.iter().map(|(_, cover)| cover).sum();
+    covers
+        .into_iter()
+        .map(|(cell, cover)| (cell, cover / total_cover))
+        .collect()
+}
+
+fn blade_room(load: &[f32], shares: &[(usize, f32)]) -> f32 {
+    shares
+        .iter()
+        .map(|&(cell, share)| {
+            (KNIFE_LAID_CAPACITY_UM - load[cell * TIP_CHANNELS + VOLUME_CHANNEL]).max(0.0) / share
+        })
+        .fold(f32::INFINITY, f32::min)
+}
+
+fn add_to_blade(load: &mut [f32], shares: &[(usize, f32)], taken: &PaintTotals) {
+    for &(cell, share) in shares {
+        let share = f64::from(share);
+        let values = &mut load[cell * TIP_CHANNELS..(cell + 1) * TIP_CHANNELS];
+        for (slot, amount) in taken.pigment.iter().enumerate() {
+            values[slot] += (amount * share) as f32;
+        }
+        values[VOLUME_CHANNEL] += (taken.volume * share) as f32;
+    }
+}
+
+fn level_after(held_um: f32, capacity_um: f32, taken: &PaintTotals) -> f32 {
+    if capacity_um > 0.0 {
+        ((held_um + taken.volume as f32) / capacity_um).clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+fn holds_paint(totals: &PaintTotals) -> bool {
+    totals.volume.is_finite() && totals.volume > 0.0
+}
+
 fn dip_thickness(mixture: &Mixture) -> Option<f32> {
     let thickness = mixture.volume_um;
     (thickness.is_finite() && thickness > 0.0).then(|| thickness.min(MAX_TIP_THICKNESS_UM))
@@ -1812,14 +1933,18 @@ fn dab_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> 
     }
 }
 
-fn buffer_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+pub(crate) fn buffer_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
     wgpu::BindGroupEntry {
         binding,
         resource: buffer.as_entire_binding(),
     }
 }
 
-fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::BindGroupEntry<'_> {
+pub(crate) fn texture_binding(
+    binding: u32,
+    canvas: &Canvas,
+    which: StateTexture,
+) -> wgpu::BindGroupEntry<'_> {
     wgpu::BindGroupEntry {
         binding,
         resource: wgpu::BindingResource::TextureView(canvas.view(which)),
@@ -1975,5 +2100,34 @@ impl PaintEngine for WetOilEngine {
 
     fn params_mut(&mut self) -> &mut SimParams {
         &mut self.params
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_nearly_full_blade_cell_limits_what_the_knife_draws_up() {
+        let shares = blade_shares(4.0);
+        let mut load = vec![0.0; BLADE_LOAD_VALUES];
+        let empty_room = blade_room(&load, &shares);
+        let (crowded, _) = shares[shares.len() / 2];
+        load[crowded * TIP_CHANNELS + VOLUME_CHANNEL] = KNIFE_LAID_CAPACITY_UM - 10.0;
+        let room = blade_room(&load, &shares);
+        assert!(room < empty_room);
+        let taken = PaintTotals {
+            volume: f64::from(room),
+            ..PaintTotals::default()
+        };
+        add_to_blade(&mut load, &shares, &taken);
+        let fullest = load
+            .chunks(TIP_CHANNELS)
+            .map(|cell| cell[VOLUME_CHANNEL])
+            .fold(0.0, f32::max);
+        assert!(fullest <= KNIFE_LAID_CAPACITY_UM * (1.0 + 1e-6));
+        assert!(
+            (load[crowded * TIP_CHANNELS + VOLUME_CHANNEL] - KNIFE_LAID_CAPACITY_UM).abs() < 1e-2
+        );
     }
 }

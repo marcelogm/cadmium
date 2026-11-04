@@ -8,5 +8,6 @@
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-knife-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-blender-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-rag-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-tube-symbolic.svg</file>
   </gresource>
 </gresources>
