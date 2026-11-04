@@ -1,4 +1,6 @@
-use oleo_engine::{canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample};
+use oleo_engine::{
+    canvas::*, engine::PaintEngine, gpu::GpuContext, session::PaintSession, stroke::StrokeSample,
+};
 
 const WIDTH: u32 = 1280;
 const PEN_TILT_DEG: f32 = 25.0;
@@ -11,6 +13,10 @@ const ROW: f64 = 64.0;
 const VISIBLE_PIGMENT_UM: f32 = 3.0;
 const BLUE_SLOT: usize = 1;
 const PIGMENT_CHANNELS_PER_TEXTURE: usize = 4;
+const TENFOLD_RESERVE: f32 = 10.0;
+const LOW_LOAD: f32 = 0.2;
+const FULL_LOAD: f32 = 1.0;
+const DEFAULT_RESERVE_RUN_PX: usize = 440;
 
 fn encode_frame(gpu: &GpuContext, session: &mut PaintSession) {
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -18,8 +24,7 @@ fn encode_frame(gpu: &GpuContext, session: &mut PaintSession) {
     gpu.queue.submit([encoder.finish()]);
 }
 
-#[test]
-fn tilted_default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into_the_stroke() {
+fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> {
     let gpu = GpuContext::new().unwrap();
     let mut session = PaintSession::new(
         &gpu,
@@ -31,7 +36,14 @@ fn tilted_default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into
             pigment_slots: vec!["titanium_white".into(), "ultramarine_blue".into()],
         },
     );
+    if let Some(reserve_factor) = reserve_factor {
+        session
+            .engine
+            .params_mut()
+            .set("reserve_factor", reserve_factor);
+    }
     session.brush.recipe = vec![(BLUE_SLOT, 1.0)];
+    session.brush.load = load;
     session.reload_brush(&gpu);
     for index in 0..=SAMPLES {
         let sample = StrokeSample {
@@ -56,9 +68,40 @@ fn tilted_default_brush_at_full_pressure_still_lays_paint_a_thousand_pixels_into
 
     let volume = session.canvas.read_f32(&gpu, StateTexture::WetVol);
     let pigment = session.canvas.read_f32(&gpu, StateTexture::WetPig0);
-    let row_start = ROW as usize * WIDTH as usize;
-    let near_the_end = (STROKE_FROM_PX + STROKE_LENGTH_PX * 0.95) as usize;
-    let texel = row_start + near_the_end;
-    let blue_um = pigment[texel * PIGMENT_CHANNELS_PER_TEXTURE + BLUE_SLOT] * volume[texel];
-    assert!(blue_um > VISIBLE_PIGMENT_UM, "{blue_um} µm of blue");
+    let row_start = ROW as usize * WIDTH as usize + STROKE_FROM_PX as usize;
+    (row_start..row_start + STROKE_LENGTH_PX as usize)
+        .map(|texel| pigment[texel * PIGMENT_CHANNELS_PER_TEXTURE + BLUE_SLOT] * volume[texel])
+        .collect()
+}
+
+#[test]
+fn tilted_default_brush_with_a_tenfold_reserve_still_lays_paint_a_thousand_pixels_into_the_stroke()
+{
+    let blue = blue_along_a_long_stroke(oleo_engine::brush::DEFAULT_LOAD, Some(TENFOLD_RESERVE));
+    let near_the_end = (STROKE_LENGTH_PX * 0.95) as usize;
+    assert!(
+        blue[near_the_end] > VISIBLE_PIGMENT_UM,
+        "{} µm of blue",
+        blue[near_the_end]
+    );
+}
+
+#[test]
+fn a_low_load_with_the_default_reserve_runs_dry_within_440_px() {
+    let blue = blue_along_a_long_stroke(LOW_LOAD, None);
+    let last_visible = blue.iter().rposition(|amount| *amount > VISIBLE_PIGMENT_UM);
+    assert!(
+        last_visible.is_some_and(|px| px < DEFAULT_RESERVE_RUN_PX),
+        "last visible blue at {last_visible:?} px"
+    );
+}
+
+#[test]
+fn a_full_load_with_the_default_reserve_still_paints_440_px_into_the_stroke() {
+    let blue = blue_along_a_long_stroke(FULL_LOAD, None);
+    assert!(
+        blue[DEFAULT_RESERVE_RUN_PX] > VISIBLE_PIGMENT_UM,
+        "{} µm of blue",
+        blue[DEFAULT_RESERVE_RUN_PX]
+    );
 }

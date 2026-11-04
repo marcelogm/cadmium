@@ -35,7 +35,7 @@ const fn spec(
     }
 }
 
-const PARAM_COUNT: usize = 18;
+const PARAM_COUNT: usize = 19;
 
 const SPECS: [ParamSpec; PARAM_COUNT] = [
     spec(
@@ -69,6 +69,14 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         0.0,
         1.0,
         0.03,
+    ),
+    spec(
+        "reserve_factor",
+        "Reserva",
+        ParamGroup::Transfer,
+        1.0,
+        12.0,
+        3.0,
     ),
     spec("advection", "Arrasto", ParamGroup::Dynamics, 0.0, 1.0, 0.5),
     spec("squeeze", "Espremer", ParamGroup::Dynamics, 0.0, 2.0, 0.6),

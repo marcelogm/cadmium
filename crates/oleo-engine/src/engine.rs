@@ -2,7 +2,7 @@ use std::sync::mpsc;
 
 use wgpu::util::DeviceExt;
 
-use crate::brush::{BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX};
+use crate::brush::{BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX, FULL_RESERVOIR_VOLUME_UM};
 use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
@@ -12,6 +12,7 @@ use crate::stroke::{Dab, Tool};
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
 pub const DELTA_SCALE: f32 = 65536.0;
+pub const MAX_TIP_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM;
 
 const TIP_HALF: u32 = TIP_SIZE / 2;
 const MAX_TIP_RADIUS: f32 = ((TIP_SIZE - TIP_MARGIN) / 2) as f32;
@@ -22,7 +23,12 @@ const TIP_CHANNELS: usize = PIGMENT_CHANNELS + 1;
 const TIP_TEXELS: usize = (TIP_SIZE * TIP_SIZE) as usize;
 const TIP_VALUES: usize = TIP_TEXELS * TIP_CHANNELS;
 const TIP_BYTES: u64 = (TIP_VALUES * std::mem::size_of::<f32>()) as u64;
-const BODY_RESERVE_FACTOR: f32 = 10.0;
+const FULL_DIP: f32 = 1.0;
+const TIP_SUM_INVOCATIONS: u32 = 256;
+const TIP_SUM_CHANNELS: usize = TIP_CHANNELS + 1;
+const TIP_TEXEL_COUNT_SUM: usize = TIP_CHANNELS;
+const TIP_SUMS_BYTES: u64 = (TIP_SUM_CHANNELS * std::mem::size_of::<f32>()) as u64;
+const MIN_TIP_MEAN_VOLUME_UM: f32 = 1e-3;
 const DAB_RECORD_STRIDE: u64 = 256;
 const DAB_APRON_PX: i32 = 2;
 const SPREAD_APRON_PX: i32 = 1;
@@ -132,6 +138,27 @@ struct BodyState {
 }
 
 const BODY_BYTES: u64 = std::mem::size_of::<BodyState>() as u64;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct DipRecord {
+    fractions: [f32; PIGMENT_CHANNELS],
+    tip_radius: f32,
+    tip_add_um: f32,
+    tip_limit_um: f32,
+    body_add_um: f32,
+    body_limit_um: f32,
+    _pad: [f32; 3],
+}
+
+impl DipRecord {
+    fn measuring(tip_radius: f32) -> DipRecord {
+        DipRecord {
+            tip_radius,
+            ..bytemuck::Zeroable::zeroed()
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -462,6 +489,7 @@ fn shader_source(snippets: &[&str], body: &str) -> String {
          const TILE_SIZE: u32 = {TILE_SIZE}u;\n\
          const DRY_WORKGROUP_SIZE: u32 = {DRY_WORKGROUP_SIZE}u;\n\
          const PICK_INVOCATIONS: u32 = {PICK_INVOCATIONS}u;\n\
+         const TIP_SUM_INVOCATIONS: u32 = {TIP_SUM_INVOCATIONS}u;\n\
          const MIN_TOP_LAYER_UM: f32 = {MIN_TOP_LAYER_UM:?};\n"
     );
     for snippet in snippets {
@@ -624,6 +652,7 @@ pub struct WetOilEngine {
     wanted: wgpu::Buffer,
     contact_reference: wgpu::Buffer,
     paint_found: wgpu::Buffer,
+    tip_sums: wgpu::Buffer,
     exchange_layout: wgpu::BindGroupLayout,
     apply_layout: wgpu::BindGroupLayout,
     refill_layout: wgpu::BindGroupLayout,
@@ -632,6 +661,7 @@ pub struct WetOilEngine {
     rag_layout: wgpu::BindGroupLayout,
     pick_layout: wgpu::BindGroupLayout,
     dry_layout: wgpu::BindGroupLayout,
+    dip_layout: wgpu::BindGroupLayout,
     scratch: Option<Scratch>,
     reference_pipeline: wgpu::ComputePipeline,
     exchange_pipeline: wgpu::ComputePipeline,
@@ -645,6 +675,9 @@ pub struct WetOilEngine {
     pick_sample_pipeline: wgpu::ComputePipeline,
     pick_reload_pipeline: wgpu::ComputePipeline,
     dry_pipeline: wgpu::ComputePipeline,
+    fill_body_pipeline: wgpu::ComputePipeline,
+    fill_tip_pipeline: wgpu::ComputePipeline,
+    sum_tip_pipeline: wgpu::ComputePipeline,
 }
 
 impl WetOilEngine {
@@ -743,6 +776,17 @@ impl WetOilEngine {
             ],
         );
 
+        let (dip_layout, dip_pipeline_layout) = layouts(
+            gpu,
+            "brush_dip",
+            &[
+                uniform_entry(0, None),
+                storage_entry(1, false),
+                storage_entry(2, false),
+                storage_entry(3, false),
+            ],
+        );
+
         let dab_module = |label, body| shader_module(gpu, label, &DAB_SNIPPETS, body);
         let exchange = dab_module("dab_exchange", include_str!("shaders/dab_exchange.wgsl"));
         let apply = dab_module("tip_apply", include_str!("shaders/tip_apply.wgsl"));
@@ -757,6 +801,12 @@ impl WetOilEngine {
             include_str!("shaders/eyedropper.wgsl"),
         );
         let dry = shader_module(gpu, "dry", &DRY_SNIPPETS, include_str!("shaders/dry.wgsl"));
+        let dip = shader_module(
+            gpu,
+            "brush_dip",
+            &EYEDROPPER_SNIPPETS,
+            include_str!("shaders/brush_dip.wgsl"),
+        );
 
         WetOilEngine {
             params: SimParams::default(),
@@ -772,6 +822,7 @@ impl WetOilEngine {
                 CONTACT_REFERENCE_BYTES,
             ),
             paint_found: storage_buffer(gpu, "eyedropper_paint_found", PAINT_FOUND_BYTES),
+            tip_sums: storage_buffer(gpu, "brush_tip_sums", TIP_SUMS_BYTES),
             reference_pipeline: compute_pipeline(
                 gpu,
                 "dab_reference",
@@ -844,6 +895,27 @@ impl WetOilEngine {
                 "reload",
             ),
             dry_pipeline: compute_pipeline(gpu, "dry", &dry, &dry_pipeline_layout, "main"),
+            fill_body_pipeline: compute_pipeline(
+                gpu,
+                "brush_fill_body",
+                &dip,
+                &dip_pipeline_layout,
+                "fill_body",
+            ),
+            fill_tip_pipeline: compute_pipeline(
+                gpu,
+                "brush_fill_tip",
+                &dip,
+                &dip_pipeline_layout,
+                "fill_tip",
+            ),
+            sum_tip_pipeline: compute_pipeline(
+                gpu,
+                "brush_sum_tip",
+                &dip,
+                &dip_pipeline_layout,
+                "sum_tip",
+            ),
             exchange_layout,
             apply_layout,
             refill_layout,
@@ -852,43 +924,141 @@ impl WetOilEngine {
             rag_layout,
             pick_layout,
             dry_layout,
+            dip_layout,
             scratch: None,
         }
     }
 
-    pub fn set_tip_radius(&mut self, radius_px: f32) {
-        self.tip_radius = radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+    pub fn resize_tip(&mut self, radius_px: f32) {
+        if radius_px.is_finite() {
+            self.tip_radius = radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+        }
     }
 
     pub fn load_reservoir(&mut self, gpu: &GpuContext, mixture: &Mixture) {
-        let thickness = mixture.volume_um.max(0.0);
-        let mut tip = vec![0.0f32; TIP_VALUES];
-        let mut loaded_texels = 0usize;
-        let radius_squared = self.tip_radius * self.tip_radius;
-        for (index, texel) in tip.as_chunks_mut::<TIP_CHANNELS>().0.iter_mut().enumerate() {
-            let x = (index as u32 % TIP_SIZE) as f32 - TIP_HALF as f32;
-            let y = (index as u32 / TIP_SIZE) as f32 - TIP_HALF as f32;
-            if x * x + y * y > radius_squared {
-                continue;
-            }
-            loaded_texels += 1;
-            for (slot, fraction) in mixture.fractions.iter().enumerate() {
-                texel[slot] = thickness * fraction;
-            }
-            texel[VOLUME_CHANNEL] = thickness;
-        }
-        let body_volume = BODY_RESERVE_FACTOR * thickness * loaded_texels as f32;
-        let body = BodyState {
-            pigment: mixture.fractions.map(|fraction| body_volume * fraction),
-            volume: body_volume,
-            granted_ratio: 0.0,
-            granted_fractions: [0.0; PIGMENT_CHANNELS],
+        self.clean_brush(gpu);
+        self.dip(gpu, mixture, FULL_DIP);
+    }
+
+    pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
+        let Some(thickness) = dip_thickness(mixture) else {
+            return;
         };
-        gpu.queue
-            .write_buffer(&self.tip, 0, bytemuck::cast_slice(&tip));
-        gpu.queue
-            .write_buffer(&self.body, 0, bytemuck::bytes_of(&body));
+        if !amount.is_finite() || amount <= 0.0 {
+            return;
+        }
+        let record = DipRecord {
+            fractions: dip_fractions(mixture),
+            tip_radius: self.tip_radius,
+            tip_add_um: amount * thickness,
+            tip_limit_um: MAX_TIP_THICKNESS_UM,
+            body_add_um: amount * self.reserve_volume(thickness),
+            body_limit_um: self.reserve_volume(MAX_TIP_THICKNESS_UM),
+            _pad: [0.0; 3],
+        };
+        self.submit_fill(gpu, &record, true);
         self.loaded_thickness_um = thickness;
+    }
+
+    pub fn restore_reserve(&mut self, gpu: &GpuContext, mixture: &Mixture) {
+        let Some(thickness) = dip_thickness(mixture) else {
+            return;
+        };
+        let full_reserve = self.reserve_volume(thickness);
+        let record = DipRecord {
+            fractions: dip_fractions(mixture),
+            tip_radius: self.tip_radius,
+            tip_add_um: 0.0,
+            tip_limit_um: 0.0,
+            body_add_um: full_reserve,
+            body_limit_um: full_reserve,
+            _pad: [0.0; 3],
+        };
+        self.submit_fill(gpu, &record, false);
+        self.loaded_thickness_um = thickness;
+    }
+
+    pub fn tip_mean_mixture(&self, gpu: &GpuContext) -> Mixture {
+        let group = self.dip_bind_group(gpu, &DipRecord::measuring(self.tip_radius));
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("brush_sum_tip"),
+            });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("brush_sum_tip"),
+            timestamp_writes: None,
+        });
+        pass.set_bind_group(0, &group, &[]);
+        pass.set_pipeline(&self.sum_tip_pipeline);
+        pass.dispatch_workgroups(1, 1, 1);
+        drop(pass);
+        gpu.queue.submit([encoder.finish()]);
+        let sums = read_buffer(gpu, &self.tip_sums);
+        let volume = sums[VOLUME_CHANNEL];
+        let texels = sums[TIP_TEXEL_COUNT_SUM];
+        if volume < MIN_TIP_MEAN_VOLUME_UM || texels <= 0.0 {
+            return Mixture {
+                volume_um: 0.0,
+                fractions: [0.0; PIGMENT_CHANNELS],
+            };
+        }
+        Mixture {
+            volume_um: volume / texels,
+            fractions: std::array::from_fn(|slot| sums[slot] / volume),
+        }
+    }
+
+    pub fn reserve_totals(&self, gpu: &GpuContext) -> PaintTotals {
+        let mut totals = PaintTotals::default();
+        accumulate(&mut totals, &read_buffer(gpu, &self.body)[..TIP_CHANNELS]);
+        totals
+    }
+
+    fn reserve_volume(&self, thickness_um: f32) -> f32 {
+        self.params.get("reserve_factor") * thickness_um * disk_texels(self.tip_radius) as f32
+    }
+
+    fn submit_fill(&self, gpu: &GpuContext, record: &DipRecord, fills_tip: bool) {
+        let group = self.dip_bind_group(gpu, record);
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("brush_dip"),
+            });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("brush_dip"),
+            timestamp_writes: None,
+        });
+        pass.set_bind_group(0, &group, &[]);
+        pass.set_pipeline(&self.fill_body_pipeline);
+        pass.dispatch_workgroups(1, 1, 1);
+        if fills_tip {
+            pass.set_pipeline(&self.fill_tip_pipeline);
+            pass.dispatch_workgroups(TIP_GROUPS, TIP_GROUPS, 1);
+        }
+        drop(pass);
+        gpu.queue.submit([encoder.finish()]);
+    }
+
+    fn dip_bind_group(&self, gpu: &GpuContext, record: &DipRecord) -> wgpu::BindGroup {
+        let uniform = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("brush_dip"),
+                contents: bytemuck::bytes_of(record),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("brush_dip"),
+            layout: &self.dip_layout,
+            entries: &[
+                buffer_binding(0, &uniform),
+                buffer_binding(1, &self.body),
+                buffer_binding(2, &self.tip),
+                buffer_binding(3, &self.tip_sums),
+            ],
+        })
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
@@ -955,11 +1125,7 @@ impl WetOilEngine {
             radius,
             tip_radius: self.tip_radius,
             thickness_um: self.loaded_thickness_um,
-            empty_body_volume_um: BODY_RESERVE_FACTOR
-                * std::f32::consts::PI
-                * self.tip_radius
-                * self.tip_radius
-                * self.loaded_thickness_um,
+            empty_body_volume_um: self.reserve_volume(self.loaded_thickness_um),
             _pad: [0.0; 2],
         };
         let pick = gpu
@@ -1175,6 +1341,38 @@ impl WetOilEngine {
             ],
         })
     }
+}
+
+fn dip_thickness(mixture: &Mixture) -> Option<f32> {
+    let thickness = mixture.volume_um;
+    (thickness.is_finite() && thickness > 0.0).then(|| thickness.min(MAX_TIP_THICKNESS_UM))
+}
+
+fn dip_fractions(mixture: &Mixture) -> [f32; PIGMENT_CHANNELS] {
+    mixture.fractions.map(|fraction| {
+        if fraction.is_finite() {
+            fraction.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    })
+}
+
+fn disk_texels(radius: f32) -> u32 {
+    let radius_squared = radius * radius;
+    let offsets = -(TIP_HALF as i32)..(TIP_SIZE - TIP_HALF) as i32;
+    offsets
+        .clone()
+        .map(|y| {
+            offsets
+                .clone()
+                .filter(|&x| {
+                    let (x, y) = (x as f32, y as f32);
+                    x * x + y * y <= radius_squared
+                })
+                .count() as u32
+        })
+        .sum()
 }
 
 fn accumulate(totals: &mut PaintTotals, amounts: &[f32]) {

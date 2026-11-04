@@ -130,16 +130,42 @@ impl PaintSession {
         self.engine.reservoir_mixture(gpu)
     }
 
-    pub fn reload_brush(&mut self, gpu: &GpuContext) {
-        let mixture = self
-            .brush
-            .reservoir_mixture(self.canvas.spec.pigment_slots.len());
+    pub fn resize_tip(&mut self) {
         self.engine
-            .set_tip_radius(self.brush.geometry.max_diameter_px / 2.0);
-        self.engine.load_reservoir(gpu, &mixture);
+            .resize_tip(self.brush.geometry.max_diameter_px / 2.0);
+    }
+
+    pub fn reload_brush(&mut self, gpu: &GpuContext) {
+        self.flush(gpu);
+        self.resize_tip();
+        let mixture = self.recipe_mixture();
+        if is_pigment_free(&mixture) {
+            self.engine.clean_brush(gpu);
+        } else {
+            self.engine.load_reservoir(gpu, &mixture);
+        }
+    }
+
+    pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
+        self.flush(gpu);
+        self.engine.dip(gpu, mixture, amount);
+    }
+
+    pub fn restore_reserve(&mut self, gpu: &GpuContext) {
+        self.flush(gpu);
+        let mixture = self.recipe_mixture();
+        if !is_pigment_free(&mixture) {
+            self.engine.restore_reserve(gpu, &mixture);
+        }
+    }
+
+    pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Mixture {
+        self.flush(gpu);
+        self.engine.tip_mean_mixture(gpu)
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
+        self.flush(gpu);
         self.engine.clean_brush(gpu);
     }
 
@@ -157,6 +183,11 @@ impl PaintSession {
         let mut encoder = new_encoder(gpu, "flush_queued_dabs");
         self.encode_queued_dabs(gpu, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
+    }
+
+    fn recipe_mixture(&self) -> Mixture {
+        self.brush
+            .reservoir_mixture(self.canvas.spec.pigment_slots.len())
     }
 
     fn settle_pending_step(&mut self, gpu: &GpuContext) {
@@ -212,6 +243,10 @@ impl PaintSession {
         }
         touched.into_iter().collect()
     }
+}
+
+fn is_pigment_free(mixture: &Mixture) -> bool {
+    mixture.fractions.iter().all(|fraction| *fraction <= 0.0)
 }
 
 fn new_encoder(gpu: &GpuContext, label: &str) -> wgpu::CommandEncoder {
