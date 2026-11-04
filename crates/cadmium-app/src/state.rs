@@ -228,6 +228,7 @@ pub struct AppState {
     pub reload_each_stroke: bool,
     pub clean_each_stroke: bool,
     reserve_volume: f32,
+    reserve_mixture: Mixture,
     pub knife_mixture: Mixture,
     knife_volume: f32,
     contact: Option<Contact>,
@@ -262,6 +263,7 @@ impl AppState {
             reload_each_stroke: true,
             clean_each_stroke: false,
             reserve_volume: 0.0,
+            reserve_mixture: EMPTY_MIXTURE,
             knife_mixture: EMPTY_MIXTURE,
             knife_volume: 0.0,
             contact: None,
@@ -626,6 +628,7 @@ impl AppState {
         };
         self.tip_mixture = readout.tip_mean;
         self.reserve_volume = readout.reserve.volume as f32;
+        self.reserve_mixture = mean_mixture(&readout.reserve);
         self.knife_mixture = mean_mixture(&readout.knife);
         self.knife_volume = readout.knife.volume as f32;
         Some(readout)

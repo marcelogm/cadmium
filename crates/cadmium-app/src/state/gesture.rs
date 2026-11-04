@@ -12,6 +12,7 @@ use crate::tools::UiTool;
 
 pub const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
 const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
+const FULL_LEVEL: f32 = 0.999;
 
 pub fn load_cancelled(origin: (f64, f64), current: (f64, f64), threshold_px: f64) -> bool {
     (current.0 - origin.0).hypot(current.1 - origin.1) > threshold_px
@@ -304,17 +305,50 @@ impl AppState {
         )
     }
 
+    fn held_level(&self, tool: Tool) -> f32 {
+        if tool == Tool::Knife {
+            self.knife_level()
+        } else {
+            self.reserve_level()
+        }
+    }
+
+    fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
+        let held = if tool == Tool::Knife {
+            &self.knife_mixture
+        } else {
+            &self.reserve_mixture
+        };
+        (!held.is_empty()).then(|| {
+            mixture_srgb8(
+                &self.session.db,
+                &self.session.canvas.spec.pigment_slots,
+                &held.fractions,
+            )
+        })
+    }
+
     pub fn load_ring(&self) -> Option<LoadRing> {
         let Some(Contact::Loading {
-            pen, colour, level, ..
+            tool,
+            pen,
+            colour,
+            level,
+            ..
         }) = self.contact
         else {
             return None;
         };
+        let level = level.unwrap_or_else(|| self.held_level(tool));
+        let colour = match colour {
+            Some(taken) => taken,
+            None if level >= FULL_LEVEL => self.held_colour(tool)?,
+            None => return None,
+        };
         Some(LoadRing {
-            level: level?,
+            level,
             pressure: pen.pressure,
-            colour: colour?,
+            colour,
         })
     }
 
@@ -628,12 +662,30 @@ mod tests {
     #[test]
     fn a_still_touch_on_a_clean_tray_shows_no_ring() {
         let mut state = painting_state();
+        state.clean_brush();
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         assert_eq!(state.load_ring(), None);
         state.advance_hold(0.2);
         assert_eq!(state.load_ring(), None);
         state.release();
+    }
+
+    #[test]
+    fn a_full_brush_closes_the_ring_at_once_on_a_clean_tray() {
+        let mut state = painting_state();
+        state.set_load(1.0);
+        state.reload_brush();
+        assert!(state.reserve_level() >= FULL_LEVEL);
+        state.set_ui_tool(UiTool::Paint(Tool::Brush));
+        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
+        let ring = state.load_ring().expect("a full brush rings at once");
+        assert!((ring.level - 1.0).abs() < 1e-3, "{}", ring.level);
+        state.advance_hold(0.2);
+        let ring = state.load_ring().expect("still full");
+        assert!((ring.level - 1.0).abs() < 1e-3, "{}", ring.level);
+        state.release();
+        assert!(!state.has_unsaved_edits());
     }
 
     #[test]
