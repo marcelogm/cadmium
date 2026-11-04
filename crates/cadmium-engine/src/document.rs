@@ -140,7 +140,7 @@ impl StateBytes {
 pub struct DocumentSnapshot {
     spec: CanvasSpec,
     states: Vec<StateBytes>,
-    tray: Vec<StateBytes>,
+    tray: Option<Vec<StateBytes>>,
 }
 
 impl DocumentSnapshot {
@@ -149,10 +149,14 @@ impl DocumentSnapshot {
         session: &mut PaintSession,
     ) -> Result<DocumentSnapshot, GpuLost> {
         session.flush(gpu);
+        let states = capture_canvas(gpu, &session.canvas)?;
+        let tray = (session.tray.spec == tray_spec(&session.canvas.spec.pigment_slots))
+            .then(|| capture_canvas(gpu, &session.tray))
+            .transpose()?;
         Ok(DocumentSnapshot {
             spec: session.canvas.spec.clone(),
-            states: capture_canvas(gpu, &session.canvas)?,
-            tray: capture_canvas(gpu, &session.tray)?,
+            states,
+            tray,
         })
     }
 
@@ -161,14 +165,14 @@ impl DocumentSnapshot {
         let (format, spec) = read_manifest(&mut archive)?;
         let states = read_states(&mut archive, format, PAINTING_PREFIX, &spec)?;
         let tray = if format >= TRAY_FORMAT {
-            read_states(
+            Some(read_states(
                 &mut archive,
                 format,
                 TRAY_PREFIX,
                 &tray_spec(&spec.pigment_slots),
-            )?
+            )?)
         } else {
-            Vec::new()
+            None
         };
         Ok(DocumentSnapshot { spec, states, tray })
     }
@@ -191,21 +195,20 @@ impl DocumentSnapshot {
 
     fn upload(self, gpu: &GpuContext, session: &mut PaintSession) {
         upload_states(gpu, &mut session.canvas, self.states);
-        if !self.tray.is_empty() {
-            upload_states(gpu, &mut session.tray, self.tray);
+        if let Some(tray) = self.tray {
+            upload_states(gpu, &mut session.tray, tray);
         }
     }
 
-    fn format(&self) -> u32 {
-        if self.tray.is_empty() {
-            TRAYLESS_FORMAT
-        } else {
-            FORMAT_VERSION
+    fn file_format(&self) -> u32 {
+        match self.tray {
+            Some(_) => FORMAT_VERSION,
+            None => TRAYLESS_FORMAT,
         }
     }
 
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
-        let format = self.format();
+        let format = self.file_format();
         let manifest = Manifest {
             format,
             pigment_db: PigmentDb::VERSION,
@@ -230,14 +233,9 @@ impl DocumentSnapshot {
                 &self.spec,
                 &self.states,
             )?;
-            write_states(
-                &mut archive,
-                options,
-                format,
-                TRAY_PREFIX,
-                &tray_spec,
-                &self.tray,
-            )?;
+            if let Some(tray) = &self.tray {
+                write_states(&mut archive, options, format, TRAY_PREFIX, &tray_spec, tray)?;
+            }
             archive.finish()?;
             Ok(())
         })
@@ -253,6 +251,15 @@ fn write_states<W: Write + std::io::Seek>(
     states: &[StateBytes],
 ) -> Result<(), DocumentError> {
     for state in states {
+        let name = state_entry(prefix, state.which, format);
+        if state.rows.row_bytes != spec.width * state.which.bytes_per_texel()
+            || state.rows.rows != spec.height
+        {
+            return Err(DocumentError::Format(format!(
+                "{name} does not match the {}×{} canvas",
+                spec.width, spec.height
+            )));
+        }
         let raw = state.texels();
         let stored = if state.which == StateTexture::DryHeight {
             Cow::Owned(dry_relief(spec, &raw))
@@ -260,7 +267,7 @@ fn write_states<W: Write + std::io::Seek>(
             raw
         };
         let compressed = zstd::encode_all(stored.as_ref(), ZSTD_LEVEL)?;
-        archive.start_file(state_entry(prefix, state.which, format), options)?;
+        archive.start_file(name, options)?;
         archive.write_all(&compressed)?;
     }
     Ok(())

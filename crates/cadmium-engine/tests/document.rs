@@ -182,6 +182,12 @@ impl Entries {
         Entries(entries)
     }
 
+    fn saved_as_format_2(path: &Path) -> Entries {
+        Entries::saved(path)
+            .without_tray()
+            .edit_manifest(|m| m["format"] = 2.into())
+    }
+
     fn without_tray(mut self) -> Entries {
         self.0.retain(|(entry, _)| !entry.starts_with(TRAY_PREFIX));
         self
@@ -763,9 +769,7 @@ fn a_format_two_painting_opens_with_a_clean_tray() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("format-2-tray");
     let (s, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    let entries = Entries::saved(&path)
-        .without_tray()
-        .edit_manifest(|m| m["format"] = 2.into());
+    let entries = Entries::saved_as_format_2(&path);
     let opened = read_entries(entries).unwrap().into_session(&gpu).unwrap();
     assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
     assert_eq!(
@@ -786,9 +790,7 @@ fn a_format_two_painting_opened_into_a_running_session_clears_its_tray() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("format-2-running");
     let (mut running, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    let entries = Entries::saved(&path)
-        .without_tray()
-        .edit_manifest(|m| m["format"] = 2.into());
+    let entries = Entries::saved_as_format_2(&path);
     read_entries(entries)
         .unwrap()
         .restore_into(&gpu, &mut running)
@@ -802,13 +804,68 @@ fn a_format_two_painting_saved_again_still_opens() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("format-2-resaved");
     let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    let entries = Entries::saved(&path)
-        .without_tray()
-        .edit_manifest(|m| m["format"] = 2.into());
+    let entries = Entries::saved_as_format_2(&path);
     let resaved = dir.file("resaved.cadmium");
     read_entries(entries).unwrap().write(&resaved).unwrap();
     let opened = document::open(&gpu, &resaved).unwrap();
     assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
+}
+
+fn saved_format(path: &Path) -> u64 {
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut manifest = String::new();
+    archive
+        .by_name("manifest.json")
+        .unwrap()
+        .read_to_string(&mut manifest)
+        .unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    manifest["format"].as_u64().unwrap()
+}
+
+#[test]
+fn a_clean_tray_is_still_saved_as_format_three() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painted_session(&gpu);
+    let dir = TempDir::new("clean-tray");
+    let path = dir.file("clean.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    assert_eq!(saved_format(&path), 3);
+    assert!(
+        Entries::saved(&path)
+            .0
+            .iter()
+            .any(|(entry, _)| entry == TRAY_WET_VOLUME)
+    );
+}
+
+#[test]
+fn a_painting_whose_tray_could_not_be_rebuilt_saves_without_it_and_reopens() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painted_session_with_a_wet_tray(&gpu);
+    let placeholder = CanvasSpec {
+        width: 1,
+        height: 1,
+        ..tray_spec(&s.canvas.spec.pigment_slots)
+    };
+    s.tray = Canvas::new(&gpu, &s.db, placeholder).unwrap();
+    let dir = TempDir::new("placeholder-tray");
+    let path = dir.file("placeholder.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    assert_eq!(saved_format(&path), 2);
+    let opened = document::open(&gpu, &path).unwrap();
+    assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert_eq!(
+        opened.tray.spec,
+        tray_spec(&opened.canvas.spec.pigment_slots)
+    );
+    for t in StateTexture::PAINT_STATE {
+        assert_eq!(
+            opened.canvas.read_bytes(&gpu, t).unwrap(),
+            s.canvas.read_bytes(&gpu, t).unwrap(),
+            "{t:?}"
+        );
+    }
 }
 
 #[test]
