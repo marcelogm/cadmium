@@ -13,7 +13,7 @@ use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::{Nozzle, Tube, squeeze_region};
+use crate::tube::{Nozzle, Squeezed, Tube, squeeze_region};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -28,6 +28,12 @@ const SAVE_MARGIN_PX: f32 = 4.0;
 pub enum ClearOutcome {
     NothingWet,
     Cleared { undoable: bool },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Hold {
+    surface: Surface,
+    cord_end: Option<[f32; 2]>,
 }
 
 pub struct PaintSession {
@@ -45,7 +51,7 @@ pub struct PaintSession {
     queued: Vec<Dab>,
     step_open: bool,
     stroke_surface: Surface,
-    hold: Option<Surface>,
+    hold: Option<Hold>,
     tube: Tube,
     drawer: DrawUp,
 }
@@ -164,7 +170,10 @@ impl PaintSession {
     pub fn begin_hold(&mut self, gpu: &GpuContext, surface: Surface) {
         self.settle_pending_step(gpu);
         self.history.begin_step(surface);
-        self.hold = Some(surface);
+        self.hold = Some(Hold {
+            surface,
+            cord_end: None,
+        });
     }
 
     pub fn end_hold(&mut self) {
@@ -178,14 +187,20 @@ impl PaintSession {
     }
 
     pub fn squeeze(&mut self, gpu: &GpuContext, nozzle: Nozzle) -> bool {
-        let Some(surface) = self.hold else {
+        let Some(Hold { surface, cord_end }) = self.hold else {
             return false;
         };
         let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
         let params = self.engine.params();
-        let Some(region) = squeeze_region(canvas, params, &nozzle) else {
+        let Some(region) = squeeze_region(canvas, params, &nozzle, cord_end) else {
             return false;
         };
+        if let Squeezed::Cord { .. } = region.squeezed {
+            self.hold = Some(Hold {
+                surface,
+                cord_end: Some(nozzle.to),
+            });
+        }
         let [x0, y0, x1, y1] = region.rect();
         let tiles = tiles_in_rect(canvas.spec.width, canvas.spec.height, x0, y0, x1, y1);
         let mut encoder = new_encoder(gpu, "squeeze");
@@ -203,7 +218,7 @@ impl PaintSession {
         request: DrawUpRequest,
     ) -> Result<DrawnUp, GpuLost> {
         self.flush(gpu);
-        let Some(surface) = self.hold else {
+        let Some(Hold { surface, .. }) = self.hold else {
             return Ok(DrawnUp::default());
         };
         if !draws_up(self.brush.tool) {

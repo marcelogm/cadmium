@@ -35,7 +35,7 @@ const fn spec(
     }
 }
 
-const PARAM_COUNT: usize = 22;
+const PARAM_COUNT: usize = 23;
 
 const SPECS: [ParamSpec; PARAM_COUNT] = [
     spec(
@@ -142,6 +142,14 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         ParamGroup::Tools,
         20.0,
         2000.0,
+        300.0,
+    ),
+    spec(
+        "tube_cord_um",
+        "Altura do cordão (µm)",
+        ParamGroup::Tools,
+        20.0,
+        800.0,
         300.0,
     ),
     spec(

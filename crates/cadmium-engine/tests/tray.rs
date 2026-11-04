@@ -305,25 +305,122 @@ fn a_still_tube_grows_its_blob() {
     assert!(s.tray.wet_totals(&gpu).unwrap().volume > 1.5 * once);
 }
 
+const FRAME_SECONDS: f32 = 1.0 / 60.0;
+const CORD_RADIUS: f32 = 8.0;
+
+fn drag_tube(
+    gpu: &GpuContext,
+    s: &mut PaintSession,
+    from: [f32; 2],
+    to: [f32; 2],
+    frames: usize,
+    pressure: f32,
+) {
+    let at = |frame: usize| {
+        let t = frame as f32 / frames as f32;
+        [
+            from[0] + t * (to[0] - from[0]),
+            from[1] + t * (to[1] - from[1]),
+        ]
+    };
+    s.begin_hold(gpu, Surface::Tray);
+    for frame in 0..frames {
+        s.squeeze(
+            gpu,
+            Nozzle {
+                from: at(frame),
+                to: at(frame + 1),
+                radius: CORD_RADIUS,
+                slot: 0,
+                pressure,
+                seconds: FRAME_SECONDS,
+            },
+        );
+    }
+    s.end_hold();
+}
+
+fn tray_heights(gpu: &GpuContext, s: &PaintSession) -> impl Fn(usize, usize) -> f32 {
+    let volume = s.tray.read_f32(gpu, StateTexture::WetVol).unwrap();
+    move |x, y| volume[y * TRAY_WIDTH as usize + x]
+}
+
 #[test]
-fn a_slow_tube_lays_a_thicker_cord_than_a_fast_one() {
+fn a_moving_tube_lays_an_even_cord_without_beads_at_the_frame_joints() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let cord = |length: f32, y: f32| Nozzle {
-        from: [100.0, y],
-        to: [100.0 + length, y],
-        radius: 8.0,
-        slot: 0,
-        pressure: 1.0,
-        seconds: 0.1,
-    };
-    s.begin_hold(&gpu, Surface::Tray);
-    s.squeeze(&gpu, cord(40.0, 200.0));
-    s.squeeze(&gpu, cord(400.0, 400.0));
-    s.end_hold();
-    let volume = s.tray.read_f32(&gpu, StateTexture::WetVol).unwrap();
-    let thickness = |x: usize, y: usize| volume[y * TRAY_WIDTH as usize + x];
-    assert!(thickness(120, 200) > 2.0 * thickness(120, 400));
+    drag_tube(&gpu, &mut s, [100.0, 200.5], [400.0, 200.5], 23, 1.0);
+    let height = tray_heights(&gpu, &s);
+    let along: Vec<f32> = (130..370).map(|x| height(x, 200)).collect();
+    let lowest = along.iter().copied().fold(f32::INFINITY, f32::min);
+    let highest = along.iter().copied().fold(0.0, f32::max);
+    assert!(lowest > 0.0);
+    assert!(highest / lowest <= 1.15, "{lowest}..{highest}");
+}
+
+#[test]
+fn a_fast_and_a_slow_tube_raise_the_same_cord() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube(&gpu, &mut s, [100.0, 200.5], [400.0, 200.5], 60, 0.8);
+    drag_tube(&gpu, &mut s, [100.0, 400.5], [400.0, 400.5], 5, 0.8);
+    let height = tray_heights(&gpu, &s);
+    let crest = s.engine.params().get("tube_cord_um") * 0.8;
+    for y in [200, 400] {
+        assert!((height(250, y) - crest).abs() < 0.01 * crest, "{y}");
+    }
+}
+
+#[test]
+fn a_harder_squeeze_raises_a_taller_cord() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube(&gpu, &mut s, [100.0, 200.5], [400.0, 200.5], 10, 1.0);
+    drag_tube(&gpu, &mut s, [100.0, 400.5], [400.0, 400.5], 10, 0.4);
+    let height = tray_heights(&gpu, &s);
+    assert!(height(250, 200) > 2.0 * height(250, 400));
+}
+
+#[test]
+fn the_cord_is_rounded_across() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube(&gpu, &mut s, [100.0, 200.5], [400.0, 200.5], 10, 1.0);
+    let height = tray_heights(&gpu, &s);
+    assert!(height(250, 200) > height(250, 203));
+    assert!(height(250, 203) > height(250, 206));
+    assert!(height(250, 206) > 0.0);
+    assert!((height(250, 194) - height(250, 206)).abs() < 1e-3 * height(250, 206));
+}
+
+#[test]
+fn a_tube_crossing_its_own_cord_does_not_double_it() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube(&gpu, &mut s, [100.0, 200.5], [400.0, 200.5], 10, 1.0);
+    let before = tray_heights(&gpu, &s)(250, 200);
+    drag_tube(&gpu, &mut s, [250.5, 100.0], [250.5, 300.0], 10, 1.0);
+    drag_tube(&gpu, &mut s, [400.0, 200.5], [100.0, 200.5], 10, 1.0);
+    let after = tray_heights(&gpu, &s)(250, 200);
+    assert!(
+        (after - before).abs() < 0.01 * before,
+        "{before} -> {after}"
+    );
+}
+
+#[test]
+fn a_cord_starts_and_ends_round() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    drag_tube(&gpu, &mut s, [100.5, 200.5], [400.5, 200.5], 10, 1.0);
+    let height = tray_heights(&gpu, &s);
+    let crest = height(250, 200);
+    for x in [96, 404] {
+        assert!(height(x, 200) > 0.5 * crest, "{x}");
+        assert!(height(x, 200) < crest, "{x}");
+    }
+    assert_eq!(height(91, 200), 0.0);
+    assert_eq!(height(409, 200), 0.0);
 }
 
 #[test]
