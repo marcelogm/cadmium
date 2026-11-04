@@ -1,9 +1,12 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod application;
 mod brush_panel;
 mod canvas_widget;
 mod dialogs;
+#[cfg_attr(not(target_os = "linux"), path = "dmabuf_off.rs")]
 mod dmabuf;
-#[cfg(any(debug_assertions, feature = "smoke"))]
+#[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
 mod dmabuf_selftest;
 mod files;
 mod input;
@@ -11,7 +14,10 @@ mod lab_panel;
 mod new_painting_dialog;
 mod presenter;
 mod presets;
-#[cfg_attr(not(any(debug_assertions, feature = "smoke")), path = "smoke_off.rs")]
+#[cfg_attr(
+    not(all(target_os = "linux", any(debug_assertions, feature = "smoke"))),
+    path = "smoke_off.rs"
+)]
 mod smoke;
 mod state;
 mod swatch;

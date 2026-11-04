@@ -21,11 +21,13 @@ gtk = { workspace = true }
 adw = { workspace = true }
 wgpu = { workspace = true }
 wgpu-hal = { workspace = true }
+async-channel = { workspace = true }
+pollster = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
 ash = { workspace = true }
 libc = { workspace = true }
 drm-fourcc = { workspace = true }
-async-channel = { workspace = true }
-pollster = { workspace = true }
 
 [build-dependencies]
 glib-build-tools = { workspace = true }

@@ -18,4 +18,3 @@ serde_json = { workspace = true }
 zip = { workspace = true }
 zstd = { workspace = true }
 png = { workspace = true }
-libc = { workspace = true }
