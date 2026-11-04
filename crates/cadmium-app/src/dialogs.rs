@@ -3,7 +3,6 @@ use gtk::glib;
 
 use crate::application::ACCELERATORS;
 use crate::tools::UiTool;
-use crate::window::TOOL_KEYS;
 
 const APPLICATION_ICON: &str = "applications-graphics-symbolic";
 const PIGMENT_DATA_CREDIT: &str = "Espectros provisórios, ajustados à mão a partir da aparência conhecida de cada pigmento; não são medições";
@@ -48,10 +47,10 @@ pub fn action_accelerator(action: &str) -> Option<String> {
 }
 
 pub fn tool_accelerator(tool: UiTool) -> String {
-    TOOL_KEYS
+    tool.profile()
+        .keys
         .iter()
-        .filter(|(_, bound)| *bound == tool)
-        .filter_map(|(key, _)| key.name())
+        .filter_map(|key| key.name())
         .collect::<Vec<_>>()
         .join(" ")
 }

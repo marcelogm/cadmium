@@ -1,8 +1,11 @@
+use gtk::gdk;
+
 pub use cadmium_engine::stroke::Tool;
 
 mod blender;
 mod brush;
 mod eyedropper;
+pub(crate) mod keys;
 mod knife;
 mod moving;
 mod rag;
@@ -21,6 +24,8 @@ pub enum UiTool {
 pub(crate) struct UiToolProfile {
     name: &'static str,
     label: &'static str,
+    pub(crate) keys: &'static [gdk::Key],
+    keypad_keys: &'static [gdk::Key],
     handling: Option<&'static str>,
 }
 

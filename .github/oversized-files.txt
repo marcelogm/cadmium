@@ -11,7 +11,7 @@
 1003 crates/cadmium-app/src/state/gesture.rs
 1359 crates/cadmium-app/src/state.rs
 658 crates/cadmium-app/src/tray_view.rs
-612 crates/cadmium-app/src/window.rs
+568 crates/cadmium-app/src/window.rs
 774 crates/cadmium-engine/src/canvas.rs
 613 crates/cadmium-engine/src/document.rs
 2067 crates/cadmium-engine/src/engine.rs

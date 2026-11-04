@@ -15,7 +15,8 @@ use crate::files::OUT_OF_VIDEO_MEMORY;
 use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
 use crate::state::{DryOutcome, SharedState};
-use crate::tools::{Tool, UiTool};
+use crate::tools::UiTool;
+use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS};
 use crate::tray_view::TrayView;
 use crate::writes::WritesInFlight;
 
@@ -127,26 +128,6 @@ const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indispo
 const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
 const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
-
-pub const TOOL_KEYS: [(gdk::Key, UiTool); 8] = [
-    (gdk::Key::h, UiTool::Move),
-    (gdk::Key::_1, UiTool::Paint(Tool::Brush)),
-    (gdk::Key::_2, UiTool::Paint(Tool::Knife)),
-    (gdk::Key::_3, UiTool::Paint(Tool::Blender)),
-    (gdk::Key::_4, UiTool::Paint(Tool::Rag)),
-    (gdk::Key::_5, UiTool::Paint(Tool::Eyedropper)),
-    (gdk::Key::_6, UiTool::Tube),
-    (gdk::Key::r, UiTool::Paint(Tool::Rag)),
-];
-
-const KEYPAD_TOOL_KEYS: [(gdk::Key, UiTool); 6] = [
-    (gdk::Key::KP_1, UiTool::Paint(Tool::Brush)),
-    (gdk::Key::KP_2, UiTool::Paint(Tool::Knife)),
-    (gdk::Key::KP_3, UiTool::Paint(Tool::Blender)),
-    (gdk::Key::KP_4, UiTool::Paint(Tool::Rag)),
-    (gdk::Key::KP_5, UiTool::Paint(Tool::Eyedropper)),
-    (gdk::Key::KP_6, UiTool::Tube),
-];
 
 impl CadmiumWindow {
     pub fn new(app: &adw::Application, state: SharedState) -> Self {
@@ -583,30 +564,5 @@ impl CadmiumWindow {
             .invert_boolean()
             .sync_create()
             .build();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn keypad_digits_choose_the_same_tools_as_the_number_row() {
-        for (keypad, tool) in KEYPAD_TOOL_KEYS {
-            let digit = keypad.name().unwrap().replace("KP_", "");
-            assert!(
-                TOOL_KEYS
-                    .iter()
-                    .any(|(key, bound)| key.name().as_deref() == Some(digit.as_str())
-                        && *bound == tool),
-                "{keypad:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn six_chooses_the_tube_on_both_rows() {
-        assert!(TOOL_KEYS.contains(&(gdk::Key::_6, UiTool::Tube)));
-        assert!(KEYPAD_TOOL_KEYS.contains(&(gdk::Key::KP_6, UiTool::Tube)));
     }
 }
