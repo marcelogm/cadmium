@@ -144,38 +144,49 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         if (mask <= 0.0) {
             continue;
         }
-        let texel = vec2<i32>(round(local)) + vec2<i32>(TIP_HALF);
-        if (any(texel < vec2<i32>(0)) || any(texel >= vec2<i32>(i32(TIP_SIZE)))) {
-            continue;
-        }
-        let base = tip_index(vec2<u32>(texel));
-        let tip_volume = tip[base + VOLUME_CHANNEL];
-        let transfer = bristle_transfer(mask, volume, dry + volume, tip_volume);
-        let deposit = transfer.deposit * sample_share;
-        let deposit_q = max(quantize(deposit), 0);
-        let pickup_q = clamp(quantize(transfer.pickup * sample_share), 0, pickup_left_q);
-        if (deposit_q == 0 && pickup_q == 0) {
-            continue;
-        }
-        pickup_left_q -= pickup_q;
-        let pickup_amount = dequantize(pickup_q);
-        for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-            var tip_share = 0.0;
-            if (tip_volume > EMPTY_VOLUME_UM) {
-                tip_share = max(tip[base + slot], 0.0) / tip_volume;
+        let continuous = local + vec2<f32>(f32(TIP_HALF));
+        let corner = vec2<i32>(floor(continuous));
+        let fraction = continuous - floor(continuous);
+        for (var neighbour = 0u; neighbour < 4u; neighbour++) {
+            let step = vec2<i32>(i32(neighbour & 1u), i32(neighbour >> 1u));
+            let texel = corner + step;
+            if (any(texel < vec2<i32>(0)) || any(texel >= vec2<i32>(i32(TIP_SIZE)))) {
+                continue;
             }
-            let deposit_slot_q = max(quantize(deposit * tip_share), 0);
-            let pickup_slot_q = max(quantize(pickup_amount * fractions[slot]), 0);
-            deposit_slots_q[slot] += deposit_slot_q;
-            pickup_slots_q[slot] += pickup_slot_q;
-            let tip_change = pickup_slot_q - deposit_slot_q;
-            if (tip_change != 0) {
-                atomicAdd(&tip_delta[base + slot], tip_change);
+            let along = mix(1.0 - fraction, fraction, vec2<f32>(step));
+            let weight = along.x * along.y * sample_share;
+            if (weight <= 0.0) {
+                continue;
             }
+            let base = tip_index(vec2<u32>(texel));
+            let tip_volume = tip[base + VOLUME_CHANNEL];
+            let transfer = bristle_transfer(mask, volume, dry + volume, tip_volume);
+            let deposit = transfer.deposit * weight;
+            let deposit_q = max(quantize(deposit), 0);
+            let pickup_q = clamp(quantize(transfer.pickup * weight), 0, pickup_left_q);
+            if (deposit_q == 0 && pickup_q == 0) {
+                continue;
+            }
+            pickup_left_q -= pickup_q;
+            let pickup_amount = dequantize(pickup_q);
+            for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
+                var tip_share = 0.0;
+                if (tip_volume > EMPTY_VOLUME_UM) {
+                    tip_share = max(tip[base + slot], 0.0) / tip_volume;
+                }
+                let deposit_slot_q = max(quantize(deposit * tip_share), 0);
+                let pickup_slot_q = max(quantize(pickup_amount * fractions[slot]), 0);
+                deposit_slots_q[slot] += deposit_slot_q;
+                pickup_slots_q[slot] += pickup_slot_q;
+                let tip_change = pickup_slot_q - deposit_slot_q;
+                if (tip_change != 0) {
+                    atomicAdd(&tip_delta[base + slot], tip_change);
+                }
+            }
+            atomicAdd(&tip_delta[base + VOLUME_CHANNEL], pickup_q - deposit_q);
+            deposit_total_q += deposit_q;
+            pickup_total_q += pickup_q;
         }
-        atomicAdd(&tip_delta[base + VOLUME_CHANNEL], pickup_q - deposit_q);
-        deposit_total_q += deposit_q;
-        pickup_total_q += pickup_q;
     }
     if (deposit_total_q == 0 && pickup_total_q == 0) {
         return;

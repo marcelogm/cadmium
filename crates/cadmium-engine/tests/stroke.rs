@@ -244,3 +244,38 @@ fn diameter_spans_min_ratio_to_max_through_the_curve() {
     assert!((g.diameter(1.0) - 40.0).abs() < 1e-5);
     assert!((g.diameter(0.5) - 26.0).abs() < 1e-5);
 }
+
+fn largest_dab_step(settings: &cadmium_engine::brush::BrushSettings) -> f64 {
+    let mut b = StrokeBuilder::new(settings.stroke_geometry());
+    let mut dabs = b.push(sample(0.0, 0));
+    dabs.extend(b.push(sample(400.0, 100)));
+    dabs.windows(2)
+        .map(|pair| f64::from(pair[1].x - pair[0].x))
+        .fold(0.0, f64::max)
+}
+
+#[test]
+fn a_wide_knife_steps_finely_so_its_oblique_ends_stay_straight() {
+    let mut knife = cadmium_engine::brush::BrushSettings {
+        tool: Tool::Knife,
+        ..Default::default()
+    };
+    knife.geometry.max_diameter_px = 450.0;
+    let step = largest_dab_step(&knife);
+    assert!(
+        step <= f64::from(cadmium_engine::brush::KNIFE_MAX_STEP_PX) + 1e-3,
+        "{step}"
+    );
+}
+
+#[test]
+fn a_wide_brush_keeps_its_spacing() {
+    let mut brush = cadmium_engine::brush::BrushSettings::default();
+    brush.geometry.max_diameter_px = 450.0;
+    brush.geometry.min_diameter_ratio = 1.0;
+    let step = largest_dab_step(&brush);
+    assert!(
+        (step - f64::from(brush.geometry.spacing * 450.0)).abs() < 1e-3,
+        "{step}"
+    );
+}

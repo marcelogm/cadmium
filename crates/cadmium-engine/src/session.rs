@@ -100,7 +100,7 @@ impl PaintSession {
         self.step_open = true;
         self.stroke_brush = self.brush.clone();
         self.engine.begin_stroke();
-        let mut builder = StrokeBuilder::new(self.stroke_brush.geometry);
+        let mut builder = StrokeBuilder::new(self.stroke_brush.stroke_geometry());
         self.queued.extend(builder.push(sample));
         self.stroke = Some(builder);
     }
