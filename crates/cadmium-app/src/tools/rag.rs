@@ -1,5 +1,7 @@
 use gtk::gdk;
 
+use super::brush::BRUSH_WORDING;
+use super::panel::{NO_CONTROLS, VisibleControls};
 use super::{Press, Tool, UiToolProfile};
 
 pub(super) const RAG: UiToolProfile = UiToolProfile {
@@ -9,5 +11,10 @@ pub(super) const RAG: UiToolProfile = UiToolProfile {
     keypad_keys: &[gdk::Key::KP_4],
     on_tray: Press::Stroke(Tool::Rag),
     on_painting: Press::Stroke(Tool::Rag),
+    controls: VisibleControls {
+        size: true,
+        ..NO_CONTROLS
+    },
+    wording: BRUSH_WORDING,
     handling: None,
 };

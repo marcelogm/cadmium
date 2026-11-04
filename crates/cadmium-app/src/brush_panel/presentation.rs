@@ -1,8 +1,8 @@
 use cadmium_engine::stroke::Tool;
 
-use crate::tools::{KNIFE_HANDLING, UiTool};
+use crate::tools::UiTool;
+use crate::tools::panel::{CLEAN_LABEL, ToolWording, VisibleControls};
 
-pub const CLEAN_LABEL: &str = "Limpo";
 const PERCENT: f64 = 100.0;
 const MIN_LISTED_SHARE: f32 = 0.01;
 pub const EYEDROPPER_HINT: &str = "Clique na tela para pegar a tinta que está nela. \
@@ -15,11 +15,19 @@ pub enum PanelTool {
 }
 
 impl PanelTool {
-    pub fn label(self) -> &'static str {
+    fn ui_tool(self) -> UiTool {
         match self {
-            PanelTool::Paint(tool) => UiTool::Paint(tool).label(),
-            PanelTool::Tube => UiTool::Tube.label(),
+            PanelTool::Paint(tool) => UiTool::Paint(tool),
+            PanelTool::Tube => UiTool::Tube,
         }
+    }
+
+    pub fn label(self) -> &'static str {
+        self.ui_tool().label()
+    }
+
+    pub fn holds_knife(self) -> bool {
+        matches!(self, PanelTool::Paint(tool) if tool.profile().holds_on_blade())
     }
 }
 
@@ -31,146 +39,16 @@ pub fn panel_tool(ui_tool: UiTool, tool_in_hand: Tool) -> PanelTool {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ToolWording {
-    pub pigments: &'static str,
-    pub loaded_title: &'static str,
-    pub loaded_tooltip: &'static str,
-    pub level_tooltip: &'static str,
-    pub clean: &'static str,
-    pub clean_button: &'static str,
-    pub size_title: &'static str,
-    pub size_subtitle: Option<&'static str>,
-    pub reload_hint: &'static str,
-    pub clean_each_hint: &'static str,
-}
-
-const BRUSH_WORDING: ToolWording = ToolWording {
-    pigments: "Clique carrega o pincel limpo, de novo mergulha mais; Ctrl+clique mistura um pouco",
-    loaded_title: "No pincel",
-    loaded_tooltip: "Esquerda: mistura na paleta · direita: ponta do pincel",
-    level_tooltip: "Tinta na reserva do pincel",
-    clean: CLEAN_LABEL,
-    clean_button: "Limpar pincel",
-    size_title: "Tamanho",
-    size_subtitle: None,
-    reload_hint: "Repõe a reserva com a mistura da paleta",
-    clean_each_hint: "Começa cada traço com o pincel limpo e recarregado",
-};
-
-const KNIFE_WORDING: ToolWording = ToolWording {
-    pigments: "Clique carrega a espátula limpa, de novo pega mais; Ctrl+clique mistura um pouco",
-    loaded_title: "Na espátula",
-    loaded_tooltip: "Esquerda: mistura na paleta · direita: tinta na espátula",
-    level_tooltip: "Tinta na espátula",
-    clean: "Limpa",
-    clean_button: "Limpar espátula",
-    size_subtitle: Some("Comprimento da lâmina"),
-    reload_hint: "Repõe a tinta da espátula até a carga",
-    clean_each_hint: "Começa cada traço com a espátula limpa e recarregada",
-    ..BRUSH_WORDING
-};
-
-const TUBE_WORDING: ToolWording = ToolWording {
-    pigments: "Clique escolhe o tubo",
-    size_title: "Bico",
-    size_subtitle: None,
-    ..BRUSH_WORDING
-};
-
 pub fn tool_wording(tool: PanelTool) -> ToolWording {
-    match tool {
-        PanelTool::Paint(Tool::Knife) => KNIFE_WORDING,
-        PanelTool::Paint(_) => BRUSH_WORDING,
-        PanelTool::Tube => TUBE_WORDING,
-    }
+    tool.ui_tool().profile().wording
 }
 
 pub fn tool_hint(tool: PanelTool) -> &'static str {
-    match tool {
-        PanelTool::Paint(Tool::Knife) => KNIFE_HANDLING,
-        PanelTool::Paint(_) | PanelTool::Tube => EYEDROPPER_HINT,
-    }
+    tool.ui_tool().handling().unwrap_or(EYEDROPPER_HINT)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct VisibleControls {
-    pub pigments: bool,
-    pub loaded: bool,
-    pub size: bool,
-    pub load: bool,
-    pub medium: bool,
-    pub plate_gap: bool,
-    pub shape: bool,
-    pub stroke_loading: bool,
-    pub clean: bool,
-    pub hint: bool,
-}
-
-impl VisibleControls {
-    pub fn tool_group(self) -> bool {
-        self.size || self.loaded || self.shape
-    }
-}
-
-const NO_CONTROLS: VisibleControls = VisibleControls {
-    pigments: false,
-    loaded: false,
-    size: false,
-    load: false,
-    medium: false,
-    plate_gap: false,
-    shape: false,
-    stroke_loading: false,
-    clean: false,
-    hint: false,
-};
-
-#[expect(clippy::too_many_lines)]
 pub fn visible_controls(tool: PanelTool) -> VisibleControls {
-    match tool {
-        PanelTool::Paint(Tool::Brush) => VisibleControls {
-            pigments: true,
-            loaded: true,
-            size: true,
-            load: true,
-            medium: true,
-            plate_gap: false,
-            shape: true,
-            stroke_loading: true,
-            clean: true,
-            hint: false,
-        },
-        PanelTool::Paint(Tool::Knife) => VisibleControls {
-            pigments: true,
-            loaded: true,
-            size: true,
-            load: true,
-            plate_gap: true,
-            stroke_loading: true,
-            clean: true,
-            hint: true,
-            ..NO_CONTROLS
-        },
-        PanelTool::Paint(Tool::Blender) => VisibleControls {
-            size: true,
-            shape: true,
-            ..NO_CONTROLS
-        },
-        PanelTool::Paint(Tool::Rag) => VisibleControls {
-            size: true,
-            ..NO_CONTROLS
-        },
-        PanelTool::Paint(Tool::Eyedropper) => VisibleControls {
-            hint: true,
-            ..NO_CONTROLS
-        },
-        PanelTool::Tube => VisibleControls {
-            pigments: true,
-            size: true,
-            ..NO_CONTROLS
-        },
-    }
+    tool.ui_tool().profile().controls
 }
 
 pub fn pile_is_highlighted(
@@ -224,6 +102,7 @@ pub fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::KNIFE_HANDLING;
 
     #[test]
     fn recipe_description_names_a_single_pigment() {

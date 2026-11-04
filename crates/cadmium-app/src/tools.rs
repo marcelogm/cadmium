@@ -2,6 +2,7 @@ use gtk::gdk;
 
 pub use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
+use panel::{ToolWording, VisibleControls};
 
 mod blender;
 mod brush;
@@ -9,6 +10,7 @@ mod eyedropper;
 pub(crate) mod keys;
 mod knife;
 mod moving;
+pub(crate) mod panel;
 mod rag;
 mod tube;
 
@@ -38,6 +40,8 @@ pub(crate) struct UiToolProfile {
     keypad_keys: &'static [gdk::Key],
     on_tray: Press,
     on_painting: Press,
+    pub(crate) controls: VisibleControls,
+    pub(crate) wording: ToolWording,
     handling: Option<&'static str>,
 }
 

@@ -392,7 +392,7 @@ impl BrushPanel {
             }
         };
         let palette_colour = colour_of(&state.palette_mixture());
-        let (held_colour, held_level, held_is_clean) = if tool == PanelTool::Paint(Tool::Knife) {
+        let (held_colour, held_level, held_is_clean) = if tool.holds_knife() {
             (
                 colour_of(&state.knife_mixture),
                 state.knife_level(),
