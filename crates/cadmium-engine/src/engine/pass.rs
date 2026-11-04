@@ -3,6 +3,7 @@ use super::dab_record::{DAB_RECORD_SIZE, DAB_RECORD_STRIDE};
 use super::placement::Placement;
 use crate::canvas::Canvas;
 use crate::gpu::GpuContext;
+use crate::tool::DabStage;
 use apply::ApplyPass;
 use blade::BladePass;
 use capillary::CapillaryPass;
@@ -114,24 +115,26 @@ impl DabPasses {
         pass: &mut wgpu::ComputePass<'_>,
         dab: PlacedDab<'_>,
     ) {
-        let profile = dab.placement.profile;
-        if profile.wipes {
-            self.wipe.encode(pass, &bind_groups.wipe, dab);
-            return;
+        for stage in dab.placement.profile.dab_stages {
+            self.encode_stage(*stage, bind_groups, pass, dab);
         }
-        if profile.blades {
-            self.spread.encode(pass, &bind_groups.spread, dab);
-            self.blade.encode(pass, &bind_groups.blade, dab);
-            return;
-        }
-        self.exchange.encode(pass, &bind_groups.exchange, dab);
-        self.apply.encode(pass, &bind_groups.apply, dab);
-        self.capillary.encode(pass, &bind_groups.refill, dab);
-        if profile.refills {
-            self.refill.encode(pass, &bind_groups.refill, dab);
-        }
-        if profile.spreads {
-            self.spread.encode(pass, &bind_groups.spread, dab);
+    }
+
+    fn encode_stage(
+        &self,
+        stage: DabStage,
+        bind_groups: &DabBindGroups,
+        pass: &mut wgpu::ComputePass<'_>,
+        dab: PlacedDab<'_>,
+    ) {
+        match stage {
+            DabStage::Exchange => self.exchange.encode(pass, &bind_groups.exchange, dab),
+            DabStage::Apply => self.apply.encode(pass, &bind_groups.apply, dab),
+            DabStage::Capillary => self.capillary.encode(pass, &bind_groups.refill, dab),
+            DabStage::Refill => self.refill.encode(pass, &bind_groups.refill, dab),
+            DabStage::Spread => self.spread.encode(pass, &bind_groups.spread, dab),
+            DabStage::Blade => self.blade.encode(pass, &bind_groups.blade, dab),
+            DabStage::Wipe => self.wipe.encode(pass, &bind_groups.wipe, dab),
         }
     }
 }

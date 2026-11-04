@@ -6,8 +6,5 @@ pub(super) const EYEDROPPER: ToolProfile = ToolProfile {
     holder: None,
     footprint: None,
     rest_follow: CONTACT_REST_FOLLOW,
-    spreads: false,
-    refills: false,
-    wipes: false,
-    blades: false,
+    dab_stages: &[],
 };

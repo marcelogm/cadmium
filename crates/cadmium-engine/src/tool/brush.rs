@@ -1,4 +1,6 @@
-use super::{CONTACT_REST_FOLLOW, FootprintShape, Holder, Spreading, TOOL_MODE_BRUSH, ToolProfile};
+use super::{
+    CONTACT_REST_FOLLOW, DabStage, FootprintShape, Holder, Spreading, TOOL_MODE_BRUSH, ToolProfile,
+};
 
 pub(super) const BRUSH: ToolProfile = ToolProfile {
     shader_mode: TOOL_MODE_BRUSH,
@@ -6,8 +8,11 @@ pub(super) const BRUSH: ToolProfile = ToolProfile {
     holder: Some(Holder::Reservoir),
     footprint: Some(FootprintShape::Ellipse),
     rest_follow: CONTACT_REST_FOLLOW,
-    spreads: true,
-    refills: true,
-    wipes: false,
-    blades: false,
+    dab_stages: &[
+        DabStage::Exchange,
+        DabStage::Apply,
+        DabStage::Capillary,
+        DabStage::Refill,
+        DabStage::Spread,
+    ],
 };

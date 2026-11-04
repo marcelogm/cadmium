@@ -12,3 +12,15 @@ fn only_a_blade_footprint_is_drawn_with_the_knife_shader_mode() {
         );
     }
 }
+
+#[test]
+fn a_tool_places_dabs_exactly_when_it_has_dab_stages() {
+    for tool in Tool::ALL {
+        let profile = tool.profile();
+        assert_eq!(
+            profile.places_dabs(),
+            !profile.dab_stages.is_empty(),
+            "{tool:?}"
+        );
+    }
+}

@@ -60,7 +60,7 @@ impl WetOilEngine {
     pub(super) fn take_first_rest(&mut self, placements: &mut [Placement]) {
         if let Some(first_resting) = placements
             .iter_mut()
-            .find(|placement| !placement.profile.wipes)
+            .find(|placement| !placement.profile.wipes())
             && self.rest_pending
         {
             first_resting.record.rest_follow = FIRST_REST_FOLLOW;
@@ -198,7 +198,11 @@ fn place(
         velocity_cutoff: params.get("velocity_cutoff"),
         residual_um: params.get("residual_um"),
         penetration_um: params.get("penetration_um"),
-        bristle_contrast: if profile.wipes { 0.0 } else { bristle_contrast },
+        bristle_contrast: if profile.wipes() {
+            0.0
+        } else {
+            bristle_contrast
+        },
         bristle_count: bristle_count.min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
         refill_rate: rate_over_step(params.get("refill_rate"), step_ratio),
         loaded_thickness_um,
