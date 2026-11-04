@@ -7,7 +7,7 @@ use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
 
-use super::{Contact, LoadRing};
+use super::{Contact, LoadRing, Loading, Squeezing};
 use crate::state::AppState;
 use crate::state::dip::mean_mixture;
 use crate::state::recipe::recipe_from_fractions;
@@ -49,12 +49,12 @@ impl AppState {
         let seconds = seconds.min(MAX_HOLD_STEP_SECONDS);
         let radius = self.session.brush.geometry.max_diameter_px / 2.0;
         match self.contact {
-            Some(Contact::Squeezing {
+            Some(Contact::Squeezing(Squeezing {
                 surface,
                 pen,
                 nozzle_at,
                 squeezed,
-            }) => {
+            })) => {
                 let squeezed_now = self.session.squeeze(
                     &self.gpu,
                     Nozzle {
@@ -67,20 +67,20 @@ impl AppState {
                         still_reach_px: STILL_TUBE_SCREEN_PX / self.screen_zoom(surface),
                     },
                 );
-                self.contact = Some(Contact::Squeezing {
+                self.contact = Some(Contact::Squeezing(Squeezing {
                     surface,
                     pen,
                     nozzle_at: (pen.x, pen.y),
                     squeezed: squeezed || squeezed_now,
-                });
+                }));
             }
-            Some(Contact::Loading {
+            Some(Contact::Loading(Loading {
                 tool,
                 origin,
                 pen,
                 colour,
                 ..
-            }) => {
+            })) => {
                 let request = DrawUpRequest {
                     center: [pen.x as f32, pen.y as f32],
                     radius,
@@ -92,13 +92,13 @@ impl AppState {
                     return;
                 };
                 let taken = (drawn.taken.volume > 0.0).then(|| self.colour_of(&drawn.taken));
-                self.contact = Some(Contact::Loading {
+                self.contact = Some(Contact::Loading(Loading {
                     tool,
                     origin,
                     pen,
                     colour: taken.or(colour),
                     level: Some(drawn.level),
-                });
+                }));
             }
             Some(Contact::Stroke { .. }) | None => return,
         }
@@ -149,13 +149,13 @@ impl AppState {
     }
 
     pub fn load_ring(&self) -> Option<LoadRing> {
-        let Some(Contact::Loading {
+        let Some(Contact::Loading(Loading {
             tool,
             pen,
             colour,
             level,
             ..
-        }) = self.contact
+        })) = self.contact
         else {
             return None;
         };

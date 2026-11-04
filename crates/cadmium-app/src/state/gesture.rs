@@ -15,20 +15,24 @@ pub struct LoadRing {
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Contact {
-    Stroke {
-        surface: Surface,
-    },
-    Loading {
-        tool: Tool,
-        origin: (f64, f64),
-        pen: StrokeSample,
-        colour: Option<[u8; 3]>,
-        level: Option<f32>,
-    },
-    Squeezing {
-        surface: Surface,
-        pen: StrokeSample,
-        nozzle_at: (f64, f64),
-        squeezed: bool,
-    },
+    Stroke { surface: Surface },
+    Loading(Loading),
+    Squeezing(Squeezing),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Loading {
+    tool: Tool,
+    origin: (f64, f64),
+    pen: StrokeSample,
+    colour: Option<[u8; 3]>,
+    level: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Squeezing {
+    surface: Surface,
+    pen: StrokeSample,
+    nozzle_at: (f64, f64),
+    squeezed: bool,
 }

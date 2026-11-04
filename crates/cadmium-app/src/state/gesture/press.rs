@@ -1,7 +1,7 @@
 use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 
-use super::Contact;
+use super::{Contact, Loading, Squeezing};
 use crate::state::AppState;
 use crate::tools::Press;
 
@@ -15,23 +15,23 @@ impl AppState {
         let began = match press {
             Press::Pan | Press::PickColour => false,
             Press::Squeeze => {
-                let squeezing = Contact::Squeezing {
+                let squeezing = Contact::Squeezing(Squeezing {
                     surface,
                     pen: sample,
                     nozzle_at: (sample.x, sample.y),
                     squeezed: false,
-                };
+                });
                 self.begin_hold(surface, sample, squeezing);
                 true
             }
             Press::LoadFromPile(tool) => {
-                let loading = Contact::Loading {
+                let loading = Contact::Loading(Loading {
                     tool,
                     origin: (sample.x, sample.y),
                     pen: sample,
                     colour: None,
                     level: None,
-                };
+                });
                 self.begin_hold(surface, sample, loading);
                 self.session.brush.tool = tool;
                 true

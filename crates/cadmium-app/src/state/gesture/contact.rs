@@ -1,9 +1,9 @@
 use cadmium_engine::stroke::StrokeSample;
 use cadmium_engine::surface::Surface;
 
-use super::Contact;
 use super::hold::{LOAD_CANCEL_SCREEN_PX, load_cancelled};
 use super::stroke::StrokePreparation;
+use super::{Contact, Loading, Squeezing};
 use crate::state::AppState;
 
 impl AppState {
@@ -28,8 +28,10 @@ impl AppState {
 
     fn contact_surface(&self) -> Option<Surface> {
         match self.contact? {
-            Contact::Stroke { surface } | Contact::Squeezing { surface, .. } => Some(surface),
-            Contact::Loading { .. } => Some(Surface::Tray),
+            Contact::Stroke { surface } | Contact::Squeezing(Squeezing { surface, .. }) => {
+                Some(surface)
+            }
+            Contact::Loading(_) => Some(Surface::Tray),
         }
     }
 
@@ -44,26 +46,26 @@ impl AppState {
                 self.add_samples(samples);
                 return;
             }
-            Some(Contact::Squeezing {
+            Some(Contact::Squeezing(Squeezing {
                 surface,
                 nozzle_at,
                 squeezed,
                 ..
-            }) => {
-                self.contact = Some(Contact::Squeezing {
+            })) => {
+                self.contact = Some(Contact::Squeezing(Squeezing {
                     surface,
                     pen,
                     nozzle_at,
                     squeezed,
-                });
+                }));
             }
-            Some(Contact::Loading {
+            Some(Contact::Loading(Loading {
                 tool,
                 origin,
                 colour,
                 level,
                 ..
-            }) => {
+            })) => {
                 let threshold_px = LOAD_CANCEL_SCREEN_PX / f64::from(self.tray_zoom);
                 let cancelled_at = samples
                     .iter()
@@ -78,13 +80,13 @@ impl AppState {
                     self.add_samples(&samples[index + 1..]);
                     return;
                 }
-                self.contact = Some(Contact::Loading {
+                self.contact = Some(Contact::Loading(Loading {
                     tool,
                     origin,
                     pen,
                     colour,
                     level,
-                });
+                }));
             }
         }
         self.note_samples(samples);
@@ -98,13 +100,13 @@ impl AppState {
         };
         match contact {
             Contact::Stroke { .. } => self.finish_stroke(),
-            Contact::Squeezing { squeezed, .. } => {
+            Contact::Squeezing(Squeezing { squeezed, .. }) => {
                 self.session.end_hold();
                 if squeezed {
                     self.edits.record();
                 }
             }
-            Contact::Loading { tool, colour, .. } => {
+            Contact::Loading(Loading { tool, colour, .. }) => {
                 self.session.end_hold();
                 self.finish_loading(tool, colour.is_some());
             }
