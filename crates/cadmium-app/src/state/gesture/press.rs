@@ -15,25 +15,11 @@ impl AppState {
         let began = match press {
             Press::Pan | Press::PickColour => false,
             Press::Squeeze => {
-                let squeezing = Contact::Squeezing(Squeezing {
-                    surface,
-                    pen: sample,
-                    nozzle_at: (sample.x, sample.y),
-                    squeezed: false,
-                });
-                self.begin_hold(surface, sample, squeezing);
+                self.begin_squeezing(surface, sample);
                 true
             }
             Press::LoadFromPile(tool) => {
-                let loading = Contact::Loading(Loading {
-                    tool,
-                    origin: (sample.x, sample.y),
-                    pen: sample,
-                    colour: None,
-                    level: None,
-                });
-                self.begin_hold(surface, sample, loading);
-                self.session.brush.tool = tool;
+                self.begin_loading(surface, tool, sample);
                 true
             }
             Press::Stroke(tool) => {
@@ -43,6 +29,28 @@ impl AppState {
         };
         self.wake();
         began
+    }
+
+    fn begin_squeezing(&mut self, surface: Surface, sample: StrokeSample) {
+        let squeezing = Squeezing {
+            surface,
+            pen: sample,
+            nozzle_at: (sample.x, sample.y),
+            squeezed: false,
+        };
+        self.begin_hold(surface, sample, Contact::Squeezing(squeezing));
+    }
+
+    fn begin_loading(&mut self, surface: Surface, tool: Tool, sample: StrokeSample) {
+        let loading = Loading {
+            tool,
+            origin: (sample.x, sample.y),
+            pen: sample,
+            colour: None,
+            level: None,
+        };
+        self.begin_hold(surface, sample, Contact::Loading(loading));
+        self.session.brush.tool = tool;
     }
 
     fn begin_hold(&mut self, surface: Surface, sample: StrokeSample, contact: Contact) {
