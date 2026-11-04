@@ -16,15 +16,20 @@ const EMPTY_VOLUME_UM: f32 = 1e-4;
 @group(0) @binding(6) var wet_vol: texture_storage_2d<r32float, write>;
 @group(0) @binding(7) var scratch_motion: texture_storage_2d<rgba32float, read>;
 
+fn scratch_texel(pixel: vec2<i32>) -> vec2<i32> {
+    return pixel - dab.canvas_origin;
+}
+
 fn inside_copied_region(pixel: vec2<i32>) -> bool {
-    let offset = pixel - dab.canvas_origin;
-    return all(offset >= vec2<i32>(0)) && all(offset < vec2<i32>(dab.canvas_size));
+    let local = scratch_texel(pixel);
+    return all(local >= vec2<i32>(0)) && all(local < vec2<i32>(dab.canvas_size));
 }
 
 fn amounts_at(pixel: vec2<i32>) -> array<f32, 9> {
-    let volume = textureLoad(scratch_vol, pixel).x;
-    let low = textureLoad(scratch_pig0, pixel) * volume;
-    let high = textureLoad(scratch_pig1, pixel) * volume;
+    let local = scratch_texel(pixel);
+    let volume = textureLoad(scratch_vol, local).x;
+    let low = textureLoad(scratch_pig0, local) * volume;
+    let high = textureLoad(scratch_pig1, local) * volume;
     return array<f32, 9>(low.x, low.y, low.z, low.w, high.x, high.y, high.z, high.w, volume);
 }
 
@@ -32,7 +37,7 @@ fn motion(pixel: vec2<i32>) -> Motion {
     if (!inside_copied_region(pixel)) {
         return Motion(vec2<f32>(0.0), 0.0);
     }
-    let stored = textureLoad(scratch_motion, pixel);
+    let stored = textureLoad(scratch_motion, scratch_texel(pixel));
     return Motion(stored.xy, stored.z);
 }
 

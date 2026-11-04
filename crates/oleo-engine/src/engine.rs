@@ -416,6 +416,12 @@ fn place(
     })
 }
 
+fn max_dab_region_side() -> u32 {
+    let knife_half_width = (KNIFE_HALF_WIDTH_RATIO * MAX_TIP_RADIUS).max(KNIFE_MIN_HALF_WIDTH_PX);
+    let half_extent = MAX_TIP_RADIUS.hypot(knife_half_width).ceil() as u32;
+    2 * (half_extent + 1 + DAB_APRON_PX as u32)
+}
+
 fn clamped_region(
     first: [i32; 2],
     last: [i32; 2],
@@ -1067,7 +1073,8 @@ impl WetOilEngine {
     }
 
     fn fit_scratch(&mut self, gpu: &GpuContext, canvas: &Canvas) {
-        let size = [canvas.spec.width, canvas.spec.height];
+        let side = max_dab_region_side();
+        let size = [canvas.spec.width.min(side), canvas.spec.height.min(side)];
         if self
             .scratch
             .as_ref()
@@ -1216,6 +1223,10 @@ impl PaintEngine for WetOilEngine {
         let refill_group = self.refill_bind_group(gpu, &dab_buffer);
         let rag_group = self.rag_bind_group(gpu, canvas, &dab_buffer);
         self.fit_scratch(gpu, canvas);
+        debug_assert!(placements.iter().all(|placement| {
+            let scratch_size = self.scratch.as_ref().map_or([0; 2], |scratch| scratch.size);
+            (0..2).all(|axis| placement.record.canvas_size[axis] <= scratch_size[axis])
+        }));
         let (copy_group, advect_group) = self.spreading_bind_groups(gpu, canvas, &dab_buffer);
 
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {

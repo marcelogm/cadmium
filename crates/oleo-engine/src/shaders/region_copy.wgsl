@@ -63,10 +63,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= dab.canvas_size.x || id.y >= dab.canvas_size.y) {
         return;
     }
-    let pixel = dab.canvas_origin + vec2<i32>(id.xy);
+    let local = vec2<i32>(id.xy);
+    let pixel = dab.canvas_origin + local;
     let volume = textureLoad(wet_vol, pixel);
-    textureStore(scratch_pig0, pixel, textureLoad(wet_pig0, pixel));
-    textureStore(scratch_pig1, pixel, textureLoad(wet_pig1, pixel));
-    textureStore(scratch_vol, pixel, volume);
-    textureStore(scratch_motion, pixel, motion(pixel, volume.x));
+    textureStore(scratch_pig0, local, textureLoad(wet_pig0, pixel));
+    textureStore(scratch_pig1, local, textureLoad(wet_pig1, pixel));
+    textureStore(scratch_vol, local, volume);
+    textureStore(scratch_motion, local, motion(pixel, volume.x));
 }

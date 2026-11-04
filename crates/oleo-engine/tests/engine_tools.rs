@@ -14,6 +14,7 @@ const PREVIEW_HEIGHT: u32 = 256;
 const CANVAS_WIDTH: usize = 512;
 const SECTION_COLUMNS: std::ops::Range<usize> = 150..350;
 const STROKE_EXTENT_SHARE: f32 = 0.05;
+const CONSERVATION_TOLERANCE: f64 = 1e-6;
 
 fn session(gpu: &GpuContext) -> PaintSession {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -154,7 +155,7 @@ fn spreading_conserves_volume() {
     let after = total(&gpu, &s);
     let (volume, pigment) = relative_drift(&before, &after);
     eprintln!("blender volume drift {volume:e}, pigment drift {pigment:?}");
-    assert!(volume.abs() < 1e-4);
+    assert!(volume.abs() < CONSERVATION_TOLERANCE);
 }
 
 #[test]
@@ -170,7 +171,7 @@ fn brush_and_knife_spreading_conserve_volume_and_each_pigment() {
     let after = total(&gpu, &s);
     let (volume, pigment) = relative_drift(&before, &after);
     eprintln!("brush+knife volume drift {volume:e}, pigment drift {pigment:?}");
-    assert!(volume.abs() < 1e-4);
+    assert!(volume.abs() < CONSERVATION_TOLERANCE);
     assert!(pigment.iter().all(|drift| drift.abs() < 5e-3));
 }
 
@@ -199,6 +200,46 @@ fn band_means(profile: &[f32]) -> (f32, f32) {
     );
     let central = mean((first + band..=last - band).collect());
     (outer, central)
+}
+
+fn diagonal(from: (f64, f64), to: (f64, f64), pressure: f32, tilt_x_deg: f32) -> Vec<StrokeSample> {
+    line(0.0, 0.0, 1.0, pressure, tilt_x_deg)
+        .into_iter()
+        .map(|sample| StrokeSample {
+            x: from.0 + (to.0 - from.0) * sample.x,
+            y: from.1 + (to.1 - from.1) * sample.x,
+            ..sample
+        })
+        .collect()
+}
+
+#[test]
+fn strokes_running_off_the_canvas_edges_conserve_volume() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let before = total(&gpu, &s);
+    drag(&gpu, &mut s, &line(3.0, -30.0, 540.0, 1.0, 20.0));
+    drag(&gpu, &mut s, &column(508.0, 280.0, -30.0, 1.0, 50.0));
+    let edged = total(&gpu, &s);
+    s.brush.geometry.max_diameter_px = 500.0;
+    s.reload_brush(&gpu);
+    let reloaded = total(&gpu, &s);
+    drag(
+        &gpu,
+        &mut s,
+        &diagonal((-40.0, 300.0), (560.0, -40.0), 1.0, 60.0),
+    );
+    s.brush.tool = Tool::Knife;
+    drag(
+        &gpu,
+        &mut s,
+        &diagonal((560.0, 290.0), (-40.0, -30.0), 1.0, 0.0),
+    );
+    let after = total(&gpu, &s);
+    let (first, _) = relative_drift(&before, &edged);
+    let (second, pigment) = relative_drift(&reloaded, &after);
+    eprintln!("edge volume drift {first:e} then {second:e}, pigment drift {pigment:?}");
+    assert!(first.abs() < CONSERVATION_TOLERANCE && second.abs() < CONSERVATION_TOLERANCE);
 }
 
 #[test]
