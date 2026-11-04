@@ -17,8 +17,6 @@ const VIEW_COLOR: u32 = 0u;
 const VIEW_HEIGHT: u32 = 1u;
 const VIEW_WETNESS: u32 = 2u;
 
-const OPTICAL_DEPTH_LIMIT: f32 = 20.0;
-const NEGLIGIBLE_BETA: f32 = 1e-7;
 const SURFACE_REFLECTION_K1: f32 = 0.04;
 const INTERNAL_REFLECTION_K2: f32 = 0.6;
 
@@ -52,46 +50,9 @@ const VOLUME_VIEW_FULL_SCALE_UM: f32 = 200.0;
 @group(0) @binding(8) var dry_height: texture_storage_2d<r32float, read>;
 @group(0) @binding(9) var display: texture_storage_2d<rgba16float, write>;
 
-struct Layer {
-    reflectance: f32,
-    transmittance: f32,
-};
-
-fn km_layer(absorption: f32, scattering: f32, thickness_um: f32) -> Layer {
-    let k = max(absorption, 0.0);
-    let s = max(scattering, 0.0);
-    let x = max(thickness_um, 0.0);
-    let beta = sqrt(k * (k + 2.0 * s));
-    if (beta < NEGLIGIBLE_BETA) {
-        let sx = s * x;
-        return Layer(sx / (1.0 + sx), 1.0 / (1.0 + sx));
-    }
-    let optical_depth = beta * x;
-    let bx = min(optical_depth, OPTICAL_DEPTH_LIMIT);
-    let d = (k + s) * sinh(bx) + beta * cosh(bx);
-    var transmittance = beta / d;
-    if (optical_depth >= OPTICAL_DEPTH_LIMIT) {
-        transmittance = 0.0;
-    }
-    return Layer(s * sinh(bx) / d, transmittance);
-}
-
-fn composite_over(top: Layer, below_reflectance: f32) -> f32 {
-    return top.reflectance
-        + top.transmittance * top.transmittance * below_reflectance
-            / (1.0 - top.reflectance * below_reflectance);
-}
-
 fn saunderson_display(reflectance: f32) -> f32 {
     return (1.0 - SURFACE_REFLECTION_K1) * (1.0 - INTERNAL_REFLECTION_K2) * reflectance
         / (1.0 - INTERNAL_REFLECTION_K2 * reflectance);
-}
-
-fn pick(low: vec4<f32>, high: vec4<f32>, index: u32) -> f32 {
-    if (index < 4u) {
-        return low[index];
-    }
-    return high[index - 4u];
 }
 
 fn clamped(pixel: vec2<i32>, size: vec2<u32>) -> vec2<i32> {
@@ -108,14 +69,9 @@ fn albedo(fractions_low: vec4<f32>, fractions_high: vec4<f32>, volume: f32, belo
     for (var b = 0u; b < 8u; b++) {
         let band_vec = b / 4u;
         let lane = b % 4u;
-        var k = 0.0;
-        var s = 0.0;
-        for (var slot = 0u; slot < slots.count; slot++) {
-            let c = pick(fractions_low, fractions_high, slot);
-            k += c * slots.absorption[2u * slot + band_vec][lane];
-            s += c * slots.scattering[2u * slot + band_vec][lane];
-        }
-        let below = pick(below_low, below_high, b);
+        let k = mixture_absorption(fractions_low, fractions_high, b);
+        let s = mixture_scattering(fractions_low, fractions_high, b);
+        let below = slot_lane(below_low, below_high, b);
         let shown = saunderson_display(composite_over(km_layer(k, s, volume), below));
         xyz += shown * vec3<f32>(
             params.xyz_weights[band_vec][lane],
@@ -182,7 +138,7 @@ fn main(
         return;
     }
     if (params.view_mode != VIEW_COLOR) {
-        let amount = pick(fractions_low, fractions_high, params.view_slot) * volume;
+        let amount = slot_lane(fractions_low, fractions_high, params.view_slot) * volume;
         textureStore(display, pixel, vec4<f32>(vec3<f32>(amount / VOLUME_VIEW_FULL_SCALE_UM), 1.0));
         return;
     }

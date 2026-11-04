@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use wgpu::util::DeviceExt;
 
 use crate::brush::{BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX};
-use crate::canvas::{Canvas, PaintTotals, StateTexture};
+use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
@@ -32,6 +32,23 @@ const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
 const KNIFE_ADVECTION: f32 = 1.0;
 const KNIFE_SQUEEZE_GAIN: f32 = 2.0;
+const MAX_PICK_RADIUS_PX: f32 = 16.0;
+const MIN_PICK_RADIUS_PX: f32 = 0.5;
+const DRY_WORKGROUP_SIZE: u32 = 8;
+const DRY_WORKGROUPS_PER_TILE_SIDE: u32 = TILE_SIZE / DRY_WORKGROUP_SIZE;
+const TIP_GROUPS: u32 = TIP_SIZE.div_ceil(WORKGROUP_SIZE);
+
+const DAB_SNIPPETS: [&str; 3] = [
+    include_str!("shaders/brush_tip.wgsl"),
+    include_str!("shaders/nearest_half.wgsl"),
+    include_str!("shaders/footprint.wgsl"),
+];
+const EYEDROPPER_SNIPPETS: [&str; 1] = [include_str!("shaders/brush_tip.wgsl")];
+const DRY_SNIPPETS: [&str; 3] = [
+    include_str!("shaders/pigment_slots.wgsl"),
+    include_str!("shaders/kubelka_munk.wgsl"),
+    include_str!("shaders/nearest_half.wgsl"),
+];
 
 const TOOL_MODE_BRUSH: u32 = 0;
 const TOOL_MODE_KNIFE: u32 = 1;
@@ -50,6 +67,12 @@ pub trait PaintEngine {
         encoder: &mut wgpu::CommandEncoder,
     );
     fn end_stroke(&mut self, gpu: &GpuContext, canvas: &Canvas);
+    fn encode_dry(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        encoder: &mut wgpu::CommandEncoder,
+    );
     fn params(&self) -> &SimParams;
     fn params_mut(&mut self) -> &mut SimParams;
 }
@@ -98,6 +121,17 @@ struct BodyState {
 }
 
 const BODY_BYTES: u64 = std::mem::size_of::<BodyState>() as u64;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct PickRecord {
+    center: [f32; 2],
+    radius: f32,
+    tip_radius: f32,
+    thickness_um: f32,
+    empty_body_volume_um: f32,
+    _pad: [f32; 2],
+}
 const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
 const CONTACT_REFERENCE_BYTES: u64 = std::mem::size_of::<f32>() as u64;
 
@@ -109,6 +143,7 @@ struct Placement {
     tip_groups: [u32; 2],
     spreads: bool,
     refills: bool,
+    wipes: bool,
 }
 
 struct ScratchSurface {
@@ -203,7 +238,26 @@ fn spreads(tool: Tool) -> bool {
 }
 
 fn refills(tool: Tool) -> bool {
-    tool != Tool::Blender
+    !matches!(tool, Tool::Blender | Tool::Rag)
+}
+
+fn wipes(tool: Tool) -> bool {
+    tool == Tool::Rag
+}
+
+fn is_finite(dab: &Dab) -> bool {
+    [
+        dab.x,
+        dab.y,
+        dab.radius,
+        dab.pressure,
+        dab.altitude,
+        dab.azimuth,
+        dab.direction,
+        dab.speed,
+    ]
+    .iter()
+    .all(|value| value.is_finite())
 }
 
 impl Footprint {
@@ -278,6 +332,9 @@ fn place(
     loaded_thickness_um: f32,
     canvas: &Canvas,
 ) -> Option<Placement> {
+    if brush.tool == Tool::Eyedropper || !is_finite(dab) {
+        return None;
+    }
     let footprint = Footprint::of(dab, brush, params);
     let [half_x, half_y] = footprint.canvas_half_extents();
     let width = canvas.spec.width as f32;
@@ -308,11 +365,19 @@ fn place(
         canvas_size,
         tip_origin,
         tip_size,
-        transfer_fraction: params.get("transfer_fraction"),
+        transfer_fraction: if wipes(brush.tool) {
+            params.get("rag_strength")
+        } else {
+            params.get("transfer_fraction")
+        },
         velocity_cutoff: params.get("velocity_cutoff"),
         residual_um: params.get("residual_um"),
         penetration_um: params.get("penetration_um"),
-        bristle_contrast: params.get("bristle_contrast"),
+        bristle_contrast: if wipes(brush.tool) {
+            0.0
+        } else {
+            params.get("bristle_contrast")
+        },
         bristle_count: params
             .get("bristle_count")
             .min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
@@ -330,11 +395,12 @@ fn place(
         tip_groups: tip_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
         spreads: spreads(brush.tool),
         refills: refills(brush.tool),
+        wipes: wipes(brush.tool),
     })
 }
 
-fn shader_source(body: &str) -> String {
-    format!(
+fn shader_source(snippets: &[&str], body: &str) -> String {
+    let mut source = format!(
         "const TIP_SIZE: u32 = {TIP_SIZE}u;\n\
          const TIP_HALF: i32 = {TIP_HALF};\n\
          const TIP_CHANNELS: u32 = {TIP_CHANNELS}u;\n\
@@ -342,11 +408,14 @@ fn shader_source(body: &str) -> String {
          const VOLUME_CHANNEL: u32 = {VOLUME_CHANNEL}u;\n\
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
          const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
-         {}\n{}\n{}\n{body}",
-        include_str!("shaders/brush_tip.wgsl"),
-        include_str!("shaders/nearest_half.wgsl"),
-        include_str!("shaders/footprint.wgsl")
-    )
+         const TILE_SIZE: u32 = {TILE_SIZE}u;\n"
+    );
+    for snippet in snippets {
+        source.push_str(snippet);
+        source.push('\n');
+    }
+    source.push_str(body);
+    source
 }
 
 fn compute_pipeline(
@@ -367,11 +436,16 @@ fn compute_pipeline(
         })
 }
 
-fn shader_module(gpu: &GpuContext, label: &str, body: &str) -> wgpu::ShaderModule {
+fn shader_module(
+    gpu: &GpuContext,
+    label: &str,
+    snippets: &[&str],
+    body: &str,
+) -> wgpu::ShaderModule {
     gpu.device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(label),
-            source: wgpu::ShaderSource::Wgsl(shader_source(body).into()),
+            source: wgpu::ShaderSource::Wgsl(shader_source(snippets, body).into()),
         })
 }
 
@@ -499,6 +573,9 @@ pub struct WetOilEngine {
     apply_layout: wgpu::BindGroupLayout,
     refill_layout: wgpu::BindGroupLayout,
     spreading_layout: wgpu::BindGroupLayout,
+    rag_layout: wgpu::BindGroupLayout,
+    pick_layout: wgpu::BindGroupLayout,
+    dry_layout: wgpu::BindGroupLayout,
     scratch: Option<Scratch>,
     reference_pipeline: wgpu::ComputePipeline,
     exchange_pipeline: wgpu::ComputePipeline,
@@ -508,6 +585,10 @@ pub struct WetOilEngine {
     distribute_pipeline: wgpu::ComputePipeline,
     copy_pipeline: wgpu::ComputePipeline,
     advect_pipeline: wgpu::ComputePipeline,
+    rag_pipeline: wgpu::ComputePipeline,
+    pick_sample_pipeline: wgpu::ComputePipeline,
+    pick_reload_pipeline: wgpu::ComputePipeline,
+    dry_pipeline: wgpu::ComputePipeline,
 }
 
 impl WetOilEngine {
@@ -563,15 +644,59 @@ impl WetOilEngine {
             ],
         );
 
-        let exchange = shader_module(
+        let (rag_layout, rag_pipeline_layout) = layouts(
             gpu,
-            "dab_exchange",
-            include_str!("shaders/dab_exchange.wgsl"),
+            "rag",
+            &[
+                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                texture_entry(1, ReadWrite, R32Float),
+            ],
         );
-        let apply = shader_module(gpu, "tip_apply", include_str!("shaders/tip_apply.wgsl"));
-        let refill = shader_module(gpu, "tip_refill", include_str!("shaders/tip_refill.wgsl"));
-        let copy = shader_module(gpu, "region_copy", include_str!("shaders/region_copy.wgsl"));
-        let advect = shader_module(gpu, "advect", include_str!("shaders/advect.wgsl"));
+        let (pick_layout, pick_pipeline_layout) = layouts(
+            gpu,
+            "eyedropper",
+            &[
+                uniform_entry(0, None),
+                texture_entry(1, ReadOnly, Rgba16Float),
+                texture_entry(2, ReadOnly, Rgba16Float),
+                texture_entry(3, ReadOnly, R32Float),
+                texture_entry(4, ReadOnly, Rgba16Float),
+                texture_entry(5, ReadOnly, Rgba16Float),
+                storage_entry(6, false),
+                storage_entry(7, false),
+            ],
+        );
+        let (dry_layout, dry_pipeline_layout) = layouts(
+            gpu,
+            "dry",
+            &[
+                uniform_entry(0, None),
+                storage_entry(1, true),
+                texture_entry(2, ReadWrite, Rgba16Float),
+                texture_entry(3, ReadWrite, Rgba16Float),
+                texture_entry(4, ReadWrite, R32Float),
+                texture_entry(5, ReadWrite, Rgba16Float),
+                texture_entry(6, ReadWrite, Rgba16Float),
+                texture_entry(7, ReadWrite, R32Float),
+                texture_entry(8, WriteOnly, Rgba16Float),
+                texture_entry(9, WriteOnly, Rgba16Float),
+            ],
+        );
+
+        let dab_module = |label, body| shader_module(gpu, label, &DAB_SNIPPETS, body);
+        let exchange = dab_module("dab_exchange", include_str!("shaders/dab_exchange.wgsl"));
+        let apply = dab_module("tip_apply", include_str!("shaders/tip_apply.wgsl"));
+        let refill = dab_module("tip_refill", include_str!("shaders/tip_refill.wgsl"));
+        let copy = dab_module("region_copy", include_str!("shaders/region_copy.wgsl"));
+        let advect = dab_module("advect", include_str!("shaders/advect.wgsl"));
+        let rag = dab_module("rag", include_str!("shaders/rag.wgsl"));
+        let eyedropper = shader_module(
+            gpu,
+            "eyedropper",
+            &EYEDROPPER_SNIPPETS,
+            include_str!("shaders/eyedropper.wgsl"),
+        );
+        let dry = shader_module(gpu, "dry", &DRY_SNIPPETS, include_str!("shaders/dry.wgsl"));
 
         WetOilEngine {
             params: SimParams::default(),
@@ -642,10 +767,29 @@ impl WetOilEngine {
                 &spreading_pipeline_layout,
                 "main",
             ),
+            rag_pipeline: compute_pipeline(gpu, "rag", &rag, &rag_pipeline_layout, "main"),
+            pick_sample_pipeline: compute_pipeline(
+                gpu,
+                "eyedropper_sample",
+                &eyedropper,
+                &pick_pipeline_layout,
+                "sample",
+            ),
+            pick_reload_pipeline: compute_pipeline(
+                gpu,
+                "eyedropper_reload",
+                &eyedropper,
+                &pick_pipeline_layout,
+                "reload",
+            ),
+            dry_pipeline: compute_pipeline(gpu, "dry", &dry, &dry_pipeline_layout, "main"),
             exchange_layout,
             apply_layout,
             refill_layout,
             spreading_layout,
+            rag_layout,
+            pick_layout,
+            dry_layout,
             scratch: None,
         }
     }
@@ -721,6 +865,137 @@ impl WetOilEngine {
             volume_um: self.loaded_thickness_um,
             fractions,
         }
+    }
+
+    pub fn encode_eyedropper(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        x: f32,
+        y: f32,
+        radius: f32,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if !x.is_finite() || !y.is_finite() {
+            return;
+        }
+        let radius = if radius.is_finite() {
+            radius.clamp(MIN_PICK_RADIUS_PX, MAX_PICK_RADIUS_PX)
+        } else {
+            MIN_PICK_RADIUS_PX
+        };
+        let record = PickRecord {
+            center: [x, y],
+            radius,
+            tip_radius: self.tip_radius,
+            thickness_um: self.loaded_thickness_um,
+            empty_body_volume_um: BODY_RESERVE_FACTOR
+                * std::f32::consts::PI
+                * self.tip_radius
+                * self.tip_radius
+                * self.loaded_thickness_um,
+            _pad: [0.0; 2],
+        };
+        let pick = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("eyedropper"),
+                contents: bytemuck::bytes_of(&record),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("eyedropper"),
+            layout: &self.pick_layout,
+            entries: &[
+                buffer_binding(0, &pick),
+                texture_binding(1, canvas, StateTexture::WetPig0),
+                texture_binding(2, canvas, StateTexture::WetPig1),
+                texture_binding(3, canvas, StateTexture::WetVol),
+                texture_binding(4, canvas, StateTexture::DryTopPig0),
+                texture_binding(5, canvas, StateTexture::DryTopPig1),
+                buffer_binding(6, &self.body),
+                buffer_binding(7, &self.tip),
+            ],
+        });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("eyedropper"),
+            timestamp_writes: None,
+        });
+        pass.set_bind_group(0, &group, &[]);
+        pass.set_pipeline(&self.pick_sample_pipeline);
+        pass.dispatch_workgroups(1, 1, 1);
+        pass.set_pipeline(&self.pick_reload_pipeline);
+        pass.dispatch_workgroups(TIP_GROUPS, TIP_GROUPS, 1);
+    }
+
+    pub fn encode_dry_tiles(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        tiles: &[TileCoord],
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if tiles.is_empty() {
+            return;
+        }
+        let tile_list: Vec<[u32; 2]> = tiles.iter().map(|tile| [tile.x, tile.y]).collect();
+        let tile_buffer = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("dry_tiles"),
+                contents: bytemuck::cast_slice(&tile_list),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
+        let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("dry"),
+            layout: &self.dry_layout,
+            entries: &[
+                buffer_binding(0, canvas.slot_table()),
+                buffer_binding(1, &tile_buffer),
+                texture_binding(2, canvas, StateTexture::WetPig0),
+                texture_binding(3, canvas, StateTexture::WetPig1),
+                texture_binding(4, canvas, StateTexture::WetVol),
+                texture_binding(5, canvas, StateTexture::DryRefl0),
+                texture_binding(6, canvas, StateTexture::DryRefl1),
+                texture_binding(7, canvas, StateTexture::DryHeight),
+                texture_binding(8, canvas, StateTexture::DryTopPig0),
+                texture_binding(9, canvas, StateTexture::DryTopPig1),
+            ],
+        });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("dry"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.dry_pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.dispatch_workgroups(
+            DRY_WORKGROUPS_PER_TILE_SIDE,
+            DRY_WORKGROUPS_PER_TILE_SIDE,
+            tile_list.len() as u32,
+        );
+        drop(pass);
+        for tile in tiles {
+            let x0 = (tile.x * TILE_SIZE) as f32;
+            let y0 = (tile.y * TILE_SIZE) as f32;
+            let last = (TILE_SIZE - 1) as f32;
+            canvas.dirty.mark_rect(x0, y0, x0 + last, y0 + last);
+        }
+    }
+
+    fn rag_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        dabs: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("rag"),
+            layout: &self.rag_layout,
+            entries: &[
+                dab_binding(0, dabs),
+                texture_binding(1, canvas, StateTexture::WetVol),
+            ],
+        })
     }
 
     fn exchange_bind_group(
@@ -897,6 +1172,7 @@ impl PaintEngine for WetOilEngine {
         let exchange_group = self.exchange_bind_group(gpu, canvas, &dab_buffer);
         let apply_group = self.apply_bind_group(gpu, &dab_buffer);
         let refill_group = self.refill_bind_group(gpu, &dab_buffer);
+        let rag_group = self.rag_bind_group(gpu, canvas, &dab_buffer);
         self.fit_scratch(gpu, canvas);
         let (copy_group, advect_group) = self.spreading_bind_groups(gpu, canvas, &dab_buffer);
 
@@ -906,6 +1182,12 @@ impl PaintEngine for WetOilEngine {
         });
         for (index, placement) in placements.iter().enumerate() {
             let offset = (index as u64 * DAB_RECORD_STRIDE) as wgpu::DynamicOffset;
+            if placement.wipes {
+                pass.set_bind_group(0, &rag_group, &[offset]);
+                pass.set_pipeline(&self.rag_pipeline);
+                pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
+                continue;
+            }
             pass.set_bind_group(0, &exchange_group, &[offset]);
             pass.set_pipeline(&self.reference_pipeline);
             pass.dispatch_workgroups(1, 1, 1);
@@ -942,6 +1224,16 @@ impl PaintEngine for WetOilEngine {
     }
 
     fn end_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas) {}
+
+    fn encode_dry(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let tiles = canvas.wet_tiles.take();
+        self.encode_dry_tiles(gpu, canvas, &tiles, encoder);
+    }
 
     fn params(&self) -> &SimParams {
         &self.params

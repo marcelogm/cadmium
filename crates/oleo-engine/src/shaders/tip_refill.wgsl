@@ -1,10 +1,3 @@
-struct Body {
-    pigment: array<f32, 8>,
-    volume: f32,
-    granted_ratio: f32,
-    granted_fractions: array<f32, 8>,
-};
-
 struct Wanted {
     low: atomic<u32>,
     high: atomic<u32>,

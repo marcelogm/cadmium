@@ -27,6 +27,13 @@ struct Dab {
     knife_flatten: f32,
 };
 
+struct Body {
+    pigment: array<f32, 8>,
+    volume: f32,
+    granted_ratio: f32,
+    granted_fractions: array<f32, 8>,
+};
+
 fn tip_index(texel: vec2<u32>) -> u32 {
     return (texel.y * TIP_SIZE + texel.x) * TIP_CHANNELS;
 }
