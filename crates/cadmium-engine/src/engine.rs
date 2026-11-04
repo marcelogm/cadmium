@@ -195,14 +195,13 @@ impl DipRecord {
 struct PickRecord {
     center: [f32; 2],
     radius: f32,
-    tip_radius: f32,
-    thickness_um: f32,
-    empty_body_volume_um: f32,
-    _pad: [f32; 2],
+    _pad: f32,
 }
 const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
 const CONTACT_REFERENCE_BYTES: u64 = std::mem::size_of::<f32>() as u64;
-const PAINT_FOUND_BYTES: u64 = std::mem::size_of::<u32>() as u64;
+const PICKED_PAINT_FOUND: usize = 0;
+const PICKED_FRACTIONS: usize = 1;
+const PICKED_BYTES: u64 = ((PICKED_FRACTIONS + PIGMENT_CHANNELS) * std::mem::size_of::<f32>()) as u64;
 
 #[derive(Clone, Copy, Debug)]
 struct Placement {
@@ -774,7 +773,7 @@ pub struct WetOilEngine {
     body: wgpu::Buffer,
     wanted: wgpu::Buffer,
     contact_reference: wgpu::Buffer,
-    paint_found: wgpu::Buffer,
+    picked: wgpu::Buffer,
     tip_sums: wgpu::Buffer,
     blade_load: wgpu::Buffer,
     blade_delta: wgpu::Buffer,
@@ -803,8 +802,7 @@ pub struct WetOilEngine {
     copy_pipeline: wgpu::ComputePipeline,
     advect_pipeline: wgpu::ComputePipeline,
     rag_pipeline: wgpu::ComputePipeline,
-    pick_sample_pipeline: wgpu::ComputePipeline,
-    pick_reload_pipeline: wgpu::ComputePipeline,
+    pick_pipeline: wgpu::ComputePipeline,
     dry_pipeline: wgpu::ComputePipeline,
     fill_body_pipeline: wgpu::ComputePipeline,
     fill_tip_pipeline: wgpu::ComputePipeline,
@@ -886,8 +884,6 @@ impl WetOilEngine {
                 texture_entry(4, ReadOnly, Rgba16Float),
                 texture_entry(5, ReadOnly, Rgba16Float),
                 storage_entry(6, false),
-                storage_entry(7, false),
-                storage_entry(8, false),
             ],
         );
         let (dry_layout, dry_pipeline_layout) = layouts(
@@ -968,7 +964,7 @@ impl WetOilEngine {
                 "dab_contact_reference",
                 CONTACT_REFERENCE_BYTES,
             ),
-            paint_found: storage_buffer(gpu, "eyedropper_paint_found", PAINT_FOUND_BYTES),
+            picked: storage_buffer(gpu, "eyedropper_picked", PICKED_BYTES),
             tip_sums: storage_buffer(gpu, "brush_tip_sums", TIP_SUMS_BYTES),
             blade_load: storage_buffer(gpu, "knife_blade_load", BLADE_LOAD_BYTES),
             blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
@@ -1035,19 +1031,12 @@ impl WetOilEngine {
                 "main",
             ),
             rag_pipeline: compute_pipeline(gpu, "rag", &rag, &rag_pipeline_layout, "main"),
-            pick_sample_pipeline: compute_pipeline(
+            pick_pipeline: compute_pipeline(
                 gpu,
-                "eyedropper_sample",
+                "eyedropper",
                 &eyedropper,
                 &pick_pipeline_layout,
                 "sample",
-            ),
-            pick_reload_pipeline: compute_pipeline(
-                gpu,
-                "eyedropper_reload",
-                &eyedropper,
-                &pick_pipeline_layout,
-                "reload",
             ),
             dry_pipeline: compute_pipeline(gpu, "dry", &dry, &dry_pipeline_layout, "main"),
             fill_body_pipeline: compute_pipeline(
@@ -1350,7 +1339,7 @@ impl WetOilEngine {
     }
 
     pub fn encode_eyedropper(
-        &mut self,
+        &self,
         gpu: &GpuContext,
         canvas: &Canvas,
         x: f32,
@@ -1358,6 +1347,7 @@ impl WetOilEngine {
         radius: f32,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        encoder.clear_buffer(&self.picked, 0, None);
         if !x.is_finite() || !y.is_finite() {
             return;
         }
@@ -1373,10 +1363,7 @@ impl WetOilEngine {
         let record = PickRecord {
             center: [x, y],
             radius,
-            tip_radius: self.tip_radius,
-            thickness_um: self.loaded_thickness_um,
-            empty_body_volume_um: self.reserve_volume(self.loaded_thickness_um),
-            _pad: [0.0; 2],
+            _pad: 0.0,
         };
         let pick = gpu
             .device
@@ -1395,9 +1382,7 @@ impl WetOilEngine {
                 texture_binding(3, canvas, StateTexture::WetVol),
                 texture_binding(4, canvas, StateTexture::DryTopPig0),
                 texture_binding(5, canvas, StateTexture::DryTopPig1),
-                buffer_binding(6, &self.body),
-                buffer_binding(7, &self.tip),
-                buffer_binding(8, &self.paint_found),
+                buffer_binding(6, &self.picked),
             ],
         });
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -1405,10 +1390,19 @@ impl WetOilEngine {
             timestamp_writes: None,
         });
         pass.set_bind_group(0, &group, &[]);
-        pass.set_pipeline(&self.pick_sample_pipeline);
+        pass.set_pipeline(&self.pick_pipeline);
         pass.dispatch_workgroups(1, 1, 1);
-        pass.set_pipeline(&self.pick_reload_pipeline);
-        pass.dispatch_workgroups(TIP_GROUPS, TIP_GROUPS, 1);
+    }
+
+    pub fn picked_mixture(&self, gpu: &GpuContext) -> Option<Mixture> {
+        let picked = read_buffer(gpu, &self.picked);
+        if picked[PICKED_PAINT_FOUND].to_bits() == 0 {
+            return None;
+        }
+        Some(Mixture {
+            volume_um: self.loaded_thickness_um,
+            fractions: std::array::from_fn(|slot| picked[PICKED_FRACTIONS + slot]),
+        })
     }
 
     pub fn dab_bounds(

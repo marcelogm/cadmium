@@ -121,13 +121,13 @@ impl PaintSession {
         self.history.redo(gpu, &mut self.canvas)
     }
 
-    pub fn pick_color(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Mixture {
-        let mut encoder = new_encoder(gpu, "pick_color");
+    pub fn pick_colour(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Option<Mixture> {
+        let mut encoder = new_encoder(gpu, "pick_colour");
         self.encode_queued_dabs(gpu, &mut encoder);
         self.engine
             .encode_eyedropper(gpu, &self.canvas, x, y, PICK_RADIUS_PX, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        self.engine.reservoir_mixture(gpu)
+        self.engine.picked_mixture(gpu)
     }
 
     pub fn resize_tip(&mut self) {

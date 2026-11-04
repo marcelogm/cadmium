@@ -81,8 +81,8 @@ fn dry(gpu: &GpuContext, s: &mut PaintSession) {
     without_wgpu_errors(gpu, || s.dry(gpu));
 }
 
-fn pick(gpu: &GpuContext, s: &mut PaintSession, x: f32, y: f32) -> Mixture {
-    without_wgpu_errors(gpu, || s.pick_color(gpu, x, y))
+fn pick(gpu: &GpuContext, s: &mut PaintSession, x: f32, y: f32) -> Option<Mixture> {
+    without_wgpu_errors(gpu, || s.pick_colour(gpu, x, y))
 }
 
 fn shaded_display(gpu: &GpuContext, s: &mut PaintSession) -> Vec<f32> {
@@ -120,16 +120,16 @@ fn rag_keeps_the_wet_mixture_proportions() {
 }
 
 #[test]
-fn eyedropper_loads_the_brush_with_the_mixture_under_it() {
+fn eyedropper_finds_the_mixture_under_it() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    let m = pick(&gpu, &mut s, 256.0, 128.0);
+    let m = pick(&gpu, &mut s, 256.0, 128.0).unwrap();
     assert!(m.fractions[0] > 0.5, "{:?}", m.fractions);
 }
 
 #[test]
-fn eyedropper_reloads_the_tip_so_the_next_stroke_paints_the_picked_colour() {
+fn a_brush_loaded_with_the_picked_mixture_paints_the_picked_colour() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     s.brush.recipe = vec![(1, 1.0)];
@@ -137,7 +137,9 @@ fn eyedropper_reloads_the_tip_so_the_next_stroke_paints_the_picked_colour() {
     stroke(&gpu, &mut s, 64.0, 40.0, 470.0);
     s.brush.recipe = vec![(0, 1.0)];
     s.reload_brush(&gpu);
-    pick(&gpu, &mut s, 256.0, 64.0);
+    let picked = pick(&gpu, &mut s, 256.0, 64.0).unwrap();
+    s.brush.recipe = picked.fractions.iter().copied().enumerate().collect();
+    s.reload_brush(&gpu);
     stroke(&gpu, &mut s, 192.0, 40.0, 470.0);
     let low = s.canvas.read_f32(&gpu, StateTexture::WetPig0);
     let texel = 4 * (192 * CANVAS_WIDTH + 256);
@@ -146,14 +148,14 @@ fn eyedropper_reloads_the_tip_so_the_next_stroke_paints_the_picked_colour() {
 }
 
 #[test]
-fn eyedropper_on_an_empty_brush_gives_it_a_full_body() {
+fn eyedropper_over_paint_finds_it_without_touching_the_brush() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     s.clean_brush(&gpu);
-    let m = pick(&gpu, &mut s, 256.0, 128.0);
+    let m = pick(&gpu, &mut s, 256.0, 128.0).unwrap();
     assert!(m.fractions[0] > 0.5, "{:?}", m.fractions);
-    assert!(s.engine.brush_totals(&gpu).volume > 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).volume, 0.0);
 }
 
 #[test]
@@ -164,7 +166,7 @@ fn eyedropper_over_dried_paint_picks_the_top_dry_layer() {
     s.reload_brush(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     dry(&gpu, &mut s);
-    let m = pick(&gpu, &mut s, 256.0, 128.0);
+    let m = pick(&gpu, &mut s, 256.0, 128.0).unwrap();
     assert!(m.fractions[1] > 0.5, "{:?}", m.fractions);
 }
 
@@ -285,7 +287,7 @@ fn assert_brush_untouched_by_pick(x: f32, y: f32) {
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let before = s.engine.brush_totals(&gpu);
     let mixture_before = s.engine.reservoir_mixture(&gpu);
-    pick(&gpu, &mut s, x, y);
+    assert!(pick(&gpu, &mut s, x, y).is_none());
     assert_eq!(s.engine.brush_totals(&gpu), before);
     assert_eq!(
         s.engine.reservoir_mixture(&gpu).fractions,
@@ -296,6 +298,15 @@ fn assert_brush_untouched_by_pick(x: f32, y: f32) {
 #[test]
 fn eyedropper_off_the_canvas_leaves_the_brush_untouched() {
     assert_brush_untouched_by_pick(-200.0, -200.0);
+}
+
+#[test]
+fn a_pick_off_the_canvas_finds_nothing_even_right_after_a_pick_that_found_paint() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    assert!(pick(&gpu, &mut s, 256.0, 128.0).is_some());
+    assert!(pick(&gpu, &mut s, -200.0, -200.0).is_none());
 }
 
 #[test]
@@ -313,7 +324,7 @@ fn eyedropper_at_the_edge_of_dried_paint_ignores_the_bare_primer_around_it() {
         low[texel + 1] = 1.0;
         low
     });
-    let m = pick(&gpu, &mut s, 256.5, 128.5);
+    let m = pick(&gpu, &mut s, 256.5, 128.5).unwrap();
     assert!((m.fractions[1] - 1.0).abs() < 1e-3, "{:?}", m.fractions);
 }
 

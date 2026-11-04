@@ -470,12 +470,9 @@ impl AppState {
 
     pub fn pick_colour(&mut self, x: f32, y: f32) -> bool {
         self.put_down_stroke_tool();
-        self.session.flush(&self.gpu);
-        let before = self.session.engine.reservoir_mixture(&self.gpu);
-        let picked = self.session.pick_color(&self.gpu, x, y);
-        if picked == before {
+        let Some(picked) = self.session.pick_colour(&self.gpu, x, y) else {
             return false;
-        }
+        };
         self.session.brush.recipe = recipe_from_fractions(&picked.fractions);
         self.session.reload_brush(&self.gpu);
         if self.holds_knife() {
@@ -916,6 +913,21 @@ mod tests {
         let totals = brush_totals(&state);
         assert_eq!(totals.pigment[WHITE_SLOT], 0.0);
         assert!(totals.pigment[ULTRAMARINE_SLOT] > 0.0);
+    }
+
+    #[test]
+    fn picking_the_colour_already_on_the_brush_refreshes_it() {
+        let mut state = painting_state();
+        let full = reserve_volume(&state);
+        let samples = row_samples(PAINT_ROW_Y);
+        state.reload_each_stroke = false;
+        stroke(&mut state, Tool::Brush, &samples);
+        assert!(reserve_volume(&state) < full);
+        let middle = samples[samples.len() / 2];
+        assert!(state.pick_colour(middle.x as f32, middle.y as f32));
+        assert!((reserve_volume(&state) - full).abs() <= full * RESERVE_TOLERANCE);
+        assert_eq!(state.session.brush.recipe.len(), 1);
+        assert_eq!(state.session.brush.recipe[0].0, ULTRAMARINE_SLOT);
     }
 
     #[test]
