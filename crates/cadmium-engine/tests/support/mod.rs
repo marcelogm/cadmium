@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, Weave},
     gpu::GpuContext,
-    present::{ViewTransform, readback_rgba8},
+    present::{PresentRequest, ViewTransform, readback_rgba8},
     session::PaintSession,
     stroke::StrokeSample,
 };
@@ -93,11 +93,13 @@ pub fn presented_rgba(gpu: &GpuContext, s: &PaintSession, width: u32, height: u3
     let mut e = gpu.device.create_command_encoder(&Default::default());
     s.presenter.encode_present(
         gpu,
-        &s.canvas,
-        ViewTransform {
-            origin_x: 0.0,
-            origin_y: 0.0,
-            zoom: 1.0,
+        PresentRequest {
+            canvas: &s.canvas,
+            view: ViewTransform {
+                origin_x: 0.0,
+                origin_y: 0.0,
+                zoom: 1.0,
+            },
         },
         &target,
         &mut e,

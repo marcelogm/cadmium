@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::gpu::{GpuContext, GpuLost};
-use crate::present::{ViewTransform, readback_rgba8};
+use crate::present::{PresentRequest, ViewTransform, readback_rgba8};
 use crate::render::ViewMode;
 use crate::session::PaintSession;
 
@@ -38,8 +38,10 @@ impl ExportedImage {
         session.encode_frame(gpu, &mut encoder);
         session.presenter.encode_present(
             gpu,
-            &session.canvas,
-            UNSCALED_VIEW,
+            PresentRequest {
+                canvas: &session.canvas,
+                view: UNSCALED_VIEW,
+            },
             &target,
             &mut encoder,
         );

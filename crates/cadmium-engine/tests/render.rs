@@ -40,7 +40,7 @@ fn shade_and_present(
         },
         &mut enc,
     );
-    presenter.encode_present(gpu, canvas, view, &target, &mut enc);
+    presenter.encode_present(gpu, PresentRequest { canvas, view }, &target, &mut enc);
     gpu.queue.submit([enc.finish()]);
     readback_rgba8(gpu, &target).unwrap()
 }

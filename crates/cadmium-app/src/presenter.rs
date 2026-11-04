@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
-use cadmium_engine::present::ViewTransform;
+use cadmium_engine::present::{PresentRequest, ViewTransform};
 use cadmium_engine::surface::{TRAY_HEIGHT, TRAY_WIDTH};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -52,8 +52,10 @@ impl PresentSource {
                 state.encode_frame(encoder);
                 state.session.presenter.encode_present(
                     gpu,
-                    &state.session.canvas,
-                    state.view,
+                    PresentRequest {
+                        canvas: &state.session.canvas,
+                        view: state.view,
+                    },
                     target,
                     encoder,
                 );
@@ -63,8 +65,10 @@ impl PresentSource {
                 let view = tray_view((target.width(), target.height()));
                 state.session.presenter.encode_present(
                     gpu,
-                    &state.session.tray,
-                    view,
+                    PresentRequest {
+                        canvas: &state.session.tray,
+                        view,
+                    },
                     target,
                     encoder,
                 );

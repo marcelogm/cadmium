@@ -15,6 +15,11 @@ pub struct ViewTransform {
     pub zoom: f32,
 }
 
+pub struct PresentRequest<'a> {
+    pub canvas: &'a Canvas,
+    pub view: ViewTransform,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct PresentParams {
@@ -61,15 +66,14 @@ impl Presenter {
         })
     }
 
-    #[expect(clippy::too_many_arguments)]
     pub fn encode_present(
         &self,
         gpu: &GpuContext,
-        canvas: &Canvas,
-        view: ViewTransform,
+        request: PresentRequest<'_>,
         target: &wgpu::Texture,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        let PresentRequest { canvas, view } = request;
         let params = PresentParams {
             origin: [view.origin_x, view.origin_y],
             zoom: view.zoom,
