@@ -3,5 +3,7 @@ pub mod canvas;
 pub mod gpu;
 pub mod params;
 pub mod pigments;
+pub mod present;
+pub mod render;
 pub mod spectral;
 pub mod stroke;
