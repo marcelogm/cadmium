@@ -13,7 +13,7 @@ use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::{Dwell, Nozzle, Tube, dwell_after, squeeze_region};
+use crate::tube::{Dwell, Nozzle, SqueezeRecord, Tube, dwell_after, squeeze_region};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -202,8 +202,8 @@ impl PaintSession {
         let mut encoder = new_encoder(gpu, "squeeze");
         self.history
             .encode_save_tiles(gpu, canvas, &tiles, &mut encoder);
-        self.tube
-            .encode_squeeze(gpu, canvas, params, &nozzle, &region, &mut encoder);
+        let record = SqueezeRecord::new(&nozzle, &region, params);
+        self.tube.encode_squeeze(gpu, canvas, &record, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         true
     }
@@ -230,7 +230,7 @@ impl PaintSession {
             let Some(region) = region else {
                 return Ok(PaintTotals::default());
             };
-            take_from(gpu, drawer, history, canvas, &request, &region, room_um)
+            take_from(gpu, drawer, history, canvas, &region, room_um)
         })?;
         Ok(DrawnUp { taken, level })
     }
@@ -511,7 +511,6 @@ fn take_from(
     drawer: &DrawUp,
     history: &mut History,
     canvas: &mut Canvas,
-    request: &DrawUpRequest,
     region: &DrawUpRegion,
     room_um: f32,
 ) -> Result<PaintTotals, GpuLost> {
@@ -524,7 +523,7 @@ fn take_from(
     if !tiles.iter().any(|tile| canvas.wet_tiles.contains(*tile)) {
         return Ok(nothing);
     }
-    let measured = drawer.measure(gpu, canvas, request, region, room_um)?;
+    let measured = drawer.measure(gpu, canvas, region, room_um)?;
     if measured.taken.volume.is_nan() || measured.taken.volume <= 0.0 {
         return Ok(nothing);
     }

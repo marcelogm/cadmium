@@ -54,6 +54,8 @@ pub(crate) struct DrawUpRegion {
     pub origin: [i32; 2],
     pub size: [u32; 2],
     pub share: f32,
+    pub center: [f32; 2],
+    pub radius: f32,
 }
 
 impl DrawUpRegion {
@@ -87,6 +89,8 @@ pub(crate) fn draw_up_region(
         origin,
         size,
         share,
+        center: request.center,
+        radius: request.radius,
     })
 }
 
@@ -131,18 +135,16 @@ impl DrawUp {
         }
     }
 
-    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn measure(
         &self,
         gpu: &GpuContext,
         canvas: &Canvas,
-        request: &DrawUpRequest,
         region: &DrawUpRegion,
         room_um: f32,
     ) -> Result<Measured, GpuLost> {
         let record = DrawUpRecord {
-            center: request.center,
-            radius: request.radius,
+            center: region.center,
+            radius: region.radius,
             share: region.share,
             room: room_um,
             _pad: 0.0,
@@ -156,16 +158,35 @@ impl DrawUp {
                 contents: bytemuck::bytes_of(&record),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        let group = self.compute.bind_group(
+        let group = self.measure_bind_group(gpu, canvas, &uniform);
+        self.submit_measure(gpu, &group);
+        let drawn = read_buffer(gpu, &self.drawn)?;
+        Ok(Measured {
+            group,
+            region: *region,
+            taken: drawn_totals(&drawn),
+        })
+    }
+
+    fn measure_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        uniform: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        self.compute.bind_group(
             gpu,
             &[
-                buffer_binding(0, &uniform),
+                buffer_binding(0, uniform),
                 texture_binding(1, canvas, StateTexture::WetPig0),
                 texture_binding(2, canvas, StateTexture::WetPig1),
                 texture_binding(3, canvas, StateTexture::WetVol),
                 buffer_binding(4, &self.drawn),
             ],
-        );
+        )
+    }
+
+    fn submit_measure(&self, gpu: &GpuContext, group: &wgpu::BindGroup) {
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -175,24 +196,11 @@ impl DrawUp {
             label: Some("draw_up_measure"),
             timestamp_writes: None,
         });
-        pass.set_bind_group(0, &group, &[]);
+        pass.set_bind_group(0, group, &[]);
         pass.set_pipeline(&self.measure);
         pass.dispatch_workgroups(1, 1, 1);
         drop(pass);
         gpu.queue.submit([encoder.finish()]);
-        let drawn = read_buffer(gpu, &self.drawn)?;
-        let mut taken = PaintTotals {
-            volume: f64::from(drawn[DRAWN_VOLUME]),
-            ..PaintTotals::default()
-        };
-        for (slot, amount) in drawn[DRAWN_PIGMENT..].iter().enumerate() {
-            taken.pigment[slot] = f64::from(*amount);
-        }
-        Ok(Measured {
-            group,
-            region: *region,
-            taken,
-        })
     }
 
     pub(crate) fn encode_take(
@@ -217,6 +225,17 @@ impl DrawUp {
         let [x0, y0, x1, y1] = region.rect();
         canvas.dirty.mark_rect(x0, y0, x1, y1);
     }
+}
+
+fn drawn_totals(drawn: &[f32]) -> PaintTotals {
+    let mut taken = PaintTotals {
+        volume: f64::from(drawn[DRAWN_VOLUME]),
+        ..PaintTotals::default()
+    };
+    for (slot, amount) in drawn[DRAWN_PIGMENT..].iter().enumerate() {
+        taken.pigment[slot] = f64::from(*amount);
+    }
+    taken
 }
 
 #[cfg(test)]

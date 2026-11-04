@@ -31,7 +31,7 @@ const BLOB_SETTLE_SECONDS: f32 = 0.25;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct SqueezeRecord {
+pub(crate) struct SqueezeRecord {
     segment_start: [f32; 2],
     segment_end: [f32; 2],
     radius: f32,
@@ -40,6 +40,29 @@ struct SqueezeRecord {
     slot: u32,
     origin: [i32; 2],
     size: [u32; 2],
+}
+
+impl SqueezeRecord {
+    pub(crate) fn new(
+        nozzle: &Nozzle,
+        region: &SqueezeRegion,
+        params: &SimParams,
+    ) -> SqueezeRecord {
+        SqueezeRecord {
+            segment_start: nozzle.from,
+            segment_end: nozzle.to,
+            radius: nozzle.radius,
+            height_um: region.height_um,
+            max_um: params.get("tube_max_um"),
+            slot: nozzle.slot as u32,
+            origin: region.origin,
+            size: region.size,
+        }
+    }
+
+    fn rect(&self) -> [f32; 4] {
+        region_rect(self.origin, self.size)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -154,31 +177,18 @@ impl Tube {
         }
     }
 
-    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(crate) fn encode_squeeze(
         &self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
-        params: &SimParams,
-        nozzle: &Nozzle,
-        region: &SqueezeRegion,
+        record: &SqueezeRecord,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let record = SqueezeRecord {
-            segment_start: nozzle.from,
-            segment_end: nozzle.to,
-            radius: nozzle.radius,
-            height_um: region.height_um,
-            max_um: params.get("tube_max_um"),
-            slot: nozzle.slot as u32,
-            origin: region.origin,
-            size: region.size,
-        };
         let uniform = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("squeeze"),
-                contents: bytemuck::bytes_of(&record),
+                contents: bytemuck::bytes_of(record),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let group = self.compute.bind_group(
@@ -197,12 +207,12 @@ impl Tube {
         pass.set_bind_group(0, &group, &[]);
         pass.set_pipeline(&self.pipeline);
         pass.dispatch_workgroups(
-            region.size[0].div_ceil(WORKGROUP_SIZE),
-            region.size[1].div_ceil(WORKGROUP_SIZE),
+            record.size[0].div_ceil(WORKGROUP_SIZE),
+            record.size[1].div_ceil(WORKGROUP_SIZE),
             1,
         );
         drop(pass);
-        let [x0, y0, x1, y1] = region.rect();
+        let [x0, y0, x1, y1] = record.rect();
         canvas.dirty.mark_rect(x0, y0, x1, y1);
         canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
     }
