@@ -1,5 +1,5 @@
 use super::pattern::FramePattern;
-use super::*;
+use super::run::FRAMES;
 
 #[test]
 fn consecutive_frames_use_distinct_patterns() {
