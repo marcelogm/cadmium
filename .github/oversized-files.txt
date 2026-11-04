@@ -16,7 +16,7 @@
 613 crates/cadmium-engine/src/document.rs
 2067 crates/cadmium-engine/src/engine.rs
 519 crates/cadmium-engine/src/history.rs
-576 crates/cadmium-engine/src/session.rs
+572 crates/cadmium-engine/src/session.rs
 403 crates/cadmium-engine/tests/brush_loading.rs
 409 crates/cadmium-engine/tests/canvas.rs
 927 crates/cadmium-engine/tests/document.rs

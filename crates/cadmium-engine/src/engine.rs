@@ -8,8 +8,8 @@ use crate::canvas::{Canvas, PaintTotals, StateTexture, TILE_SIZE, TileCoord};
 use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
-use crate::stroke::{Dab, StrokeSample, Tool, pen_angles};
-use crate::tool::{TOOL_MODE_KNIFE, ToolProfile};
+use crate::stroke::{Dab, StrokeSample, pen_angles};
+use crate::tool::{FootprintShape, TOOL_MODE_KNIFE, ToolProfile};
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -380,7 +380,7 @@ fn is_finite(dab: &Dab) -> bool {
 
 impl Footprint {
     fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
-        if brush.tool == Tool::Knife {
+        if brush.tool.profile().footprint == Some(FootprintShape::Blade) {
             let radius =
                 (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
             return Footprint {
@@ -456,10 +456,10 @@ fn place(
     canvas: &Canvas,
 ) -> Option<Placement> {
     let profile = brush.tool.profile();
-    if brush.tool == Tool::Eyedropper || !is_finite(dab) {
+    if profile.footprint.is_none() || !is_finite(dab) {
         return None;
     }
-    if brush.tool == Tool::Knife && !heading_known(dab) {
+    if profile.footprint == Some(FootprintShape::Blade) && !heading_known(dab) {
         return None;
     }
     let footprint = Footprint::of(dab, brush, params);
@@ -1520,7 +1520,7 @@ impl WetOilEngine {
         brush: &BrushSettings,
         sample: &StrokeSample,
     ) -> Option<BrushOutline> {
-        if matches!(brush.tool, Tool::Knife | Tool::Eyedropper) {
+        if brush.tool.profile().footprint != Some(FootprintShape::Ellipse) {
             return None;
         }
         let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);

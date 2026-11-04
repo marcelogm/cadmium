@@ -18,11 +18,31 @@ const CONTACT_REST_FOLLOW: f32 = 0.25;
 pub struct ToolProfile {
     pub(crate) shader_mode: u32,
     pub(crate) spreading: Spreading,
+    pub holder: Option<Holder>,
+    pub(crate) footprint: Option<FootprintShape>,
     pub(crate) rest_follow: f32,
     pub(crate) spreads: bool,
     pub(crate) refills: bool,
     pub(crate) wipes: bool,
     pub(crate) blades: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Holder {
+    Reservoir,
+    Blade,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FootprintShape {
+    Ellipse,
+    Blade,
+}
+
+impl ToolProfile {
+    pub fn holds_on_blade(&self) -> bool {
+        self.holder == Some(Holder::Blade)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

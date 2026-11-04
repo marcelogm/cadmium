@@ -11,7 +11,7 @@ use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ViewMode};
-use crate::stroke::{Dab, StrokeBuilder, StrokeSample, Tool};
+use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
 use crate::tube::{Dwell, Nozzle, Tube, dwell_after, squeeze_region};
 
@@ -218,7 +218,7 @@ impl PaintSession {
         let Some(Hold { surface, .. }) = self.hold else {
             return Ok(DrawnUp::default());
         };
-        if !draws_up(self.brush.tool) {
+        if self.brush.tool.profile().holder.is_none() {
             return Ok(DrawnUp::default());
         }
         self.resize_tip();
@@ -420,7 +420,7 @@ impl PaintSession {
     }
 
     fn holds_knife(&self) -> bool {
-        self.brush.tool == Tool::Knife
+        self.brush.tool.profile().holds_on_blade()
     }
 
     pub fn has_pending_work(&self) -> bool {
@@ -535,10 +535,6 @@ fn take_from(
     drawer.encode_take(canvas, &measured, &mut encoder);
     gpu.queue.submit([encoder.finish()]);
     Ok(measured.taken)
-}
-
-fn draws_up(tool: Tool) -> bool {
-    matches!(tool, Tool::Brush | Tool::Knife)
 }
 
 fn surface_canvas<'a>(
