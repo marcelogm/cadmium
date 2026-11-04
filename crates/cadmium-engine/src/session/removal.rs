@@ -1,8 +1,8 @@
 use crate::canvas::StateTexture;
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, new_encoder};
 use crate::surface::Surface;
 
-use super::{ClearOutcome, PaintSession, new_encoder};
+use super::{ClearOutcome, PaintSession};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 

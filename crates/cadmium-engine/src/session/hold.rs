@@ -1,12 +1,12 @@
 use crate::canvas::{Canvas, PaintTotals, tiles_in_rect};
 use crate::draw_up::{DrawUp, DrawUpRegion, DrawUpRequest, DrawnUp, draw_up_region};
 use crate::engine::PaintEngine;
-use crate::gpu::{GpuContext, GpuLost};
+use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::History;
 use crate::surface::Surface;
 use crate::tube::{Dwell, Nozzle, SqueezeRecord, dwell_after, squeeze_region};
 
-use super::{PaintSession, new_encoder, surface_canvas};
+use super::{PaintSession, surface_canvas};
 
 pub(super) struct Hold {
     surface: Surface,

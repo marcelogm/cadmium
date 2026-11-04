@@ -2,7 +2,7 @@ use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
 use crate::draw_up::DrawUp;
 use crate::engine::{PaintEngine, PickRequest, WetOilEngine};
-use crate::gpu::{GpuContext, GpuLost};
+use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
@@ -183,9 +183,4 @@ fn history_budget(spec: &CanvasSpec) -> u64 {
     let painting = tile_count(spec.width, spec.height) * HISTORY_PAINTING_COPIES;
     let tray = tile_count(TRAY_WIDTH, TRAY_HEIGHT) * HISTORY_TRAY_COPIES;
     HISTORY_BUDGET_BYTES.min((painting + tray) * bytes_per_tile_all_textures())
-}
-
-fn new_encoder(gpu: &GpuContext, label: &str) -> wgpu::CommandEncoder {
-    gpu.device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) })
 }

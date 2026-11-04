@@ -1,7 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::canvas::{Canvas, TileCoord};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, new_encoder};
 use crate::surface::Surface;
 
 mod atlas;
@@ -214,11 +214,7 @@ impl History {
             self.drop_redo_steps();
             redoable = self.reserve_after_slots(&mut step);
         }
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("undo"),
-            });
+        let mut encoder = new_encoder(gpu, "undo");
         for saved in &step.tiles {
             self.undo_tile(canvas, saved, &mut encoder);
         }
@@ -235,11 +231,7 @@ impl History {
         let Some(step) = self.redo_steps.pop() else {
             return false;
         };
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("redo"),
-            });
+        let mut encoder = new_encoder(gpu, "redo");
         for saved in &step.tiles {
             self.redo_tile(canvas, saved, step.removes_wet_paint, &mut encoder);
         }

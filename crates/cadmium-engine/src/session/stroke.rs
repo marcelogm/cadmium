@@ -2,11 +2,11 @@ use std::collections::BTreeSet;
 
 use crate::canvas::{TileCoord, tiles_in_rect};
 use crate::engine::{DabBatch, PaintEngine};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, new_encoder};
 use crate::stroke::{StrokeBuilder, StrokeSample};
 use crate::surface::Surface;
 
-use super::{PaintSession, new_encoder, surface_canvas};
+use super::{PaintSession, surface_canvas};
 
 const SAVE_MARGIN_PX: f32 = 4.0;
 

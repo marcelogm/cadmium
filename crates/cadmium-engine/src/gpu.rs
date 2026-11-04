@@ -138,6 +138,11 @@ fn watch_device(device: &wgpu::Device) -> Arc<AtomicBool> {
     lost
 }
 
+pub(crate) fn new_encoder(gpu: &GpuContext, label: &str) -> wgpu::CommandEncoder {
+    gpu.device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) })
+}
+
 pub fn staging_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
     gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
