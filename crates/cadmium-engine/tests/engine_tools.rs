@@ -1,3 +1,5 @@
+pub mod support;
+
 use std::path::PathBuf;
 
 use cadmium_engine::{
@@ -9,6 +11,7 @@ use cadmium_engine::{
     session::PaintSession,
     stroke::{StrokeSample, Tool, pen_angles},
 };
+use support::{drag, frame, line, session, session_of_width, stroke};
 
 const PREVIEW_WIDTH: u32 = 512;
 const PREVIEW_HEIGHT: u32 = 256;
@@ -44,70 +47,6 @@ const PLATE_START_COLUMNS: std::ops::Range<usize> = 40..140;
 const SHORTEST_FULL_DIP_PLATE_PX: usize = 600;
 const LONGEST_FULL_DIP_PLATE_PX: usize = 850;
 
-fn session(gpu: &GpuContext) -> PaintSession {
-    session_of_width(gpu, CANVAS_WIDTH as u32)
-}
-
-fn session_of_width(gpu: &GpuContext, width: u32) -> PaintSession {
-    let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let session = PaintSession::new(
-        gpu,
-        CanvasSpec {
-            width,
-            height: 256,
-            primer: Primer::WhiteGesso,
-            weave: Weave::Linen,
-            pigment_slots: vec![
-                "ultramarine_blue".into(),
-                "cadmium_yellow".into(),
-                "titanium_white".into(),
-            ],
-        },
-    )
-    .unwrap();
-    let error = pollster::block_on(scope.pop());
-    assert!(error.is_none(), "wgpu error: {error:?}");
-    session
-}
-
-fn frame(gpu: &GpuContext, s: &mut PaintSession) {
-    let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
-    gpu.queue.submit([e.finish()]);
-    let error = pollster::block_on(scope.pop());
-    assert!(error.is_none(), "wgpu error: {error:?}");
-}
-
-fn drag(gpu: &GpuContext, s: &mut PaintSession, samples: &[StrokeSample]) {
-    for (i, sample) in samples.iter().enumerate() {
-        if i == 0 {
-            s.begin_stroke(gpu, *sample)
-        } else {
-            s.add_samples(&[*sample])
-        }
-        if i % 4 == 0 {
-            frame(gpu, s);
-        }
-    }
-    s.end_stroke();
-    frame(gpu, s);
-}
-
-fn line(y: f64, from: f64, to: f64, pressure: f32, tilt_x_deg: f32) -> Vec<StrokeSample> {
-    let steps = 60;
-    (0..=steps)
-        .map(|i| StrokeSample {
-            x: from + (to - from) * i as f64 / steps as f64,
-            y,
-            pressure,
-            tilt_x_deg,
-            tilt_y_deg: 0.0,
-            time_ms: i * 4,
-        })
-        .collect()
-}
-
 fn column(x: f64, from: f64, to: f64, pressure: f32, tilt_x_deg: f32) -> Vec<StrokeSample> {
     line(0.0, from, to, pressure, tilt_x_deg)
         .into_iter()
@@ -117,10 +56,6 @@ fn column(x: f64, from: f64, to: f64, pressure: f32, tilt_x_deg: f32) -> Vec<Str
             ..sample
         })
         .collect()
-}
-
-fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
-    drag(gpu, s, &line(y, from, to, 0.8, 20.0));
 }
 
 fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
