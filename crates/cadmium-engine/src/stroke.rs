@@ -13,6 +13,16 @@ pub enum Tool {
     Eyedropper,
 }
 
+impl Tool {
+    pub const ALL: [Tool; 5] = [
+        Tool::Brush,
+        Tool::Knife,
+        Tool::Blender,
+        Tool::Rag,
+        Tool::Eyedropper,
+    ];
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct StrokeSample {
     pub x: f64,

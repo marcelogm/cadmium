@@ -43,6 +43,18 @@ impl ToolProfile {
     pub fn holds_on_blade(&self) -> bool {
         self.holder == Some(Holder::Blade)
     }
+
+    pub(crate) fn has_blade_footprint(&self) -> bool {
+        self.footprint == Some(FootprintShape::Blade)
+    }
+
+    pub(crate) fn has_ellipse_footprint(&self) -> bool {
+        self.footprint == Some(FootprintShape::Ellipse)
+    }
+
+    pub(crate) fn places_dabs(&self) -> bool {
+        self.footprint.is_some()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -93,3 +105,6 @@ impl Tool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

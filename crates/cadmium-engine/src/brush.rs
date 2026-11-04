@@ -1,6 +1,5 @@
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::{BrushGeometry, PressureCurve, Tool};
-use crate::tool::FootprintShape;
 
 pub const FULL_RESERVOIR_VOLUME_UM: f32 = 200.0;
 pub const DEFAULT_MAX_DIAMETER_PX: f32 = 40.0;
@@ -49,9 +48,7 @@ impl Default for BrushSettings {
 impl BrushSettings {
     pub fn stroke_geometry(&self) -> BrushGeometry {
         let mut geometry = self.geometry;
-        if self.tool.profile().footprint == Some(FootprintShape::Blade)
-            && geometry.max_diameter_px > 0.0
-        {
+        if self.tool.profile().has_blade_footprint() && geometry.max_diameter_px > 0.0 {
             geometry.spacing = geometry
                 .spacing
                 .min(KNIFE_MAX_STEP_PX / geometry.max_diameter_px);

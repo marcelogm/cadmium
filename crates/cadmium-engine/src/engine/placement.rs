@@ -11,7 +11,7 @@ use crate::compute::WORKGROUP_SIZE;
 use crate::params::SimParams;
 use crate::region::clamped_region;
 use crate::stroke::Dab;
-use crate::tool::{FootprintShape, ToolProfile};
+use crate::tool::ToolProfile;
 
 const REFERENCE_STEP_PX: f32 = DEFAULT_SPACING * DEFAULT_MAX_DIAMETER_PX;
 const DAB_APRON_PX: i32 = 2;
@@ -152,10 +152,10 @@ fn place(
     canvas: &Canvas,
 ) -> Option<Placement> {
     let profile = brush.tool.profile();
-    if profile.footprint.is_none() || !is_finite(dab) {
+    if !profile.places_dabs() || !is_finite(dab) {
         return None;
     }
-    if profile.footprint == Some(FootprintShape::Blade) && !heading_known(dab) {
+    if profile.has_blade_footprint() && !heading_known(dab) {
         return None;
     }
     let footprint = Footprint::of(dab, brush, params);

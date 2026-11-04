@@ -4,7 +4,6 @@ use super::{
 use crate::brush::{BrushSettings, BrushShape};
 use crate::params::SimParams;
 use crate::stroke::{Dab, StrokeSample, pen_angles};
-use crate::tool::FootprintShape;
 
 const FLAT_THICKNESS_SHARE: f32 = 0.25;
 const FAN_THICKNESS_SHARE: f32 = 0.12;
@@ -30,7 +29,7 @@ pub(super) struct Footprint {
 
 impl Footprint {
     pub(super) fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
-        if brush.tool.profile().footprint == Some(FootprintShape::Blade) {
+        if brush.tool.profile().has_blade_footprint() {
             let radius =
                 (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
             return Footprint {
@@ -117,7 +116,7 @@ impl WetOilEngine {
         brush: &BrushSettings,
         sample: &StrokeSample,
     ) -> Option<BrushOutline> {
-        if brush.tool.profile().footprint != Some(FootprintShape::Ellipse) {
+        if !brush.tool.profile().has_ellipse_footprint() {
             return None;
         }
         let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
