@@ -35,13 +35,25 @@ const EDGE_LOW_SHARE: f32 = 0.1;
 const SHARP_EDGE_PX: usize = 2;
 const FURROW_SHARE: f32 = 0.6;
 const PREDICTION_TOLERANCE: f64 = 1e-4;
+const WIDE_CANVAS_WIDTH: usize = 1024;
+const WIDE_STROKE_START_PX: f64 = 20.0;
+const WIDE_STROKE_END_PX: f64 = 1004.0;
+const FULL_GAP_PRESSURE: f32 = 0.0;
+const PLATE_REACH_SHARE: f32 = 0.5;
+const PLATE_START_COLUMNS: std::ops::Range<usize> = 40..140;
+const SHORTEST_FULL_DIP_PLATE_PX: usize = 600;
+const LONGEST_FULL_DIP_PLATE_PX: usize = 850;
 
 fn session(gpu: &GpuContext) -> PaintSession {
+    session_of_width(gpu, CANVAS_WIDTH as u32)
+}
+
+fn session_of_width(gpu: &GpuContext, width: u32) -> PaintSession {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let session = PaintSession::new(
         gpu,
         CanvasSpec {
-            width: 512,
+            width,
             height: 256,
             primer: Primer::WhiteGesso,
             weave: Weave::Linen,
@@ -524,6 +536,46 @@ fn a_full_dip_lays_on_a_clean_knife_the_volume_the_engine_predicts() {
         "{loaded} {predicted}"
     );
     assert!(s.engine.knife_full_dip_volume(2.0 * mixture.volume_um) > predicted as f32);
+}
+
+fn row_profile(
+    gpu: &GpuContext,
+    s: &PaintSession,
+    width: usize,
+    rows: std::ops::Range<usize>,
+) -> Vec<f32> {
+    let wet = s.canvas.read_f32(gpu, StateTexture::WetVol);
+    let count = rows.len() as f32;
+    (0..width)
+        .map(|x| rows.clone().map(|y| wet[y * width + x]).sum::<f32>() / count)
+        .collect()
+}
+
+#[test]
+fn a_full_knife_dip_lays_a_plate_most_of_a_canvas_width_long() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session_of_width(&gpu, WIDE_CANVAS_WIDTH as u32);
+    dip_knife(&gpu, &mut s);
+    drag(
+        &gpu,
+        &mut s,
+        &line(
+            KNIFE_ROW,
+            WIDE_STROKE_START_PX,
+            WIDE_STROKE_END_PX,
+            FULL_GAP_PRESSURE,
+            LAID_TILT_DEG,
+        ),
+    );
+    let profile = row_profile(&gpu, &s, WIDE_CANVAS_WIDTH, PLATE_INTERIOR);
+    let plate = mean(&profile[PLATE_START_COLUMNS]);
+    let end = profile
+        .iter()
+        .rposition(|&height| height > PLATE_REACH_SHARE * plate)
+        .unwrap();
+    let length = end - WIDE_STROKE_START_PX as usize;
+    eprintln!("a full dip laid a {plate} µm plate {length} px long");
+    assert!((SHORTEST_FULL_DIP_PLATE_PX..=LONGEST_FULL_DIP_PLATE_PX).contains(&length));
 }
 
 #[test]
