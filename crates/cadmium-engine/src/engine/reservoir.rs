@@ -88,7 +88,6 @@ impl WetOilEngine {
         }
     }
 
-    #[expect(clippy::excessive_nesting)]
     fn draw_up_into_reserve(
         &mut self,
         gpu: &GpuContext,
@@ -99,9 +98,9 @@ impl WetOilEngine {
         let taken = take(capacity - held)?;
         if holds_paint(&taken) {
             self.add_to_reserve(gpu, &taken);
-            if held <= 0.0 {
-                self.loaded_thickness_um = self.loaded_thickness_um.max(DRAWN_LOADED_THICKNESS_UM);
-            }
+        }
+        if holds_paint(&taken) && held <= 0.0 {
+            self.loaded_thickness_um = self.loaded_thickness_um.max(DRAWN_LOADED_THICKNESS_UM);
         }
         Ok((taken, level_after(held, capacity, &taken)))
     }
@@ -146,22 +145,19 @@ impl WetOilEngine {
         gpu.queue.submit([encoder.finish()]);
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         let body = read_buffer(gpu, &self.buffers.body)?;
         let volume = body[VOLUME_CHANNEL];
-        let fractions = std::array::from_fn(|slot| {
-            if volume > 0.0 {
-                body[slot] / volume
-            } else {
-                0.0
-            }
-        });
+        let fractions = std::array::from_fn(|slot| share_of(body[slot], volume));
         Ok(Mixture {
             volume_um: self.loaded_thickness_um,
             fractions,
         })
     }
+}
+
+fn share_of(amount: f32, volume: f32) -> f32 {
+    if volume > 0.0 { amount / volume } else { 0.0 }
 }
 
 pub(super) fn level_after(held_um: f32, capacity_um: f32, taken: &PaintTotals) -> f32 {

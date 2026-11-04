@@ -1,8 +1,8 @@
 use super::readout::accumulate;
 use super::reservoir::{dip_fractions, dip_thickness, holds_paint, level_after};
 use super::{
-    BLADE_CELLS, KNIFE_DIP_LENGTH_PX, KNIFE_LAID_CAPACITY_UM, MAX_TIP_THICKNESS_UM, TIP_CHANNELS,
-    TIP_HALF, VOLUME_CHANNEL, WetOilEngine,
+    BLADE_CELLS, KNIFE_DIP_LENGTH_PX, KNIFE_LAID_CAPACITY_UM, MAX_TIP_THICKNESS_UM,
+    PIGMENT_CHANNELS, TIP_CHANNELS, TIP_HALF, VOLUME_CHANNEL, WetOilEngine,
 };
 use crate::brush::FULL_RESERVOIR_VOLUME_UM;
 use crate::canvas::PaintTotals;
@@ -30,7 +30,6 @@ impl WetOilEngine {
         Ok((taken, level_after(held, held + room, &taken)))
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn dip_knife(
         &mut self,
         gpu: &GpuContext,
@@ -52,10 +51,7 @@ impl WetOilEngine {
             let values = &mut load[cell * TIP_CHANNELS..(cell + 1) * TIP_CHANNELS];
             let room = (KNIFE_LAID_CAPACITY_UM - values[VOLUME_CHANNEL]).max(0.0);
             let added = (cover * amount * thickness * KNIFE_DIP_LENGTH_PX).min(room);
-            for (slot, fraction) in fractions.iter().enumerate() {
-                values[slot] += added * fraction;
-            }
-            values[VOLUME_CHANNEL] += added;
+            add_to_cell(values, &fractions, added);
         }
         gpu.queue
             .write_buffer(&self.buffers.blade_load, 0, bytemuck::cast_slice(&load));
@@ -142,6 +138,13 @@ pub(super) fn knife_from_load(load: &[f32]) -> PaintTotals {
         accumulate(&mut totals, cell);
     }
     totals
+}
+
+fn add_to_cell(values: &mut [f32], fractions: &[f32; PIGMENT_CHANNELS], added: f32) {
+    for (slot, fraction) in fractions.iter().enumerate() {
+        values[slot] += added * fraction;
+    }
+    values[VOLUME_CHANNEL] += added;
 }
 
 #[cfg(test)]
