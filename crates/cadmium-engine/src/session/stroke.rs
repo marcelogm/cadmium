@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::canvas::{TileCoord, tiles_in_rect};
-use crate::engine::PaintEngine;
+use crate::engine::{DabBatch, PaintEngine};
 use crate::gpu::GpuContext;
 use crate::stroke::{StrokeBuilder, StrokeSample};
 use crate::surface::Surface;
@@ -89,8 +89,11 @@ impl PaintSession {
             let canvas = surface_canvas(self.stroke_surface, &mut self.canvas, &mut self.tray);
             self.history
                 .encode_save_tiles(gpu, canvas, &touched, encoder);
-            self.engine
-                .encode_dabs(gpu, canvas, &self.stroke_brush, &self.queued, encoder);
+            let batch = DabBatch {
+                brush: &self.stroke_brush,
+                dabs: &self.queued,
+            };
+            self.engine.encode_dabs(gpu, canvas, batch, encoder);
             self.queued.clear();
         }
         if self.stroke.is_none() {

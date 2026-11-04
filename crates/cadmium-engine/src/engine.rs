@@ -63,15 +63,18 @@ const BLADE_DELTA_BYTES: u64 =
 const BLADE_CELL_GROUP_SIZE: u32 = 64;
 const DRY_WORKGROUP_SIZE: u32 = 8;
 
+pub struct DabBatch<'a> {
+    pub brush: &'a BrushSettings,
+    pub dabs: &'a [Dab],
+}
+
 pub trait PaintEngine {
     fn begin_stroke(&mut self);
-    #[expect(clippy::too_many_arguments)]
     fn encode_dabs(
         &mut self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
-        brush: &BrushSettings,
-        dabs: &[Dab],
+        batch: DabBatch<'_>,
         encoder: &mut wgpu::CommandEncoder,
     );
     fn params(&self) -> &SimParams;
@@ -187,11 +190,10 @@ impl PaintEngine for WetOilEngine {
         &mut self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
-        brush: &BrushSettings,
-        dabs: &[Dab],
+        batch: DabBatch<'_>,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let mut placements = self.place_all(canvas, brush, dabs);
+        let mut placements = self.place_all(canvas, batch.brush, batch.dabs);
         if placements.is_empty() {
             return;
         }

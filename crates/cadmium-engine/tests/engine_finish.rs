@@ -1,7 +1,11 @@
 pub mod support;
 
 use cadmium_engine::{
-    canvas::*, engine::PaintEngine, gpu::GpuContext, pigments::Mixture, session::PaintSession,
+    canvas::*,
+    engine::{DabBatch, PaintEngine},
+    gpu::GpuContext,
+    pigments::Mixture,
+    session::PaintSession,
     stroke::Tool,
 };
 use support::{frame, line, session, stroke, without_wgpu_errors};
@@ -213,8 +217,15 @@ fn dabs_with_non_finite_geometry_are_skipped() {
     without_wgpu_errors(&gpu, || {
         let mut e = gpu.device.create_command_encoder(&Default::default());
         let brush = s.brush.clone();
-        s.engine
-            .encode_dabs(&gpu, &mut s.canvas, &brush, &broken, &mut e);
+        s.engine.encode_dabs(
+            &gpu,
+            &mut s.canvas,
+            DabBatch {
+                brush: &brush,
+                dabs: &broken,
+            },
+            &mut e,
+        );
         gpu.queue.submit([e.finish()]);
     });
     assert!(s.canvas.wet_tiles.is_empty());
