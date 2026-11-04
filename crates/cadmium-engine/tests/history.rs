@@ -257,18 +257,45 @@ fn a_budget_below_one_tile_disables_history() {
 }
 
 #[test]
-fn a_step_too_large_for_the_history_keeps_earlier_steps() {
+fn a_step_too_large_for_the_history_clears_earlier_steps() {
+    let gpu = GpuContext::new().unwrap();
+    let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    save_step(&gpu, &mut history, &canvas, &tiles(2));
+    save_step(&gpu, &mut history, &canvas, &tiles(5));
+    assert!(!history.can_undo());
+    assert!(!history.can_redo());
+}
+
+#[test]
+fn after_an_unrecorded_step_the_full_capacity_is_free_again() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
     let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(5));
+    save_step(&gpu, &mut history, &canvas, &tiles(4));
     assert!(history.undo(&gpu, &mut canvas));
     assert!(!history.can_undo());
 }
 
 #[test]
-fn a_dry_too_large_for_the_history_keeps_earlier_steps_and_is_not_undoable() {
+fn clearing_the_history_forgets_undo_and_redo() {
+    let gpu = GpuContext::new().unwrap();
+    let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256));
+    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    save_step(&gpu, &mut history, &canvas, &tiles(1));
+    save_step(&gpu, &mut history, &canvas, &tiles(1));
+    assert!(history.undo(&gpu, &mut canvas));
+    history.clear();
+    assert!(!history.can_undo());
+    assert!(!history.can_redo());
+    save_step(&gpu, &mut history, &canvas, &tiles(4));
+    assert!(history.can_undo());
+}
+
+#[test]
+fn a_dry_too_large_for_the_history_clears_earlier_steps_and_is_not_undoable() {
     let gpu = GpuContext::new().unwrap();
     let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(1024, 640)));
     s.history = History::new(&gpu, 64 * TILE_BYTES_ALL_TEXTURES, 100);
@@ -276,8 +303,8 @@ fn a_dry_too_large_for_the_history_keeps_earlier_steps_and_is_not_undoable() {
     assert!(s.history.can_undo());
     s.canvas.wet_tiles.mark_all();
     assert!(!without_wgpu_errors(&gpu, || s.dry(&gpu)));
-    assert!(s.history.can_undo());
-    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(!s.history.can_undo());
+    assert!(!s.history.can_redo());
 }
 
 #[test]

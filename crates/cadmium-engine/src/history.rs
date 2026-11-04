@@ -147,11 +147,11 @@ impl History {
 
     pub fn begin_drying_step(&mut self, wet_tile_count: usize) {
         self.open_step(true);
-        if wet_tile_count > self.slot_capacity as usize {
-            self.drop_redo_steps();
-            if let Some(step) = self.current.as_mut() {
-                step.complete = false;
-            }
+        if wet_tile_count > self.slot_capacity as usize
+            && let Some(mut step) = self.current.take()
+        {
+            self.abandon(&mut step);
+            self.current = Some(step);
         }
     }
 
@@ -186,13 +186,13 @@ impl History {
         }
         self.drop_redo_steps();
         if step.tiles.len() + unsaved.len() > self.slot_capacity as usize {
-            step.complete = false;
+            self.abandon(&mut step);
             self.current = Some(step);
             return;
         }
         for tile in &unsaved {
             let Some(slot) = self.allocate() else {
-                step.complete = false;
+                self.abandon(&mut step);
                 break;
             };
             self.copy_tile(canvas, *tile, slot, CopyDirection::CanvasToSlot, encoder);
@@ -323,6 +323,28 @@ impl History {
             saved.after = Some(slot);
         }
         true
+    }
+
+    pub fn clear(&mut self) {
+        if let Some(step) = self.current.take() {
+            self.release(step);
+        }
+        self.drop_undo_steps();
+        self.drop_redo_steps();
+    }
+
+    fn abandon(&mut self, step: &mut Step) {
+        step.complete = false;
+        self.free_slots
+            .extend(std::mem::take(&mut step.tiles).iter().map(|saved| saved.before));
+        self.drop_undo_steps();
+        self.drop_redo_steps();
+    }
+
+    fn drop_undo_steps(&mut self) {
+        while let Some(step) = self.undo_steps.pop_front() {
+            self.release(step);
+        }
     }
 
     fn release(&mut self, step: Step) {
