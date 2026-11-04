@@ -572,7 +572,11 @@ mod tests {
     #[test]
     fn only_points_on_the_tray_image_are_on_the_tray() {
         let (width, height) = (f64::from(TRAY_WIDTH), f64::from(TRAY_HEIGHT));
-        for inside in [(0.0, 0.0), (width - 0.5, height - 0.5), (700.0, 300.0)] {
+        for inside in [
+            (0.0, 0.0),
+            (width - 0.5, height - 0.5),
+            (width / 2.0, height / 2.0),
+        ] {
             assert!(is_on_tray(inside), "{inside:?}");
         }
         for outside in [
@@ -597,13 +601,16 @@ mod tests {
     fn the_widget_corners_are_the_tray_corners() {
         let viewport = (768, 512);
         assert_eq!(tray_point(viewport, 2.0, 0.0, 0.0), (0.0, 0.0));
-        assert_eq!(tray_point(viewport, 2.0, 384.0, 256.0), (1536.0, 1024.0));
+        assert_eq!(
+            tray_point(viewport, 2.0, 384.0, 256.0),
+            (f64::from(TRAY_WIDTH), f64::from(TRAY_HEIGHT))
+        );
     }
 
     #[test]
     fn the_tray_is_two_thirds_as_tall_as_it_is_wide() {
         assert_eq!(tray_height_for_width(384), 256);
-        assert_eq!(tray_height_for_width(1536), 1024);
+        assert_eq!(tray_height_for_width(TRAY_WIDTH as i32), TRAY_HEIGHT as i32);
     }
 
     #[test]

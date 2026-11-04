@@ -319,11 +319,11 @@ fn a_slow_tube_lays_a_thicker_cord_than_a_fast_one() {
     };
     s.begin_hold(&gpu, Surface::Tray);
     s.squeeze(&gpu, cord(40.0, 200.0));
-    s.squeeze(&gpu, cord(400.0, 600.0));
+    s.squeeze(&gpu, cord(400.0, 400.0));
     s.end_hold();
     let volume = s.tray.read_f32(&gpu, StateTexture::WetVol).unwrap();
     let thickness = |x: usize, y: usize| volume[y * TRAY_WIDTH as usize + x];
-    assert!(thickness(120, 200) > 2.0 * thickness(120, 600));
+    assert!(thickness(120, 200) > 2.0 * thickness(120, 400));
 }
 
 #[test]

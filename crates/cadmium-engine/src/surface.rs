@@ -6,8 +6,8 @@ pub enum Surface {
     Tray,
 }
 
-pub const TRAY_WIDTH: u32 = 1536;
-pub const TRAY_HEIGHT: u32 = 1024;
+pub const TRAY_WIDTH: u32 = 768;
+pub const TRAY_HEIGHT: u32 = 512;
 
 pub fn tray_spec(pigment_slots: &[String]) -> CanvasSpec {
     CanvasSpec {
