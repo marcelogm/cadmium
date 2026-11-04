@@ -1,4 +1,3 @@
-613 crates/cadmium-engine/src/document.rs
 569 crates/cadmium-engine/src/session.rs
 403 crates/cadmium-engine/tests/brush_loading.rs
 409 crates/cadmium-engine/tests/canvas.rs
