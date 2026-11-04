@@ -11,7 +11,7 @@ use cadmium_engine::stroke::Tool;
 use gtk::{gdk, glib};
 
 use crate::LOG_DOMAIN;
-use crate::lab_panel::{format_param, param_row};
+use crate::sliders::{SliderRow, format_param, param_row, slider_row};
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::window::CadmiumWindow;
@@ -35,8 +35,6 @@ const LOADED_SPACING: i32 = 4;
 const ADD_LIST_SWATCH_SIZE: i32 = 18;
 const ADD_LIST_SPACING: i32 = 10;
 const ADD_LIST_ROW_MARGIN: i32 = 6;
-pub const SCALE_WIDTH: i32 = 140;
-const VALUE_LABEL_CHARS: i32 = 6;
 const MIN_SIZE_PX: f64 = 4.0;
 const MAX_SIZE_PX: f64 = 500.0;
 const SIZE_STEP: f64 = 0.01;
@@ -97,36 +95,6 @@ fn percent_text(value: f64) -> String {
     format!("{:.0}%", value * PERCENT)
 }
 
-pub fn value_label() -> gtk::Label {
-    gtk::Label::builder()
-        .width_chars(VALUE_LABEL_CHARS)
-        .xalign(1.0)
-        .css_classes(["numeric", "dim-label"])
-        .build()
-}
-
-pub fn slider_row(
-    title: &str,
-    lower: f64,
-    upper: f64,
-    step: f64,
-    page: f64,
-) -> (adw::ActionRow, gtk::Scale, gtk::Label) {
-    let adjustment = gtk::Adjustment::new(lower, lower, upper, step, page, 0.0);
-    let scale = gtk::Scale::builder()
-        .adjustment(&adjustment)
-        .draw_value(false)
-        .width_request(SCALE_WIDTH)
-        .valign(gtk::Align::Center)
-        .build();
-    scale.update_property(&[gtk::accessible::Property::Label(title)]);
-    let label = value_label();
-    let row = adw::ActionRow::builder().title(title).build();
-    row.add_suffix(&scale);
-    row.add_suffix(&label);
-    (row, scale, label)
-}
-
 struct PigmentChoice {
     id: &'static str,
     name: &'static str,
@@ -168,10 +136,10 @@ pub struct BrushPanel {
     loaded_row: adw::ActionRow,
     loaded_swatch: Swatch,
     reserve_bar: gtk::LevelBar,
-    size: (adw::ActionRow, gtk::Scale, gtk::Label),
-    load: (adw::ActionRow, gtk::Scale, gtk::Label),
-    plate_gap: (adw::ActionRow, gtk::Scale, gtk::Label),
-    medium: (adw::ActionRow, gtk::Scale, gtk::Label),
+    size: SliderRow,
+    load: SliderRow,
+    plate_gap: SliderRow,
+    medium: SliderRow,
     shape_row: adw::ComboRow,
     reload_row: adw::SwitchRow,
     clean_each_row: adw::SwitchRow,

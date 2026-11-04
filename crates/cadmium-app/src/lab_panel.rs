@@ -6,18 +6,13 @@ use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::params::{ParamGroup, ParamSpec, SimParams};
 use cadmium_engine::render::ViewMode;
 
-use crate::brush_panel::slider_row;
+use crate::sliders::{format_param, param_row};
 use crate::state::{PenReadout, SharedState};
 use crate::swatch::{Swatch, SwatchShape};
 
 const PANEL_MARGIN: i32 = 12;
 const GROUP_SPACING: i32 = 18;
 const VIEW_SPACING: i32 = 12;
-const PARAM_STEPS: f64 = 100.0;
-const PARAM_PAGES: f64 = 10.0;
-const WHOLE_NUMBER_PARAMS: [&str; 1] = ["bristle_count"];
-const WHOLE_STEP: f64 = 1.0;
-const STEP_DECIMALS_SLACK: f64 = 1e-6;
 const PIGMENT_SWATCH_SIZE: (i32, i32) = (28, 20);
 const PIGMENT_SWATCH_SPACING: i32 = 4;
 const TINT_WHITE_PARTS: f32 = 1.0;
@@ -61,45 +56,6 @@ pub fn view_from_name(name: &str, pigment_slot: u8) -> Option<ViewMode> {
         VIEW_PIGMENT => Some(ViewMode::Pigment(pigment_slot)),
         _ => None,
     }
-}
-
-pub fn is_whole_number_param(spec: &ParamSpec) -> bool {
-    WHOLE_NUMBER_PARAMS.contains(&spec.key)
-}
-
-pub fn param_step(spec: &ParamSpec) -> f64 {
-    if is_whole_number_param(spec) {
-        WHOLE_STEP
-    } else {
-        f64::from(spec.max - spec.min) / PARAM_STEPS
-    }
-}
-
-pub fn decimals_for_step(step: f64) -> usize {
-    if step <= 0.0 || !step.is_finite() {
-        return 0;
-    }
-    (-(step.log10() + STEP_DECIMALS_SLACK).floor()).max(0.0) as usize
-}
-
-pub fn format_param(spec: &ParamSpec, value: f32) -> String {
-    let decimals = decimals_for_step(param_step(spec));
-    format!("{value:.decimals$}")
-}
-
-pub fn param_row(spec: &ParamSpec) -> (adw::ActionRow, gtk::Scale, gtk::Label) {
-    let range = f64::from(spec.max - spec.min);
-    let (row, scale, label) = slider_row(
-        spec.label,
-        f64::from(spec.min),
-        f64::from(spec.max),
-        param_step(spec),
-        range / PARAM_PAGES,
-    );
-    if is_whole_number_param(spec) {
-        scale.set_round_digits(0);
-    }
-    (row, scale, label)
 }
 
 pub fn pen_texts(pen: &PenReadout) -> [String; 4] {
@@ -433,36 +389,6 @@ mod tests {
                 spec.key
             );
         }
-    }
-
-    fn spec_named(key: &str) -> &'static ParamSpec {
-        SimParams::specs()
-            .iter()
-            .find(|spec| spec.key == key)
-            .unwrap()
-    }
-
-    #[test]
-    fn param_values_show_as_many_decimals_as_their_slider_step() {
-        assert_eq!(format_param(spec_named("bristle_count"), 24.0), "24");
-        assert_eq!(format_param(spec_named("transfer_fraction"), 0.1), "0.10");
-        assert_eq!(format_param(spec_named("residual_um"), 2.0), "2.0");
-        assert_eq!(format_param(spec_named("penetration_um"), 120.0), "120");
-    }
-
-    #[test]
-    fn decimals_follow_the_step_size() {
-        assert_eq!(decimals_for_step(0.01), 2);
-        assert_eq!(decimals_for_step(0.02), 2);
-        assert_eq!(decimals_for_step(0.1), 1);
-        assert_eq!(decimals_for_step(0.2), 1);
-        assert_eq!(decimals_for_step(1.0), 0);
-        assert_eq!(decimals_for_step(3.0), 0);
-    }
-
-    #[test]
-    fn bristle_count_moves_in_whole_bristles() {
-        assert_eq!(param_step(spec_named("bristle_count")), 1.0);
     }
 
     #[test]

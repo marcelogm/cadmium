@@ -15,6 +15,7 @@ mod lab_panel;
 mod new_painting_dialog;
 mod presenter;
 mod presets;
+mod sliders;
 #[cfg_attr(
     not(all(target_os = "linux", any(debug_assertions, feature = "smoke"))),
     path = "smoke_off.rs"
