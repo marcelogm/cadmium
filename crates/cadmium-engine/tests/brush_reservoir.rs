@@ -21,11 +21,16 @@ const LOW_LOAD: f32 = 0.2;
 const FULL_LOAD: f32 = 1.0;
 const DEFAULT_RESERVE_RUN_PX: usize = 440;
 
-#[expect(clippy::too_many_lines)]
 fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> {
     let gpu = GpuContext::new().unwrap();
+    let mut session = loaded_session(&gpu, load, reserve_factor);
+    paint_long_stroke(&gpu, &mut session);
+    blue_along_the_row(&gpu, &session)
+}
+
+fn loaded_session(gpu: &GpuContext, load: f32, reserve_factor: Option<f32>) -> PaintSession {
     let mut session = PaintSession::new(
-        &gpu,
+        gpu,
         CanvasSpec {
             width: WIDTH,
             height: HEIGHT,
@@ -43,7 +48,11 @@ fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> 
     }
     session.brush.recipe = vec![(BLUE_SLOT, 1.0)];
     session.brush.load = load;
-    session.reload_brush(&gpu);
+    session.reload_brush(gpu);
+    session
+}
+
+fn paint_long_stroke(gpu: &GpuContext, session: &mut PaintSession) {
     for index in 0..=SAMPLES {
         let sample = StrokeSample {
             x: STROKE_FROM_PX + STROKE_LENGTH_PX * f64::from(index) / f64::from(SAMPLES),
@@ -54,22 +63,21 @@ fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> 
             time_ms: index * 8,
         };
         if index == 0 {
-            session.begin_stroke(&gpu, sample);
+            session.begin_stroke(gpu, sample);
         } else {
             session.add_samples(&[sample]);
         }
         if index % SAMPLES_PER_FRAME == 0 {
-            encode_frame(&gpu, &mut session);
+            encode_frame(gpu, session);
         }
     }
     session.end_stroke();
-    encode_frame(&gpu, &mut session);
+    encode_frame(gpu, session);
+}
 
-    let volume = session.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
-    let pigment = session
-        .canvas
-        .read_f32(&gpu, StateTexture::WetPig0)
-        .unwrap();
+fn blue_along_the_row(gpu: &GpuContext, session: &PaintSession) -> Vec<f32> {
+    let volume = session.canvas.read_f32(gpu, StateTexture::WetVol).unwrap();
+    let pigment = session.canvas.read_f32(gpu, StateTexture::WetPig0).unwrap();
     let row_start = ROW as usize * WIDTH as usize + STROKE_FROM_PX as usize;
     (row_start..row_start + STROKE_LENGTH_PX as usize)
         .map(|texel| pigment[texel * PIGMENT_CHANNELS_PER_TEXTURE + BLUE_SLOT] * volume[texel])

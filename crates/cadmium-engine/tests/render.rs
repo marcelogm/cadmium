@@ -114,7 +114,6 @@ fn shading_consumes_dirty_tiles() {
 }
 
 #[test]
-#[expect(clippy::excessive_nesting)]
 fn impasto_edge_facing_the_light_is_brighter_than_the_edge_in_shadow() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = blank(&gpu);
@@ -123,11 +122,9 @@ fn impasto_edge_facing_the_light_is_brighter_than_the_edge_in_shadow() {
     let mut pig = vec![0.0f32; side * side * 4];
     let mut vol = vec![0.0f32; side * side];
     for y in 0..side {
-        for x in 0..side {
-            if inside(x, y) {
-                pig[(y * side + x) * 4] = 1.0;
-                vol[y * side + x] = 200.0;
-            }
+        for x in (0..side).filter(|&x| inside(x, y)) {
+            pig[(y * side + x) * 4] = 1.0;
+            vol[y * side + x] = 200.0;
         }
     }
     canvas.write_f32(&gpu, StateTexture::WetPig0, &pig);

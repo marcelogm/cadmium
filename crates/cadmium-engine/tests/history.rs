@@ -300,7 +300,6 @@ fn a_small_canvas_keeps_a_few_copies_of_itself_and_one_of_the_tray_for_undo() {
 }
 
 #[test]
-#[expect(clippy::cognitive_complexity)]
 fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_tools() {
     const TUNED_KEY: &str = "wet_gloss";
     const TUNED_VALUE: f32 = 0.0;
@@ -312,12 +311,7 @@ fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_
     stroke(&gpu, &mut s, 64.0, 40.0, 470.0);
     let wider = spec(1024, 256);
     without_wgpu_errors(&gpu, || s.replace_document(&gpu, wider.clone())).unwrap();
-    assert_eq!(s.canvas.spec, wider);
-    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
-    assert!(!s.history.can_undo());
-    assert!(!s.history.can_redo());
-    let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
-    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles());
+    assert_a_blank_canvas_with_an_empty_history(&gpu, &s, wider);
     assert_eq!(s.engine.params().get(TUNED_KEY), TUNED_VALUE);
     assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
     assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);
@@ -326,4 +320,17 @@ fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_
     assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
     assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+}
+
+fn assert_a_blank_canvas_with_an_empty_history(
+    gpu: &GpuContext,
+    s: &PaintSession,
+    wider: CanvasSpec,
+) {
+    assert_eq!(s.canvas.spec, wider);
+    assert_eq!(s.canvas.wet_totals(gpu).unwrap().volume, 0.0);
+    assert!(!s.history.can_undo());
+    assert!(!s.history.can_redo());
+    let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
+    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles());
 }

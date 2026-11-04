@@ -107,36 +107,37 @@ struct Window {
     relative_ripple: f64,
 }
 
-#[expect(clippy::excessive_nesting)]
 fn windows(lum: &[f64]) -> Vec<Window> {
+    (FIRST_WINDOW_X..(TO_X as usize - WINDOW_PX))
+        .step_by(WINDOW_PX)
+        .map(|start_x| measure_window(lum, start_x))
+        .collect()
+}
+
+fn measure_window(lum: &[f64], start_x: usize) -> Window {
     let at = |x: usize, y: usize| lum[y * WIDTH as usize + x];
     let primer = at(4, 4);
     let rows = ((ROW - BAND_HALF_WIDTH_PX) as usize)..=((ROW + BAND_HALF_WIDTH_PX) as usize);
-    (FIRST_WINDOW_X..(TO_X as usize - WINDOW_PX))
-        .step_by(WINDOW_PX)
-        .map(|start_x| {
-            let mut depth = 0.0;
-            let mut ripple = 0.0;
-            let mut count = 0.0;
-            for y in rows.clone() {
-                for x in start_x..start_x + WINDOW_PX {
-                    let neighbourhood = (-ALONG_REACH_PX..=ALONG_REACH_PX)
-                        .map(|step| at((x as i32 + step) as usize, y))
-                        .sum::<f64>()
-                        / f64::from(2 * ALONG_REACH_PX + 1);
-                    depth += primer - at(x, y);
-                    ripple += (at(x, y) - neighbourhood).abs();
-                    count += 1.0;
-                }
-            }
-            let paint_depth = depth / count;
-            Window {
-                start_x,
-                paint_depth,
-                relative_ripple: ripple / count / paint_depth.max(f64::EPSILON),
-            }
-        })
-        .collect()
+    let mut depth = 0.0;
+    let mut ripple = 0.0;
+    let mut count = 0.0;
+    for y in rows {
+        for x in start_x..start_x + WINDOW_PX {
+            let neighbourhood = (-ALONG_REACH_PX..=ALONG_REACH_PX)
+                .map(|step| at((x as i32 + step) as usize, y))
+                .sum::<f64>()
+                / f64::from(2 * ALONG_REACH_PX + 1);
+            depth += primer - at(x, y);
+            ripple += (at(x, y) - neighbourhood).abs();
+            count += 1.0;
+        }
+    }
+    let paint_depth = depth / count;
+    Window {
+        start_x,
+        paint_depth,
+        relative_ripple: ripple / count / paint_depth.max(f64::EPSILON),
+    }
 }
 
 #[test]
