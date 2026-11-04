@@ -1,5 +1,8 @@
 mod application;
+mod dialogs;
+mod new_painting_dialog;
 mod smoke;
+mod swatch;
 mod tools;
 mod window;
 

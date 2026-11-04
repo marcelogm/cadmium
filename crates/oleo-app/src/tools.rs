@@ -36,6 +36,17 @@ impl UiTool {
             UiTool::Paint(Tool::Eyedropper) => "eyedropper",
         }
     }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            UiTool::Move => "Mover",
+            UiTool::Paint(Tool::Brush) => "Pincel",
+            UiTool::Paint(Tool::Knife) => "Espátula",
+            UiTool::Paint(Tool::Blender) => "Misturador",
+            UiTool::Paint(Tool::Rag) => "Pano",
+            UiTool::Paint(Tool::Eyedropper) => "Conta-gotas",
+        }
+    }
 }
 
 #[cfg(test)]

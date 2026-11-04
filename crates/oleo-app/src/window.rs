@@ -4,6 +4,9 @@ use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gdk, gio, glib};
 
+use oleo_engine::pigments::PigmentDb;
+
+use crate::new_painting_dialog::{NewPaintingDialog, starting_canvas_spec};
 use crate::tools::{Tool, UiTool};
 
 const LOG_DOMAIN: &str = "oleo";
@@ -80,11 +83,10 @@ glib::wrapper! {
             gtk::ConstraintTarget, gtk::Native, gtk::Root, gtk::ShortcutManager;
 }
 
-const PENDING_ACTIONS: [&str; 12] = [
+const PENDING_ACTIONS: [&str; 11] = [
     "undo",
     "redo",
     "dry",
-    "new",
     "open",
     "save",
     "save-as",
@@ -95,7 +97,7 @@ const PENDING_ACTIONS: [&str; 12] = [
     "zoom-fit",
 ];
 
-const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
+pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
     (gdk::Key::_1, UiTool::Paint(Tool::Brush)),
     (gdk::Key::_2, UiTool::Paint(Tool::Knife)),
@@ -126,6 +128,9 @@ impl OleoWindow {
                 split_view.set_show_sidebar(!split_view.shows_sidebar());
             })
             .build();
+        let new = gio::ActionEntry::builder("new")
+            .activate(|window: &Self, _, _| window.open_new_painting_dialog())
+            .build();
         let pending = PENDING_ACTIONS.into_iter().map(|name| {
             gio::ActionEntry::builder(name)
                 .activate(move |_: &Self, _, _| {
@@ -133,7 +138,15 @@ impl OleoWindow {
                 })
                 .build()
         });
-        self.add_action_entries([tool, toggle_sidebar].into_iter().chain(pending));
+        self.add_action_entries([tool, toggle_sidebar, new].into_iter().chain(pending));
+    }
+
+    fn open_new_painting_dialog(&self) {
+        let dialog = NewPaintingDialog::new(&PigmentDb::builtin(), &starting_canvas_spec());
+        dialog.connect_create(|spec| {
+            glib::g_message!(LOG_DOMAIN, "new painting requested: {spec:?}");
+        });
+        dialog.present(Some(self));
     }
 
     fn select_tool(&self, action: &gio::SimpleAction, name: &str) {

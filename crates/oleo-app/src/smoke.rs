@@ -9,13 +9,51 @@ use crate::window::OleoWindow;
 
 const EXIT_AFTER_FRAMES: &str = "OLEO_SMOKE_EXIT_AFTER_FRAMES";
 const SCREENSHOT: &str = "OLEO_SMOKE_SCREENSHOT";
+const DIALOG: &str = "OLEO_SMOKE_DIALOG";
 const DEFAULT_EXIT_AFTER_FRAMES: u32 = 30;
 const LOG_DOMAIN: &str = "oleo";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SmokeDialog {
+    NewPainting,
+    About,
+    Shortcuts,
+}
+
+impl std::str::FromStr for SmokeDialog {
+    type Err = ();
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            "new" => Ok(SmokeDialog::NewPainting),
+            "about" => Ok(SmokeDialog::About),
+            "shortcuts" => Ok(SmokeDialog::Shortcuts),
+            _ => Err(()),
+        }
+    }
+}
+
+impl SmokeDialog {
+    fn action(self) -> &'static str {
+        match self {
+            SmokeDialog::NewPainting => "win.new",
+            SmokeDialog::About => "app.about",
+            SmokeDialog::Shortcuts => "app.shortcuts",
+        }
+    }
+
+    fn open(self, window: &OleoWindow) {
+        if let Err(error) = WidgetExt::activate_action(window, self.action(), None) {
+            glib::g_warning!(LOG_DOMAIN, "smoke could not open {self:?}: {error}");
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SmokeConfig {
     pub exit_after_frames: u32,
     pub screenshot: Option<PathBuf>,
+    pub dialog: Option<SmokeDialog>,
 }
 
 impl SmokeConfig {
@@ -26,15 +64,18 @@ impl SmokeConfig {
     fn from_lookup(lookup: impl Fn(&str) -> Option<OsString>) -> Option<SmokeConfig> {
         let exit_after_frames = lookup(EXIT_AFTER_FRAMES);
         let screenshot = lookup(SCREENSHOT).map(PathBuf::from);
-        if exit_after_frames.is_none() && screenshot.is_none() {
+        let dialog = lookup(DIALOG);
+        if exit_after_frames.is_none() && screenshot.is_none() && dialog.is_none() {
             return None;
         }
+        let dialog = dialog.and_then(|value| parse_or_warn(DIALOG, &value));
         let exit_after_frames = exit_after_frames
             .and_then(|value| parse_or_warn(EXIT_AFTER_FRAMES, &value))
             .unwrap_or(DEFAULT_EXIT_AFTER_FRAMES);
         Some(SmokeConfig {
             exit_after_frames,
             screenshot,
+            dialog,
         })
     }
 
@@ -43,6 +84,11 @@ impl SmokeConfig {
         let drawn = Cell::new(0u32);
         window.add_tick_callback(move |window, _| {
             drawn.set(drawn.get() + 1);
+            if drawn.get() == 1
+                && let Some(dialog) = self.dialog
+            {
+                dialog.open(window);
+            }
             if drawn.get() < self.exit_after_frames {
                 return glib::ControlFlow::Continue;
             }
@@ -123,5 +169,26 @@ mod tests {
     fn unparsable_frame_count_falls_back_to_default() {
         let config = SmokeConfig::from_lookup(lookup(&[(EXIT_AFTER_FRAMES, "soon")])).unwrap();
         assert_eq!(config.exit_after_frames, DEFAULT_EXIT_AFTER_FRAMES);
+    }
+
+    #[test]
+    fn dialog_alone_starts_a_smoke_run_that_opens_it() {
+        let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "new")])).unwrap();
+        assert_eq!(config.dialog, Some(SmokeDialog::NewPainting));
+        assert_eq!(config.exit_after_frames, DEFAULT_EXIT_AFTER_FRAMES);
+    }
+
+    #[test]
+    fn about_and_shortcuts_dialogs_are_recognised() {
+        let about = SmokeConfig::from_lookup(lookup(&[(DIALOG, "about")])).unwrap();
+        let shortcuts = SmokeConfig::from_lookup(lookup(&[(DIALOG, "shortcuts")])).unwrap();
+        assert_eq!(about.dialog, Some(SmokeDialog::About));
+        assert_eq!(shortcuts.dialog, Some(SmokeDialog::Shortcuts));
+    }
+
+    #[test]
+    fn unknown_dialog_is_ignored() {
+        let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "preferences")])).unwrap();
+        assert_eq!(config.dialog, None);
     }
 }

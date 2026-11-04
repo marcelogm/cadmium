@@ -1,13 +1,13 @@
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
+use crate::dialogs;
 use crate::smoke::SmokeConfig;
 use crate::window::OleoWindow;
 
-const LOG_DOMAIN: &str = "oleo";
 const ICON_RESOURCE_PATH: &str = "/io/github/marcelo/Oleo/icons";
 
-const ACCELERATORS: [(&str, &[&str]); 14] = [
+pub const ACCELERATORS: [(&str, &[&str]); 14] = [
     ("win.undo", &["<Control>z"]),
     ("win.redo", &["<Control><Shift>z"]),
     ("win.dry", &["<Control>d"]),
@@ -60,15 +60,18 @@ fn register_icons() {
 }
 
 fn setup_actions(app: &adw::Application) {
-    let pending = ["shortcuts", "about"].map(|name| {
-        gio::ActionEntry::builder(name)
-            .activate(move |_: &adw::Application, _, _| {
-                glib::g_debug!(LOG_DOMAIN, "app.{name} is not wired yet");
-            })
-            .build()
-    });
+    let shortcuts = gio::ActionEntry::builder("shortcuts")
+        .activate(|app: &adw::Application, _, _| {
+            dialogs::shortcuts_dialog().present(app.active_window().as_ref());
+        })
+        .build();
+    let about = gio::ActionEntry::builder("about")
+        .activate(|app: &adw::Application, _, _| {
+            dialogs::about_dialog().present(app.active_window().as_ref());
+        })
+        .build();
     let quit = gio::ActionEntry::builder("quit")
         .activate(|app: &adw::Application, _, _| app.quit())
         .build();
-    app.add_action_entries(pending.into_iter().chain([quit]));
+    app.add_action_entries([shortcuts, about, quit]);
 }
