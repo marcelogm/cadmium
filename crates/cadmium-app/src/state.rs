@@ -22,6 +22,7 @@ pub use history::DryOutcome;
 pub use pen::PenReadout;
 
 mod document;
+mod frames;
 mod gesture;
 mod history;
 mod lab;
@@ -392,25 +393,6 @@ impl AppState {
         }
     }
 
-    pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.advance_hold_by_clock(Surface::Painting);
-        self.session.encode_frame(&self.gpu, encoder);
-        self.after_frame();
-    }
-
-    pub fn encode_tray_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.advance_hold_by_clock(Surface::Tray);
-        self.session.encode_tray_frame(&self.gpu, encoder);
-        self.after_frame();
-    }
-
-    fn after_frame(&mut self) {
-        if !self.is_stroking() {
-            self.session.brush.tool = self.resting_tool;
-        }
-        self.pen.samples_last_frame = std::mem::take(&mut self.samples_since_frame);
-    }
-
     fn measure_brush(&mut self) -> Option<BrushReadout> {
         let Ok(readout) = self.session.read_brush(&self.gpu) else {
             self.wake();
@@ -422,10 +404,6 @@ impl AppState {
         self.knife_mixture = mean_mixture(&readout.knife);
         self.knife_volume = readout.knife.volume as f32;
         Some(readout)
-    }
-
-    pub fn gpu_is_lost(&self) -> bool {
-        self.gpu.is_lost()
     }
 }
 
@@ -440,16 +418,6 @@ mod tests {
         WHITE_SLOT, brush_totals, holding_the_knife, knife_totals, painting_state,
         present_one_frame, reserve_volume, row_samples, stroke, wet_volume,
     };
-
-    #[test]
-    fn a_stroke_still_queued_when_the_eraser_comes_down_is_painted_with_its_own_brush() {
-        let mut state = painting_state();
-        stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
-        stroke(&mut state, Tool::Rag, &row_samples(RAG_ROW_Y));
-        present_one_frame(&mut state);
-        assert!(wet_volume(&state) > 0.0);
-        assert_eq!(state.session.brush.tool, Tool::Brush);
-    }
 
     #[test]
     fn tool_chosen_mid_stroke_waits_for_the_stroke_to_end() {

@@ -681,29 +681,6 @@ mod tests {
     }
 
     #[test]
-    fn an_eraser_stroke_on_the_tray_puts_the_rag_down_after_the_tray_frame() {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), true);
-        state.motion(&[sample_at(340.0, 300.0, 0.9)]);
-        assert_eq!(state.session.brush.tool, Tool::Rag);
-        state.release();
-        present_one_tray_frame(&mut state);
-        assert_eq!(state.session.brush.tool, Tool::Brush);
-    }
-
-    #[test]
-    fn tray_frames_report_the_pen_samples_they_drew() {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Paint(Tool::Blender));
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
-        state.motion(&[sample_at(320.0, 300.0, 0.9), sample_at(340.0, 300.0, 0.9)]);
-        present_one_tray_frame(&mut state);
-        assert_eq!(state.pen.samples_last_frame, 3);
-        state.release();
-    }
-
-    #[test]
     fn a_still_touch_on_a_clean_tray_shows_no_ring() {
         let mut state = painting_state();
         state.clean_brush();
