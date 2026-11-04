@@ -1,5 +1,4 @@
 723 crates/cadmium-app/src/brush_panel.rs
-578 crates/cadmium-app/src/files.rs
 479 crates/cadmium-app/src/lab_panel.rs
 786 crates/cadmium-app/src/new_painting_dialog.rs
 568 crates/cadmium-app/src/window.rs
