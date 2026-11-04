@@ -74,3 +74,39 @@ fn default_brush_is_a_round_brush_with_the_first_slot() {
     assert_eq!(b.geometry.max_diameter_px, 40.0);
     assert_eq!(b.recipe, vec![(0, 1.0)]);
 }
+
+#[test]
+fn set_ignores_nan() {
+    let mut p = SimParams::default();
+    p.set("transfer_fraction", f32::NAN);
+    assert_eq!(p.get("transfer_fraction"), 0.1);
+}
+
+#[test]
+fn reservoir_mixture_keeps_some_pigment_however_much_medium() {
+    let b = BrushSettings {
+        medium: 3.0,
+        ..BrushSettings::default()
+    };
+    let m = b.reservoir_mixture(1);
+    assert!((m.fractions[0] - 0.05).abs() < 1e-6);
+    let b = BrushSettings {
+        medium: -1.0,
+        ..BrushSettings::default()
+    };
+    assert!((b.reservoir_mixture(1).fractions[0] - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn reservoir_volume_never_exceeds_a_full_load() {
+    let over = BrushSettings {
+        load: 4.0,
+        ..BrushSettings::default()
+    };
+    assert!((over.reservoir_mixture(1).volume_um - 200.0).abs() < 1e-4);
+    let under = BrushSettings {
+        load: -1.0,
+        ..BrushSettings::default()
+    };
+    assert_eq!(under.reservoir_mixture(1).volume_um, 0.0);
+}

@@ -201,6 +201,9 @@ impl SimParams {
     }
 
     pub fn set(&mut self, key: &str, value: f32) {
+        if value.is_nan() {
+            return;
+        }
         match index_of(key) {
             Some(index) => {
                 let spec = &SPECS[index];

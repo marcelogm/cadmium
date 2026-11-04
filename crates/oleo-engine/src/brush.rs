@@ -7,6 +7,7 @@ pub const DEFAULT_MIN_DIAMETER_RATIO: f32 = 0.3;
 pub const DEFAULT_SPACING: f32 = 0.05;
 pub const DEFAULT_LOAD: f32 = 0.8;
 pub const DEFAULT_MEDIUM: f32 = 0.1;
+pub const MAX_MEDIUM: f32 = 0.95;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BrushShape {
@@ -53,14 +54,14 @@ impl BrushSettings {
             }
         }
         let total: f32 = parts.iter().sum();
-        let pigment_share = 1.0 - self.medium;
+        let pigment_share = 1.0 - self.medium.clamp(0.0, MAX_MEDIUM);
         let fractions = if total > 0.0 {
             parts.map(|part| part / total * pigment_share)
         } else {
             [0.0; MAX_SLOTS]
         };
         Mixture {
-            volume_um: FULL_RESERVOIR_VOLUME_UM * self.load,
+            volume_um: FULL_RESERVOIR_VOLUME_UM * self.load.clamp(0.0, 1.0),
             fractions,
         }
     }
