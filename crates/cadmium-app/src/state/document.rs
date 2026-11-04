@@ -5,7 +5,7 @@ use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
 use cadmium_engine::gpu::GpuLost;
 
 use super::AppState;
-use super::recipe_for_palette;
+use super::recipe::recipe_for_palette;
 use crate::presets::starting_recipe;
 use crate::writes::EditMark;
 

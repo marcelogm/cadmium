@@ -1,6 +1,7 @@
 use cadmium_engine::session::ClearOutcome;
 
-use super::{AppState, PigmentClick};
+use super::AppState;
+use super::recipe::PigmentClick;
 use crate::tools::UiTool;
 
 impl AppState {

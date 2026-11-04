@@ -8,7 +8,8 @@ use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
 
 use super::{Contact, LoadRing};
-use crate::state::{AppState, mean_mixture, recipe_from_fractions};
+use crate::state::recipe::recipe_from_fractions;
+use crate::state::{AppState, mean_mixture};
 
 pub(super) const LOAD_CANCEL_SCREEN_PX: f64 = 4.0;
 const STILL_TUBE_SCREEN_PX: f32 = 3.0;

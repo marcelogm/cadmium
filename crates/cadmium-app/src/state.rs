@@ -20,6 +20,8 @@ use gesture::Contact;
 pub use gesture::LoadRing;
 pub use history::DryOutcome;
 pub use pen::PenReadout;
+pub use recipe::PigmentClick;
+use recipe::{PARTIAL_DIP, PigmentDip, plan_pigment_dip, recipe_from_fractions};
 
 mod document;
 mod frames;
@@ -28,10 +30,9 @@ mod hand;
 mod history;
 mod lab;
 mod pen;
+mod recipe;
 mod tray;
 
-const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
-pub const PARTIAL_DIP: f32 = 0.25;
 const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
@@ -39,87 +40,11 @@ const EMPTY_MIXTURE: Mixture = Mixture {
     fractions: [0.0; MAX_SLOTS],
 };
 
-pub fn recipe_from_fractions(fractions: &[f32; MAX_SLOTS]) -> Vec<(usize, f32)> {
-    fractions
-        .iter()
-        .enumerate()
-        .filter(|(_, fraction)| **fraction > NEGLIGIBLE_PICKED_FRACTION)
-        .map(|(slot, fraction)| (slot, *fraction))
-        .collect()
-}
-
-pub fn recipe_for_palette(
-    recipe: &[(usize, f32)],
-    old_palette: &[String],
-    new_palette: &[String],
-) -> Vec<(usize, f32)> {
-    recipe
-        .iter()
-        .filter_map(|(slot, share)| {
-            let pigment = old_palette.get(*slot)?;
-            let slot = new_palette.iter().position(|id| id == pigment)?;
-            Some((slot, *share))
-        })
-        .collect()
-}
-
 pub fn reserve_level(volume: f32, capacity: f32) -> f32 {
     if capacity > 0.0 && volume.is_finite() {
         (volume / capacity).clamp(0.0, 1.0)
     } else {
         0.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PigmentClick {
-    Choose,
-    Mix,
-    CleanAndLoad,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PigmentDip {
-    CleanAndLoad,
-    DipAgain,
-    AddOnTop(usize),
-}
-
-pub fn is_only_pigment(recipe: &[(usize, f32)], slot: usize) -> bool {
-    let mut present = recipe.iter().filter(|(_, parts)| *parts > 0.0).peekable();
-    present.peek().is_some() && present.all(|(chosen, _)| *chosen == slot)
-}
-
-pub fn recipe_after_mixing(recipe: &[(usize, f32)], slot: usize) -> Vec<(usize, f32)> {
-    let total: f32 = recipe.iter().map(|(_, parts)| parts.max(0.0)).sum();
-    if total <= 0.0 {
-        return vec![(slot, 1.0)];
-    }
-    let added = PARTIAL_DIP * total;
-    let mut recipe = recipe.to_vec();
-    match recipe.iter_mut().find(|(chosen, _)| *chosen == slot) {
-        Some((_, parts)) => *parts += added,
-        None => recipe.push((slot, added)),
-    }
-    recipe
-}
-
-pub fn plan_pigment_dip(
-    recipe: &[(usize, f32)],
-    slot: usize,
-    click: PigmentClick,
-) -> (Vec<(usize, f32)>, PigmentDip) {
-    match click {
-        PigmentClick::Mix => (
-            recipe_after_mixing(recipe, slot),
-            PigmentDip::AddOnTop(slot),
-        ),
-        PigmentClick::Choose if is_only_pigment(recipe, slot) => {
-            (recipe.to_vec(), PigmentDip::DipAgain)
-        }
-        PigmentClick::Choose | PigmentClick::CleanAndLoad => {
-            (vec![(slot, 1.0)], PigmentDip::CleanAndLoad)
-        }
     }
 }
 
@@ -360,16 +285,6 @@ mod tests {
         holding_the_knife, knife_totals, painting_state, reserve_volume, row_samples, stroke,
     };
 
-    #[test]
-    fn recipe_follows_its_pigments_into_the_new_palette() {
-        let old: Vec<String> = ["white", "blue", "red"].map(String::from).to_vec();
-        let new: Vec<String> = ["red", "white"].map(String::from).to_vec();
-        assert_eq!(
-            recipe_for_palette(&[(0, 0.5), (1, 0.2), (2, 0.3)], &old, &new),
-            [(1, 0.5), (0, 0.3)]
-        );
-    }
-
     const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
 
     #[test]
@@ -467,54 +382,6 @@ mod tests {
     }
 
     #[test]
-    fn click_on_another_pigment_replaces_the_palette_mix() {
-        assert_eq!(
-            plan_pigment_dip(&[(0, 2.0), (3, 1.0)], 5, PigmentClick::Choose),
-            (vec![(5, 1.0)], PigmentDip::CleanAndLoad)
-        );
-        assert_eq!(
-            plan_pigment_dip(&[(0, 2.0), (3, 1.0)], 3, PigmentClick::Choose),
-            (vec![(3, 1.0)], PigmentDip::CleanAndLoad)
-        );
-    }
-
-    #[test]
-    fn click_on_the_only_pigment_dips_again() {
-        assert_eq!(
-            plan_pigment_dip(&[(2, 1.0)], 2, PigmentClick::Choose),
-            (vec![(2, 1.0)], PigmentDip::DipAgain)
-        );
-    }
-
-    #[test]
-    fn shift_click_always_cleans_and_loads() {
-        assert_eq!(
-            plan_pigment_dip(&[(2, 1.0)], 2, PigmentClick::CleanAndLoad),
-            (vec![(2, 1.0)], PigmentDip::CleanAndLoad)
-        );
-    }
-
-    #[test]
-    fn ctrl_click_adds_a_quarter_of_the_pile_of_that_pigment() {
-        assert_eq!(
-            plan_pigment_dip(&[(0, 1.0)], 3, PigmentClick::Mix),
-            (vec![(0, 1.0), (3, 0.25)], PigmentDip::AddOnTop(3))
-        );
-        assert_eq!(
-            recipe_after_mixing(&[(0, 2.0), (3, 2.0)], 3),
-            [(0, 2.0), (3, 3.0)]
-        );
-    }
-
-    #[test]
-    fn ctrl_click_on_an_empty_palette_starts_a_pile() {
-        assert_eq!(recipe_after_mixing(&[], 2), [(2, 1.0)]);
-        assert!(!is_only_pigment(&[], 2));
-        assert!(!is_only_pigment(&[(2, 1.0), (3, 0.5)], 2));
-        assert!(is_only_pigment(&[(2, 1.0), (3, 0.0)], 2));
-    }
-
-    #[test]
     fn knife_tops_up_only_the_share_it_is_missing() {
         assert_eq!(knife_top_up(0.0, 400.0), Some(1.0));
         assert_eq!(knife_top_up(300.0, 400.0), Some(0.25));
@@ -597,15 +464,5 @@ mod tests {
         assert_eq!(reserve_level(small / 2.0, small), 0.5);
         assert_eq!(reserve_level(small * 2.0, small), 1.0);
         assert_eq!(reserve_level(1.0, 0.0), 0.0);
-    }
-
-    #[test]
-    fn picked_paint_becomes_a_recipe_of_the_pigments_present() {
-        let mut fractions = [0.0; MAX_SLOTS];
-        fractions[1] = 0.6;
-        fractions[4] = 0.3;
-        fractions[5] = 1e-5;
-        assert_eq!(recipe_from_fractions(&fractions), [(1, 0.6), (4, 0.3)]);
-        assert!(recipe_from_fractions(&[0.0; MAX_SLOTS]).is_empty());
     }
 }

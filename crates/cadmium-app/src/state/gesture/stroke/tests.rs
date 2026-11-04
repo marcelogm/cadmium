@@ -1,7 +1,7 @@
 use cadmium_engine::pigments::Mixture;
 
 use super::*;
-use crate::state::PARTIAL_DIP;
+use crate::state::recipe::PARTIAL_DIP;
 use crate::state::test_support::{
     PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals,
     holding_the_knife, knife_totals, painting_state, present_one_tray_frame, reserve_volume,
