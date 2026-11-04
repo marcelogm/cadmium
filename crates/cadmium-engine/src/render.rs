@@ -65,18 +65,10 @@ struct ShadeParams {
 }
 
 impl ShadeParams {
-    #[expect(clippy::excessive_nesting)]
     fn new(params: &SimParams, mode: ViewMode) -> Self {
-        let weights = band_xyz_weights();
-        let mut xyz_weights = [[0.0; 4]; XYZ_WEIGHT_VEC4S];
-        for (channel, bands) in weights.iter().enumerate() {
-            for (part, chunk) in bands.as_chunks::<BANDS_PER_VEC4>().0.iter().enumerate() {
-                xyz_weights[channel * BANDS / BANDS_PER_VEC4 + part] = *chunk;
-            }
-        }
         let (view_mode, view_slot) = mode.shader_selector();
         ShadeParams {
-            xyz_weights,
+            xyz_weights: xyz_weight_vec4s(),
             impasto_scale: params.get("impasto_scale"),
             light_azimuth_deg: params.get("light_azimuth_deg"),
             light_elevation_deg: params.get("light_elevation_deg"),
@@ -87,6 +79,17 @@ impl ShadeParams {
             _pad: 0,
         }
     }
+}
+
+fn xyz_weight_vec4s() -> [[f32; 4]; XYZ_WEIGHT_VEC4S] {
+    let weights = band_xyz_weights();
+    let mut xyz_weights = [[0.0; 4]; XYZ_WEIGHT_VEC4S];
+    for (channel, bands) in weights.iter().enumerate() {
+        for (part, chunk) in bands.as_chunks::<BANDS_PER_VEC4>().0.iter().enumerate() {
+            xyz_weights[channel * BANDS / BANDS_PER_VEC4 + part] = *chunk;
+        }
+    }
+    xyz_weights
 }
 
 pub struct Renderer {
@@ -100,7 +103,7 @@ impl Renderer {
         }
     }
 
-    #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
+    #[expect(clippy::too_many_arguments)]
     pub fn encode_shade(
         &self,
         gpu: &GpuContext,
@@ -113,34 +116,10 @@ impl Renderer {
         if tiles.is_empty() {
             return;
         }
-        let canvas: &Canvas = canvas;
         let tile_list: Vec<[u32; 2]> = tiles.iter().map(|tile| [tile.x, tile.y]).collect();
-        let tile_buffer = gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("shade_tiles"),
-                contents: bytemuck::cast_slice(&tile_list),
-                usage: wgpu::BufferUsages::STORAGE,
-            });
-        let params_buffer = gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("shade_params"),
-                contents: bytemuck::bytes_of(&ShadeParams::new(params, mode)),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
-        let mut entries = vec![
-            buffer_binding(0, canvas.slot_table()),
-            buffer_binding(1, &params_buffer),
-            buffer_binding(2, &tile_buffer),
-        ];
-        let textures = SHADE_INPUTS.iter().chain([&StateTexture::Display]);
-        entries.extend(
-            (3..)
-                .zip(textures)
-                .map(|(binding, which)| texture_binding(binding, canvas, *which)),
-        );
-        let bind_group = self.compute.bind_group(gpu, &entries);
+        let tile_buffer = shade_tile_buffer(gpu, &tile_list);
+        let params_buffer = shade_params_buffer(gpu, params, mode);
+        let bind_group = self.shade_bind_group(gpu, canvas, &params_buffer, &tile_buffer);
         self.compute.encode(
             encoder,
             &bind_group,
@@ -151,4 +130,43 @@ impl Renderer {
             ],
         );
     }
+
+    fn shade_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        params_buffer: &wgpu::Buffer,
+        tile_buffer: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        let mut entries = vec![
+            buffer_binding(0, canvas.slot_table()),
+            buffer_binding(1, params_buffer),
+            buffer_binding(2, tile_buffer),
+        ];
+        let textures = SHADE_INPUTS.iter().chain([&StateTexture::Display]);
+        entries.extend(
+            (3..)
+                .zip(textures)
+                .map(|(binding, which)| texture_binding(binding, canvas, *which)),
+        );
+        self.compute.bind_group(gpu, &entries)
+    }
+}
+
+fn shade_tile_buffer(gpu: &GpuContext, tile_list: &[[u32; 2]]) -> wgpu::Buffer {
+    gpu.device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("shade_tiles"),
+            contents: bytemuck::cast_slice(tile_list),
+            usage: wgpu::BufferUsages::STORAGE,
+        })
+}
+
+fn shade_params_buffer(gpu: &GpuContext, params: &SimParams, mode: ViewMode) -> wgpu::Buffer {
+    gpu.device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("shade_params"),
+            contents: bytemuck::bytes_of(&ShadeParams::new(params, mode)),
+            usage: wgpu::BufferUsages::UNIFORM,
+        })
 }
