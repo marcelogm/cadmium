@@ -1,0 +1,24 @@
+[package]
+name = "oleo-app"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "oleo"
+path = "src/main.rs"
+
+[dependencies]
+oleo-engine = { path = "../oleo-engine" }
+gtk = { workspace = true }
+adw = { workspace = true }
+wgpu = { workspace = true }
+wgpu-hal = { workspace = true }
+ash = { workspace = true }
+libc = { workspace = true }
+drm-fourcc = { workspace = true }
+async-channel = { workspace = true }
+pollster = { workspace = true }
+
+[build-dependencies]
+glib-build-tools = { workspace = true }
