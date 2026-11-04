@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
+use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
 use cadmium_engine::canvas::{CanvasError, CanvasSpec, PaintTotals};
 use cadmium_engine::engine::{BrushReadout, FULL_DIP};
 use cadmium_engine::gpu::GpuContext;
@@ -24,6 +24,7 @@ pub use pen::PenReadout;
 mod document;
 mod frames;
 mod gesture;
+mod hand;
 mod history;
 mod lab;
 mod pen;
@@ -264,15 +265,6 @@ impl AppState {
         self.knife_volume <= 0.0
     }
 
-    pub fn holds_knife(&self) -> bool {
-        self.session.brush.tool.profile().holds_on_blade()
-    }
-
-    fn put_down_stroke_tool(&mut self) {
-        self.release();
-        self.session.brush.tool = self.resting_tool;
-    }
-
     fn clean_and_load(&mut self) {
         if !self.holds_knife() {
             self.session.reload_brush(&self.gpu);
@@ -346,26 +338,6 @@ impl AppState {
         self.wake();
     }
 
-    pub fn set_brush_size(&mut self, diameter_px: f32) {
-        self.release();
-        self.session.brush.geometry.max_diameter_px = diameter_px;
-        self.session.resize_tip();
-    }
-
-    pub fn set_brush_shape(&mut self, shape: BrushShape) {
-        self.release();
-        self.session.brush.shape = shape;
-        self.session.resize_tip();
-    }
-
-    pub fn set_load(&mut self, load: f32) {
-        self.session.brush.load = load;
-    }
-
-    pub fn set_medium(&mut self, medium: f32) {
-        self.session.brush.medium = medium;
-    }
-
     pub fn pick_colour_on(&mut self, surface: Surface, x: f32, y: f32) -> bool {
         self.put_down_stroke_tool();
         let Ok(Some(picked)) = self.session.pick_colour_on(&self.gpu, surface, x, y) else {
@@ -380,17 +352,6 @@ impl AppState {
         self.measure_brush();
         self.wake();
         true
-    }
-
-    pub fn set_ui_tool(&mut self, tool: UiTool) {
-        self.ui_tool = tool;
-        let UiTool::Paint(paint_tool) = tool else {
-            return;
-        };
-        self.resting_tool = paint_tool;
-        if !self.is_stroking() {
-            self.session.brush.tool = paint_tool;
-        }
     }
 
     fn measure_brush(&mut self) -> Option<BrushReadout> {
@@ -414,24 +375,9 @@ mod test_support;
 mod tests {
     use super::*;
     use crate::state::test_support::{
-        PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, TEST_BRUSH_DIAMETER_PX, ULTRAMARINE_SLOT,
-        WHITE_SLOT, brush_totals, holding_the_knife, knife_totals, painting_state,
-        present_one_frame, reserve_volume, row_samples, stroke, wet_volume,
+        PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals,
+        holding_the_knife, knife_totals, painting_state, reserve_volume, row_samples, stroke,
     };
-
-    #[test]
-    fn tool_chosen_mid_stroke_waits_for_the_stroke_to_end() {
-        let mut state = painting_state();
-        let samples = row_samples(PAINT_ROW_Y);
-        state.begin_stroke(Tool::Brush, samples[0]);
-        state.set_ui_tool(UiTool::Paint(Tool::Rag));
-        state.add_samples(&samples[1..]);
-        assert_eq!(state.session.brush.tool, Tool::Brush);
-        state.release();
-        present_one_frame(&mut state);
-        assert!(wet_volume(&state) > 0.0);
-        assert_eq!(state.session.brush.tool, Tool::Rag);
-    }
 
     #[test]
     fn recipe_follows_its_pigments_into_the_new_palette() {
@@ -451,25 +397,6 @@ mod tests {
         let mut brush = state.session.brush.clone();
         brush.recipe = vec![(slot, 1.0)];
         brush.reservoir_mixture(state.slot_count())
-    }
-
-    #[test]
-    fn resizing_the_brush_keeps_the_paint_on_its_tip() {
-        let mut state = painting_state();
-        stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
-        let before = brush_totals(&state);
-        state.set_brush_size(TEST_BRUSH_DIAMETER_PX * 2.0);
-        state.set_brush_shape(BrushShape::Flat);
-        assert_eq!(brush_totals(&state), before);
-    }
-
-    #[test]
-    fn load_and_medium_wait_for_the_next_dip() {
-        let mut state = painting_state();
-        let before = brush_totals(&state);
-        state.set_load(0.2);
-        state.set_medium(0.5);
-        assert_eq!(brush_totals(&state), before);
     }
 
     #[test]
