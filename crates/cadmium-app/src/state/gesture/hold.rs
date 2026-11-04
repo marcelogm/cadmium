@@ -41,68 +41,71 @@ impl AppState {
         }
     }
 
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn advance_hold(&mut self, seconds: f32) {
         if seconds.is_nan() || seconds <= 0.0 {
             return;
         }
         let seconds = seconds.min(MAX_HOLD_STEP_SECONDS);
         let radius = self.session.brush.geometry.max_diameter_px / 2.0;
-        match self.contact {
-            Some(Contact::Squeezing(Squeezing {
-                surface,
-                pen,
-                nozzle_at,
-                squeezed,
-            })) => {
-                let squeezed_now = self.session.squeeze(
-                    &self.gpu,
-                    Nozzle {
-                        from: [nozzle_at.0 as f32, nozzle_at.1 as f32],
-                        to: [pen.x as f32, pen.y as f32],
-                        radius,
-                        slot: self.tube_slot,
-                        pressure: pen.pressure,
-                        seconds,
-                        still_reach_px: STILL_TUBE_SCREEN_PX / self.screen_zoom(surface),
-                    },
-                );
-                self.contact = Some(Contact::Squeezing(Squeezing {
-                    surface,
-                    pen,
-                    nozzle_at: (pen.x, pen.y),
-                    squeezed: squeezed || squeezed_now,
-                }));
+        let still_holding = match self.contact {
+            Some(Contact::Squeezing(squeezing)) => {
+                self.advance_squeezing(squeezing, seconds, radius);
+                true
             }
-            Some(Contact::Loading(Loading {
-                tool,
-                origin,
-                pen,
-                colour,
-                ..
-            })) => {
-                let request = DrawUpRequest {
-                    center: [pen.x as f32, pen.y as f32],
-                    radius,
-                    pressure: pen.pressure,
-                    seconds,
-                };
-                let Ok(drawn) = self.session.draw_up(&self.gpu, request) else {
-                    self.release();
-                    return;
-                };
-                let taken = (drawn.taken.volume > 0.0).then(|| self.colour_of(&drawn.taken));
-                self.contact = Some(Contact::Loading(Loading {
-                    tool,
-                    origin,
-                    pen,
-                    colour: taken.or(colour),
-                    level: Some(drawn.level),
-                }));
-            }
-            Some(Contact::Stroke { .. }) | None => return,
+            Some(Contact::Loading(loading)) => self.advance_loading(loading, seconds, radius),
+            Some(Contact::Stroke { .. }) | None => false,
+        };
+        if still_holding {
+            self.wake();
         }
-        self.wake();
+    }
+
+    fn advance_squeezing(&mut self, squeezing: Squeezing, seconds: f32, radius: f32) {
+        let Squeezing {
+            surface,
+            pen,
+            nozzle_at,
+            squeezed,
+        } = squeezing;
+        let squeezed_now = self.session.squeeze(
+            &self.gpu,
+            Nozzle {
+                from: [nozzle_at.0 as f32, nozzle_at.1 as f32],
+                to: [pen.x as f32, pen.y as f32],
+                radius,
+                slot: self.tube_slot,
+                pressure: pen.pressure,
+                seconds,
+                still_reach_px: STILL_TUBE_SCREEN_PX / self.screen_zoom(surface),
+            },
+        );
+        self.contact = Some(Contact::Squeezing(Squeezing {
+            surface,
+            pen,
+            nozzle_at: (pen.x, pen.y),
+            squeezed: squeezed || squeezed_now,
+        }));
+    }
+
+    fn advance_loading(&mut self, loading: Loading, seconds: f32, radius: f32) -> bool {
+        let pen = loading.pen;
+        let request = DrawUpRequest {
+            center: [pen.x as f32, pen.y as f32],
+            radius,
+            pressure: pen.pressure,
+            seconds,
+        };
+        let Ok(drawn) = self.session.draw_up(&self.gpu, request) else {
+            self.release();
+            return false;
+        };
+        let taken = (drawn.taken.volume > 0.0).then(|| self.colour_of(&drawn.taken));
+        self.contact = Some(Contact::Loading(Loading {
+            colour: taken.or(loading.colour),
+            level: Some(drawn.level),
+            ..loading
+        }));
+        true
     }
 
     pub(in crate::state) fn advance_hold_by_clock(&mut self, frame_surface: Surface) {
