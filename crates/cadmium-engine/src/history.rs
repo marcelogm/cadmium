@@ -10,7 +10,7 @@ mod tiles;
 
 pub use atlas::bytes_per_tile_all_textures;
 
-use atlas::{Atlas, CopyDirection, slots_for_budget};
+use atlas::{Atlas, slots_for_budget};
 use tiles::{forget_wet, mark_restored, mark_wet, tile_extent};
 
 pub const ATLAS_TILES_PER_SIDE: u32 = 48;
@@ -48,6 +48,19 @@ impl Step {
         self.tiles
             .iter()
             .flat_map(|saved| std::iter::once(saved.before).chain(saved.after))
+    }
+
+    fn unsaved(&self, canvas: &Canvas, tiles: &[TileCoord]) -> Vec<TileCoord> {
+        let mut seen = HashSet::new();
+        tiles
+            .iter()
+            .copied()
+            .filter(|tile| {
+                !self.saved.contains(tile)
+                    && tile_extent(canvas, *tile).is_some()
+                    && seen.insert(*tile)
+            })
+            .collect()
     }
 }
 
@@ -127,7 +140,6 @@ impl History {
         self.current = Some(Step::new(removes_wet_paint, surface));
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn encode_save_tiles(
         &mut self,
         _gpu: &GpuContext,
@@ -138,16 +150,7 @@ impl History {
         let Some(mut step) = self.current.take() else {
             return;
         };
-        let mut unsaved = Vec::new();
-        let mut seen = HashSet::new();
-        for tile in tiles {
-            if !step.saved.contains(tile)
-                && tile_extent(canvas, *tile).is_some()
-                && seen.insert(*tile)
-            {
-                unsaved.push(*tile);
-            }
-        }
+        let unsaved = step.unsaved(canvas, tiles);
         if unsaved.is_empty() || !step.complete {
             self.current = Some(step);
             return;
@@ -158,20 +161,33 @@ impl History {
             self.current = Some(step);
             return;
         }
-        for tile in &unsaved {
-            let Some(slot) = self.allocate() else {
-                self.abandon(&mut step);
-                break;
-            };
-            self.copy_tile(canvas, *tile, slot, CopyDirection::CanvasToSlot, encoder);
-            step.saved.insert(*tile);
-            step.tiles.push(SavedTile {
-                tile: *tile,
-                before: slot,
-                after: None,
-            });
+        let saved_every_tile = unsaved
+            .iter()
+            .all(|tile| self.save_into_step(canvas, &mut step, *tile, encoder));
+        if !saved_every_tile {
+            self.abandon(&mut step);
         }
         self.current = Some(step);
+    }
+
+    fn save_into_step(
+        &mut self,
+        canvas: &Canvas,
+        step: &mut Step,
+        tile: TileCoord,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> bool {
+        let Some(slot) = self.allocate() else {
+            return false;
+        };
+        self.copy_canvas_to_slot(canvas, tile, slot, encoder);
+        step.saved.insert(tile);
+        step.tiles.push(SavedTile {
+            tile,
+            before: slot,
+            after: None,
+        });
+        true
     }
 
     pub fn commit_step(&mut self) -> bool {
@@ -188,7 +204,6 @@ impl History {
         true
     }
 
-    #[expect(clippy::excessive_nesting, clippy::too_many_lines)]
     pub fn undo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
         self.commit_step();
         let Some(mut step) = self.undo_steps.pop_back() else {
@@ -205,24 +220,7 @@ impl History {
                 label: Some("undo"),
             });
         for saved in &step.tiles {
-            if let Some(after) = saved.after {
-                self.copy_tile(
-                    canvas,
-                    saved.tile,
-                    after,
-                    CopyDirection::CanvasToSlot,
-                    &mut encoder,
-                );
-            }
-            self.copy_tile(
-                canvas,
-                saved.tile,
-                saved.before,
-                CopyDirection::SlotToCanvas,
-                &mut encoder,
-            );
-            mark_restored(canvas, saved.tile);
-            mark_wet(canvas, saved.tile);
+            self.undo_tile(canvas, saved, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
         if redoable {
@@ -233,7 +231,6 @@ impl History {
         true
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn redo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
         let Some(step) = self.redo_steps.pop() else {
             return false;
@@ -244,19 +241,7 @@ impl History {
                 label: Some("redo"),
             });
         for saved in &step.tiles {
-            if let Some(after) = saved.after {
-                self.copy_tile(
-                    canvas,
-                    saved.tile,
-                    after,
-                    CopyDirection::SlotToCanvas,
-                    &mut encoder,
-                );
-                mark_restored(canvas, saved.tile);
-                if !step.removes_wet_paint {
-                    mark_wet(canvas, saved.tile);
-                }
-            }
+            self.redo_tile(canvas, saved, step.removes_wet_paint, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
         if step.removes_wet_paint {
@@ -265,6 +250,37 @@ impl History {
         self.undo_steps.push_back(step);
         self.trim_to_max_steps();
         true
+    }
+
+    fn undo_tile(
+        &self,
+        canvas: &mut Canvas,
+        saved: &SavedTile,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if let Some(after) = saved.after {
+            self.copy_canvas_to_slot(canvas, saved.tile, after, encoder);
+        }
+        self.copy_slot_to_canvas(canvas, saved.tile, saved.before, encoder);
+        mark_restored(canvas, saved.tile);
+        mark_wet(canvas, saved.tile);
+    }
+
+    fn redo_tile(
+        &self,
+        canvas: &mut Canvas,
+        saved: &SavedTile,
+        removes_wet_paint: bool,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let Some(after) = saved.after else {
+            return;
+        };
+        self.copy_slot_to_canvas(canvas, saved.tile, after, encoder);
+        mark_restored(canvas, saved.tile);
+        if !removes_wet_paint {
+            mark_wet(canvas, saved.tile);
+        }
     }
 
     pub fn undo_surface(&self) -> Option<Surface> {

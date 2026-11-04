@@ -1,26 +1,22 @@
 use super::{History, Slot, Step};
 
 impl History {
-    #[expect(clippy::excessive_nesting)]
     pub(super) fn allocate(&mut self) -> Option<Slot> {
-        loop {
-            if let Some(slot) = self.free_slots.pop() {
-                return Some(slot);
-            }
+        while self.free_slots.is_empty() {
             let oldest = self.undo_steps.pop_front()?;
             self.release(oldest);
         }
+        self.free_slots.pop()
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub(super) fn reserve_after_slots(&mut self, step: &mut Step) -> bool {
-        for saved in step.tiles.iter_mut().filter(|saved| saved.after.is_none()) {
-            let Some(slot) = self.allocate() else {
-                return false;
-            };
-            saved.after = Some(slot);
-        }
-        true
+        step.tiles
+            .iter_mut()
+            .filter(|saved| saved.after.is_none())
+            .all(|saved| {
+                saved.after = self.allocate();
+                saved.after.is_some()
+            })
     }
 
     pub fn clear(&mut self) {
@@ -58,12 +54,11 @@ impl History {
         }
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub(super) fn trim_to_max_steps(&mut self) {
-        while self.undo_steps.len() > self.max_steps {
-            if let Some(oldest) = self.undo_steps.pop_front() {
-                self.release(oldest);
-            }
+        while self.undo_steps.len() > self.max_steps
+            && let Some(oldest) = self.undo_steps.pop_front()
+        {
+            self.release(oldest);
         }
     }
 }

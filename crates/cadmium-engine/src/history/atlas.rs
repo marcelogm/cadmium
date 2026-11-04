@@ -9,20 +9,12 @@ pub(super) struct Atlas {
 }
 
 impl Atlas {
-    #[expect(clippy::excessive_nesting)]
     pub(super) fn allocate_largest(gpu: &GpuContext, wanted_slots: u32) -> Option<(Atlas, u32)> {
-        let mut slot_capacity = wanted_slots;
-        while slot_capacity > 0 {
-            if let Some(atlas) = Atlas::try_new(gpu, slot_capacity) {
-                return Some((atlas, slot_capacity));
-            }
-            slot_capacity = if slot_capacity > MIN_SLOTS_AFTER_OUT_OF_MEMORY {
-                (slot_capacity / 2).max(MIN_SLOTS_AFTER_OUT_OF_MEMORY)
-            } else {
-                0
-            };
-        }
-        None
+        std::iter::successors(Some(wanted_slots), |&slot_capacity| {
+            Some(halved_capacity(slot_capacity))
+        })
+        .take_while(|&slot_capacity| slot_capacity > 0)
+        .find_map(|slot_capacity| Atlas::try_new(gpu, slot_capacity).zip(Some(slot_capacity)))
     }
 
     fn try_new(gpu: &GpuContext, slot_capacity: u32) -> Option<Atlas> {
@@ -57,10 +49,12 @@ impl Atlas {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum CopyDirection {
-    CanvasToSlot,
-    SlotToCanvas,
+fn halved_capacity(slot_capacity: u32) -> u32 {
+    if slot_capacity > MIN_SLOTS_AFTER_OUT_OF_MEMORY {
+        (slot_capacity / 2).max(MIN_SLOTS_AFTER_OUT_OF_MEMORY)
+    } else {
+        0
+    }
 }
 
 pub(super) fn slots_for_budget(budget_bytes: u64) -> u32 {
@@ -74,21 +68,45 @@ pub fn bytes_per_tile_all_textures() -> u64 {
         .sum()
 }
 
+struct TileCopy<'a> {
+    canvas: wgpu::TexelCopyTextureInfo<'a>,
+    slot: wgpu::TexelCopyTextureInfo<'a>,
+    extent: wgpu::Extent3d,
+}
+
 impl History {
-    #[expect(clippy::excessive_nesting, clippy::too_many_arguments)]
-    pub(super) fn copy_tile(
+    pub(super) fn copy_canvas_to_slot(
         &self,
         canvas: &Canvas,
         tile: TileCoord,
         slot: Slot,
-        direction: CopyDirection,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let Some(extent) = tile_extent(canvas, tile) else {
-            return;
-        };
-        let Some(atlas) = self.atlas.as_ref() else {
-            return;
+        for copy in self.tile_copies(canvas, tile, slot) {
+            encoder.copy_texture_to_texture(copy.canvas, copy.slot, copy.extent);
+        }
+    }
+
+    pub(super) fn copy_slot_to_canvas(
+        &self,
+        canvas: &Canvas,
+        tile: TileCoord,
+        slot: Slot,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        for copy in self.tile_copies(canvas, tile, slot) {
+            encoder.copy_texture_to_texture(copy.slot, copy.canvas, copy.extent);
+        }
+    }
+
+    fn tile_copies<'a>(
+        &'a self,
+        canvas: &'a Canvas,
+        tile: TileCoord,
+        slot: Slot,
+    ) -> Vec<TileCopy<'a>> {
+        let (Some(extent), Some(atlas)) = (tile_extent(canvas, tile), self.atlas.as_ref()) else {
+            return Vec::new();
         };
         let canvas_origin = wgpu::Origin3d {
             x: tile.x * TILE_SIZE,
@@ -100,27 +118,23 @@ impl History {
             y: (slot / ATLAS_TILES_PER_SIDE) * TILE_SIZE,
             z: 0,
         };
-        for (which, atlas_texture) in StateTexture::PAINT_STATE.iter().zip(&atlas.textures) {
-            let canvas_copy = wgpu::TexelCopyTextureInfo {
-                texture: canvas.texture(*which),
-                mip_level: 0,
-                origin: canvas_origin,
-                aspect: wgpu::TextureAspect::All,
-            };
-            let slot_copy = wgpu::TexelCopyTextureInfo {
-                texture: atlas_texture,
-                mip_level: 0,
-                origin: slot_origin,
-                aspect: wgpu::TextureAspect::All,
-            };
-            match direction {
-                CopyDirection::CanvasToSlot => {
-                    encoder.copy_texture_to_texture(canvas_copy, slot_copy, extent)
-                }
-                CopyDirection::SlotToCanvas => {
-                    encoder.copy_texture_to_texture(slot_copy, canvas_copy, extent)
-                }
-            }
-        }
+        StateTexture::PAINT_STATE
+            .iter()
+            .zip(&atlas.textures)
+            .map(|(which, atlas_texture)| TileCopy {
+                canvas: texel_copy(canvas.texture(*which), canvas_origin),
+                slot: texel_copy(atlas_texture, slot_origin),
+                extent,
+            })
+            .collect()
+    }
+}
+
+fn texel_copy(texture: &wgpu::Texture, origin: wgpu::Origin3d) -> wgpu::TexelCopyTextureInfo<'_> {
+    wgpu::TexelCopyTextureInfo {
+        texture,
+        mip_level: 0,
+        origin,
+        aspect: wgpu::TextureAspect::All,
     }
 }
