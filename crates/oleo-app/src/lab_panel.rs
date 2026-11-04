@@ -2,7 +2,6 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
-use gtk::glib;
 use oleo_engine::engine::PaintEngine;
 use oleo_engine::params::{ParamGroup, ParamSpec, SimParams};
 use oleo_engine::render::ViewMode;
@@ -16,7 +15,9 @@ const GROUP_SPACING: i32 = 18;
 const VIEW_SPACING: i32 = 12;
 const PARAM_STEPS: f64 = 100.0;
 const PARAM_PAGES: f64 = 10.0;
-const WHOLE_NUMBER_RANGE: f32 = 20.0;
+const WHOLE_NUMBER_PARAMS: [&str; 1] = ["bristle_count"];
+const WHOLE_STEP: f64 = 1.0;
+const STEP_DECIMALS_SLACK: f64 = 1e-6;
 const PIGMENT_SWATCH_SIZE: (i32, i32) = (28, 20);
 const PIGMENT_SWATCH_SPACING: i32 = 4;
 const TINT_WHITE_PARTS: f32 = 1.0;
@@ -62,12 +63,28 @@ pub fn view_from_name(name: &str, pigment_slot: u8) -> Option<ViewMode> {
     }
 }
 
-pub fn format_param(spec: &ParamSpec, value: f32) -> String {
-    if spec.max - spec.min >= WHOLE_NUMBER_RANGE {
-        format!("{value:.0}")
+pub fn is_whole_number_param(spec: &ParamSpec) -> bool {
+    WHOLE_NUMBER_PARAMS.contains(&spec.key)
+}
+
+pub fn param_step(spec: &ParamSpec) -> f64 {
+    if is_whole_number_param(spec) {
+        WHOLE_STEP
     } else {
-        format!("{value:.2}")
+        f64::from(spec.max - spec.min) / PARAM_STEPS
     }
+}
+
+pub fn decimals_for_step(step: f64) -> usize {
+    if step <= 0.0 || !step.is_finite() {
+        return 0;
+    }
+    (-(step.log10() + STEP_DECIMALS_SLACK).floor()).max(0.0) as usize
+}
+
+pub fn format_param(spec: &ParamSpec, value: f32) -> String {
+    let decimals = decimals_for_step(param_step(spec));
+    format!("{value:.decimals$}")
 }
 
 pub fn pen_texts(pen: &PenReadout) -> [String; 4] {
@@ -102,6 +119,7 @@ pub struct LabPanel {
     pigment_dropdown: gtk::DropDown,
     params: Vec<ParamControl>,
     pen_labels: [gtk::Label; 4],
+    shown_pen: RefCell<Option<[String; 4]>>,
     pigments_group: adw::PreferencesGroup,
     pigment_rows: RefCell<Vec<adw::ActionRow>>,
     shown_slots: RefCell<Option<Vec<String>>>,
@@ -150,9 +168,12 @@ impl LabPanel {
                     spec.label,
                     f64::from(spec.min),
                     f64::from(spec.max),
-                    range / PARAM_STEPS,
+                    param_step(spec),
                     range / PARAM_PAGES,
                 );
+                if is_whole_number_param(spec) {
+                    scale.set_round_digits(0);
+                }
                 preferences.add(&row);
                 params.push(ParamControl { spec, scale, label });
             }
@@ -199,13 +220,19 @@ impl LabPanel {
             pigment_dropdown,
             params,
             pen_labels,
+            shown_pen: RefCell::new(None),
             pigments_group,
             pigment_rows: RefCell::new(Vec::new()),
             shown_slots: RefCell::new(None),
             syncing: Cell::new(false),
         });
         panel.connect_controls(&reset);
-        panel.follow_pen();
+        let shown = Rc::downgrade(&panel);
+        panel.root.connect_map(move |_| {
+            if let Some(panel) = shown.upgrade() {
+                panel.show_pen();
+            }
+        });
         panel.refresh();
         panel
     }
@@ -256,6 +283,7 @@ impl LabPanel {
             control.label.set_label(&format_param(control.spec, value));
         }
         self.syncing.set(false);
+        self.show_pen();
     }
 
     fn rebuild_slots(&self, infos: &[SlotInfo]) {
@@ -333,45 +361,20 @@ impl LabPanel {
         self.state.borrow_mut().set_view_mode(mode);
     }
 
-    fn follow_pen(self: &Rc<Self>) {
-        let ticking: Rc<RefCell<Option<gtk::TickCallbackId>>> = Rc::default();
-        let panel = Rc::downgrade(self);
-        self.root.connect_map(glib::clone!(
-            #[strong]
-            ticking,
-            move |root| {
-                let panel = panel.clone();
-                let shown = RefCell::new(None::<[String; 4]>);
-                let tick = root.add_tick_callback(move |_, _| {
-                    let Some(panel) = panel.upgrade() else {
-                        return glib::ControlFlow::Break;
-                    };
-                    panel.show_pen(&shown);
-                    glib::ControlFlow::Continue
-                });
-                if let Some(previous) = ticking.replace(Some(tick)) {
-                    previous.remove();
-                }
-            }
-        ));
-        self.root.connect_unmap(move |_| {
-            if let Some(tick) = ticking.take() {
-                tick.remove();
-            }
-        });
-    }
-
-    fn show_pen(&self, shown: &RefCell<Option<[String; 4]>>) {
+    pub fn show_pen(&self) {
+        if !self.root.is_mapped() {
+            return;
+        }
         let Ok(state) = self.state.try_borrow() else {
             return;
         };
         let texts = pen_texts(&state.pen);
         drop(state);
-        if shown.borrow().as_ref() != Some(&texts) {
+        if self.shown_pen.borrow().as_ref() != Some(&texts) {
             for (label, text) in self.pen_labels.iter().zip(&texts) {
                 label.set_label(text);
             }
-            shown.replace(Some(texts));
+            self.shown_pen.replace(Some(texts));
         }
     }
 }
@@ -423,18 +426,34 @@ mod tests {
         }
     }
 
+    fn spec_named(key: &str) -> &'static ParamSpec {
+        SimParams::specs()
+            .iter()
+            .find(|spec| spec.key == key)
+            .unwrap()
+    }
+
     #[test]
-    fn wide_ranges_show_whole_numbers_and_narrow_ones_two_decimals() {
-        let count = SimParams::specs()
-            .iter()
-            .find(|spec| spec.key == "bristle_count")
-            .unwrap();
-        let fraction = SimParams::specs()
-            .iter()
-            .find(|spec| spec.key == "transfer_fraction")
-            .unwrap();
-        assert_eq!(format_param(count, 24.0), "24");
-        assert_eq!(format_param(fraction, 0.1), "0.10");
+    fn param_values_show_as_many_decimals_as_their_slider_step() {
+        assert_eq!(format_param(spec_named("bristle_count"), 24.0), "24");
+        assert_eq!(format_param(spec_named("transfer_fraction"), 0.1), "0.10");
+        assert_eq!(format_param(spec_named("residual_um"), 2.0), "2.0");
+        assert_eq!(format_param(spec_named("penetration_um"), 120.0), "120");
+    }
+
+    #[test]
+    fn decimals_follow_the_step_size() {
+        assert_eq!(decimals_for_step(0.01), 2);
+        assert_eq!(decimals_for_step(0.02), 2);
+        assert_eq!(decimals_for_step(0.1), 1);
+        assert_eq!(decimals_for_step(0.2), 1);
+        assert_eq!(decimals_for_step(1.0), 0);
+        assert_eq!(decimals_for_step(3.0), 0);
+    }
+
+    #[test]
+    fn bristle_count_moves_in_whole_bristles() {
+        assert_eq!(param_step(spec_named("bristle_count")), 1.0);
     }
 
     #[test]

@@ -15,7 +15,7 @@ use crate::canvas_widget::OleoCanvas;
 use crate::dialogs::confirm_discard;
 use crate::lab_panel::LabPanel;
 use crate::new_painting_dialog::NewPaintingDialog;
-use crate::state::SharedState;
+use crate::state::{DryOutcome, SharedState};
 use crate::tools::{Tool, UiTool};
 
 pub type PanelRefresher = Rc<dyn Fn()>;
@@ -113,6 +113,7 @@ const ZOOM_PERCENT: f32 = 100.0;
 const DRIED_TOAST: &str = "Tela seca";
 const UNDO_LABEL: &str = "Desfazer";
 const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indisponível)";
+const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
@@ -159,10 +160,16 @@ impl OleoWindow {
             self,
             move |canvas| window.show_zoom(canvas.zoom())
         ));
-        canvas.connect_brush_changed(glib::clone!(
+        canvas.connect_colour_picked(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |_| window.refresh_panels()
+            move |_, found_paint| {
+                if found_paint {
+                    window.refresh_panels();
+                } else {
+                    window.show_toast(NOTHING_TO_PICK_TOAST);
+                }
+            }
         ));
         canvas.connect_presented(glib::clone!(
             #[weak(rename_to = window)]
@@ -189,6 +196,19 @@ impl OleoWindow {
         self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
         let lab_panel = LabPanel::new(state);
         self.imp().lab_panel_slot.append(lab_panel.widget());
+        let canvas = self.canvas();
+        let pen_panel = Rc::downgrade(&lab_panel);
+        canvas.connect_presented(move |_| {
+            if let Some(panel) = pen_panel.upgrade() {
+                panel.show_pen();
+            }
+        });
+        let pen_panel = Rc::downgrade(&lab_panel);
+        canvas.connect_pen_observed(move |_| {
+            if let Some(panel) = pen_panel.upgrade() {
+                panel.show_pen();
+            }
+        });
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
     }
@@ -236,13 +256,16 @@ impl OleoWindow {
     }
 
     fn dry(&self) {
-        self.state().borrow_mut().dry();
+        let outcome = self.state().borrow_mut().dry();
+        let DryOutcome::Dried { undoable } = outcome else {
+            return;
+        };
         self.after_history_change();
-        let toast = adw::Toast::builder()
-            .title(DRIED_TOAST)
-            .button_label(UNDO_LABEL)
-            .action_name("win.undo")
-            .build();
+        let toast = adw::Toast::new(DRIED_TOAST);
+        if undoable {
+            toast.set_button_label(Some(UNDO_LABEL));
+            toast.set_action_name(Some("win.undo"));
+        }
         self.imp().toast_overlay.add_toast(toast);
     }
 

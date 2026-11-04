@@ -5,6 +5,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 use oleo_engine::present::ViewTransform;
+use oleo_engine::stroke::StrokeSample;
 
 use crate::presenter::FramePresenter;
 use crate::state::{AppState, SharedState};
@@ -19,6 +20,7 @@ const OUTLINE_DARK: gdk::RGBA = gdk::RGBA::new(0.0, 0.0, 0.0, 0.7);
 const CANVAS_CURSOR: &str = "crosshair";
 
 type CanvasHandler = Box<dyn Fn(&OleoCanvas)>;
+type PickHandler = Box<dyn Fn(&OleoCanvas, bool)>;
 
 mod imp {
     use super::*;
@@ -33,10 +35,12 @@ mod imp {
         pub scale_watch: RefCell<Option<(glib::WeakRef<gdk::Surface>, glib::SignalHandlerId)>>,
         pub hover: Cell<Option<(f64, f64)>>,
         pub user_moved_view: Cell<bool>,
+        pub fit_after_stroke: Cell<bool>,
         pub allocated: Cell<(i32, i32)>,
         pub presented_frames: Cell<u64>,
         pub view_changed_handlers: RefCell<Vec<CanvasHandler>>,
-        pub brush_changed_handlers: RefCell<Vec<CanvasHandler>>,
+        pub colour_picked_handlers: RefCell<Vec<PickHandler>>,
+        pub pen_observed_handlers: RefCell<Vec<CanvasHandler>>,
         pub presented_handlers: RefCell<Vec<CanvasHandler>>,
         pub fallback_handlers: RefCell<Vec<CanvasHandler>>,
     }
@@ -99,16 +103,21 @@ mod imp {
             let canvas = self.obj();
             let resized = self.allocated.replace((width, height)) != (width, height);
             if resized && !self.user_moved_view.get() && width > 0 && height > 0 {
-                canvas.zoom_fit();
+                canvas.fit_unless_stroking();
             }
             canvas.queue_present();
         }
 
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let canvas = self.obj();
-            let bounds =
-                graphene::Rect::new(0.0, 0.0, canvas.width() as f32, canvas.height() as f32);
             if let Some(texture) = self.texture.borrow().as_ref() {
+                let scale = canvas.device_scale() as f32;
+                let bounds = graphene::Rect::new(
+                    0.0,
+                    0.0,
+                    texture.width() as f32 / scale,
+                    texture.height() as f32 / scale,
+                );
                 snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Nearest, &bounds);
             }
             if let Some((x, y)) = self.hover.get()
@@ -269,11 +278,25 @@ impl OleoCanvas {
             .push(Box::new(handler));
     }
 
-    pub fn connect_brush_changed(&self, handler: impl Fn(&OleoCanvas) + 'static) {
+    pub fn connect_colour_picked(&self, handler: impl Fn(&OleoCanvas, bool) + 'static) {
         self.imp()
-            .brush_changed_handlers
+            .colour_picked_handlers
             .borrow_mut()
             .push(Box::new(handler));
+    }
+
+    pub fn connect_pen_observed(&self, handler: impl Fn(&OleoCanvas) + 'static) {
+        self.imp()
+            .pen_observed_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
+    pub fn observe_hover_pen(&self, sample: &StrokeSample) {
+        self.state().borrow_mut().observe_hover_pen(sample);
+        for handler in self.imp().pen_observed_handlers.borrow().iter() {
+            handler(self);
+        }
     }
 
     pub fn connect_presented(&self, handler: impl Fn(&OleoCanvas) + 'static) {
@@ -292,9 +315,9 @@ impl OleoCanvas {
 
     pub fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
-        self.state().borrow_mut().pick_colour(x as f32, y as f32);
-        for handler in self.imp().brush_changed_handlers.borrow().iter() {
-            handler(self);
+        let found_paint = self.state().borrow_mut().pick_colour(x as f32, y as f32);
+        for handler in self.imp().colour_picked_handlers.borrow().iter() {
+            handler(self, found_paint);
         }
     }
 
@@ -336,9 +359,31 @@ impl OleoCanvas {
 
     fn follow_scale_change(&self) {
         if !self.imp().user_moved_view.get() && self.width() > 0 && self.height() > 0 {
-            self.zoom_fit();
+            self.fit_unless_stroking();
         }
         self.queue_present();
+    }
+
+    fn fit_unless_stroking(&self) {
+        let stroking = self
+            .imp()
+            .state
+            .get()
+            .and_then(|state| state.try_borrow().ok().map(|state| state.is_stroking()))
+            .unwrap_or(true);
+        if stroking {
+            self.imp().fit_after_stroke.set(true);
+        } else {
+            self.imp().fit_after_stroke.set(false);
+            self.zoom_fit();
+        }
+    }
+
+    fn fit_if_a_stroke_held_it_back(&self) {
+        let imp = self.imp();
+        if imp.fit_after_stroke.get() && !imp.user_moved_view.get() {
+            self.fit_unless_stroking();
+        }
     }
 
     fn frame_needed(&self, state: &AppState, presenter: &FramePresenter) -> bool {
@@ -363,6 +408,7 @@ impl OleoCanvas {
     }
 
     fn present_if_needed(&self) {
+        self.fit_if_a_stroke_held_it_back();
         if !self.present_frame() {
             return;
         }

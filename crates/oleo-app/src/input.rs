@@ -17,9 +17,50 @@ const WHEEL_PAN_STEP: f64 = 48.0;
 const PAN_BUTTON: u32 = gdk::BUTTON_MIDDLE;
 const EYEDROPPER_BUTTON: u32 = gdk::BUTTON_SECONDARY;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PanGesture {
+    Primary,
+    Middle,
+}
+
+impl PanGesture {
+    fn button(self) -> u32 {
+        match self {
+            PanGesture::Primary => gdk::BUTTON_PRIMARY,
+            PanGesture::Middle => PAN_BUTTON,
+        }
+    }
+
+    fn index(self) -> usize {
+        match self {
+            PanGesture::Primary => 0,
+            PanGesture::Middle => 1,
+        }
+    }
+}
+
+#[derive(Default)]
+struct PanFlags {
+    panning: [Cell<bool>; 2],
+}
+
+impl PanFlags {
+    fn set(&self, gesture: PanGesture, panning: bool) {
+        self.panning[gesture.index()].set(panning);
+    }
+
+    fn is_panning(&self, gesture: PanGesture) -> bool {
+        self.panning[gesture.index()].get()
+    }
+
+    fn any(&self) -> bool {
+        self.panning.iter().any(Cell::get)
+    }
+}
+
 #[derive(Default)]
 struct Contact {
-    panning: Cell<bool>,
+    pans: PanFlags,
     stroking_device: RefCell<Option<gdk::Device>>,
 }
 
@@ -32,8 +73,8 @@ impl Contact {
 pub fn attach(canvas: &OleoCanvas) {
     let contact = Rc::new(Contact::default());
     canvas.add_controller(stylus_gesture(canvas, &contact));
-    canvas.add_controller(pan_gesture(canvas, &contact, gdk::BUTTON_PRIMARY));
-    canvas.add_controller(pan_gesture(canvas, &contact, PAN_BUTTON));
+    canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Primary));
+    canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Middle));
     canvas.add_controller(eyedropper_click(canvas));
     canvas.add_controller(scroll_controller(canvas));
     canvas.add_controller(hover_controller(canvas, &contact));
@@ -143,6 +184,10 @@ fn is_primary_contact(event: &gdk::Event) -> bool {
     }
 }
 
+fn comes_from_a_pen(event: &gdk::Event) -> bool {
+    event.device_tool().is_some()
+}
+
 fn is_eraser(event: &gdk::Event) -> bool {
     event
         .device_tool()
@@ -161,7 +206,7 @@ fn stylus_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>) -> gtk::GestureSty
             let Some(event) = stylus.current_event() else {
                 return;
             };
-            if !is_primary_contact(&event) || !stroke_may_begin(contact.panning.get()) {
+            if !is_primary_contact(&event) || !stroke_may_begin(contact.pans.any()) {
                 return;
             }
             let state = canvas.state();
@@ -194,8 +239,9 @@ fn stylus_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>) -> gtk::GestureSty
             };
             let state = canvas.state();
             if !state.borrow().is_stroking() {
-                let sample = event_sample(&canvas, &event, x, y);
-                state.borrow_mut().observe_hover_pen(&sample);
+                if comes_from_a_pen(&event) {
+                    canvas.observe_hover_pen(&event_sample(&canvas, &event, x, y));
+                }
                 return;
             }
             if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
@@ -236,8 +282,9 @@ fn stylus_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>) -> gtk::GestureSty
                 return;
             }
             canvas.set_hover(Some((x, y)));
-            let sample = event_sample(&canvas, &event, x, y);
-            canvas.state().borrow_mut().observe_hover_pen(&sample);
+            if comes_from_a_pen(&event) {
+                canvas.observe_hover_pen(&event_sample(&canvas, &event, x, y));
+            }
         }
     ));
     stylus.connect_cancel(glib::clone!(
@@ -255,18 +302,19 @@ fn end_stroke(canvas: &OleoCanvas, contact: &Contact) {
     canvas.state().borrow_mut().end_stroke();
 }
 
-fn pan_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>, button: u32) -> gtk::GestureDrag {
+fn pan_gesture(
+    canvas: &OleoCanvas,
+    contact: &Rc<Contact>,
+    gesture: PanGesture,
+) -> gtk::GestureDrag {
     let drag = gtk::GestureDrag::new();
-    drag.set_button(button);
-    let panning = Rc::new(Cell::new(false));
+    drag.set_button(gesture.button());
     let last_offset = Rc::new(Cell::new((0.0, 0.0)));
     drag.connect_drag_begin(glib::clone!(
         #[weak]
         canvas,
         #[strong]
         contact,
-        #[strong]
-        panning,
         #[strong]
         last_offset,
         move |drag, _, _| {
@@ -275,10 +323,9 @@ fn pan_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>, button: u32) -> gtk::
                 let state = state.borrow();
                 (state.ui_tool, state.is_stroking())
             };
-            let wants_pan = button != gdk::BUTTON_PRIMARY || ui_tool == UiTool::Move;
+            let wants_pan = gesture != PanGesture::Primary || ui_tool == UiTool::Move;
             let pans = wants_pan && side_button_may_act(stroking);
-            panning.set(pans);
-            contact.panning.set(contact.panning.get() || pans);
+            contact.pans.set(gesture, pans);
             last_offset.set((0.0, 0.0));
             if !pans {
                 drag.set_state(gtk::EventSequenceState::Denied);
@@ -289,9 +336,9 @@ fn pan_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>, button: u32) -> gtk::
         #[weak]
         canvas,
         #[strong]
-        panning,
+        contact,
         move |_, offset_x, offset_y| {
-            if !panning.get() {
+            if !contact.pans.is_panning(gesture) {
                 return;
             }
             let (last_x, last_y) = last_offset.replace((offset_x, offset_y));
@@ -301,11 +348,7 @@ fn pan_gesture(canvas: &OleoCanvas, contact: &Rc<Contact>, button: u32) -> gtk::
     drag.connect_drag_end(glib::clone!(
         #[strong]
         contact,
-        move |_, _, _| {
-            if panning.replace(false) {
-                contact.panning.set(false);
-            }
-        }
+        move |_, _, _| contact.pans.set(gesture, false)
     ));
     drag
 }
@@ -501,6 +544,19 @@ mod tests {
     fn pen_down_during_a_pan_does_not_paint() {
         assert!(!stroke_may_begin(true));
         assert!(stroke_may_begin(false));
+    }
+
+    #[test]
+    fn one_pan_ending_leaves_the_other_panning() {
+        let pans = PanFlags::default();
+        pans.set(PanGesture::Primary, true);
+        pans.set(PanGesture::Middle, true);
+        pans.set(PanGesture::Middle, false);
+        assert!(pans.any());
+        assert!(pans.is_panning(PanGesture::Primary));
+        assert!(!pans.is_panning(PanGesture::Middle));
+        pans.set(PanGesture::Primary, false);
+        assert!(!pans.any());
     }
 
     #[test]
