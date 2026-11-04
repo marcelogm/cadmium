@@ -1,6 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture, TILE_SIZE};
+use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
 use crate::spectral::{BANDS, band_xyz_weights};
@@ -89,28 +90,14 @@ impl ShadeParams {
 }
 
 pub struct Renderer {
-    pipeline: wgpu::ComputePipeline,
+    compute: AutoLayoutStage,
 }
 
 impl Renderer {
     pub fn new(gpu: &GpuContext) -> Self {
-        let module = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("shade"),
-                source: wgpu::ShaderSource::Wgsl(SHADE_SOURCE.into()),
-            });
-        let pipeline = gpu
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("shade"),
-                layout: None,
-                module: &module,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        Renderer { pipeline }
+        Renderer {
+            compute: AutoLayoutStage::new(gpu, "shade", SHADE_SOURCE),
+        }
     }
 
     #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
@@ -126,6 +113,7 @@ impl Renderer {
         if tiles.is_empty() {
             return;
         }
+        let canvas: &Canvas = canvas;
         let tile_list: Vec<[u32; 2]> = tiles.iter().map(|tile| [tile.x, tile.y]).collect();
         let tile_buffer = gpu
             .device
@@ -142,41 +130,25 @@ impl Renderer {
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let mut entries = vec![
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: canvas.slot_table().as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: params_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: tile_buffer.as_entire_binding(),
-            },
+            buffer_binding(0, canvas.slot_table()),
+            buffer_binding(1, &params_buffer),
+            buffer_binding(2, &tile_buffer),
         ];
         let textures = SHADE_INPUTS.iter().chain([&StateTexture::Display]);
-        for (binding, which) in (3..).zip(textures) {
-            entries.push(wgpu::BindGroupEntry {
-                binding,
-                resource: wgpu::BindingResource::TextureView(canvas.view(*which)),
-            });
-        }
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("shade"),
-            layout: &self.pipeline.get_bind_group_layout(0),
-            entries: &entries,
-        });
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("shade"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(
-            WORKGROUPS_PER_TILE_SIDE,
-            WORKGROUPS_PER_TILE_SIDE,
-            tile_list.len() as u32,
+        entries.extend(
+            (3..)
+                .zip(textures)
+                .map(|(binding, which)| texture_binding(binding, canvas, *which)),
+        );
+        let bind_group = self.compute.bind_group(gpu, &entries);
+        self.compute.encode(
+            encoder,
+            &bind_group,
+            [
+                WORKGROUPS_PER_TILE_SIDE,
+                WORKGROUPS_PER_TILE_SIDE,
+                tile_list.len() as u32,
+            ],
         );
     }
 }

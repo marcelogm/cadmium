@@ -1,14 +1,15 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, PaintTotals, StateTexture};
-use crate::engine::{
-    WORKGROUP_SIZE, buffer_binding, clamped_region, compute_pipeline, layouts, read_buffer,
-    region_rect, shader_module, storage_buffer, storage_entry, texture_binding, texture_entry,
-    uniform_entry,
+use crate::compute::{
+    ComputeStage, WORKGROUP_SIZE, buffer_binding, read_buffer, storage_buffer, storage_entry,
+    texture_binding, texture_entry, uniform_entry,
 };
+use crate::engine::shader::shader_source;
 use crate::gpu::{GpuContext, GpuLost};
 use crate::params::SimParams;
 use crate::pigments::MAX_SLOTS;
+use crate::region::{clamped_region, region_rect};
 
 const DRAW_UP_INVOCATIONS: u32 = 256;
 const DRAWN_GRANTED_SHARE: usize = 0;
@@ -96,7 +97,7 @@ pub(crate) struct Measured {
 }
 
 pub(crate) struct DrawUp {
-    layout: wgpu::BindGroupLayout,
+    compute: ComputeStage,
     measure: wgpu::ComputePipeline,
     take: wgpu::ComputePipeline,
     drawn: wgpu::Buffer,
@@ -106,9 +107,14 @@ impl DrawUp {
     pub(crate) fn new(gpu: &GpuContext) -> DrawUp {
         use wgpu::StorageTextureAccess::{ReadOnly, ReadWrite};
         use wgpu::TextureFormat::{R32Float, Rgba16Float};
-        let (layout, pipeline_layout) = layouts(
+        let invocations = format!("const DRAW_UP_INVOCATIONS: u32 = {DRAW_UP_INVOCATIONS}u;");
+        let compute = ComputeStage::new(
             gpu,
             "draw_up",
+            &shader_source(
+                &[&invocations, include_str!("shaders/slot_lane.wgsl")],
+                include_str!("shaders/draw_up.wgsl"),
+            ),
             &[
                 uniform_entry(0, None),
                 texture_entry(1, ReadOnly, Rgba16Float),
@@ -117,18 +123,11 @@ impl DrawUp {
                 storage_entry(4, false),
             ],
         );
-        let invocations = format!("const DRAW_UP_INVOCATIONS: u32 = {DRAW_UP_INVOCATIONS}u;");
-        let module = shader_module(
-            gpu,
-            "draw_up",
-            &[&invocations, include_str!("shaders/slot_lane.wgsl")],
-            include_str!("shaders/draw_up.wgsl"),
-        );
         DrawUp {
-            layout,
-            measure: compute_pipeline(gpu, "draw_up_measure", &module, &pipeline_layout, "measure"),
-            take: compute_pipeline(gpu, "draw_up_take", &module, &pipeline_layout, "take"),
+            measure: compute.pipeline(gpu, "draw_up_measure", "measure"),
+            take: compute.pipeline(gpu, "draw_up_take", "take"),
             drawn: storage_buffer(gpu, "drawn", DRAWN_BYTES),
+            compute,
         }
     }
 
@@ -157,17 +156,16 @@ impl DrawUp {
                 contents: bytemuck::bytes_of(&record),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("draw_up"),
-            layout: &self.layout,
-            entries: &[
+        let group = self.compute.bind_group(
+            gpu,
+            &[
                 buffer_binding(0, &uniform),
                 texture_binding(1, canvas, StateTexture::WetPig0),
                 texture_binding(2, canvas, StateTexture::WetPig1),
                 texture_binding(3, canvas, StateTexture::WetVol),
                 buffer_binding(4, &self.drawn),
             ],
-        });
+        );
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {

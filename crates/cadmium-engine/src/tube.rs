@@ -1,12 +1,13 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture};
-use crate::engine::{
-    WORKGROUP_SIZE, buffer_binding, clamped_region, compute_pipeline, layouts, region_rect,
-    shader_module, texture_binding, texture_entry, uniform_entry,
+use crate::compute::{
+    ComputeStage, WORKGROUP_SIZE, buffer_binding, texture_binding, texture_entry, uniform_entry,
 };
+use crate::engine::shader::shader_source;
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
+use crate::region::{clamped_region, region_rect};
 
 const SQUEEZE_SNIPPETS: [&str; 2] = [
     include_str!("shaders/nearest_half.wgsl"),
@@ -128,7 +129,7 @@ pub(crate) fn squeeze_region(
 }
 
 pub(crate) struct Tube {
-    layout: wgpu::BindGroupLayout,
+    compute: ComputeStage,
     pipeline: wgpu::ComputePipeline,
 }
 
@@ -136,9 +137,10 @@ impl Tube {
     pub(crate) fn new(gpu: &GpuContext) -> Tube {
         use wgpu::StorageTextureAccess::ReadWrite;
         use wgpu::TextureFormat::{R32Float, Rgba16Float};
-        let (layout, pipeline_layout) = layouts(
+        let compute = ComputeStage::new(
             gpu,
             "squeeze",
+            &shader_source(&SQUEEZE_SNIPPETS, include_str!("shaders/squeeze.wgsl")),
             &[
                 uniform_entry(0, None),
                 texture_entry(1, ReadWrite, Rgba16Float),
@@ -146,14 +148,10 @@ impl Tube {
                 texture_entry(3, ReadWrite, R32Float),
             ],
         );
-        let module = shader_module(
-            gpu,
-            "squeeze",
-            &SQUEEZE_SNIPPETS,
-            include_str!("shaders/squeeze.wgsl"),
-        );
-        let pipeline = compute_pipeline(gpu, "squeeze", &module, &pipeline_layout, "main");
-        Tube { layout, pipeline }
+        Tube {
+            pipeline: compute.pipeline(gpu, "squeeze", "main"),
+            compute,
+        }
     }
 
     #[expect(clippy::too_many_arguments, clippy::too_many_lines)]
@@ -183,16 +181,15 @@ impl Tube {
                 contents: bytemuck::bytes_of(&record),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("squeeze"),
-            layout: &self.layout,
-            entries: &[
+        let group = self.compute.bind_group(
+            gpu,
+            &[
                 buffer_binding(0, &uniform),
                 texture_binding(1, canvas, StateTexture::WetPig0),
                 texture_binding(2, canvas, StateTexture::WetPig1),
                 texture_binding(3, canvas, StateTexture::WetVol),
             ],
-        });
+        );
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("squeeze"),
             timestamp_writes: None,
