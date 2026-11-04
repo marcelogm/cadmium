@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+pub mod support;
 
 use cadmium_engine::{
     canvas::*, gpu::GpuContext, params::SimParams, pigments::PigmentDb, present::*, render::*,
 };
+use support::write_png;
 
 fn blank(gpu: &GpuContext) -> Canvas {
     Canvas::new(
@@ -40,22 +41,6 @@ fn shade_and_present(
     presenter.encode_present(gpu, canvas, view, &target, &mut enc);
     gpu.queue.submit([enc.finish()]);
     readback_rgba8(gpu, &target).unwrap()
-}
-
-fn write_png(name: &str, width: u32, height: u32, rgba: &[u8]) {
-    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .parent()
-        .expect("cargo target tmpdir lives inside the target directory")
-        .to_path_buf();
-    let file = std::fs::File::create(target_dir.join(name)).unwrap();
-    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder
-        .write_header()
-        .unwrap()
-        .write_image_data(rgba)
-        .unwrap();
 }
 
 const IDENTITY_VIEW: ViewTransform = ViewTransform {

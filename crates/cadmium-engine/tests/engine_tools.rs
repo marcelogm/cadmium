@@ -1,20 +1,15 @@
 pub mod support;
 
-use std::path::PathBuf;
-
 use cadmium_engine::{
     canvas::*,
     engine::{PaintEngine, blade_gap_um},
     gpu::GpuContext,
-    present::{ViewTransform, readback_rgba8},
     render::ViewMode,
     session::PaintSession,
     stroke::{StrokeSample, Tool, pen_angles},
 };
-use support::{drag, frame, line, session, session_of_width, stroke};
+use support::{drag, frame, line, session, session_of_width, stroke, write_preview};
 
-const PREVIEW_WIDTH: u32 = 512;
-const PREVIEW_HEIGHT: u32 = 256;
 const CANVAS_WIDTH: usize = 512;
 const SECTION_COLUMNS: std::ops::Range<usize> = 150..350;
 const STROKE_EXTENT_SHARE: f32 = 0.05;
@@ -71,40 +66,6 @@ fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
         }
     }
     t
-}
-
-fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
-    let target = s
-        .presenter
-        .create_target(gpu, PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.presenter.encode_present(
-        gpu,
-        &s.canvas,
-        ViewTransform {
-            origin_x: 0.0,
-            origin_y: 0.0,
-            zoom: 1.0,
-        },
-        &target,
-        &mut e,
-    );
-    gpu.queue.submit([e.finish()]);
-    let rgba = readback_rgba8(gpu, &target).unwrap();
-    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .parent()
-        .expect("cargo target tmpdir lives inside the target directory")
-        .to_path_buf();
-    let file = std::fs::File::create(target_dir.join(name)).unwrap();
-    let mut encoder =
-        png::Encoder::new(std::io::BufWriter::new(file), PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder
-        .write_header()
-        .unwrap()
-        .write_image_data(&rgba)
-        .unwrap();
 }
 
 fn relative_drift(before: &PaintTotals, after: &PaintTotals) -> (f64, Vec<f64>) {

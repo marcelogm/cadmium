@@ -1,9 +1,15 @@
+use std::path::PathBuf;
+
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, Weave},
     gpu::GpuContext,
+    present::{ViewTransform, readback_rgba8},
     session::PaintSession,
     stroke::StrokeSample,
 };
+
+const PREVIEW_WIDTH: u32 = 512;
+const PREVIEW_HEIGHT: u32 = 256;
 
 pub fn without_wgpu_errors<T>(gpu: &GpuContext, work: impl FnOnce() -> T) -> T {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -76,4 +82,47 @@ pub fn line(y: f64, from: f64, to: f64, pressure: f32, tilt_x_deg: f32) -> Vec<S
 
 pub fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
     drag(gpu, s, &line(y, from, to, 0.8, 20.0));
+}
+
+pub fn total_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
+    s.canvas.wet_totals(gpu).unwrap().volume + s.engine.brush_totals(gpu).unwrap().volume
+}
+
+pub fn presented_rgba(gpu: &GpuContext, s: &PaintSession, width: u32, height: u32) -> Vec<u8> {
+    let target = s.presenter.create_target(gpu, width, height);
+    let mut e = gpu.device.create_command_encoder(&Default::default());
+    s.presenter.encode_present(
+        gpu,
+        &s.canvas,
+        ViewTransform {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            zoom: 1.0,
+        },
+        &target,
+        &mut e,
+    );
+    gpu.queue.submit([e.finish()]);
+    readback_rgba8(gpu, &target).unwrap()
+}
+
+pub fn write_png(name: &str, width: u32, height: u32, rgba: &[u8]) {
+    let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .parent()
+        .expect("cargo target tmpdir lives inside the target directory")
+        .to_path_buf();
+    let file = std::fs::File::create(target_dir.join(name)).unwrap();
+    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(rgba)
+        .unwrap();
+}
+
+pub fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
+    let rgba = presented_rgba(gpu, s, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    write_png(name, PREVIEW_WIDTH, PREVIEW_HEIGHT, &rgba);
 }

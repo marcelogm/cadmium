@@ -1,6 +1,9 @@
+pub mod support;
+
 use cadmium_engine::{
     canvas::*, engine::PaintEngine, gpu::GpuContext, session::PaintSession, stroke::StrokeSample,
 };
+use support::encode_frame;
 
 const WIDTH: u32 = 1280;
 const PEN_TILT_DEG: f32 = 25.0;
@@ -17,12 +20,6 @@ const TENFOLD_RESERVE: f32 = 10.0;
 const LOW_LOAD: f32 = 0.2;
 const FULL_LOAD: f32 = 1.0;
 const DEFAULT_RESERVE_RUN_PX: usize = 440;
-
-fn encode_frame(gpu: &GpuContext, session: &mut PaintSession) {
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    session.encode_frame(gpu, &mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-}
 
 #[expect(clippy::too_many_lines)]
 fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> {
