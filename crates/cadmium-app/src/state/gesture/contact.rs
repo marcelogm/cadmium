@@ -1,7 +1,7 @@
 use cadmium_engine::stroke::StrokeSample;
 use cadmium_engine::surface::Surface;
 
-use super::{Contact, Loading, Squeezing};
+use super::{Contact, Squeezing};
 use crate::state::AppState;
 
 impl AppState {
@@ -45,22 +45,15 @@ impl AppState {
         }
     }
 
-    #[expect(clippy::excessive_nesting)]
     pub fn release(&mut self) {
         let Some(contact) = self.contact.take() else {
             return;
         };
         match contact {
             Contact::Stroke { .. } => self.finish_stroke(),
-            Contact::Squeezing(Squeezing { squeezed, .. }) => {
-                self.session.end_hold();
-                if squeezed {
-                    self.edits.record();
-                }
-            }
-            Contact::Loading(Loading { tool, colour, .. }) => {
-                self.session.end_hold();
-                self.finish_loading(tool, colour.is_some());
+            Contact::Squeezing(squeezing) => self.finish_squeezing(squeezing.squeezed),
+            Contact::Loading(loading) => {
+                self.finish_loading(loading.tool, loading.colour.is_some())
             }
         }
         self.wake();

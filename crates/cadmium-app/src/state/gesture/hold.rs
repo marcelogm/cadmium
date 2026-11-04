@@ -212,7 +212,15 @@ impl AppState {
         })
     }
 
+    pub(super) fn finish_squeezing(&mut self, squeezed: bool) {
+        self.session.end_hold();
+        if squeezed {
+            self.edits.record();
+        }
+    }
+
     pub(super) fn finish_loading(&mut self, tool: Tool, loaded: bool) {
+        self.session.end_hold();
         let readout = self.measure_brush();
         if !loaded {
             return;
