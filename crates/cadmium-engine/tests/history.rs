@@ -33,6 +33,10 @@ fn spec(width: u32, height: u32) -> CanvasSpec {
     }
 }
 
+fn tray_tiles() -> u32 {
+    TRAY_WIDTH.div_ceil(TILE_SIZE) * TRAY_HEIGHT.div_ceil(TILE_SIZE)
+}
+
 fn session(gpu: &GpuContext) -> PaintSession {
     without_wgpu_errors(gpu, || PaintSession::new(gpu, spec(512, 256)).unwrap())
 }
@@ -354,10 +358,9 @@ fn a_small_canvas_keeps_a_few_copies_of_itself_and_one_of_the_tray_for_undo() {
     let gpu = GpuContext::new().unwrap();
     let s = session(&gpu);
     let tiles = 512u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
-    let tray_tiles = TRAY_WIDTH.div_ceil(TILE_SIZE) * TRAY_HEIGHT.div_ceil(TILE_SIZE);
     assert_eq!(
         s.history.slot_capacity(),
-        tiles * CANVAS_COPIES + tray_tiles
+        tiles * CANVAS_COPIES + tray_tiles()
     );
 }
 
@@ -378,8 +381,7 @@ fn replacing_the_document_starts_a_blank_canvas_with_an_empty_history_and_clean_
     assert!(!s.history.can_undo());
     assert!(!s.history.can_redo());
     let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
-    let tray_tiles = TRAY_WIDTH.div_ceil(TILE_SIZE) * TRAY_HEIGHT.div_ceil(TILE_SIZE);
-    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles);
+    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles());
     assert_eq!(s.engine.params().get(TUNED_KEY), TUNED_VALUE);
     assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, 0.0);
     assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);

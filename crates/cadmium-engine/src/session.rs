@@ -15,8 +15,8 @@ const DRY_TILES_PER_SUBMIT: usize = 64;
 const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
-const HISTORY_CANVAS_COPIES: u64 = 4;
-const TRAY_HISTORY_COPIES: u64 = 1;
+const HISTORY_PAINTING_COPIES: u64 = 4;
+const HISTORY_TRAY_COPIES: u64 = 1;
 const PLACEHOLDER_SIZE_PX: u32 = 1;
 const SAVE_MARGIN_PX: f32 = 4.0;
 
@@ -89,8 +89,19 @@ impl PaintSession {
                 Err(error)
             }
         };
-        let tray_rebuilt = Canvas::new(gpu, &self.db, tray_spec(&self.canvas.spec.pigment_slots))
-            .map(|tray| self.tray = tray);
+        let painting_tray = tray_spec(&self.canvas.spec.pigment_slots);
+        let tray_rebuilt = match Canvas::new(gpu, &self.db, painting_tray.clone()) {
+            Ok(tray) => {
+                self.tray = tray;
+                Ok(())
+            }
+            Err(error) => {
+                if let Ok(blank) = Canvas::new(gpu, &self.db, placeholder_spec(&painting_tray)) {
+                    self.tray = blank;
+                }
+                Err(error)
+            }
+        };
         self.history.refit(gpu, history_budget(&self.canvas.spec));
         self.view_mode = ViewMode::Color;
         self.engine.clean_brush(gpu);
@@ -349,8 +360,8 @@ fn tile_count(width: u32, height: u32) -> u64 {
 }
 
 fn history_budget(spec: &CanvasSpec) -> u64 {
-    let painting = tile_count(spec.width, spec.height) * HISTORY_CANVAS_COPIES;
-    let tray = tile_count(TRAY_WIDTH, TRAY_HEIGHT) * TRAY_HISTORY_COPIES;
+    let painting = tile_count(spec.width, spec.height) * HISTORY_PAINTING_COPIES;
+    let tray = tile_count(TRAY_WIDTH, TRAY_HEIGHT) * HISTORY_TRAY_COPIES;
     HISTORY_BUDGET_BYTES.min((painting + tray) * bytes_per_tile_all_textures())
 }
 

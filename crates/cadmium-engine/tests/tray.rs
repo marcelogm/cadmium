@@ -61,8 +61,29 @@ fn surfaces_are_reached_by_name() {
 fn replacing_the_document_starts_a_clean_tray_with_the_new_pigments() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
+    let texels = (TRAY_WIDTH * TRAY_HEIGHT) as usize;
+    s.tray
+        .write_f32(&gpu, StateTexture::WetVol, &vec![20.0; texels]);
+    assert!(s.tray.wet_totals(&gpu).unwrap().volume > 0.0);
     let mut other = spec();
     other.pigment_slots = vec!["burnt_sienna".into()];
     s.replace_document(&gpu, other.clone()).unwrap();
     assert_eq!(s.tray.spec, tray_spec(&other.pigment_slots));
+    assert_eq!(s.tray.wet_totals(&gpu).unwrap().volume, 0.0);
+}
+
+#[test]
+fn the_tray_always_carries_the_painting_pigments() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.add_slot(&gpu, "titanium_white").unwrap();
+    assert_eq!(s.tray.spec.pigment_slots, s.canvas.spec.pigment_slots);
+    let mut other = spec();
+    other.pigment_slots = vec!["burnt_sienna".into(), "cadmium_red".into()];
+    s.replace_document(&gpu, other).unwrap();
+    assert_eq!(s.tray.spec.pigment_slots, s.canvas.spec.pigment_slots);
+    s.add_slot(&gpu, "titanium_white").unwrap();
+    assert_eq!(s.tray.spec.pigment_slots, s.canvas.spec.pigment_slots);
+    assert!(s.add_slot(&gpu, "unobtainium").is_err());
+    assert_eq!(s.tray.spec.pigment_slots, s.canvas.spec.pigment_slots);
 }
