@@ -2,12 +2,12 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use cadmium_engine::stroke::{StrokeSample, Tool};
+use cadmium_engine::surface::Surface;
 use gtk::glib::translate::IntoGlib;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use crate::canvas_widget::CadmiumCanvas;
-use crate::state::Surface;
 use crate::tools::UiTool;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
@@ -264,7 +264,7 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
                 .current_event()
                 .is_some_and(|event| is_primary_contact(&event))
             {
-                end_stroke(&canvas, &contact);
+                release(&canvas, &contact);
             }
         }
     ));
@@ -279,7 +279,7 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
             };
             if event.event_type() == gdk::EventType::ProximityOut {
                 if contact.is_stroking_device(stylus.current_event_device().as_ref()) {
-                    end_stroke(&canvas, &contact);
+                    release(&canvas, &contact);
                 }
                 canvas.set_hover(None);
                 return;
@@ -295,12 +295,12 @@ fn stylus_gesture(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Gesture
         canvas,
         #[strong]
         contact,
-        move |_, _| end_stroke(&canvas, &contact)
+        move |_, _| release(&canvas, &contact)
     ));
     stylus
 }
 
-fn end_stroke(canvas: &CadmiumCanvas, contact: &Contact) {
+fn release(canvas: &CadmiumCanvas, contact: &Contact) {
     contact.stroking_device.replace(None);
     canvas.state().borrow_mut().release();
 }
@@ -434,7 +434,7 @@ fn hover_controller(canvas: &CadmiumCanvas, contact: &Rc<Contact>) -> gtk::Event
         move |motion| {
             canvas.set_hover(None);
             if contact.is_stroking_device(motion.current_event_device().as_ref()) {
-                end_stroke(&canvas, &contact);
+                release(&canvas, &contact);
             }
         }
     ));

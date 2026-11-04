@@ -384,7 +384,7 @@ fn paint_stroke(window: &CadmiumWindow) {
     let tool = state.session.brush.tool;
     state.begin_stroke(tool, samples[0]);
     state.add_samples(&samples[1..]);
-    state.end_stroke();
+    state.release();
     drop(state);
     canvas.queue_present();
     window.refresh_panels();

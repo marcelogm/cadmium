@@ -6,30 +6,28 @@ use std::time::Instant;
 use cadmium_engine::brush::{BrushShape, FULL_RESERVOIR_VOLUME_UM};
 use cadmium_engine::canvas::{CanvasError, CanvasSpec, PaintTotals};
 use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
-use cadmium_engine::draw_up::DrawUpRequest;
 use cadmium_engine::engine::{BrushReadout, FULL_DIP, PaintEngine};
 use cadmium_engine::gpu::{GpuContext, GpuLost};
 use cadmium_engine::params::{ParamGroup, SimParams};
-use cadmium_engine::pigments::{MAX_SLOTS, Mixture, mixture_srgb8};
+use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::render::ViewMode;
 use cadmium_engine::session::{ClearOutcome, PaintSession};
 use cadmium_engine::stroke::{StrokeSample, Tool};
-pub use cadmium_engine::surface::Surface;
-use cadmium_engine::tube::Nozzle;
+use cadmium_engine::surface::Surface;
 
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
 use crate::writes::{EditCounter, EditMark};
+use gesture::Contact;
+
+mod gesture;
 
 const RATE_SMOOTHING: f32 = 0.2;
 const MILLISECONDS_PER_SECOND: f32 = 1000.0;
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
 pub const PARTIAL_DIP: f32 = 0.25;
 const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
-pub const LOAD_CANCEL_PX: f64 = 4.0;
-pub const MAX_HOLD_STEP_SECONDS: f32 = 0.1;
-const LOAD_RING_EMPTY_COLOUR: [u8; 3] = [128, 128, 128];
 
 const EMPTY_MIXTURE: Mixture = Mixture {
     volume_um: 0.0,
@@ -154,34 +152,6 @@ pub fn mean_mixture(totals: &PaintTotals) -> Mixture {
     }
 }
 
-pub fn load_cancelled(origin: (f64, f64), current: (f64, f64)) -> bool {
-    (current.0 - origin.0).hypot(current.1 - origin.1) > LOAD_CANCEL_PX
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LoadRing {
-    pub level: f32,
-    pub pressure: f32,
-    pub colour: [u8; 3],
-}
-
-#[derive(Clone, Copy, Debug)]
-enum Hold {
-    Loading {
-        tool: Tool,
-        origin: (f64, f64),
-        pen: StrokeSample,
-        colour: Option<[u8; 3]>,
-        level: f32,
-        loaded: bool,
-    },
-    Squeezing {
-        pen: StrokeSample,
-        nozzle_at: (f64, f64),
-        squeezed: bool,
-    },
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DryOutcome {
     NothingWet,
@@ -259,8 +229,7 @@ pub struct AppState {
     reserve_volume: f32,
     pub knife_mixture: Mixture,
     knife_volume: f32,
-    stroking: bool,
-    hold: Option<Hold>,
+    contact: Option<Contact>,
     hold_clock: Option<Instant>,
     resting_tool: Tool,
     samples_since_frame: u32,
@@ -293,8 +262,7 @@ impl AppState {
             reserve_volume: 0.0,
             knife_mixture: EMPTY_MIXTURE,
             knife_volume: 0.0,
-            stroking: false,
-            hold: None,
+            contact: None,
             hold_clock: None,
             resting_tool,
             samples_since_frame: 0,
@@ -316,7 +284,7 @@ impl AppState {
     }
 
     pub fn start_painting(&mut self, spec: CanvasSpec) -> Result<(), CanvasError> {
-        self.end_stroke();
+        self.release();
         let old_palette = self.session.canvas.spec.pigment_slots.clone();
         let replaced = self.session.replace_document(&self.gpu, spec);
         self.adopt_document(&old_palette, replaced.map(|()| None));
@@ -328,7 +296,7 @@ impl AppState {
         snapshot: DocumentSnapshot,
         path: PathBuf,
     ) -> Result<(), CanvasError> {
-        self.end_stroke();
+        self.release();
         let old_palette = self.session.canvas.spec.pigment_slots.clone();
         let restored = snapshot.restore_into(&self.gpu, &mut self.session);
         self.adopt_document(&old_palette, restored.map(|()| Some(path)));
@@ -418,7 +386,7 @@ impl AppState {
     }
 
     fn put_down_stroke_tool(&mut self) {
-        self.end_stroke();
+        self.release();
         self.session.brush.tool = self.resting_tool;
     }
 
@@ -462,7 +430,7 @@ impl AppState {
     }
 
     pub fn reload_brush(&mut self) {
-        self.end_stroke();
+        self.release();
         self.session.reload_brush(&self.gpu);
         self.measure_brush();
     }
@@ -496,13 +464,13 @@ impl AppState {
     }
 
     pub fn set_brush_size(&mut self, diameter_px: f32) {
-        self.end_stroke();
+        self.release();
         self.session.brush.geometry.max_diameter_px = diameter_px;
         self.session.resize_tip();
     }
 
     pub fn set_brush_shape(&mut self, shape: BrushShape) {
-        self.end_stroke();
+        self.release();
         self.session.brush.shape = shape;
         self.session.resize_tip();
     }
@@ -543,7 +511,7 @@ impl AppState {
     }
 
     pub fn dry(&mut self) -> DryOutcome {
-        self.end_stroke();
+        self.release();
         self.session.flush(&self.gpu);
         if self.session.canvas.wet_tiles.is_empty() {
             return DryOutcome::NothingWet;
@@ -555,7 +523,7 @@ impl AppState {
     }
 
     pub fn undo(&mut self) -> bool {
-        self.end_stroke();
+        self.release();
         let undone = self.session.undo(&self.gpu);
         if undone {
             self.edits.record();
@@ -565,7 +533,7 @@ impl AppState {
     }
 
     pub fn redo(&mut self) -> bool {
-        self.end_stroke();
+        self.release();
         let redone = self.session.redo(&self.gpu);
         if redone {
             self.edits.record();
@@ -627,7 +595,7 @@ impl AppState {
     }
 
     pub fn clear_tray(&mut self) {
-        self.end_stroke();
+        self.release();
         if let ClearOutcome::Cleared { .. } = self.session.clear_tray(&self.gpu) {
             self.edits.record();
         }
@@ -636,275 +604,6 @@ impl AppState {
 
     pub fn observe_hover_pen(&mut self, sample: &StrokeSample) {
         self.pen.observe_hover(sample);
-    }
-
-    pub fn is_stroking(&self) -> bool {
-        self.stroking || self.hold.is_some()
-    }
-
-    pub fn is_holding(&self) -> bool {
-        self.hold.is_some()
-    }
-
-    pub fn press(&mut self, surface: Surface, sample: StrokeSample, eraser: bool) -> bool {
-        let began = match (eraser, self.ui_tool) {
-            (true, _) => {
-                self.begin_stroke_on(surface, Tool::Rag, sample);
-                true
-            }
-            (false, UiTool::Move | UiTool::Paint(Tool::Eyedropper)) => false,
-            (false, UiTool::Tube) => {
-                self.begin_hold(
-                    surface,
-                    sample,
-                    Hold::Squeezing {
-                        pen: sample,
-                        nozzle_at: (sample.x, sample.y),
-                        squeezed: false,
-                    },
-                );
-                true
-            }
-            (false, UiTool::Paint(tool @ (Tool::Brush | Tool::Knife)))
-                if surface == Surface::Tray =>
-            {
-                self.end_stroke();
-                self.session.brush.tool = tool;
-                let level = if tool == Tool::Knife {
-                    self.knife_level()
-                } else {
-                    self.reserve_level()
-                };
-                self.begin_hold(
-                    surface,
-                    sample,
-                    Hold::Loading {
-                        tool,
-                        origin: (sample.x, sample.y),
-                        pen: sample,
-                        colour: None,
-                        level,
-                        loaded: false,
-                    },
-                );
-                true
-            }
-            (false, UiTool::Paint(tool)) => {
-                self.begin_stroke_on(surface, tool, sample);
-                true
-            }
-        };
-        self.wake();
-        began
-    }
-
-    fn begin_hold(&mut self, surface: Surface, sample: StrokeSample, hold: Hold) {
-        self.end_stroke();
-        self.session.begin_hold(&self.gpu, surface);
-        self.hold = Some(hold);
-        self.hold_clock = None;
-        self.last_sample_time_ms = None;
-        self.note_samples(std::slice::from_ref(&sample));
-    }
-
-    pub fn motion(&mut self, samples: &[StrokeSample]) {
-        if self.hold.is_none() {
-            self.add_samples(samples);
-            return;
-        }
-        let Some(last) = samples.last() else {
-            return;
-        };
-        self.note_samples(samples);
-        let Some(hold) = self.hold.as_mut() else {
-            return;
-        };
-        match hold {
-            Hold::Squeezing { pen, .. } => *pen = *last,
-            Hold::Loading {
-                tool, origin, pen, ..
-            } => {
-                let (tool, origin) = (*tool, *origin);
-                let cancelled_at = samples
-                    .iter()
-                    .position(|sample| load_cancelled(origin, (sample.x, sample.y)));
-                let Some(index) = cancelled_at else {
-                    *pen = *last;
-                    return;
-                };
-                self.finish_hold();
-                self.hold_clock = None;
-                self.session.brush.tool = tool;
-                self.session
-                    .begin_stroke_on(&self.gpu, Surface::Tray, samples[index]);
-                self.stroking = true;
-                self.session.add_samples(&samples[index + 1..]);
-            }
-        }
-        self.wake();
-    }
-
-    pub fn advance_hold(&mut self, seconds: f32) {
-        let seconds = seconds.min(MAX_HOLD_STEP_SECONDS);
-        if seconds.is_nan() || seconds <= 0.0 {
-            return;
-        }
-        let radius = self.session.brush.geometry.max_diameter_px / 2.0;
-        match self.hold {
-            Some(Hold::Squeezing { pen, nozzle_at, .. }) => {
-                self.session.squeeze(
-                    &self.gpu,
-                    Nozzle {
-                        from: [nozzle_at.0 as f32, nozzle_at.1 as f32],
-                        to: [pen.x as f32, pen.y as f32],
-                        radius,
-                        slot: self.tube_slot,
-                        pressure: pen.pressure,
-                        seconds,
-                    },
-                );
-                self.hold = Some(Hold::Squeezing {
-                    pen,
-                    nozzle_at: (pen.x, pen.y),
-                    squeezed: true,
-                });
-            }
-            Some(Hold::Loading { pen, .. }) => {
-                let request = DrawUpRequest {
-                    center: [pen.x as f32, pen.y as f32],
-                    radius,
-                    pressure: pen.pressure,
-                    seconds,
-                };
-                let Ok(drawn) = self.session.draw_up(&self.gpu, request) else {
-                    self.session.end_hold();
-                    self.hold = None;
-                    self.wake();
-                    return;
-                };
-                let taken = (drawn.taken.volume > 0.0).then(|| self.colour_of(&drawn.taken));
-                if let Some(Hold::Loading {
-                    colour,
-                    level,
-                    loaded,
-                    ..
-                }) = self.hold.as_mut()
-                {
-                    *level = drawn.level;
-                    if taken.is_some() {
-                        *loaded = true;
-                        *colour = taken;
-                    }
-                }
-            }
-            None => return,
-        }
-        self.wake();
-    }
-
-    fn colour_of(&self, totals: &PaintTotals) -> [u8; 3] {
-        mixture_srgb8(
-            &self.session.db,
-            &self.session.canvas.spec.pigment_slots,
-            &mean_mixture(totals).fractions,
-        )
-    }
-
-    pub fn load_ring(&self) -> Option<LoadRing> {
-        let Some(Hold::Loading {
-            pen, colour, level, ..
-        }) = self.hold
-        else {
-            return None;
-        };
-        Some(LoadRing {
-            level,
-            pressure: pen.pressure,
-            colour: colour.unwrap_or(LOAD_RING_EMPTY_COLOUR),
-        })
-    }
-
-    pub fn release(&mut self) {
-        if !self.is_stroking() {
-            return;
-        }
-        if self.hold.is_some() {
-            self.finish_hold();
-        } else {
-            self.finish_stroke();
-        }
-        self.hold_clock = None;
-        self.wake();
-    }
-
-    fn finish_hold(&mut self) {
-        let Some(hold) = self.hold.take() else {
-            return;
-        };
-        self.session.end_hold();
-        match hold {
-            Hold::Squeezing { squeezed, .. } => {
-                if squeezed {
-                    self.edits.record();
-                }
-            }
-            Hold::Loading { tool, loaded, .. } => self.finish_loading(tool, loaded),
-        }
-    }
-
-    fn finish_loading(&mut self, tool: Tool, loaded: bool) {
-        let readout = self.measure_brush();
-        if !loaded {
-            return;
-        }
-        self.edits.record();
-        let held = match (tool, readout) {
-            (Tool::Knife, Some(_)) => self.knife_mixture,
-            (_, Some(readout)) => mean_mixture(&readout.reserve),
-            (_, None) => return,
-        };
-        if !held.is_empty() {
-            self.session.brush.recipe = recipe_from_fractions(&held.fractions);
-        }
-    }
-
-    pub fn begin_stroke(&mut self, tool: Tool, sample: StrokeSample) {
-        self.begin_stroke_on(Surface::Painting, tool, sample);
-    }
-
-    fn begin_stroke_on(&mut self, surface: Surface, tool: Tool, sample: StrokeSample) {
-        self.end_stroke();
-        self.session.brush.tool = tool;
-        match stroke_preparation(tool, self.reload_each_stroke, self.clean_each_stroke) {
-            StrokePreparation::None => {}
-            StrokePreparation::TopUp => self.top_up(),
-            StrokePreparation::CleanAndLoad => self.clean_and_load(),
-        }
-        self.session.begin_stroke_on(&self.gpu, surface, sample);
-        self.stroking = true;
-        self.last_sample_time_ms = None;
-        self.note_samples(std::slice::from_ref(&sample));
-        self.wake();
-    }
-
-    pub fn add_samples(&mut self, samples: &[StrokeSample]) {
-        if !self.stroking || samples.is_empty() {
-            return;
-        }
-        self.session.add_samples(samples);
-        self.note_samples(samples);
-        self.wake();
-    }
-
-    pub fn end_stroke(&mut self) {
-        self.release();
-    }
-
-    fn finish_stroke(&mut self) {
-        self.session.end_stroke();
-        self.stroking = false;
-        self.edits.record();
-        self.measure_brush();
     }
 
     pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
@@ -919,20 +618,6 @@ impl AppState {
     pub fn encode_tray_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
         self.advance_hold_by_clock();
         self.session.encode_tray_frame(&self.gpu, encoder);
-    }
-
-    fn advance_hold_by_clock(&mut self) {
-        if self.hold.is_none() {
-            return;
-        }
-        let now = Instant::now();
-        let seconds = self
-            .hold_clock
-            .replace(now)
-            .map_or(0.0, |last| now.duration_since(last).as_secs_f32());
-        if seconds > 0.0 {
-            self.advance_hold(seconds);
-        }
     }
 
     fn measure_brush(&mut self) -> Option<BrushReadout> {
@@ -973,7 +658,7 @@ mod tests {
     const RAG_ROW_Y: f64 = 200.0;
     const STROKE_STEPS: u32 = 20;
 
-    fn painting_state() -> AppState {
+    pub(super) fn painting_state() -> AppState {
         let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
         let spec = CanvasSpec {
             width: TEST_CANVAS.0,
@@ -999,13 +684,13 @@ mod tests {
             .collect()
     }
 
-    fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
+    pub(super) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
         state.begin_stroke(tool, samples[0]);
         state.add_samples(&samples[1..]);
-        state.end_stroke();
+        state.release();
     }
 
-    fn present_one_frame(state: &mut AppState) {
+    pub(super) fn present_one_frame(state: &mut AppState) {
         let gpu = state.gpu.clone();
         let mut encoder = gpu
             .device
@@ -1014,7 +699,7 @@ mod tests {
         gpu.queue.submit([encoder.finish()]);
     }
 
-    fn wet_volume(state: &AppState) -> f32 {
+    pub(super) fn wet_volume(state: &AppState) -> f32 {
         state
             .session
             .canvas
@@ -1042,7 +727,7 @@ mod tests {
         state.set_ui_tool(UiTool::Paint(Tool::Rag));
         state.add_samples(&samples[1..]);
         assert_eq!(state.session.brush.tool, Tool::Brush);
-        state.end_stroke();
+        state.release();
         present_one_frame(&mut state);
         assert!(wet_volume(&state) > 0.0);
         assert_eq!(state.session.brush.tool, Tool::Rag);
@@ -1119,13 +804,13 @@ mod tests {
         assert!(!state.brush_is_clean());
     }
 
-    const WHITE_SLOT: usize = 0;
-    const ULTRAMARINE_SLOT: usize = 4;
+    pub(super) const WHITE_SLOT: usize = 0;
+    pub(super) const ULTRAMARINE_SLOT: usize = 4;
     const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
     const RESERVE_TOLERANCE: f64 = 1e-3;
     const DIRT_DIP: f32 = 0.1;
 
-    fn brush_totals(state: &AppState) -> PaintTotals {
+    pub(super) fn brush_totals(state: &AppState) -> PaintTotals {
         state.session.engine.brush_totals(&state.gpu).unwrap()
     }
 
@@ -1497,14 +1182,14 @@ mod tests {
             (loaded - target).abs() <= target * RESERVE_TOLERANCE,
             "{loaded} {target}"
         );
-        state.end_stroke();
+        state.release();
         state.begin_stroke(Tool::Knife, samples[0]);
         let again = knife_totals(&state).volume;
         assert!(
             again <= target * (1.0 + RESERVE_TOLERANCE),
             "{again} {target}"
         );
-        state.end_stroke();
+        state.release();
     }
 
     #[test]
@@ -1514,7 +1199,7 @@ mod tests {
         let samples = row_samples(PAINT_ROW_Y);
         state.begin_stroke(Tool::Knife, samples[0]);
         assert_eq!(knife_totals(&state).volume, 0.0);
-        state.end_stroke();
+        state.release();
     }
 
     #[test]
@@ -1534,230 +1219,6 @@ mod tests {
             tilt_y_deg: -20.0,
             time_ms,
         }
-    }
-
-    fn sample_at(x: f64, y: f64, pressure: f32) -> StrokeSample {
-        StrokeSample {
-            x,
-            y,
-            pressure,
-            tilt_x_deg: 0.0,
-            tilt_y_deg: 0.0,
-            time_ms: 0,
-        }
-    }
-
-    fn present_one_tray_frame(state: &mut AppState) {
-        let gpu = state.gpu.clone();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        state.encode_tray_frame(&mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-    }
-
-    fn squeeze_blob_on_tray(state: &mut AppState, slot: usize) {
-        state.set_ui_tool(UiTool::Tube);
-        state.set_tube_slot(slot);
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
-        state.advance_hold(1.0);
-        state.release();
-    }
-
-    #[test]
-    fn load_is_cancelled_past_four_pixels() {
-        assert!(!load_cancelled((10.0, 10.0), (14.0, 10.0)));
-        assert!(load_cancelled((10.0, 10.0), (14.01, 10.0)));
-        assert!(!load_cancelled((10.0, 10.0), (10.0, 10.0)));
-    }
-
-    #[test]
-    fn a_still_touch_on_the_tray_loads_the_brush_from_it() {
-        let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, 1);
-        state.clean_brush();
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        assert!(state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false));
-        state.advance_hold(0.2);
-        let ring = state.load_ring().unwrap();
-        state.release();
-        assert!(ring.level > 0.0);
-        assert!(state.reserve_level() > 0.0);
-        let slots: Vec<usize> = state
-            .session
-            .brush
-            .recipe
-            .iter()
-            .map(|(slot, _)| *slot)
-            .collect();
-        assert_eq!(slots, vec![1]);
-    }
-
-    #[test]
-    fn a_hold_counts_as_a_contact_until_the_pen_lifts() {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
-        assert!(state.is_stroking());
-        assert!(state.is_holding());
-        state.release();
-        assert!(!state.is_stroking());
-        assert!(!state.is_holding());
-    }
-
-    #[test]
-    fn a_load_that_takes_nothing_is_not_an_edit() {
-        let mut state = painting_state();
-        let recipe = state.session.brush.recipe.clone();
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
-        state.advance_hold(0.2);
-        assert_eq!(state.load_ring().unwrap().colour, LOAD_RING_EMPTY_COLOUR);
-        state.release();
-        assert!(!state.has_unsaved_edits());
-        assert_eq!(state.session.brush.recipe, recipe);
-    }
-
-    #[test]
-    fn dragging_past_four_pixels_turns_the_load_into_a_stroke() {
-        let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, 1);
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
-        state.motion(&[sample_at(303.0, 300.0, 0.9)]);
-        assert!(state.load_ring().is_some());
-        state.motion(&[sample_at(310.0, 300.0, 0.9)]);
-        assert!(state.load_ring().is_none());
-        assert!(state.is_stroking());
-        state.release();
-        assert!(!state.is_stroking());
-    }
-
-    #[test]
-    fn a_stroke_grown_from_a_load_keeps_what_was_loaded() {
-        let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, WHITE_SLOT);
-        state.clean_brush();
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
-        state.advance_hold(0.1);
-        let loaded = brush_totals(&state);
-        state.motion(&[sample_at(310.0, 300.0, 0.9)]);
-        assert!(state.reserve_level() < 1.0);
-        assert_eq!(brush_totals(&state), loaded);
-        assert!(loaded.pigment[WHITE_SLOT] > 0.0);
-        state.release();
-    }
-
-    #[test]
-    fn the_tube_squeezes_its_own_pigment_and_leaves_the_brush_alone() {
-        let mut state = painting_state();
-        state.clean_brush();
-        state.set_ui_tool(UiTool::Tube);
-        state.set_tube_slot(1);
-        state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
-        state.advance_hold(0.2);
-        state.release();
-        let totals = state.session.canvas.wet_totals(&state.gpu).unwrap();
-        assert!(totals.pigment[1] > 0.0 && totals.pigment[0] == 0.0);
-        assert!(state.brush_is_clean());
-        assert!(state.has_unsaved_edits());
-    }
-
-    #[test]
-    fn a_hold_step_never_lasts_longer_than_a_tenth_of_a_second() {
-        let mut once = painting_state();
-        let mut long = painting_state();
-        for state in [&mut once, &mut long] {
-            state.set_ui_tool(UiTool::Tube);
-            state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
-        }
-        once.advance_hold(MAX_HOLD_STEP_SECONDS);
-        long.advance_hold(10.0);
-        once.release();
-        long.release();
-        let squeezed = |state: &AppState| state.session.tray.wet_totals(&state.gpu).unwrap().volume;
-        assert_eq!(squeezed(&long), squeezed(&once));
-    }
-
-    #[test]
-    fn choosing_a_tube_does_not_change_the_brush() {
-        let mut state = painting_state();
-        let recipe = state.session.brush.recipe.clone();
-        state.set_tube_slot(1);
-        assert_eq!(state.session.brush.recipe, recipe);
-        assert_eq!(state.tube_slot, 1);
-    }
-
-    #[test]
-    fn a_tube_beyond_the_palette_is_ignored() {
-        let mut state = painting_state();
-        state.set_tube_slot(state.slot_count());
-        assert_eq!(state.tube_slot, 0);
-    }
-
-    #[test]
-    fn the_eraser_wipes_the_tray_with_the_rag() {
-        let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, 0);
-        let before = state.session.tray.wet_totals(&state.gpu).unwrap().volume;
-        state.set_ui_tool(UiTool::Paint(Tool::Brush));
-        state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), true);
-        state.motion(&[sample_at(320.0, 300.0, 1.0)]);
-        state.release();
-        present_one_tray_frame(&mut state);
-        assert!(state.session.tray.wet_totals(&state.gpu).unwrap().volume < before);
-    }
-
-    #[test]
-    fn the_move_tool_and_the_eyedropper_do_not_touch_down() {
-        let mut state = painting_state();
-        for tool in [UiTool::Move, UiTool::Paint(Tool::Eyedropper)] {
-            state.set_ui_tool(tool);
-            assert!(!state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false));
-            assert!(!state.is_stroking());
-        }
-    }
-
-    #[test]
-    fn undo_lifts_a_hold_that_is_still_down() {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Tube);
-        state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
-        state.advance_hold(0.1);
-        assert!(state.undo());
-        assert!(!state.is_holding());
-        assert_eq!(wet_volume(&state), 0.0);
-    }
-
-    #[test]
-    fn clearing_the_tray_is_an_edit() {
-        let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, 0);
-        state.clear_tray();
-        assert_eq!(
-            state.session.tray.wet_totals(&state.gpu).unwrap().volume,
-            0.0
-        );
-        assert!(state.has_unsaved_edits());
-    }
-
-    #[test]
-    fn clearing_a_clean_tray_is_not_an_edit() {
-        let mut state = painting_state();
-        state.clear_tray();
-        assert!(!state.has_unsaved_edits());
-    }
-
-    #[test]
-    fn a_new_painting_starts_with_a_clean_tray() {
-        let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, 0);
-        state.start_painting(starting_canvas_spec()).unwrap();
-        assert_eq!(
-            state.session.tray.wet_totals(&state.gpu).unwrap().volume,
-            0.0
-        );
     }
 
     #[test]
