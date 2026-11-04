@@ -4,6 +4,10 @@ edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = []
+smoke = []
+
 [[bin]]
 name = "cadmium"
 path = "src/main.rs"

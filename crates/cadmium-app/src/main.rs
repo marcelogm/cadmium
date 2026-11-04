@@ -3,6 +3,7 @@ mod brush_panel;
 mod canvas_widget;
 mod dialogs;
 mod dmabuf;
+#[cfg(any(debug_assertions, feature = "smoke"))]
 mod dmabuf_selftest;
 mod files;
 mod input;
@@ -10,6 +11,7 @@ mod lab_panel;
 mod new_painting_dialog;
 mod presenter;
 mod presets;
+#[cfg_attr(not(any(debug_assertions, feature = "smoke")), path = "smoke_off.rs")]
 mod smoke;
 mod state;
 mod swatch;

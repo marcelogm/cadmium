@@ -232,6 +232,7 @@ impl DmabufPool {
         (self.width, self.height)
     }
 
+    #[cfg(any(debug_assertions, feature = "smoke"))]
     pub fn slot_count(&self) -> usize {
         self.slots.len()
     }
