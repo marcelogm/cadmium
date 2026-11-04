@@ -4,11 +4,8 @@ use std::time::Duration;
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
-use oleo_engine::canvas::{CanvasSpec, MAX_CANVAS_SIZE, Primer, Weave, primer_reflectance};
+use oleo_engine::canvas::{CanvasSpec, MAX_CANVAS_SIZE, Primer, Weave, primer_srgb8};
 use oleo_engine::pigments::{MAX_SLOTS, PigmentDb};
-use oleo_engine::spectral::{
-    bands_to_linear_srgb, compress_gamut, linear_to_srgb8, saunderson_display,
-};
 
 use crate::LOG_DOMAIN;
 use crate::presets::PIGMENT_PRESETS;
@@ -35,11 +32,6 @@ pub const WEAVES: [(Weave, &str); 3] = [
     (Weave::Cotton, "Algodão"),
     (Weave::Smooth, "Lisa"),
 ];
-
-pub fn primer_srgb8(db: &PigmentDb, primer: Primer) -> [u8; 3] {
-    let shown = primer_reflectance(db, primer).map(saunderson_display);
-    compress_gamut(bands_to_linear_srgb(&shown)).map(linear_to_srgb8)
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaintingFormat {
@@ -787,15 +779,5 @@ mod tests {
     #[test]
     fn counter_reads_n_of_eight() {
         assert_eq!(counter_text(6), "6 de 8");
-    }
-
-    #[test]
-    fn gesso_swatch_is_near_white_and_imprimatura_is_warm() {
-        let db = PigmentDb::builtin();
-        let gesso = primer_srgb8(&db, Primer::WhiteGesso);
-        assert!(gesso.iter().all(|channel| *channel > 200), "{gesso:?}");
-        let [red, green, blue] = primer_srgb8(&db, Primer::SiennaImprimatura);
-        assert!(red > green && green > blue, "{:?}", [red, green, blue]);
-        assert!(red < gesso[0] || blue < gesso[2]);
     }
 }

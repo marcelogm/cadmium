@@ -5,7 +5,7 @@ use wgpu::util::DeviceExt;
 
 use crate::gpu::GpuContext;
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
-use crate::spectral::{BandValues, km_infinite};
+use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
 
 pub const TILE_SIZE: u32 = 64;
 pub const MAX_CANVAS_SIZE: u32 = 4096;
@@ -326,6 +326,10 @@ pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
     }
 }
 
+pub fn primer_srgb8(db: &PigmentDb, primer: Primer) -> [u8; 3] {
+    reflectance_srgb8(&primer_reflectance(db, primer))
+}
+
 fn weave_profile(weave: Weave) -> (f32, f32) {
     match weave {
         Weave::Linen => (LINEN_AMPLITUDE_UM, LINEN_PERIOD_PX),
@@ -361,7 +365,9 @@ impl Canvas {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("pigment_slots"),
                 contents: bytemuck::bytes_of(&PigmentSlotsUniform::new(db, &spec.pigment_slots)),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::UNIFORM
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
             });
         let mut canvas = Canvas {
             dirty: DirtyTiles::new(spec.width, spec.height),
@@ -385,6 +391,24 @@ impl Canvas {
 
     pub fn slot_table(&self) -> &wgpu::Buffer {
         &self.slot_table
+    }
+
+    pub fn add_slot(
+        &mut self,
+        gpu: &GpuContext,
+        db: &PigmentDb,
+        id: &str,
+    ) -> Result<usize, String> {
+        let mut grown = self.spec.clone();
+        grown.pigment_slots.push(id.to_string());
+        grown.validate(db)?;
+        self.spec = grown;
+        gpu.queue.write_buffer(
+            &self.slot_table,
+            0,
+            bytemuck::bytes_of(&PigmentSlotsUniform::new(db, &self.spec.pigment_slots)),
+        );
+        Ok(self.spec.pigment_slots.len() - 1)
     }
 
     pub fn read_f32(&self, gpu: &GpuContext, which: StateTexture) -> Vec<f32> {

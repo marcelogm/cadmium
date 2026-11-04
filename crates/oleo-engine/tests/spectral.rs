@@ -52,3 +52,10 @@ fn srgb_encoding_matches_reference_points() {
     assert_eq!(linear_to_srgb8(1.0), 255);
     assert_eq!(linear_to_srgb8(0.215_861), 128);
 }
+
+#[test]
+fn reflectance_srgb8_shows_a_perfect_reflector_as_near_white_and_black_as_black() {
+    let white = reflectance_srgb8(&[1.0; BANDS]);
+    assert!(white.iter().all(|channel| *channel > 240), "{white:?}");
+    assert_eq!(reflectance_srgb8(&[0.0; BANDS]), [0, 0, 0]);
+}

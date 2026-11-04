@@ -76,3 +76,33 @@ fn quinacridone_glaze_over_black_is_darker_than_over_white() {
         .sum();
     assert!(over_black < over_white);
 }
+
+#[test]
+fn pure_mixture_swatch_matches_the_pigment_masstone() {
+    let db = PigmentDb::builtin();
+    let slots = vec!["titanium_white".to_string(), "ultramarine_blue".to_string()];
+    let mut fractions = [0.0; MAX_SLOTS];
+    fractions[1] = 1.0;
+    assert_eq!(
+        mixture_srgb8(&db, &slots, &fractions),
+        db.masstone_srgb8("ultramarine_blue")
+    );
+}
+
+#[test]
+fn ultramarine_and_cadmium_yellow_swatch_is_green() {
+    let db = PigmentDb::builtin();
+    let slots = vec!["ultramarine_blue".to_string(), "cadmium_yellow".to_string()];
+    let mut fractions = [0.0; MAX_SLOTS];
+    fractions[0] = 0.45;
+    fractions[1] = 0.45;
+    let [red, green, blue] = mixture_srgb8(&db, &slots, &fractions);
+    assert!(green > red && green > blue, "{red} {green} {blue}");
+}
+
+#[test]
+fn empty_mixture_swatch_is_black() {
+    let db = PigmentDb::builtin();
+    let slots = vec!["titanium_white".to_string()];
+    assert_eq!(mixture_srgb8(&db, &slots, &[0.0; MAX_SLOTS]), [0, 0, 0]);
+}

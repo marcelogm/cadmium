@@ -1,7 +1,4 @@
-use crate::spectral::{
-    BANDS, BandValues, bands_to_linear_srgb, composite_over, compress_gamut, km_layer,
-    linear_to_srgb8, saunderson_display,
-};
+use crate::spectral::{BANDS, BandValues, composite_over, km_layer, reflectance_srgb8};
 
 pub const MAX_SLOTS: usize = 8;
 pub const PROVISIONAL_PROVENANCE: &str = "Provisório: espectro ajustado à mão, não medido";
@@ -182,7 +179,7 @@ impl PigmentDb {
     }
 
     pub fn masstone_srgb8(&self, id: &str) -> [u8; 3] {
-        swatch_srgb8(&self.masstone_reflectance(id))
+        reflectance_srgb8(&self.masstone_reflectance(id))
     }
 
     pub fn tint_srgb8(&self, id: &str, white_parts: f32) -> [u8; 3] {
@@ -196,7 +193,7 @@ impl PigmentDb {
         let scattering = std::array::from_fn(|band| {
             pigment_fraction * pigment.scattering[band] + white_fraction * white.scattering[band]
         });
-        swatch_srgb8(&layer_over(
+        reflectance_srgb8(&layer_over(
             &absorption,
             &scattering,
             MASSTONE_THICKNESS_UM,
@@ -211,7 +208,7 @@ impl PigmentDb {
         } else {
             self.masstone_reflectance(TINT_WHITE_ID)
         };
-        swatch_srgb8(&layer_over(
+        reflectance_srgb8(&layer_over(
             &pigment.absorption.map(|k| GLAZE_PIGMENT_FRACTION * k),
             &pigment.scattering.map(|s| GLAZE_PIGMENT_FRACTION * s),
             GLAZE_THICKNESS_UM,
@@ -254,9 +251,14 @@ pub fn mixture_reflectance(
     layer_over(&absorption, &scattering, thickness_um, below)
 }
 
-fn swatch_srgb8(reflectance: &BandValues) -> [u8; 3] {
-    let shown = reflectance.map(saunderson_display);
-    compress_gamut(bands_to_linear_srgb(&shown)).map(linear_to_srgb8)
+pub fn mixture_srgb8(db: &PigmentDb, slots: &[String], fractions: &[f32; MAX_SLOTS]) -> [u8; 3] {
+    reflectance_srgb8(&mixture_reflectance(
+        db,
+        slots,
+        fractions,
+        MASSTONE_THICKNESS_UM,
+        &BLACK_REFLECTANCE,
+    ))
 }
 
 fn layer_over(

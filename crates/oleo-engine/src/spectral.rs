@@ -177,3 +177,8 @@ pub fn linear_to_srgb8(value: f32) -> u8 {
     };
     (encoded * SRGB8_MAX).round().clamp(0.0, SRGB8_MAX) as u8
 }
+
+pub fn reflectance_srgb8(reflectance: &BandValues) -> [u8; 3] {
+    let shown = reflectance.map(saunderson_display);
+    compress_gamut(bands_to_linear_srgb(&shown)).map(linear_to_srgb8)
+}
