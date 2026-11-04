@@ -667,68 +667,16 @@ impl AppState {
 }
 
 #[cfg(test)]
+mod test_support;
+
+#[cfg(test)]
 mod tests {
-    use cadmium_engine::canvas::StateTexture;
-
     use super::*;
-    use crate::presets::starting_canvas_spec;
-
-    const TEST_CANVAS: (u32, u32) = (512, 256);
-    const TEST_BRUSH_DIAMETER_PX: f32 = 16.0;
-    const PAINT_ROW_Y: f64 = 60.0;
-    const RAG_ROW_Y: f64 = 200.0;
-    const STROKE_STEPS: u32 = 20;
-
-    pub(super) fn painting_state() -> AppState {
-        let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
-        let spec = CanvasSpec {
-            width: TEST_CANVAS.0,
-            height: TEST_CANVAS.1,
-            ..starting_canvas_spec()
-        };
-        let mut state = AppState::new(gpu, spec).unwrap();
-        state.session.brush.geometry.max_diameter_px = TEST_BRUSH_DIAMETER_PX;
-        state.reload_brush();
-        state
-    }
-
-    fn row_samples(y: f64) -> Vec<StrokeSample> {
-        (0..STROKE_STEPS)
-            .map(|step| StrokeSample {
-                x: 100.0 + f64::from(step) * 10.0,
-                y,
-                pressure: 1.0,
-                tilt_x_deg: 0.0,
-                tilt_y_deg: 0.0,
-                time_ms: step * 8,
-            })
-            .collect()
-    }
-
-    pub(super) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
-        state.begin_stroke(tool, samples[0]);
-        state.add_samples(&samples[1..]);
-        state.release();
-    }
-
-    pub(super) fn present_one_frame(state: &mut AppState) {
-        let gpu = state.gpu.clone();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        state.encode_frame(&mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-    }
-
-    pub(super) fn wet_volume(state: &AppState) -> f32 {
-        state
-            .session
-            .canvas
-            .read_f32(&state.gpu, StateTexture::WetVol)
-            .unwrap()
-            .iter()
-            .sum()
-    }
+    use crate::state::test_support::{
+        PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, TEST_BRUSH_DIAMETER_PX, ULTRAMARINE_SLOT,
+        WHITE_SLOT, brush_totals, holding_the_knife, knife_totals, painting_state,
+        present_one_frame, reserve_volume, row_samples, stroke, wet_volume,
+    };
 
     #[test]
     fn a_stroke_still_queued_when_the_eraser_comes_down_is_painted_with_its_own_brush() {
@@ -825,25 +773,9 @@ mod tests {
         assert!(!state.brush_is_clean());
     }
 
-    pub(super) const WHITE_SLOT: usize = 0;
-    pub(super) const ULTRAMARINE_SLOT: usize = 4;
     const YELLOW_SLOT: usize = 1;
     const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
-    const RESERVE_TOLERANCE: f64 = 1e-3;
     const DIRT_DIP: f32 = 0.1;
-
-    pub(super) fn brush_totals(state: &AppState) -> PaintTotals {
-        state.session.engine.brush_totals(&state.gpu).unwrap()
-    }
-
-    fn reserve_volume(state: &AppState) -> f64 {
-        state
-            .session
-            .engine
-            .reserve_totals(&state.gpu)
-            .unwrap()
-            .volume
-    }
 
     fn single_pigment(state: &AppState, slot: usize) -> Mixture {
         let mut brush = state.session.brush.clone();
@@ -1175,16 +1107,6 @@ mod tests {
     }
 
     const KNIFE_LEVEL_TOLERANCE: f32 = 0.01;
-
-    fn knife_totals(state: &AppState) -> PaintTotals {
-        state.session.engine.knife_totals(&state.gpu).unwrap()
-    }
-
-    fn holding_the_knife() -> AppState {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Paint(Tool::Knife));
-        state
-    }
 
     #[test]
     fn a_swatch_click_with_the_knife_loads_the_knife_and_leaves_the_brush_alone() {

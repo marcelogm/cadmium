@@ -418,43 +418,16 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use cadmium_engine::stroke::{StrokeSample, Tool};
+    use cadmium_engine::stroke::Tool;
     use cadmium_engine::surface::Surface;
 
     use super::*;
     use crate::presets::starting_canvas_spec;
-    use crate::state::tests::{
-        WHITE_SLOT, brush_totals, painting_state, present_one_frame, wet_volume,
+    use crate::state::test_support::{
+        WHITE_SLOT, brush_totals, painting_state, present_one_frame, present_one_tray_frame,
+        sample_at, settle_both_surfaces, squeeze_blob_on_tray, wet_volume,
     };
     use crate::tools::UiTool;
-
-    fn sample_at(x: f64, y: f64, pressure: f32) -> StrokeSample {
-        StrokeSample {
-            x,
-            y,
-            pressure,
-            tilt_x_deg: 0.0,
-            tilt_y_deg: 0.0,
-            time_ms: 0,
-        }
-    }
-
-    fn present_one_tray_frame(state: &mut AppState) {
-        let gpu = state.gpu.clone();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        state.encode_tray_frame(&mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-    }
-
-    fn squeeze_blob_on_tray(state: &mut AppState, slot: usize) {
-        state.set_ui_tool(UiTool::Tube);
-        state.set_tube_slot(slot);
-        state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
-        state.advance_hold(1.0);
-        state.release();
-    }
 
     #[test]
     fn load_is_cancelled_past_the_threshold() {
@@ -675,13 +648,6 @@ mod tests {
         state.release();
         assert!(!state.has_unsaved_edits());
         assert_eq!(state.session.brush.recipe, recipe);
-    }
-
-    fn settle_both_surfaces(state: &mut AppState) {
-        present_one_frame(state);
-        present_one_tray_frame(state);
-        assert!(!state.session.has_pending_work());
-        assert!(!state.session.tray_has_pending_work());
     }
 
     #[test]
