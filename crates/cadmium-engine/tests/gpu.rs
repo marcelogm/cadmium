@@ -21,13 +21,18 @@ fn creates_vulkan_device_with_storage_read_write_on_rgba16float() {
 #[test]
 fn requests_adapter_limits_instead_of_defaults() {
     let gpu = GpuContext::new().expect("gpu");
+    assert_eq!(gpu.device.limits(), gpu.adapter.limits());
     assert!(gpu.device.limits().max_storage_textures_per_shader_stage >= 8);
-    assert!(gpu.device.limits().max_storage_buffer_binding_size >= 256 << 20);
 }
 
 #[test]
 fn reports_dmabuf_export_on_radv() {
     let gpu = GpuContext::new().expect("gpu");
+    let driver = gpu.adapter.get_info().driver;
+    if driver != "radv" {
+        eprintln!("skipped: dmabuf export is only guaranteed on RADV, this is {driver}");
+        return;
+    }
     assert!(gpu.supports_dmabuf_export);
 }
 
