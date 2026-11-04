@@ -322,7 +322,7 @@ impl AppState {
     }
 
     fn held_level(&self, tool: Tool) -> f32 {
-        if tool == Tool::Knife {
+        if tool.profile().holds_on_blade() {
             self.knife_level()
         } else {
             self.reserve_level()
@@ -330,7 +330,7 @@ impl AppState {
     }
 
     fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
-        let held = if tool == Tool::Knife {
+        let held = if tool.profile().holds_on_blade() {
             &self.knife_mixture
         } else {
             &self.reserve_mixture
@@ -404,7 +404,7 @@ impl AppState {
         let Some(readout) = readout else {
             return;
         };
-        let held = if tool == Tool::Knife {
+        let held = if tool.profile().holds_on_blade() {
             readout.knife
         } else {
             readout.reserve

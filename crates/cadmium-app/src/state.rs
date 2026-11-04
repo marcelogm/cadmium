@@ -171,9 +171,9 @@ pub fn stroke_preparation(
     reload_each_stroke: bool,
     clean_each_stroke: bool,
 ) -> StrokePreparation {
-    match tool {
-        Tool::Brush | Tool::Knife if clean_each_stroke => StrokePreparation::CleanAndLoad,
-        Tool::Brush | Tool::Knife if reload_each_stroke => StrokePreparation::TopUp,
+    match tool.profile().holder {
+        Some(_) if clean_each_stroke => StrokePreparation::CleanAndLoad,
+        Some(_) if reload_each_stroke => StrokePreparation::TopUp,
         _ => StrokePreparation::None,
     }
 }
@@ -389,7 +389,7 @@ impl AppState {
     }
 
     pub fn holds_knife(&self) -> bool {
-        self.session.brush.tool == Tool::Knife
+        self.session.brush.tool.profile().holds_on_blade()
     }
 
     fn put_down_stroke_tool(&mut self) {
