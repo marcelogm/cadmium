@@ -94,20 +94,13 @@ const TOOL_MODE_RAG: u32 = 3;
 const TOOL_MODE_EYEDROPPER: u32 = 4;
 
 pub trait PaintEngine {
-    fn begin_stroke(&mut self, gpu: &GpuContext, canvas: &Canvas, brush: &BrushSettings);
+    fn begin_stroke(&mut self);
     fn encode_dabs(
         &mut self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
         brush: &BrushSettings,
         dabs: &[Dab],
-        encoder: &mut wgpu::CommandEncoder,
-    );
-    fn end_stroke(&mut self, gpu: &GpuContext, canvas: &Canvas);
-    fn encode_dry(
-        &mut self,
-        gpu: &GpuContext,
-        canvas: &mut Canvas,
         encoder: &mut wgpu::CommandEncoder,
     );
     fn params(&self) -> &SimParams;
@@ -1689,7 +1682,7 @@ fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::
 }
 
 impl PaintEngine for WetOilEngine {
-    fn begin_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas, _brush: &BrushSettings) {
+    fn begin_stroke(&mut self) {
         self.rest_pending = true;
         self.previous_dab = None;
     }
@@ -1819,18 +1812,6 @@ impl PaintEngine for WetOilEngine {
             canvas.dirty.mark_rect(x0, y0, x1, y1);
             canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
         }
-    }
-
-    fn end_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas) {}
-
-    fn encode_dry(
-        &mut self,
-        gpu: &GpuContext,
-        canvas: &mut Canvas,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        let tiles = canvas.wet_tiles.take();
-        self.encode_dry_tiles(gpu, canvas, &tiles, encoder);
     }
 
     fn params(&self) -> &SimParams {

@@ -620,7 +620,7 @@ impl AppState {
         if !self.stroking {
             return;
         }
-        self.session.end_stroke(&self.gpu);
+        self.session.end_stroke();
         self.stroking = false;
         self.edits.record();
         self.measure_brush();

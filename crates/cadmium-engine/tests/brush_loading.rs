@@ -71,7 +71,7 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
             frame(gpu, s);
         }
     }
-    s.end_stroke(gpu);
+    s.end_stroke();
     frame(gpu, s);
 }
 

@@ -56,7 +56,7 @@ fn drag(gpu: &GpuContext, s: &mut PaintSession, samples: &[StrokeSample]) {
             frame(gpu, s);
         }
     }
-    s.end_stroke(gpu);
+    s.end_stroke();
     frame(gpu, s);
 }
 
@@ -345,7 +345,7 @@ fn a_queued_stroke_tail_is_painted_with_the_tool_it_was_drawn_with() {
     without_wgpu_errors(&gpu, || {
         s.begin_stroke(&gpu, tail[0]);
         s.add_samples(&tail[1..]);
-        s.end_stroke(&gpu);
+        s.end_stroke();
     });
     s.brush.tool = Tool::Rag;
     let elsewhere = line(200.0, 40.0, 470.0, 0.8, 20.0);

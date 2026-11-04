@@ -84,7 +84,7 @@ fn paint_arc(gpu: &GpuContext, s: &mut PaintSession) {
             frame(gpu, s);
         }
     }
-    s.end_stroke(gpu);
+    s.end_stroke();
     frame(gpu, s);
 }
 

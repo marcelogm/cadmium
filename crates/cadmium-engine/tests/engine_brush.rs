@@ -56,7 +56,7 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
             gpu.queue.submit([e.finish()]);
         }
     }
-    s.end_stroke(gpu);
+    s.end_stroke();
     let mut e = gpu.device.create_command_encoder(&Default::default());
     s.encode_frame(gpu, &mut e);
     gpu.queue.submit([e.finish()]);
@@ -240,7 +240,7 @@ fn a_dab_marks_its_tiles_wet_and_dirty_including_the_apron() {
             time_ms: 0,
         },
     );
-    s.end_stroke(&gpu);
+    s.end_stroke();
     assert!(s.has_pending_work());
     let mut e = gpu.device.create_command_encoder(&Default::default());
     s.encode_frame(&gpu, &mut e);

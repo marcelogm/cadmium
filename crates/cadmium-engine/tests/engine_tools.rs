@@ -90,7 +90,7 @@ fn drag(gpu: &GpuContext, s: &mut PaintSession, samples: &[StrokeSample]) {
             frame(gpu, s);
         }
     }
-    s.end_stroke(gpu);
+    s.end_stroke();
     frame(gpu, s);
 }
 

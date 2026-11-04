@@ -81,7 +81,7 @@ fn session_with_ended_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64))
     let mut s = PaintSession::new(gpu, painted_spec()).unwrap();
     s.begin_stroke(gpu, sample(from.0, from.1, 0));
     s.add_samples(&[sample(to.0, to.1, 200)]);
-    s.end_stroke(gpu);
+    s.end_stroke();
     s
 }
 
@@ -354,7 +354,7 @@ fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
     let mut s = PaintSession::new(&gpu, spec).unwrap();
     s.begin_stroke(&gpu, sample(10.0, 30.0, 0));
     s.add_samples(&[sample(90.0, 32.0, 200)]);
-    s.end_stroke(&gpu);
+    s.end_stroke();
     let dir = TempDir::new("unaligned");
     let path = dir.file("t.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
@@ -443,7 +443,7 @@ fn a_large_painting_with_one_stroke_saves_without_its_weave() {
     .unwrap();
     s.begin_stroke(&gpu, sample(300.0, 700.0, 0));
     s.add_samples(&[sample(1700.0, 800.0, 400)]);
-    s.end_stroke(&gpu);
+    s.end_stroke();
     let dir = TempDir::new("large");
     let path = dir.file("large.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();

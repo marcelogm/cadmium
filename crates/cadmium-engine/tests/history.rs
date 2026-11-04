@@ -50,7 +50,7 @@ fn drag(gpu: &GpuContext, s: &mut PaintSession, samples: &[StrokeSample]) {
             frame(gpu, s);
         }
     }
-    s.end_stroke(gpu);
+    s.end_stroke();
     frame(gpu, s);
 }
 
@@ -231,7 +231,7 @@ fn lifting_the_pen_after_every_dab_was_painted_makes_the_stroke_undoable() {
     s.begin_stroke(&gpu, samples[0]);
     s.add_samples(&samples[1..]);
     frame(&gpu, &mut s);
-    s.end_stroke(&gpu);
+    s.end_stroke();
     assert!(s.history.can_undo());
 }
 

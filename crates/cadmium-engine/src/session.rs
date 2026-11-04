@@ -99,8 +99,7 @@ impl PaintSession {
         self.history.begin_step();
         self.step_open = true;
         self.stroke_brush = self.brush.clone();
-        self.engine
-            .begin_stroke(gpu, &self.canvas, &self.stroke_brush);
+        self.engine.begin_stroke();
         let mut builder = StrokeBuilder::new(self.stroke_brush.geometry);
         self.queued.extend(builder.push(sample));
         self.stroke = Some(builder);
@@ -115,12 +114,11 @@ impl PaintSession {
         }
     }
 
-    pub fn end_stroke(&mut self, gpu: &GpuContext) {
+    pub fn end_stroke(&mut self) {
         let Some(mut builder) = self.stroke.take() else {
             return;
         };
         self.queued.extend(builder.finish());
-        self.engine.end_stroke(gpu, &self.canvas);
         if self.queued.is_empty() {
             self.commit_open_step();
         }
@@ -256,7 +254,7 @@ impl PaintSession {
     }
 
     fn settle_pending_step(&mut self, gpu: &GpuContext) {
-        self.end_stroke(gpu);
+        self.end_stroke();
         self.flush(gpu);
     }
 

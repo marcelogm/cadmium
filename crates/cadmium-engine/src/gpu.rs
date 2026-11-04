@@ -10,7 +10,6 @@ pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub supports_dmabuf_export: bool,
-    pub supports_timestamps: bool,
     lost: Arc<AtomicBool>,
 }
 
@@ -51,9 +50,6 @@ impl std::error::Error for GpuError {}
 const DMABUF_EXPORT_FEATURES: wgpu::Features =
     wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF.union(wgpu::Features::VULKAN_EXTERNAL_MEMORY_FD);
 
-const TIMESTAMP_FEATURES: wgpu::Features =
-    wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS);
-
 const DMABUF_SYNC_EXTENSIONS: [&std::ffi::CStr; 2] = [
     ash::khr::external_semaphore_fd::NAME,
     ash::ext::queue_family_foreign::NAME,
@@ -82,14 +78,10 @@ impl GpuContext {
         }
         let supports_dmabuf_export = adapter_features.contains(DMABUF_EXPORT_FEATURES)
             && supports_dmabuf_sync_extensions(&adapter);
-        let supports_timestamps = adapter_features.contains(TIMESTAMP_FEATURES);
 
         let mut required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
         if supports_dmabuf_export {
             required_features |= DMABUF_EXPORT_FEATURES;
-        }
-        if supports_timestamps {
-            required_features |= TIMESTAMP_FEATURES;
         }
         let descriptor = wgpu::DeviceDescriptor {
             label: Some("cadmium"),
@@ -116,7 +108,6 @@ impl GpuContext {
             device,
             queue,
             supports_dmabuf_export,
-            supports_timestamps,
             lost,
         })
     }

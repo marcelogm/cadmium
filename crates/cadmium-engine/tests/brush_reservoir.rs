@@ -64,7 +64,7 @@ fn blue_along_a_long_stroke(load: f32, reserve_factor: Option<f32>) -> Vec<f32> 
             encode_frame(&gpu, &mut session);
         }
     }
-    session.end_stroke(&gpu);
+    session.end_stroke();
     encode_frame(&gpu, &mut session);
 
     let volume = session.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
