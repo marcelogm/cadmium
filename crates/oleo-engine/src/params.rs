@@ -68,7 +68,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         ParamGroup::Transfer,
         0.0,
         1.0,
-        0.15,
+        0.03,
     ),
     spec("advection", "Arrasto", ParamGroup::Dynamics, 0.0, 1.0, 0.5),
     spec("squeeze", "Espremer", ParamGroup::Dynamics, 0.0, 2.0, 0.6),
@@ -94,7 +94,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         ParamGroup::Footprint,
         0.0,
         1.0,
-        0.4,
+        0.7,
     ),
     spec(
         "bristle_count",
@@ -134,7 +134,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
         ParamGroup::Render,
         0.0,
         5.0,
-        1.0,
+        2.0,
     ),
     spec(
         "light_azimuth_deg",

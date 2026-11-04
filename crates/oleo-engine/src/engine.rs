@@ -1,0 +1,726 @@
+use std::sync::mpsc;
+
+use wgpu::util::DeviceExt;
+
+use crate::brush::{BrushSettings, BrushShape, DEFAULT_MAX_DIAMETER_PX};
+use crate::canvas::{Canvas, PaintTotals, StateTexture};
+use crate::gpu::GpuContext;
+use crate::params::SimParams;
+use crate::pigments::{MAX_SLOTS, Mixture};
+use crate::stroke::{Dab, Tool};
+
+pub const TIP_SIZE: u32 = 512;
+pub const TIP_MARGIN: u32 = 12;
+pub const DELTA_SCALE: f32 = 65536.0;
+
+const TIP_HALF: u32 = TIP_SIZE / 2;
+const MAX_TIP_RADIUS: f32 = ((TIP_SIZE - TIP_MARGIN) / 2) as f32;
+const MIN_DAB_RADIUS: f32 = 0.5;
+const PIGMENT_CHANNELS: usize = MAX_SLOTS;
+const VOLUME_CHANNEL: usize = PIGMENT_CHANNELS;
+const TIP_CHANNELS: usize = PIGMENT_CHANNELS + 1;
+const TIP_TEXELS: usize = (TIP_SIZE * TIP_SIZE) as usize;
+const TIP_VALUES: usize = TIP_TEXELS * TIP_CHANNELS;
+const TIP_BYTES: u64 = (TIP_VALUES * std::mem::size_of::<f32>()) as u64;
+const BODY_RESERVE_FACTOR: f32 = 2.0;
+const DAB_RECORD_STRIDE: u64 = 256;
+const DAB_APRON_PX: f32 = 2.0;
+const TIP_APRON_TEXELS: f32 = 1.0;
+const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
+const WORKGROUP_SIZE: u32 = 8;
+
+const TOOL_MODE_BRUSH: u32 = 0;
+const TOOL_MODE_KNIFE: u32 = 1;
+const TOOL_MODE_BLENDER: u32 = 2;
+const TOOL_MODE_RAG: u32 = 3;
+const TOOL_MODE_EYEDROPPER: u32 = 4;
+
+pub trait PaintEngine {
+    fn begin_stroke(&mut self, gpu: &GpuContext, canvas: &Canvas, brush: &BrushSettings);
+    fn encode_dabs(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        brush: &BrushSettings,
+        dabs: &[Dab],
+        encoder: &mut wgpu::CommandEncoder,
+    );
+    fn end_stroke(&mut self, gpu: &GpuContext, canvas: &Canvas);
+    fn params(&self) -> &SimParams;
+    fn params_mut(&mut self) -> &mut SimParams;
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct DabRecord {
+    center: [f32; 2],
+    radius: f32,
+    pressure: f32,
+    altitude: f32,
+    azimuth: f32,
+    direction: f32,
+    speed: f32,
+    orientation: [f32; 2],
+    elongation: f32,
+    tool_mode: u32,
+    canvas_origin: [i32; 2],
+    canvas_size: [u32; 2],
+    tip_origin: [i32; 2],
+    tip_size: [u32; 2],
+    transfer_fraction: f32,
+    velocity_cutoff: f32,
+    residual_um: f32,
+    penetration_um: f32,
+    bristle_contrast: f32,
+    bristle_count: f32,
+    refill_rate: f32,
+    loaded_thickness_um: f32,
+}
+
+const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
+const _: () = assert!(DAB_RECORD_SIZE == 112 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct BodyState {
+    pigment: [f32; PIGMENT_CHANNELS],
+    volume: f32,
+    granted_ratio: f32,
+    granted_fractions: [f32; PIGMENT_CHANNELS],
+}
+
+const BODY_BYTES: u64 = std::mem::size_of::<BodyState>() as u64;
+const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
+const CONTACT_REFERENCE_BYTES: u64 = std::mem::size_of::<f32>() as u64;
+
+#[derive(Clone, Copy, Debug)]
+struct Placement {
+    record: DabRecord,
+    canvas_rect: [f32; 4],
+    canvas_groups: [u32; 2],
+    tip_groups: [u32; 2],
+}
+
+struct Footprint {
+    radius: f32,
+    elongation: f32,
+    orientation: f32,
+}
+
+impl Footprint {
+    fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
+        let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+        let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
+        let elongation = (1.0 + params.get("tilt_elongation") * tilt).min(MAX_TIP_RADIUS / radius);
+        let follows_stroke = brush.shape == BrushShape::Flat || brush.tool == Tool::Knife;
+        let orientation = if follows_stroke {
+            dab.direction
+        } else {
+            dab.azimuth
+        };
+        Footprint {
+            radius,
+            elongation,
+            orientation,
+        }
+    }
+
+    fn semi_axes(&self) -> [f32; 2] {
+        [self.radius * self.elongation, self.radius]
+    }
+
+    fn canvas_half_extents(&self) -> [f32; 2] {
+        let [along, across] = self.semi_axes();
+        let (sin, cos) = self.orientation.sin_cos();
+        [
+            (along * along * cos * cos + across * across * sin * sin).sqrt(),
+            (along * along * sin * sin + across * across * cos * cos).sqrt(),
+        ]
+    }
+}
+
+fn tool_mode(tool: Tool) -> u32 {
+    match tool {
+        Tool::Brush => TOOL_MODE_BRUSH,
+        Tool::Knife => TOOL_MODE_KNIFE,
+        Tool::Blender => TOOL_MODE_BLENDER,
+        Tool::Rag => TOOL_MODE_RAG,
+        Tool::Eyedropper => TOOL_MODE_EYEDROPPER,
+    }
+}
+
+fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
+    let reach = semi_axes.map(|semi| (semi + TIP_APRON_TEXELS).ceil() as u32);
+    let origin = reach.map(|r| (TIP_HALF - r) as i32);
+    let size = reach.map(|r| 2 * r + 1);
+    (origin, size)
+}
+
+fn place(
+    dab: &Dab,
+    brush: &BrushSettings,
+    params: &SimParams,
+    loaded_thickness_um: f32,
+    canvas: &Canvas,
+) -> Option<Placement> {
+    let footprint = Footprint::of(dab, brush, params);
+    let [half_x, half_y] = footprint.canvas_half_extents();
+    let width = canvas.spec.width as f32;
+    let height = canvas.spec.height as f32;
+    let x0 = ((dab.x - half_x).floor() - DAB_APRON_PX).max(0.0);
+    let y0 = ((dab.y - half_y).floor() - DAB_APRON_PX).max(0.0);
+    let x1 = ((dab.x + half_x).ceil() + DAB_APRON_PX).min(width);
+    let y1 = ((dab.y + half_y).ceil() + DAB_APRON_PX).min(height);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    let canvas_size = [(x1 - x0) as u32, (y1 - y0) as u32];
+    let (tip_origin, tip_size) = tip_window(footprint.semi_axes());
+    let (sin, cos) = footprint.orientation.sin_cos();
+    let record = DabRecord {
+        center: [dab.x, dab.y],
+        radius: footprint.radius,
+        pressure: dab.pressure,
+        altitude: dab.altitude,
+        azimuth: dab.azimuth,
+        direction: dab.direction,
+        speed: dab.speed,
+        orientation: [cos, sin],
+        elongation: footprint.elongation,
+        tool_mode: tool_mode(brush.tool),
+        canvas_origin: [x0 as i32, y0 as i32],
+        canvas_size,
+        tip_origin,
+        tip_size,
+        transfer_fraction: params.get("transfer_fraction"),
+        velocity_cutoff: params.get("velocity_cutoff"),
+        residual_um: params.get("residual_um"),
+        penetration_um: params.get("penetration_um"),
+        bristle_contrast: params.get("bristle_contrast"),
+        bristle_count: params
+            .get("bristle_count")
+            .min(2.0 * footprint.radius / MIN_BRISTLE_PERIOD_PX),
+        refill_rate: params.get("refill_rate"),
+        loaded_thickness_um,
+    };
+    Some(Placement {
+        record,
+        canvas_rect: [x0, y0, x1 - 1.0, y1 - 1.0],
+        canvas_groups: canvas_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
+        tip_groups: tip_size.map(|s| s.div_ceil(WORKGROUP_SIZE)),
+    })
+}
+
+fn shader_source(body: &str) -> String {
+    format!(
+        "const TIP_SIZE: u32 = {TIP_SIZE}u;\n\
+         const TIP_HALF: i32 = {TIP_HALF};\n\
+         const TIP_CHANNELS: u32 = {TIP_CHANNELS}u;\n\
+         const PIGMENT_CHANNELS: u32 = {PIGMENT_CHANNELS}u;\n\
+         const VOLUME_CHANNEL: u32 = {VOLUME_CHANNEL}u;\n\
+         const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
+         {}\n{}\n{body}",
+        include_str!("shaders/brush_tip.wgsl"),
+        include_str!("shaders/nearest_half.wgsl")
+    )
+}
+
+fn compute_pipeline(
+    gpu: &GpuContext,
+    label: &str,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    entry_point: &str,
+) -> wgpu::ComputePipeline {
+    gpu.device
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(label),
+            layout: Some(layout),
+            module,
+            entry_point: Some(entry_point),
+            compilation_options: Default::default(),
+            cache: None,
+        })
+}
+
+fn shader_module(gpu: &GpuContext, label: &str, body: &str) -> wgpu::ShaderModule {
+    gpu.device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(label),
+            source: wgpu::ShaderSource::Wgsl(shader_source(body).into()),
+        })
+}
+
+fn uniform_entry(binding: u32, dynamic_size: Option<u64>) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: dynamic_size.is_some(),
+            min_binding_size: dynamic_size.and_then(wgpu::BufferSize::new),
+        },
+        count: None,
+    }
+}
+
+fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+fn texture_entry(
+    binding: u32,
+    access: wgpu::StorageTextureAccess,
+    format: wgpu::TextureFormat,
+) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::StorageTexture {
+            access,
+            format,
+            view_dimension: wgpu::TextureViewDimension::D2,
+        },
+        count: None,
+    }
+}
+
+fn layouts(
+    gpu: &GpuContext,
+    label: &str,
+    entries: &[wgpu::BindGroupLayoutEntry],
+) -> (wgpu::BindGroupLayout, wgpu::PipelineLayout) {
+    let bind_group_layout = gpu
+        .device
+        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some(label),
+            entries,
+        });
+    let pipeline_layout = gpu
+        .device
+        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(label),
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: 0,
+        });
+    (bind_group_layout, pipeline_layout)
+}
+
+fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
+    gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_SRC
+            | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Vec<f32> {
+    let staging = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("brush_readback"),
+        size: buffer.size(),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = gpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("brush_readback"),
+        });
+    encoder.copy_buffer_to_buffer(buffer, 0, &staging, 0, buffer.size());
+    gpu.queue.submit([encoder.finish()]);
+    let slice = staging.slice(..);
+    let (sender, receiver) = mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("GPU device lost while reading the brush back");
+    receiver
+        .recv()
+        .expect("readback map callback dropped")
+        .expect("failed to map the brush readback buffer");
+    let values = bytemuck::cast_slice(
+        &slice
+            .get_mapped_range()
+            .expect("brush readback buffer is mapped"),
+    )
+    .to_vec();
+    staging.unmap();
+    values
+}
+
+pub struct WetOilEngine {
+    params: SimParams,
+    tip_radius: f32,
+    loaded_thickness_um: f32,
+    tip: wgpu::Buffer,
+    tip_delta: wgpu::Buffer,
+    body: wgpu::Buffer,
+    wanted: wgpu::Buffer,
+    contact_reference: wgpu::Buffer,
+    exchange_layout: wgpu::BindGroupLayout,
+    apply_layout: wgpu::BindGroupLayout,
+    refill_layout: wgpu::BindGroupLayout,
+    reference_pipeline: wgpu::ComputePipeline,
+    exchange_pipeline: wgpu::ComputePipeline,
+    apply_pipeline: wgpu::ComputePipeline,
+    gather_pipeline: wgpu::ComputePipeline,
+    settle_pipeline: wgpu::ComputePipeline,
+    distribute_pipeline: wgpu::ComputePipeline,
+}
+
+impl WetOilEngine {
+    pub fn new(gpu: &GpuContext) -> Self {
+        use wgpu::StorageTextureAccess::{ReadOnly, ReadWrite};
+        use wgpu::TextureFormat::{R32Float, Rgba16Float};
+
+        let (exchange_layout, exchange_pipeline_layout) = layouts(
+            gpu,
+            "dab_exchange",
+            &[
+                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                texture_entry(1, ReadWrite, Rgba16Float),
+                texture_entry(2, ReadWrite, Rgba16Float),
+                texture_entry(3, ReadWrite, R32Float),
+                texture_entry(4, ReadOnly, R32Float),
+                storage_entry(5, true),
+                storage_entry(6, false),
+                storage_entry(7, false),
+            ],
+        );
+        let (apply_layout, apply_pipeline_layout) = layouts(
+            gpu,
+            "tip_apply",
+            &[
+                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                storage_entry(1, false),
+                storage_entry(2, false),
+            ],
+        );
+        let (refill_layout, refill_pipeline_layout) = layouts(
+            gpu,
+            "tip_refill",
+            &[
+                uniform_entry(0, Some(DAB_RECORD_SIZE)),
+                storage_entry(1, false),
+                storage_entry(2, false),
+                storage_entry(3, false),
+                storage_entry(4, false),
+            ],
+        );
+
+        let exchange = shader_module(
+            gpu,
+            "dab_exchange",
+            include_str!("shaders/dab_exchange.wgsl"),
+        );
+        let apply = shader_module(gpu, "tip_apply", include_str!("shaders/tip_apply.wgsl"));
+        let refill = shader_module(gpu, "tip_refill", include_str!("shaders/tip_refill.wgsl"));
+
+        WetOilEngine {
+            params: SimParams::default(),
+            tip_radius: DEFAULT_MAX_DIAMETER_PX / 2.0,
+            loaded_thickness_um: 0.0,
+            tip: storage_buffer(gpu, "brush_tip", TIP_BYTES),
+            tip_delta: storage_buffer(gpu, "brush_tip_delta", TIP_BYTES),
+            body: storage_buffer(gpu, "brush_body", BODY_BYTES),
+            wanted: storage_buffer(gpu, "brush_refill_wanted", WANTED_BYTES),
+            contact_reference: storage_buffer(
+                gpu,
+                "dab_contact_reference",
+                CONTACT_REFERENCE_BYTES,
+            ),
+            reference_pipeline: compute_pipeline(
+                gpu,
+                "dab_reference",
+                &exchange,
+                &exchange_pipeline_layout,
+                "reference",
+            ),
+            exchange_pipeline: compute_pipeline(
+                gpu,
+                "dab_exchange",
+                &exchange,
+                &exchange_pipeline_layout,
+                "main",
+            ),
+            apply_pipeline: compute_pipeline(
+                gpu,
+                "tip_apply",
+                &apply,
+                &apply_pipeline_layout,
+                "main",
+            ),
+            gather_pipeline: compute_pipeline(
+                gpu,
+                "tip_refill_gather",
+                &refill,
+                &refill_pipeline_layout,
+                "gather",
+            ),
+            settle_pipeline: compute_pipeline(
+                gpu,
+                "tip_refill_settle",
+                &refill,
+                &refill_pipeline_layout,
+                "settle",
+            ),
+            distribute_pipeline: compute_pipeline(
+                gpu,
+                "tip_refill_distribute",
+                &refill,
+                &refill_pipeline_layout,
+                "distribute",
+            ),
+            exchange_layout,
+            apply_layout,
+            refill_layout,
+        }
+    }
+
+    pub fn set_tip_radius(&mut self, radius_px: f32) {
+        self.tip_radius = radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+    }
+
+    pub fn load_reservoir(&mut self, gpu: &GpuContext, mixture: &Mixture) {
+        let thickness = mixture.volume_um.max(0.0);
+        let mut tip = vec![0.0f32; TIP_VALUES];
+        let mut loaded_texels = 0usize;
+        let radius_squared = self.tip_radius * self.tip_radius;
+        for (index, texel) in tip.as_chunks_mut::<TIP_CHANNELS>().0.iter_mut().enumerate() {
+            let x = (index as u32 % TIP_SIZE) as f32 - TIP_HALF as f32;
+            let y = (index as u32 / TIP_SIZE) as f32 - TIP_HALF as f32;
+            if x * x + y * y > radius_squared {
+                continue;
+            }
+            loaded_texels += 1;
+            for (slot, fraction) in mixture.fractions.iter().enumerate() {
+                texel[slot] = thickness * fraction;
+            }
+            texel[VOLUME_CHANNEL] = thickness;
+        }
+        let body_volume = BODY_RESERVE_FACTOR * thickness * loaded_texels as f32;
+        let body = BodyState {
+            pigment: mixture.fractions.map(|fraction| body_volume * fraction),
+            volume: body_volume,
+            granted_ratio: 0.0,
+            granted_fractions: [0.0; PIGMENT_CHANNELS],
+        };
+        gpu.queue
+            .write_buffer(&self.tip, 0, bytemuck::cast_slice(&tip));
+        gpu.queue
+            .write_buffer(&self.body, 0, bytemuck::bytes_of(&body));
+        self.loaded_thickness_um = thickness;
+    }
+
+    pub fn clean_brush(&mut self, gpu: &GpuContext) {
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("clean_brush"),
+            });
+        encoder.clear_buffer(&self.tip, 0, None);
+        encoder.clear_buffer(&self.tip_delta, 0, None);
+        encoder.clear_buffer(&self.body, 0, None);
+        encoder.clear_buffer(&self.wanted, 0, None);
+        gpu.queue.submit([encoder.finish()]);
+    }
+
+    pub fn brush_totals(&self, gpu: &GpuContext) -> PaintTotals {
+        let mut totals = PaintTotals::default();
+        for texel in read_buffer(gpu, &self.tip).as_chunks::<TIP_CHANNELS>().0 {
+            accumulate(&mut totals, texel);
+        }
+        accumulate(&mut totals, &read_buffer(gpu, &self.body)[..TIP_CHANNELS]);
+        totals
+    }
+
+    pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Mixture {
+        let body = read_buffer(gpu, &self.body);
+        let volume = body[VOLUME_CHANNEL];
+        let fractions = std::array::from_fn(|slot| {
+            if volume > 0.0 {
+                body[slot] / volume
+            } else {
+                0.0
+            }
+        });
+        Mixture {
+            volume_um: self.loaded_thickness_um,
+            fractions,
+        }
+    }
+
+    fn exchange_bind_group(
+        &self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        dabs: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("dab_exchange"),
+            layout: &self.exchange_layout,
+            entries: &[
+                dab_binding(0, dabs),
+                texture_binding(1, canvas, StateTexture::WetPig0),
+                texture_binding(2, canvas, StateTexture::WetPig1),
+                texture_binding(3, canvas, StateTexture::WetVol),
+                texture_binding(4, canvas, StateTexture::DryHeight),
+                buffer_binding(5, &self.tip),
+                buffer_binding(6, &self.tip_delta),
+                buffer_binding(7, &self.contact_reference),
+            ],
+        })
+    }
+
+    fn apply_bind_group(&self, gpu: &GpuContext, dabs: &wgpu::Buffer) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("tip_apply"),
+            layout: &self.apply_layout,
+            entries: &[
+                dab_binding(0, dabs),
+                buffer_binding(1, &self.tip),
+                buffer_binding(2, &self.tip_delta),
+            ],
+        })
+    }
+
+    fn refill_bind_group(&self, gpu: &GpuContext, dabs: &wgpu::Buffer) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("tip_refill"),
+            layout: &self.refill_layout,
+            entries: &[
+                dab_binding(0, dabs),
+                buffer_binding(1, &self.tip),
+                buffer_binding(2, &self.tip_delta),
+                buffer_binding(3, &self.body),
+                buffer_binding(4, &self.wanted),
+            ],
+        })
+    }
+}
+
+fn accumulate(totals: &mut PaintTotals, amounts: &[f32]) {
+    for (slot, amount) in amounts[..PIGMENT_CHANNELS].iter().enumerate() {
+        totals.pigment[slot] += f64::from(*amount);
+    }
+    totals.volume += f64::from(amounts[VOLUME_CHANNEL]);
+}
+
+fn dab_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+    wgpu::BindGroupEntry {
+        binding,
+        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+            buffer,
+            offset: 0,
+            size: wgpu::BufferSize::new(DAB_RECORD_SIZE),
+        }),
+    }
+}
+
+fn buffer_binding(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+    wgpu::BindGroupEntry {
+        binding,
+        resource: buffer.as_entire_binding(),
+    }
+}
+
+fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::BindGroupEntry<'_> {
+    wgpu::BindGroupEntry {
+        binding,
+        resource: wgpu::BindingResource::TextureView(canvas.view(which)),
+    }
+}
+
+impl PaintEngine for WetOilEngine {
+    fn begin_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas, _brush: &BrushSettings) {}
+
+    fn encode_dabs(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        brush: &BrushSettings,
+        dabs: &[Dab],
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let placements: Vec<Placement> = dabs
+            .iter()
+            .filter_map(|dab| place(dab, brush, &self.params, self.loaded_thickness_um, canvas))
+            .collect();
+        if placements.is_empty() {
+            return;
+        }
+        let mut records = vec![0u8; placements.len() * DAB_RECORD_STRIDE as usize];
+        for (slot, placement) in records
+            .as_chunks_mut::<{ DAB_RECORD_STRIDE as usize }>()
+            .0
+            .iter_mut()
+            .zip(&placements)
+        {
+            slot[..DAB_RECORD_SIZE as usize].copy_from_slice(bytemuck::bytes_of(&placement.record));
+        }
+        let dab_buffer = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("dab_records"),
+                contents: &records,
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let exchange_group = self.exchange_bind_group(gpu, canvas, &dab_buffer);
+        let apply_group = self.apply_bind_group(gpu, &dab_buffer);
+        let refill_group = self.refill_bind_group(gpu, &dab_buffer);
+
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("dab_exchange"),
+            timestamp_writes: None,
+        });
+        for (index, placement) in placements.iter().enumerate() {
+            let offset = (index as u64 * DAB_RECORD_STRIDE) as wgpu::DynamicOffset;
+            pass.set_bind_group(0, &exchange_group, &[offset]);
+            pass.set_pipeline(&self.reference_pipeline);
+            pass.dispatch_workgroups(1, 1, 1);
+            pass.set_pipeline(&self.exchange_pipeline);
+            pass.dispatch_workgroups(placement.canvas_groups[0], placement.canvas_groups[1], 1);
+            pass.set_bind_group(0, &apply_group, &[offset]);
+            pass.set_pipeline(&self.apply_pipeline);
+            pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+            pass.set_bind_group(0, &refill_group, &[offset]);
+            pass.set_pipeline(&self.gather_pipeline);
+            pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+            pass.set_pipeline(&self.settle_pipeline);
+            pass.dispatch_workgroups(1, 1, 1);
+            pass.set_pipeline(&self.distribute_pipeline);
+            pass.dispatch_workgroups(placement.tip_groups[0], placement.tip_groups[1], 1);
+        }
+        drop(pass);
+
+        for placement in &placements {
+            let [x0, y0, x1, y1] = placement.canvas_rect;
+            canvas.dirty.mark_rect(x0, y0, x1, y1);
+            canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
+        }
+    }
+
+    fn end_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas) {}
+
+    fn params(&self) -> &SimParams {
+        &self.params
+    }
+
+    fn params_mut(&mut self) -> &mut SimParams {
+        &mut self.params
+    }
+}

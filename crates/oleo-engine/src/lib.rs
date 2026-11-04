@@ -1,9 +1,11 @@
 pub mod brush;
 pub mod canvas;
+pub mod engine;
 pub mod gpu;
 pub mod params;
 pub mod pigments;
 pub mod present;
 pub mod render;
+pub mod session;
 pub mod spectral;
 pub mod stroke;
