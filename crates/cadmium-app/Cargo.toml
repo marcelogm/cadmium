@@ -3,6 +3,9 @@ name = "cadmium-app"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
+description = "GNOME oil painting simulator"
+repository.workspace = true
+publish.workspace = true
 
 [features]
 default = []

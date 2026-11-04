@@ -6,6 +6,8 @@ members = ["crates/cadmium-engine", "crates/cadmium-app"]
 edition = "2024"
 rust-version = "1.92"
 version = "0.1.0"
+repository = "https://github.com/marcelogm/cadmium"
+publish = false
 
 [workspace.dependencies]
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
