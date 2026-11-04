@@ -1,0 +1,92 @@
+name: Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, feat/tray]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  portable-zip:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: zip
+          pacboy: >-
+            gtk4:p libadwaita:p rust:p pkgconf:p gcc:p librsvg:p ntldd:p adwaita-icon-theme:p
+
+      - name: Check GTK and libadwaita
+        run: |
+          pacman -Q mingw-w64-ucrt-x86_64-{gtk4,libadwaita,rust}
+          pkg-config --atleast-version=4.22 gtk4 || { echo "::error::MSYS2 gtk4 $(pkg-config --modversion gtk4) is older than 4.22"; exit 1; }
+          pkg-config --atleast-version=1.9 libadwaita-1 || { echo "::error::MSYS2 libadwaita $(pkg-config --modversion libadwaita-1) is older than 1.9"; exit 1; }
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Build
+        run: cargo build --release --locked -p cadmium-app
+
+      - name: Test the engine without a GPU
+        run: cargo test --release --locked -p cadmium-engine --lib --test spectral --test params --test pigments --test stroke
+
+      - name: Bundle
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dist=dist/Cadmium
+          pixbuf=lib/gdk-pixbuf-2.0/2.10.0
+          mkdir -p "$dist/$pixbuf" "$dist/share/glib-2.0/schemas" "$dist/share/icons"
+          cp target/release/cadmium.exe "$dist/"
+          cp -r "/ucrt64/$pixbuf/loaders" "$dist/$pixbuf/"
+          cp /ucrt64/share/glib-2.0/schemas/gschemas.compiled "$dist/share/glib-2.0/schemas/"
+          cp -r /ucrt64/share/icons/Adwaita /ucrt64/share/icons/hicolor "$dist/share/icons/"
+          for binary in "$dist/cadmium.exe" "$dist/$pixbuf"/loaders/*.dll; do ntldd -R "$binary"; done \
+            | tr '\\' / | grep -io '[a-z]:/[^ ]*/ucrt64/bin/[^ ]*\.dll' | sort -fu \
+            | while read -r dll; do cp "$(cygpath -u "$dll")" "$dist/"; done
+          (cd "$dist" && gdk-pixbuf-query-loaders "$pixbuf"/loaders/*.dll) \
+            | sed -E 's|^"[^"]*(lib[\\/]+gdk-pixbuf-2\.0)|"\1|' > "$dist/$pixbuf/loaders.cache"
+          cat "$dist/$pixbuf/loaders.cache"
+          cat > "$dist/LEIA-ME.txt" <<'TEXT'
+          Cadmium - simulador de pintura a óleo
+
+          1. Descompacte esta pasta inteira em qualquer lugar.
+          2. Abra cadmium.exe.
+
+          O Cadmium precisa de uma placa de vídeo com Vulkan e com o driver atualizado
+          (NVIDIA, AMD ou Intel). Mesas digitalizadoras funcionam pelo Windows Ink.
+          TEXT
+          ls "$dist"
+          du -sh "$dist"
+
+      - name: Check that the bundled DLLs are enough to start
+        run: PATH=/c/Windows/System32:/c/Windows dist/Cadmium/cadmium.exe --help
+
+      - name: Zip
+        run: cd dist && zip -qr9 ../Cadmium-windows-x86_64.zip Cadmium && ls -l ../Cadmium-windows-x86_64.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: Cadmium-windows-x86_64.zip
+          archive: false
+
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Cadmium-windows-x86_64.zip

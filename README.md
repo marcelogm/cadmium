@@ -35,6 +35,21 @@ Se a apresentação direta pela GPU (dmabuf) não estiver disponível, o Cadmium
 cada quadro pela memória e avisa com "Apresentação por cópia". Para forçar esse modo:
 `CADMIUM_PRESENT=readback cargo run --release -p cadmium-app`.
 
+## Windows
+
+Há uma versão portátil para Windows (64 bits), sem instalador:
+
+1. Baixe `Cadmium-windows-x86_64.zip` na página de
+   [Releases](https://github.com/marcelogm/cadmium/releases) ou, para a versão mais recente,
+   no último build do workflow **Windows** na aba
+   [Actions](https://github.com/marcelogm/cadmium/actions/workflows/windows.yml) (seção
+   *Artifacts*, é preciso estar logado no GitHub).
+2. Descompacte a pasta inteira em qualquer lugar.
+3. Abra `cadmium.exe`.
+
+É preciso uma placa de vídeo com Vulkan e com o driver atualizado (NVIDIA, AMD ou Intel). A
+mesa digitalizadora funciona pelo Windows Ink.
+
 ## Pintando com a caneta
 
 - **Pressão** controla o tamanho da pincelada e o quanto o pincel afunda na tinta molhada.
