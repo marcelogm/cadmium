@@ -45,7 +45,8 @@ const KNIFE_LAID_CAPACITY_UM: f32 = MAX_TIP_THICKNESS_UM * KNIFE_DIP_LENGTH_PX;
 const KNIFE_UPRIGHT_CAPACITY_UM: f32 = 200.0;
 const KNIFE_SPILL_SHARE: f32 = 0.5;
 const KNIFE_REST_FOLLOW: f32 = 0.25;
-const KNIFE_FIRST_REST_FOLLOW: f32 = 1.0;
+const CONTACT_REST_FOLLOW: f32 = 0.25;
+const FIRST_REST_FOLLOW: f32 = 1.0;
 const BLADE_SPILL_BAND_PX: f32 = 2.0;
 const BLADE_COVERAGE_MARGIN_PX: f32 = 1.0;
 const BLADE_DELTA_SCALE: f32 = 4096.0;
@@ -144,7 +145,7 @@ struct DabRecord {
     spread_origin: [i32; 2],
     spread_size: [u32; 2],
     rag_strength: f32,
-    blade_rest_follow: f32,
+    rest_follow: f32,
     blade_capacity_um: f32,
     blade_spill_share: f32,
 }
@@ -320,6 +321,14 @@ fn wipes(tool: Tool) -> bool {
 
 fn blades(tool: Tool) -> bool {
     tool == Tool::Knife
+}
+
+fn rest_follow(tool: Tool) -> f32 {
+    if blades(tool) {
+        KNIFE_REST_FOLLOW
+    } else {
+        CONTACT_REST_FOLLOW
+    }
 }
 
 fn upright_share(altitude: f32) -> f32 {
@@ -505,7 +514,7 @@ fn place(
         spread_origin,
         spread_size,
         rag_strength: params.get("rag_strength"),
-        blade_rest_follow: KNIFE_REST_FOLLOW,
+        rest_follow: rest_follow(brush.tool),
         blade_capacity_um: blade_capacity_um(dab.altitude),
         blade_spill_share: KNIFE_SPILL_SHARE,
     };
@@ -758,7 +767,7 @@ pub struct WetOilEngine {
     blade_delta: wgpu::Buffer,
     blade_grant: wgpu::Buffer,
     blade_state: wgpu::Buffer,
-    blade_rest_pending: bool,
+    rest_pending: bool,
     blade_layout: wgpu::BindGroupLayout,
     blade_pipelines: BladePipelines,
     exchange_layout: wgpu::BindGroupLayout,
@@ -951,7 +960,7 @@ impl WetOilEngine {
             blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
             blade_grant: storage_buffer(gpu, "knife_blade_grant", BLADE_LOAD_BYTES),
             blade_state: storage_buffer(gpu, "knife_blade_state", BLADE_STATE_BYTES),
-            blade_rest_pending: true,
+            rest_pending: true,
             blade_pipelines: BladePipelines::new(gpu, &blade_pipeline_layout),
             blade_layout,
             reference_pipeline: compute_pipeline(
@@ -1624,7 +1633,7 @@ fn texture_binding(binding: u32, canvas: &Canvas, which: StateTexture) -> wgpu::
 
 impl PaintEngine for WetOilEngine {
     fn begin_stroke(&mut self, _gpu: &GpuContext, _canvas: &Canvas, _brush: &BrushSettings) {
-        self.blade_rest_pending = true;
+        self.rest_pending = true;
     }
 
     fn encode_dabs(
@@ -1642,11 +1651,11 @@ impl PaintEngine for WetOilEngine {
         if placements.is_empty() {
             return;
         }
-        if let Some(first_blade) = placements.iter_mut().find(|placement| placement.blades)
-            && self.blade_rest_pending
+        if let Some(first_resting) = placements.iter_mut().find(|placement| !placement.wipes)
+            && self.rest_pending
         {
-            first_blade.record.blade_rest_follow = KNIFE_FIRST_REST_FOLLOW;
-            self.blade_rest_pending = false;
+            first_resting.record.rest_follow = FIRST_REST_FOLLOW;
+            self.rest_pending = false;
         }
         let mut records = vec![0u8; placements.len() * DAB_RECORD_STRIDE as usize];
         for (slot, placement) in records

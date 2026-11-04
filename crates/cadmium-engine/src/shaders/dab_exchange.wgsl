@@ -8,6 +8,10 @@ const MIN_VELOCITY_CUTOFF: f32 = 1e-6;
 const MIN_CONTACT_DEPTH_UM: f32 = 1.0;
 const EMPTY_VOLUME_UM: f32 = 1e-4;
 const QUANTIZE_LIMIT: f32 = 2.0e9;
+const REFERENCE_THREADS: u32 = 256u;
+
+var<workgroup> weighted_heights: array<f32, REFERENCE_THREADS>;
+var<workgroup> weights: array<f32, REFERENCE_THREADS>;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var wet_pig0: texture_storage_2d<rgba16float, read_write>;
@@ -69,9 +73,35 @@ fn centre_height() -> f32 {
     return surface_height(pixel);
 }
 
-@compute @workgroup_size(1)
-fn reference() {
-    contact_reference.height = centre_height();
+@compute @workgroup_size(REFERENCE_THREADS)
+fn reference(@builtin(local_invocation_index) thread: u32) {
+    var weighted = 0.0;
+    var weight = 0.0;
+    let width = dab.canvas_size.x;
+    let count = width * dab.canvas_size.y;
+    for (var index = thread; index < count; index += REFERENCE_THREADS) {
+        let pixel = dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
+        let cover = outline_footprint(brush_space(pixel));
+        weighted += cover * surface_height(pixel);
+        weight += cover;
+    }
+    weighted_heights[thread] = weighted;
+    weights[thread] = weight;
+    workgroupBarrier();
+    for (var stride = REFERENCE_THREADS / 2u; stride > 0u; stride /= 2u) {
+        if (thread < stride) {
+            weighted_heights[thread] += weighted_heights[thread + stride];
+            weights[thread] += weights[thread + stride];
+        }
+        workgroupBarrier();
+    }
+    if (thread == 0u) {
+        var found = centre_height();
+        if (weights[0] > 0.0) {
+            found = weighted_heights[0] / weights[0];
+        }
+        contact_reference.height = mix(contact_reference.height, found, dab.rest_follow);
+    }
 }
 
 @compute @workgroup_size(8, 8)
