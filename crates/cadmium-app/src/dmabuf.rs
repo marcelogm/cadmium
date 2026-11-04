@@ -1,6 +1,6 @@
 use std::fmt;
 use std::marker::PhantomData;
-use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -10,6 +10,13 @@ use gtk::gdk;
 use gtk::prelude::*;
 use wgpu::hal::{self, api::Vulkan};
 
+use modifiers::{
+    DRM_FORMAT_MOD_LINEAR, format_modifiers, shared_modifiers, vulkan_exportable_storage_modifiers,
+};
+use sync::{export_sync_file, import_sync_file, supports_sync_fd_semaphores};
+
+mod modifiers;
+mod sync;
 #[cfg(test)]
 mod tests;
 
@@ -17,10 +24,6 @@ const POOL_SIZE: usize = 3;
 const PRESENT_VK_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 const PRESENT_WGPU_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PRESENT_FOURCC: u32 = drm_fourcc::DrmFourcc::Abgr8888 as u32;
-const DRM_FORMAT_MOD_LINEAR: u64 = 0;
-const DRM_FORMAT_MOD_VENDOR_SHIFT: u64 = 56;
-const DRM_FORMAT_MOD_VENDOR_AMD: u64 = 0x02;
-const AMD_FMT_MOD_DCC_BIT: u64 = 1 << 13;
 
 const IMAGE_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::STORAGE;
 const TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::STORAGE_BINDING;
@@ -28,50 +31,11 @@ const HAL_TEXTURE_USES: wgpu::TextureUses = wgpu::TextureUses::STORAGE_READ_ONLY
     .union(wgpu::TextureUses::STORAGE_WRITE_ONLY)
     .union(wgpu::TextureUses::STORAGE_READ_WRITE);
 
-const IOC_WRITE: u64 = 1;
-const IOC_READ: u64 = 2;
-const IOC_DIRECTION_SHIFT: u64 = 30;
-const IOC_SIZE_SHIFT: u64 = 16;
-const IOC_TYPE_SHIFT: u64 = 8;
-const DMA_BUF_IOCTL_TYPE: u8 = b'b';
-const DMA_BUF_SYNC_WRITE: u32 = 2;
-const DMA_BUF_IOCTL_EXPORT_SYNC_FILE: u64 =
-    ioctl_number(IOC_READ | IOC_WRITE, DMA_BUF_IOCTL_TYPE, 2);
-const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: u64 = ioctl_number(IOC_WRITE, DMA_BUF_IOCTL_TYPE, 3);
-
-#[repr(C)]
-struct DmaBufSyncFile {
-    flags: u32,
-    fd: i32,
-}
-
-const fn ioctl_number(direction: u64, kind: u8, number: u8) -> u64 {
-    (direction << IOC_DIRECTION_SHIFT)
-        | ((std::mem::size_of::<DmaBufSyncFile>() as u64) << IOC_SIZE_SHIFT)
-        | ((kind as u64) << IOC_TYPE_SHIFT)
-        | number as u64
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModifierPolicy {
     Any,
     NoCompression,
     LinearOnly,
-}
-
-impl ModifierPolicy {
-    fn allows(self, modifier: u64) -> bool {
-        match self {
-            ModifierPolicy::Any => true,
-            ModifierPolicy::NoCompression => !is_compressed(modifier),
-            ModifierPolicy::LinearOnly => modifier == DRM_FORMAT_MOD_LINEAR,
-        }
-    }
-}
-
-fn is_compressed(modifier: u64) -> bool {
-    modifier >> DRM_FORMAT_MOD_VENDOR_SHIFT == DRM_FORMAT_MOD_VENDOR_AMD
-        && modifier & AMD_FMT_MOD_DCC_BIT != 0
 }
 
 #[derive(Debug)]
@@ -311,32 +275,6 @@ impl DmabufPool {
             import_sync_file(&slot.dmabuf, &fence)?;
         }
         self.build_texture(display, slot)
-    }
-
-    fn import_temporary_sync_file(
-        &self,
-        semaphore: vk::Semaphore,
-        sync_file: OwnedFd,
-    ) -> Result<(), DmabufError> {
-        let raw = sync_file.into_raw_fd();
-        let info = vk::ImportSemaphoreFdInfoKHR::default()
-            .semaphore(semaphore)
-            .flags(vk::SemaphoreImportFlags::TEMPORARY)
-            .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD)
-            .fd(raw);
-        unsafe { self.semaphore_fd.import_semaphore_fd(&info) }.map_err(|result| {
-            drop(unsafe { OwnedFd::from_raw_fd(raw) });
-            DmabufError::Vulkan(format!("import GTK read fence: {result}"))
-        })
-    }
-
-    fn export_frame_fence(&self, semaphore: vk::Semaphore) -> Result<Option<OwnedFd>, DmabufError> {
-        let info = vk::SemaphoreGetFdInfoKHR::default()
-            .semaphore(semaphore)
-            .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD);
-        let raw = unsafe { self.semaphore_fd.get_semaphore_fd(&info) }
-            .map_err(vulkan_error("export frame fence"))?;
-        Ok((raw >= 0).then(|| unsafe { OwnedFd::from_raw_fd(raw) }))
     }
 
     fn build_texture(
@@ -629,190 +567,4 @@ fn hal_queue(
 ) -> Result<impl std::ops::Deref<Target = hal::vulkan::Queue>, DmabufError> {
     unsafe { gpu.queue.as_hal::<Vulkan>() }
         .ok_or_else(|| DmabufError::Unsupported("GPU queue is not Vulkan".into()))
-}
-
-fn shared_modifiers(
-    vulkan_modifiers: &[u64],
-    gtk_accepts: impl Fn(u64) -> bool,
-    policy: ModifierPolicy,
-) -> Vec<u64> {
-    let mut shared: Vec<u64> = vulkan_modifiers
-        .iter()
-        .copied()
-        .filter(|&modifier| policy.allows(modifier))
-        .filter(|&modifier| gtk_accepts(modifier))
-        .collect();
-    shared.sort_by_key(|&modifier| modifier == DRM_FORMAT_MOD_LINEAR);
-    shared.dedup();
-    shared
-}
-
-fn format_modifiers(modifiers: &[u64]) -> String {
-    let listed: Vec<String> = modifiers.iter().map(|m| format!("0x{m:016x}")).collect();
-    format!("[{}]", listed.join(", "))
-}
-
-fn supports_sync_fd_semaphores(
-    instance: &ash::Instance,
-    physical_device: vk::PhysicalDevice,
-) -> bool {
-    let info = vk::PhysicalDeviceExternalSemaphoreInfo::default()
-        .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD);
-    let mut properties = vk::ExternalSemaphoreProperties::default();
-    unsafe {
-        instance.get_physical_device_external_semaphore_properties(
-            physical_device,
-            &info,
-            &mut properties,
-        )
-    };
-    properties.external_semaphore_features.contains(
-        vk::ExternalSemaphoreFeatureFlags::EXPORTABLE
-            | vk::ExternalSemaphoreFeatureFlags::IMPORTABLE,
-    )
-}
-
-fn vulkan_exportable_storage_modifiers(
-    instance: &ash::Instance,
-    physical_device: vk::PhysicalDevice,
-    width: u32,
-    height: u32,
-) -> Vec<u64> {
-    let count = {
-        let mut list = vk::DrmFormatModifierPropertiesListEXT::default();
-        let mut properties = vk::FormatProperties2::default().push_next(&mut list);
-        unsafe {
-            instance.get_physical_device_format_properties2(
-                physical_device,
-                PRESENT_VK_FORMAT,
-                &mut properties,
-            )
-        };
-        list.drm_format_modifier_count as usize
-    };
-    let mut entries = vec![vk::DrmFormatModifierPropertiesEXT::default(); count];
-    {
-        let mut list = vk::DrmFormatModifierPropertiesListEXT::default()
-            .drm_format_modifier_properties(&mut entries);
-        let mut properties = vk::FormatProperties2::default().push_next(&mut list);
-        unsafe {
-            instance.get_physical_device_format_properties2(
-                physical_device,
-                PRESENT_VK_FORMAT,
-                &mut properties,
-            )
-        };
-    }
-    single_plane_storage_modifiers(&entries, |modifier| {
-        is_exportable_at_size(instance, physical_device, modifier, width, height)
-    })
-}
-
-fn single_plane_storage_modifiers(
-    entries: &[vk::DrmFormatModifierPropertiesEXT],
-    exportable: impl Fn(u64) -> bool,
-) -> Vec<u64> {
-    entries
-        .iter()
-        .filter(|entry| entry.drm_format_modifier_plane_count == 1)
-        .filter(|entry| {
-            entry
-                .drm_format_modifier_tiling_features
-                .contains(vk::FormatFeatureFlags::STORAGE_IMAGE)
-        })
-        .map(|entry| entry.drm_format_modifier)
-        .filter(|&modifier| exportable(modifier))
-        .collect()
-}
-
-fn is_exportable_at_size(
-    instance: &ash::Instance,
-    physical_device: vk::PhysicalDevice,
-    modifier: u64,
-    width: u32,
-    height: u32,
-) -> bool {
-    let mut modifier_info = vk::PhysicalDeviceImageDrmFormatModifierInfoEXT::default()
-        .drm_format_modifier(modifier)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-    let mut external_info = vk::PhysicalDeviceExternalImageFormatInfo::default()
-        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
-    let info = vk::PhysicalDeviceImageFormatInfo2::default()
-        .format(PRESENT_VK_FORMAT)
-        .ty(vk::ImageType::TYPE_2D)
-        .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-        .usage(IMAGE_USAGE)
-        .push_next(&mut modifier_info)
-        .push_next(&mut external_info);
-    let mut external_properties = vk::ExternalImageFormatProperties::default();
-    let (supported, max_extent) = {
-        let mut properties =
-            vk::ImageFormatProperties2::default().push_next(&mut external_properties);
-        let result = unsafe {
-            instance.get_physical_device_image_format_properties2(
-                physical_device,
-                &info,
-                &mut properties,
-            )
-        };
-        (
-            result.is_ok(),
-            properties.image_format_properties.max_extent,
-        )
-    };
-    supported
-        && max_extent.width >= width
-        && max_extent.height >= height
-        && external_properties
-            .external_memory_properties
-            .external_memory_features
-            .contains(vk::ExternalMemoryFeatureFlags::EXPORTABLE)
-}
-
-fn export_sync_file(dmabuf: &OwnedFd) -> Result<OwnedFd, DmabufError> {
-    let mut request = DmaBufSyncFile {
-        flags: DMA_BUF_SYNC_WRITE,
-        fd: -1,
-    };
-    dma_buf_ioctl(
-        dmabuf.as_raw_fd(),
-        DMA_BUF_IOCTL_EXPORT_SYNC_FILE,
-        &mut request,
-    )?;
-    if request.fd < 0 {
-        return Err(DmabufError::Io(std::io::Error::other(
-            "EXPORT_SYNC_FILE returned no fence",
-        )));
-    }
-    Ok(unsafe { OwnedFd::from_raw_fd(request.fd) })
-}
-
-fn import_sync_file(dmabuf: &OwnedFd, fence: &OwnedFd) -> Result<(), DmabufError> {
-    let mut request = DmaBufSyncFile {
-        flags: DMA_BUF_SYNC_WRITE,
-        fd: fence.as_raw_fd(),
-    };
-    dma_buf_ioctl(
-        dmabuf.as_raw_fd(),
-        DMA_BUF_IOCTL_IMPORT_SYNC_FILE,
-        &mut request,
-    )
-}
-
-fn dma_buf_ioctl(
-    fd: RawFd,
-    request: u64,
-    argument: &mut DmaBufSyncFile,
-) -> Result<(), DmabufError> {
-    loop {
-        let result =
-            unsafe { libc::ioctl(fd, request as libc::Ioctl, argument as *mut DmaBufSyncFile) };
-        if result == 0 {
-            return Ok(());
-        }
-        let error = std::io::Error::last_os_error();
-        if error.kind() != std::io::ErrorKind::Interrupted {
-            return Err(DmabufError::Io(error));
-        }
-    }
 }

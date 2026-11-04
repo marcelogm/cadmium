@@ -1,3 +1,5 @@
+use super::modifiers::{DRM_FORMAT_MOD_LINEAR, shared_modifiers, single_plane_storage_modifiers};
+use super::sync::{DMA_BUF_IOCTL_EXPORT_SYNC_FILE, DMA_BUF_IOCTL_IMPORT_SYNC_FILE};
 use super::*;
 
 const AMD_DCC_MODIFIER: u64 = 0x0200_0000_0008_2305;
