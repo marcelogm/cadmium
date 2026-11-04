@@ -52,41 +52,47 @@ impl CursorOutline {
         let [along, across] = self.semi_axes;
         append_ring(
             snapshot,
-            centre,
-            [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
-            self.rotation_deg,
-            OUTLINE_DARK,
-            OUTLINE_WIDTH,
+            &RingStroke {
+                centre,
+                semi_axes: [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
+                rotation_deg: self.rotation_deg,
+                colour: OUTLINE_DARK,
+                width: OUTLINE_WIDTH,
+            },
         );
         append_ring(
             snapshot,
-            centre,
-            self.semi_axes,
-            self.rotation_deg,
-            OUTLINE_LIGHT,
-            OUTLINE_WIDTH,
+            &RingStroke {
+                centre,
+                semi_axes: self.semi_axes,
+                rotation_deg: self.rotation_deg,
+                colour: OUTLINE_LIGHT,
+                width: OUTLINE_WIDTH,
+            },
         );
     }
 }
 
-#[expect(clippy::too_many_arguments)]
-pub(crate) fn append_ring(
-    snapshot: &gtk::Snapshot,
-    (x, y): (f32, f32),
-    [along, across]: [f32; 2],
-    rotation_deg: f32,
-    colour: gdk::RGBA,
-    width: f32,
-) {
+pub(crate) struct RingStroke {
+    pub(crate) centre: (f32, f32),
+    pub(crate) semi_axes: [f32; 2],
+    pub(crate) rotation_deg: f32,
+    pub(crate) colour: gdk::RGBA,
+    pub(crate) width: f32,
+}
+
+pub(crate) fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
+    let (x, y) = ring.centre;
+    let [along, across] = ring.semi_axes;
     snapshot.save();
     snapshot.translate(&graphene::Point::new(x, y));
-    snapshot.rotate(rotation_deg);
+    snapshot.rotate(ring.rotation_deg);
     let bounds = graphene::Rect::new(-along, -across, 2.0 * along, 2.0 * across);
     let corner = graphene::Size::new(along, across);
-    let ring = gsk::PathBuilder::new();
-    ring.add_rounded_rect(&gsk::RoundedRect::new(
+    let path = gsk::PathBuilder::new();
+    path.add_rounded_rect(&gsk::RoundedRect::new(
         bounds, corner, corner, corner, corner,
     ));
-    snapshot.append_stroke(&ring.to_path(), &gsk::Stroke::new(width), &colour);
+    snapshot.append_stroke(&path.to_path(), &gsk::Stroke::new(ring.width), &ring.colour);
     snapshot.restore();
 }
