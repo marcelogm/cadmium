@@ -5,6 +5,7 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
+use crate::side_panel::panel_root;
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::Swatch;
 use crate::window::CadmiumWindow;
@@ -38,7 +39,7 @@ pub struct BrushPanel {
 
 impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
-        let root = build::panel_root();
+        let root = panel_root();
         let pigments = build::pigments_group();
         let tool_group = build::tool_group();
         let clean_button = build::clean_button();

@@ -7,8 +7,6 @@ use super::snapshot::SlotInfo;
 use crate::sliders::param_row;
 use crate::swatch::{Swatch, SwatchShape};
 
-const PANEL_MARGIN: i32 = 12;
-const GROUP_SPACING: i32 = 18;
 const VIEW_SPACING: i32 = 12;
 const PIGMENT_SWATCH_SIZE: (i32, i32) = (28, 20);
 const PIGMENT_SWATCH_SPACING: i32 = 4;
@@ -20,17 +18,6 @@ pub(super) struct ViewControls {
     pub(super) toggles: adw::ToggleGroup,
     pub(super) pigment_row: adw::ActionRow,
     pub(super) pigment_dropdown: gtk::DropDown,
-}
-
-pub(super) fn panel_root() -> gtk::Box {
-    gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(GROUP_SPACING)
-        .margin_top(PANEL_MARGIN)
-        .margin_bottom(PANEL_MARGIN)
-        .margin_start(PANEL_MARGIN)
-        .margin_end(PANEL_MARGIN)
-        .build()
 }
 
 pub(super) fn view_controls() -> ViewControls {

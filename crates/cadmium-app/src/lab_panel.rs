@@ -5,6 +5,7 @@ use adw::prelude::*;
 use cadmium_engine::params::ParamSpec;
 use cadmium_engine::render::ViewMode;
 
+use crate::side_panel::panel_root;
 use crate::sliders::format_param;
 use crate::state::SharedState;
 
@@ -39,7 +40,7 @@ pub struct LabPanel {
 
 impl LabPanel {
     pub fn new(state: SharedState) -> Rc<LabPanel> {
-        let root = build::panel_root();
+        let root = panel_root();
         let view = build::view_controls();
         root.append(&view.group);
         let params = build::param_groups(&root);
