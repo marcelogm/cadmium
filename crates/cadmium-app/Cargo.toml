@@ -32,5 +32,8 @@ drm-fourcc = { workspace = true }
 [build-dependencies]
 glib-build-tools = { workspace = true }
 
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = { workspace = true }
+
 [lints]
 workspace = true

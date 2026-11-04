@@ -63,6 +63,9 @@ impl CadmiumApplication {
 
 fn start_up(app: &adw::Application) {
     register_icons();
+    if let Some(app_id) = app.application_id() {
+        gtk::Window::set_default_icon_name(&app_id);
+    }
     setup_actions(app);
     for (action, accels) in ACCELERATORS {
         app.set_accels_for_action(action, accels);

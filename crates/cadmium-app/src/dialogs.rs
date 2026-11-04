@@ -4,7 +4,7 @@ use gtk::glib;
 use crate::application::ACCELERATORS;
 use crate::tools::UiTool;
 
-const APPLICATION_ICON: &str = "applications-graphics-symbolic";
+const APPLICATION_ICON: &str = "io.github.marcelogm.Cadmium";
 const PIGMENT_DATA_CREDIT: &str = "Espectros provisórios, ajustados à mão a partir da aparência conhecida de cada pigmento; não são medições";
 
 pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
