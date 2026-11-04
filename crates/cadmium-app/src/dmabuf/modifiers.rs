@@ -1,6 +1,8 @@
 use ash::vk;
+use gtk::gdk;
+use gtk::prelude::*;
 
-use super::{IMAGE_USAGE, ModifierPolicy, PRESENT_VK_FORMAT};
+use super::{DmabufError, IMAGE_USAGE, ModifierPolicy, PRESENT_FOURCC, PRESENT_VK_FORMAT};
 
 pub(super) const DRM_FORMAT_MOD_LINEAR: u64 = 0;
 const DRM_FORMAT_MOD_VENDOR_SHIFT: u64 = 56;
@@ -38,9 +40,29 @@ pub(super) fn shared_modifiers(
     shared
 }
 
-pub(super) fn format_modifiers(modifiers: &[u64]) -> String {
+fn format_modifiers(modifiers: &[u64]) -> String {
     let listed: Vec<String> = modifiers.iter().map(|m| format!("0x{m:016x}")).collect();
     format!("[{}]", listed.join(", "))
+}
+
+pub(super) fn candidate_modifiers(
+    vulkan_modifiers: &[u64],
+    display: &gdk::Display,
+    policy: ModifierPolicy,
+) -> Result<Vec<u64>, DmabufError> {
+    let gtk_formats = display.dmabuf_formats();
+    let candidates = shared_modifiers(
+        vulkan_modifiers,
+        |modifier| gtk_formats.contains(PRESENT_FOURCC, modifier),
+        policy,
+    );
+    if candidates.is_empty() {
+        return Err(DmabufError::Unsupported(format!(
+            "no AB24 modifier shared by Vulkan {} and GTK under {policy:?}",
+            format_modifiers(vulkan_modifiers)
+        )));
+    }
+    Ok(candidates)
 }
 
 pub(super) fn vulkan_exportable_storage_modifiers(
