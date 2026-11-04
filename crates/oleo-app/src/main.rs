@@ -1,10 +1,15 @@
 mod application;
+mod canvas_widget;
 mod dialogs;
+mod input;
 mod new_painting_dialog;
+mod presenter;
 mod presets;
 mod smoke;
+mod state;
 mod swatch;
 mod tools;
+mod view;
 mod window;
 
 const APP_ID: &str = "io.github.marcelo.Oleo";

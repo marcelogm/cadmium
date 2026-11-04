@@ -91,7 +91,6 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     dialog
 }
 
-#[expect(dead_code)]
 pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + 'static) {
     let alert = adw::AlertDialog::builder()
         .heading("Descartar a pintura atual?")

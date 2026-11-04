@@ -1,14 +1,16 @@
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gdk, gio, glib};
 
-use oleo_engine::pigments::PigmentDb;
+use oleo_engine::canvas::CanvasSpec;
 
 use crate::LOG_DOMAIN;
+use crate::canvas_widget::OleoCanvas;
+use crate::dialogs::confirm_discard;
 use crate::new_painting_dialog::NewPaintingDialog;
-use crate::presets::starting_canvas_spec;
+use crate::state::SharedState;
 use crate::tools::{Tool, UiTool};
 
 mod imp {
@@ -42,6 +44,7 @@ mod imp {
         #[template_child]
         pub lab_panel_slot: TemplateChild<gtk::Box>,
         pub tool: Cell<UiTool>,
+        pub canvas: OnceCell<OleoCanvas>,
     }
 
     #[glib::object_subclass]
@@ -67,6 +70,8 @@ mod imp {
             window.setup_tool_shortcuts();
             window.follow_tool_group();
             window.keep_window_buttons_reachable();
+            self.tool_group
+                .set_active_name(Some(UiTool::default().name()));
         }
     }
 
@@ -83,19 +88,11 @@ glib::wrapper! {
             gtk::ConstraintTarget, gtk::Native, gtk::Root, gtk::ShortcutManager;
 }
 
-const PENDING_ACTIONS: [&str; 11] = [
-    "undo",
-    "redo",
-    "dry",
-    "open",
-    "save",
-    "save-as",
-    "export",
-    "clean-brush",
-    "zoom-in",
-    "zoom-out",
-    "zoom-fit",
-];
+const PENDING_ACTIONS: [&str; 4] = ["open", "save", "save-as", "export"];
+
+const ENGINE_PENDING_ACTIONS: [&str; 3] = ["undo", "redo", "dry"];
+
+const ZOOM_PERCENT: f32 = 100.0;
 
 pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::h, UiTool::Move),
@@ -107,9 +104,55 @@ pub const TOOL_KEYS: [(gdk::Key, UiTool); 7] = [
     (gdk::Key::r, UiTool::Paint(Tool::Rag)),
 ];
 
+const KEYPAD_TOOL_KEYS: [(gdk::Key, UiTool); 5] = [
+    (gdk::Key::KP_1, UiTool::Paint(Tool::Brush)),
+    (gdk::Key::KP_2, UiTool::Paint(Tool::Knife)),
+    (gdk::Key::KP_3, UiTool::Paint(Tool::Blender)),
+    (gdk::Key::KP_4, UiTool::Paint(Tool::Rag)),
+    (gdk::Key::KP_5, UiTool::Paint(Tool::Eyedropper)),
+];
+
 impl OleoWindow {
-    pub fn new(app: &adw::Application) -> Self {
-        glib::Object::builder().property("application", app).build()
+    pub fn new(app: &adw::Application, state: SharedState) -> Self {
+        let window: OleoWindow = glib::Object::builder().property("application", app).build();
+        window.attach_state(state);
+        window
+    }
+
+    pub fn tool(&self) -> UiTool {
+        self.imp().tool.get()
+    }
+
+    pub fn canvas(&self) -> OleoCanvas {
+        self.imp()
+            .canvas
+            .get()
+            .expect("window is created with its canvas")
+            .clone()
+    }
+
+    fn attach_state(&self, state: SharedState) {
+        state.borrow_mut().set_ui_tool(self.tool());
+        let canvas = OleoCanvas::new(state);
+        canvas.connect_view_changed(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |canvas| window.show_zoom(canvas.zoom())
+        ));
+        self.imp().canvas_slot.append(&canvas);
+        if self.imp().canvas.set(canvas).is_err() {
+            unreachable!("the canvas is attached once");
+        }
+    }
+
+    fn show_zoom(&self, zoom: f32) {
+        self.imp()
+            .zoom_label
+            .set_label(&format!("{:.0}%", zoom * ZOOM_PERCENT));
+    }
+
+    fn state(&self) -> SharedState {
+        self.canvas().state()
     }
 
     fn setup_actions(&self) {
@@ -131,6 +174,30 @@ impl OleoWindow {
         let new = gio::ActionEntry::builder("new")
             .activate(|window: &Self, _, _| window.open_new_painting_dialog())
             .build();
+        let clean_brush = gio::ActionEntry::builder("clean-brush")
+            .activate(|window: &Self, _, _| {
+                let state = window.state();
+                let mut state = state.borrow_mut();
+                let gpu = state.gpu.clone();
+                state.session.clean_brush(&gpu);
+            })
+            .build();
+        let zoom_in = gio::ActionEntry::builder("zoom-in")
+            .activate(|window: &Self, _, _| window.canvas().zoom_in())
+            .build();
+        let zoom_out = gio::ActionEntry::builder("zoom-out")
+            .activate(|window: &Self, _, _| window.canvas().zoom_out())
+            .build();
+        let zoom_fit = gio::ActionEntry::builder("zoom-fit")
+            .activate(|window: &Self, _, _| window.canvas().zoom_fit())
+            .build();
+        let engine_pending = ENGINE_PENDING_ACTIONS.into_iter().map(|name| {
+            gio::ActionEntry::builder(name)
+                .activate(move |_: &Self, _, _| {
+                    glib::g_message!(LOG_DOMAIN, "win.{name}: não implementado ainda");
+                })
+                .build()
+        });
         let pending = PENDING_ACTIONS.into_iter().map(|name| {
             gio::ActionEntry::builder(name)
                 .activate(move |_: &Self, _, _| {
@@ -138,19 +205,63 @@ impl OleoWindow {
                 })
                 .build()
         });
-        self.add_action_entries([tool, toggle_sidebar, new].into_iter().chain(pending));
+        self.add_action_entries(
+            [
+                tool,
+                toggle_sidebar,
+                new,
+                clean_brush,
+                zoom_in,
+                zoom_out,
+                zoom_fit,
+            ]
+            .into_iter()
+            .chain(engine_pending)
+            .chain(pending),
+        );
     }
 
     fn open_new_painting_dialog(&self) {
         if self.visible_dialog().is_some() {
             return;
         }
-        let dialog = NewPaintingDialog::new(&PigmentDb::builtin(), &starting_canvas_spec());
-        dialog.connect_create(|dialog, spec| {
-            glib::g_message!(LOG_DOMAIN, "new painting requested: {spec:?}");
-            dialog.close();
-        });
+        let dialog = {
+            let state = self.state();
+            let state = state.borrow();
+            NewPaintingDialog::new(&state.session.db, &state.session.canvas.spec)
+        };
+        dialog.connect_create(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |dialog, spec| {
+                if !window.state().borrow().dirty_since_save {
+                    dialog.close();
+                    window.start_painting(spec);
+                    return;
+                }
+                confirm_discard(
+                    dialog,
+                    glib::clone!(
+                        #[weak]
+                        window,
+                        #[weak]
+                        dialog,
+                        move || {
+                            dialog.close();
+                            window.start_painting(spec.clone());
+                        }
+                    ),
+                );
+            }
+        ));
         dialog.present(Some(self));
+    }
+
+    fn start_painting(&self, spec: CanvasSpec) {
+        self.state().borrow_mut().start_painting(spec);
+        let canvas = self.canvas();
+        canvas.zoom_fit();
+        canvas.queue_present();
     }
 
     fn select_tool(&self, action: &gio::SimpleAction, name: &str) {
@@ -160,6 +271,9 @@ impl OleoWindow {
         };
         action.set_state(&name.to_variant());
         self.imp().tool.set(tool);
+        if let Some(canvas) = self.imp().canvas.get() {
+            canvas.state().borrow_mut().set_ui_tool(tool);
+        }
         let tool_group = &self.imp().tool_group;
         if tool_group.active_name().as_deref() != Some(name) {
             tool_group.set_active_name(Some(name));
@@ -187,7 +301,7 @@ impl OleoWindow {
         let controller = gtk::ShortcutController::new();
         controller.set_scope(gtk::ShortcutScope::Global);
         controller.set_propagation_phase(gtk::PropagationPhase::Bubble);
-        for (key, tool) in TOOL_KEYS {
+        for (key, tool) in TOOL_KEYS.into_iter().chain(KEYPAD_TOOL_KEYS) {
             let shortcut = gtk::Shortcut::builder()
                 .trigger(&gtk::KeyvalTrigger::new(key, gdk::ModifierType::empty()))
                 .action(&gtk::NamedAction::new("win.tool"))
