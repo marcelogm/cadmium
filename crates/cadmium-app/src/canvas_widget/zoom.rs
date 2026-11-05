@@ -96,7 +96,7 @@ impl CadmiumCanvas {
     pub(super) fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        Some(CursorOutline::of_brush(&state, to_widget))
+        CursorOutline::of_tool(&state, to_widget)
     }
 
     pub(super) fn note_device_scale(&self) {

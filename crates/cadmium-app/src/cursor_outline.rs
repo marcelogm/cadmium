@@ -1,5 +1,5 @@
 use cadmium_engine::engine::BrushOutline;
-use cadmium_engine::stroke::StrokeSample;
+use cadmium_engine::stroke::{StrokeSample, Tool};
 use gtk::prelude::*;
 use gtk::{gdk, graphene, gsk};
 
@@ -25,11 +25,30 @@ pub(crate) struct CursorOutline {
 }
 
 impl CursorOutline {
-    pub(crate) fn of_brush(state: &AppState, to_widget: f32) -> CursorOutline {
-        let mut brush = state.session.brush.clone();
-        if let UiTool::Paint(tool) = state.ui_tool {
-            brush.tool = tool;
+    /// The outline of what the tool in hand would touch. The tube shows its
+    /// nozzle and moving the view shows nothing, whatever brush was last held.
+    pub(crate) fn of_tool(state: &AppState, to_widget: f32) -> Option<CursorOutline> {
+        match state.ui_tool {
+            UiTool::Move => None,
+            UiTool::Tube => Some(CursorOutline::circle(
+                state.session.brush.geometry.max_diameter_px / 2.0 * to_widget,
+            )),
+            UiTool::Paint(tool) => Some(CursorOutline::of_paint_tool(state, tool, to_widget)),
         }
+    }
+
+    fn circle(radius: f32) -> CursorOutline {
+        CursorOutline {
+            shape: OutlineShape::Ellipse {
+                semi_axes: [radius; 2],
+                rotation_deg: 0.0,
+            },
+        }
+    }
+
+    fn of_paint_tool(state: &AppState, tool: Tool, to_widget: f32) -> CursorOutline {
+        let mut brush = state.session.brush.clone();
+        brush.tool = tool;
         let pen = StrokeSample {
             x: 0.0,
             y: 0.0,
@@ -53,10 +72,7 @@ impl CursorOutline {
                     .map(|[x, y]| (x * to_widget, y * to_widget))
                     .collect(),
             ),
-            None => OutlineShape::Ellipse {
-                semi_axes: [canvas_radius * to_widget; 2],
-                rotation_deg: 0.0,
-            },
+            None => return CursorOutline::circle(canvas_radius * to_widget),
         };
         CursorOutline { shape }
     }
@@ -156,3 +172,6 @@ pub(crate) fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
     snapshot.append_stroke(&path.to_path(), &gsk::Stroke::new(ring.width), &ring.colour);
     snapshot.restore();
 }
+
+#[cfg(test)]
+mod tests;

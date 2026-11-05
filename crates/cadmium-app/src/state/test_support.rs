@@ -13,12 +13,12 @@ use crate::tools::UiTool;
 
 const TEST_CANVAS: (u32, u32) = (512, 256);
 
-pub(super) const TEST_BRUSH_DIAMETER_PX: f32 = 16.0;
+pub(crate) const TEST_BRUSH_DIAMETER_PX: f32 = 16.0;
 pub(super) const PAINT_ROW_Y: f64 = 60.0;
 pub(super) const RAG_ROW_Y: f64 = 200.0;
 const STROKE_STEPS: u32 = 20;
 
-pub(super) fn painting_state() -> AppState {
+pub(crate) fn painting_state() -> AppState {
     let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
     let spec = CanvasSpec {
         width: TEST_CANVAS.0,
