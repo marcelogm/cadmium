@@ -227,22 +227,90 @@ fn widen_contact_box(bounds: vec4<i32>) {
     atomicMax(&contact_extent[CONTACT_BOX_LAST + 1u], bounds.w);
 }
 
+const ROW_SLACK_PX: f32 = 1.0;
+
+struct RowSpan {
+    first: f32,
+    last: f32,
+};
+
+fn hull_corner(sweep: Sweep, corner: u32) -> vec2<f32> {
+    switch corner {
+        case 0u: { return sweep.before.start; }
+        case 1u: { return sweep.before.end; }
+        case 2u: { return sweep.now.start; }
+        default: { return sweep.now.end; }
+    }
+}
+
+fn widen_to(span: RowSpan, x: f32) -> RowSpan {
+    return RowSpan(min(span.first, x), max(span.last, x));
+}
+
+fn crossing(span: RowSpan, start: vec2<f32>, end: vec2<f32>, line_y: f32) -> RowSpan {
+    let low = min(start.y, end.y);
+    let high = max(start.y, end.y);
+    if (line_y < low || line_y > high || high <= low) {
+        return span;
+    }
+    return widen_to(span, mix(start.x, end.x, (line_y - start.y) / (end.y - start.y)));
+}
+
+fn hull_row_span(sweep: Sweep, centre_y: f32, reach_px: f32) -> RowSpan {
+    let slab = vec2<f32>(centre_y - reach_px, centre_y + reach_px);
+    var span = RowSpan(3.0e38, -3.0e38);
+    for (var corner = 0u; corner < 4u; corner++) {
+        let point = hull_corner(sweep, corner);
+        if (point.y >= slab.x && point.y <= slab.y) {
+            span = widen_to(span, point.x);
+        }
+        for (var other = corner + 1u; other < 4u; other++) {
+            let end = hull_corner(sweep, other);
+            span = crossing(span, point, end, slab.x);
+            span = crossing(span, point, end, slab.y);
+        }
+    }
+    return RowSpan(span.first - reach_px - ROW_SLACK_PX, span.last + reach_px + ROW_SLACK_PX);
+}
+
+fn rasterize_row(sweep: Sweep, bristle: u32, bounds: vec4<i32>, row: i32) {
+    let reach_px = sweep.radius_px + COVERAGE_FEATHER_PX;
+    let span = hull_row_span(sweep, f32(row) + 0.5, reach_px);
+    if (span.first > span.last) {
+        return;
+    }
+    let first = max(bounds.x, i32(floor(span.first)));
+    let last = min(bounds.z, i32(ceil(span.last)));
+    for (var x = first; x <= last; x++) {
+        mark_pixel(vec2<i32>(x, row), sweep, bristle);
+    }
+}
+
 fn rasterize_sweep(sweep: Sweep, bristle: u32, thread: u32) {
     if (thread == 0u) {
         widen_contact_extent(sweep);
     }
     let bounds = swept_bounds(sweep);
-    let width = bounds.z - bounds.x + 1;
-    let height = bounds.w - bounds.y + 1;
-    if (width <= 0 || height <= 0) {
+    if (bounds.z < bounds.x || bounds.w < bounds.y) {
         return;
     }
     if (thread == 0u) {
         widen_contact_box(bounds);
     }
-    let pixels = u32(width) * u32(height);
+    if (bounds.w - bounds.y + 1 < i32(CONTACT_WORKGROUP_SIZE)) {
+        rasterize_box(sweep, bristle, bounds, thread);
+        return;
+    }
+    for (var row = bounds.y + i32(thread); row <= bounds.w; row += i32(CONTACT_WORKGROUP_SIZE)) {
+        rasterize_row(sweep, bristle, bounds, row);
+    }
+}
+
+fn rasterize_box(sweep: Sweep, bristle: u32, bounds: vec4<i32>, thread: u32) {
+    let width = u32(bounds.z - bounds.x + 1);
+    let pixels = width * u32(bounds.w - bounds.y + 1);
     for (var index = thread; index < pixels; index += CONTACT_WORKGROUP_SIZE) {
-        let offset = vec2<i32>(vec2<u32>(index % u32(width), index / u32(width)));
+        let offset = vec2<i32>(vec2<u32>(index % width, index / width));
         mark_pixel(bounds.xy + offset, sweep, bristle);
     }
 }

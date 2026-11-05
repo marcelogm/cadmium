@@ -32,6 +32,7 @@ fn floors_under(chain: Chain) -> Floors {
 }
 
 const BASE_BISECTIONS: u32 = 16u;
+const BISECTIONS_PER_ROUND: u32 = 2u;
 const NO_FLOOR_PX: f32 = 3.0e38;
 const FLAT_HAIR_LOAD: f32 = 1.0;
 
@@ -42,19 +43,35 @@ struct SupportFloors {
 
 var<workgroup> partials: array<f32, BRISTLE_WORKGROUP_SIZE>;
 var<workgroup> upper_partials: array<f32, BRISTLE_WORKGROUP_SIZE>;
+var<workgroup> level_partials: array<vec4<f32>, BRISTLE_WORKGROUP_SIZE>;
 
-fn workgroup_sum(thread: u32, value: f32) -> f32 {
-    partials[thread] = value;
+struct LevelRound {
+    middle_px: f32,
+    lower_px: f32,
+    upper_px: f32,
+};
+
+fn workgroup_sums(thread: u32, values: vec3<f32>) -> vec3<f32> {
+    level_partials[thread] = vec4<f32>(values, 0.0);
     workgroupBarrier();
     for (var stride = BRISTLE_WORKGROUP_SIZE / 2u; stride > 0u; stride /= 2u) {
         if thread < stride {
-            partials[thread] += partials[thread + stride];
+            level_partials[thread] += level_partials[thread + stride];
         }
         workgroupBarrier();
     }
-    let sum = workgroupUniformLoad(&partials[0]);
+    let sums = workgroupUniformLoad(&level_partials[0]);
     workgroupBarrier();
-    return sum;
+    return sums.xyz;
+}
+
+fn round_levels(bounds: vec2<f32>) -> LevelRound {
+    let middle_px = 0.5 * (bounds.x + bounds.y);
+    return LevelRound(middle_px, 0.5 * (bounds.x + middle_px), 0.5 * (middle_px + bounds.y));
+}
+
+fn bisected(bounds: vec2<f32>, level_px: f32, too_deep: bool) -> vec2<f32> {
+    return select(vec2<f32>(bounds.x, level_px), vec2<f32>(level_px, bounds.y), too_deep);
 }
 
 fn workgroup_range(thread: u32, range: vec2<f32>) -> vec2<f32> {
@@ -115,11 +132,18 @@ fn resting_base_px(thread: u32, wetness: Wetness) -> f32 {
     }
     let press_px = handle_press_px();
     let flat_penetration_px = f32(dab.bristle_total) * press_px;
-    for (var bisection = 0u; bisection < BASE_BISECTIONS; bisection++) {
-        let level_px = 0.5 * (bounds.x + bounds.y);
-        let pressed_px = workgroup_sum(thread, penetration_px(floors, level_px, press_px));
-        let too_deep = pressed_px > flat_penetration_px;
-        bounds = select(vec2<f32>(bounds.x, level_px), vec2<f32>(level_px, bounds.y), too_deep);
+    for (var round = 0u; round < BASE_BISECTIONS / BISECTIONS_PER_ROUND; round++) {
+        let levels = round_levels(bounds);
+        let pressed_px = workgroup_sums(thread, vec3<f32>(
+            penetration_px(floors, levels.middle_px, press_px),
+            penetration_px(floors, levels.lower_px, press_px),
+            penetration_px(floors, levels.upper_px, press_px),
+        ));
+        let deep_middle = pressed_px.x > flat_penetration_px;
+        bounds = bisected(bounds, levels.middle_px, deep_middle);
+        let next_px = select(levels.lower_px, levels.upper_px, deep_middle);
+        let next_pressed_px = select(pressed_px.y, pressed_px.z, deep_middle);
+        bounds = bisected(bounds, next_px, next_pressed_px > flat_penetration_px);
     }
     return 0.5 * (bounds.x + bounds.y);
 }
