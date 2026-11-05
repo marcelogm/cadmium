@@ -170,6 +170,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The notes list the commits since the previous tag.
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/download-artifact@v8
         with:

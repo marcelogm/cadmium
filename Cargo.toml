@@ -5,7 +5,7 @@ members = ["crates/cadmium-engine", "crates/cadmium-app"]
 [workspace.package]
 edition = "2024"
 rust-version = "1.92"
-version = "0.1.0"
+version = "0.0.1"
 repository = "https://github.com/marcelogm/cadmium"
 license = "MIT"
 publish = false
