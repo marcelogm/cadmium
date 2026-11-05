@@ -36,7 +36,7 @@ fn specs_cover_every_lab_parameter_once() {
     let reserve = specs.iter().find(|s| s.key == "reserve_factor").unwrap();
     assert_eq!(
         (reserve.label, reserve.group),
-        ("Reserva", ParamGroup::Transfer)
+        ("Reserve", ParamGroup::Transfer)
     );
     assert_eq!(
         (reserve.min, reserve.max, reserve.default),

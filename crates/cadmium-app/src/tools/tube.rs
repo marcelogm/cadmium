@@ -6,9 +6,9 @@ use super::{Press, UiToolProfile};
 
 pub(super) const TUBE: UiToolProfile = UiToolProfile {
     name: "tube",
-    label: "Tubo",
+    label: "Tube",
     icon: "cadmium-tube-symbolic",
-    tooltip: "Tubo (6): espreme pigmento puro na bandeja ou na tela; a pressão aperta o tubo",
+    tooltip: "Tube (6): squeezes pure pigment onto the tray or the canvas; pressure squeezes the tube",
     keys: &[gdk::Key::_6],
     keypad_keys: &[gdk::Key::KP_6],
     on_tray: Press::Squeeze,
@@ -23,8 +23,8 @@ pub(super) const TUBE: UiToolProfile = UiToolProfile {
 };
 
 const TUBE_WORDING: ToolWording = ToolWording {
-    pigments: "Clique escolhe o tubo",
-    size_title: "Bico",
+    pigments: "Click to pick the tube",
+    size_title: "Nozzle",
     size_subtitle: None,
     ..BRUSH_WORDING
 };

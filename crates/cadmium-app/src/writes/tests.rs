@@ -1,7 +1,7 @@
 use super::*;
 
-const PAINTING: &str = "/tmp/estudo.cadmium";
-const IMAGE: &str = "/tmp/estudo.png";
+const PAINTING: &str = "/tmp/study.cadmium";
+const IMAGE: &str = "/tmp/study.png";
 
 #[test]
 fn a_fresh_painting_has_nothing_unsaved() {

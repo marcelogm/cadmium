@@ -1,7 +1,7 @@
 use crate::spectral::{BANDS, BandValues, composite_over, km_layer, reflectance_srgb8};
 
 pub const MAX_SLOTS: usize = 8;
-pub const PROVISIONAL_PROVENANCE: &str = "Provisório: espectro ajustado à mão, não medido";
+pub const PROVISIONAL_PROVENANCE: &str = "Provisional: hand-tuned spectrum, not measured";
 pub const MASSTONE_THICKNESS_UM: f32 = 1000.0;
 pub const GLAZE_THICKNESS_UM: f32 = 30.0;
 pub const GLAZE_PIGMENT_FRACTION: f32 = 0.3;
@@ -50,7 +50,7 @@ struct PigmentRecipe {
 const RECIPES: [PigmentRecipe; 12] = [
     PigmentRecipe {
         id: "titanium_white",
-        name: "Branco de titânio",
+        name: "Titanium White",
         colour_index: "PW6",
         masstone_reflectance: [0.90, 0.92, 0.93, 0.93, 0.93, 0.93, 0.93, 0.93],
         scattering_power: 0.40,
@@ -58,7 +58,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "zinc_white",
-        name: "Branco de zinco",
+        name: "Zinc White",
         colour_index: "PW4",
         masstone_reflectance: [0.85, 0.90, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91],
         scattering_power: 0.12,
@@ -66,7 +66,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "cadmium_yellow",
-        name: "Amarelo cádmio",
+        name: "Cadmium Yellow",
         colour_index: "PY35",
         masstone_reflectance: [0.05, 0.06, 0.25, 0.72, 0.84, 0.86, 0.87, 0.87],
         scattering_power: 0.15,
@@ -74,7 +74,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "yellow_ochre",
-        name: "Ocre amarelo",
+        name: "Yellow Ochre",
         colour_index: "PY43",
         masstone_reflectance: [0.06, 0.07, 0.10, 0.20, 0.35, 0.45, 0.50, 0.52],
         scattering_power: 0.12,
@@ -82,7 +82,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "cadmium_red",
-        name: "Vermelho cádmio",
+        name: "Cadmium Red",
         colour_index: "PR108",
         masstone_reflectance: [0.05, 0.04, 0.04, 0.04, 0.06, 0.35, 0.65, 0.70],
         scattering_power: 0.15,
@@ -90,7 +90,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "quinacridone_magenta",
-        name: "Quinacridona magenta",
+        name: "Quinacridone Magenta",
         colour_index: "PR122",
         masstone_reflectance: [0.30, 0.20, 0.08, 0.04, 0.04, 0.15, 0.45, 0.60],
         scattering_power: 0.03,
@@ -98,7 +98,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "ultramarine_blue",
-        name: "Azul ultramar",
+        name: "Ultramarine Blue",
         colour_index: "PB29",
         masstone_reflectance: [0.30, 0.40, 0.20, 0.07, 0.04, 0.03, 0.04, 0.08],
         scattering_power: 0.03,
@@ -106,7 +106,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "phthalo_blue",
-        name: "Azul ftalo",
+        name: "Phthalo Blue",
         colour_index: "PB15",
         masstone_reflectance: [0.12, 0.20, 0.15, 0.05, 0.02, 0.015, 0.015, 0.02],
         scattering_power: 0.02,
@@ -114,7 +114,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "phthalo_green",
-        name: "Verde ftalo",
+        name: "Phthalo Green",
         colour_index: "PG7",
         masstone_reflectance: [0.04, 0.08, 0.18, 0.12, 0.05, 0.02, 0.015, 0.015],
         scattering_power: 0.02,
@@ -122,7 +122,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "burnt_sienna",
-        name: "Siena queimada",
+        name: "Burnt Sienna",
         colour_index: "PBr7",
         masstone_reflectance: [0.04, 0.04, 0.045, 0.05, 0.08, 0.18, 0.28, 0.32],
         scattering_power: 0.04,
@@ -130,7 +130,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "burnt_umber",
-        name: "Sombra queimada",
+        name: "Burnt Umber",
         colour_index: "PBr7",
         masstone_reflectance: [0.03, 0.03, 0.035, 0.04, 0.05, 0.07, 0.09, 0.10],
         scattering_power: 0.08,
@@ -138,7 +138,7 @@ const RECIPES: [PigmentRecipe; 12] = [
     },
     PigmentRecipe {
         id: "ivory_black",
-        name: "Preto marfim",
+        name: "Ivory Black",
         colour_index: "PBk9",
         masstone_reflectance: [0.03; BANDS],
         scattering_power: 0.06,

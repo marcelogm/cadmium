@@ -13,9 +13,9 @@ use crate::state::SharedState;
 use crate::tray_view::TrayView;
 
 const ZOOM_PERCENT: f32 = 100.0;
-const COPY_PRESENTATION_TOAST: &str = "Apresentação por cópia (dmabuf indisponível)";
-const NOTHING_TO_PICK_TOAST: &str = "Nada para pegar aqui";
-const HISTORY_DISABLED_TOAST: &str = "Desfazer indisponível: memória de vídeo insuficiente";
+const COPY_PRESENTATION_TOAST: &str = "Presenting by copy (dmabuf unavailable)";
+const NOTHING_TO_PICK_TOAST: &str = "Nothing to pick up here";
+const HISTORY_DISABLED_TOAST: &str = "Undo unavailable: not enough video memory";
 
 impl CadmiumWindow {
     pub(super) fn attach_state(&self, state: SharedState) {

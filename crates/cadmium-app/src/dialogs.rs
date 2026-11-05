@@ -5,36 +5,37 @@ use crate::application::ACCELERATORS;
 use crate::tools::UiTool;
 
 const APPLICATION_ICON: &str = "io.github.marcelogm.Cadmium";
-const PIGMENT_DATA_CREDIT: &str = "Espectros provisórios, ajustados à mão a partir da aparência conhecida de cada pigmento; não são medições";
+const PIGMENT_DATA_CREDIT: &str =
+    "Provisional spectra, hand-tuned from each pigment's known appearance; not measurements";
 
 pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
     (
-        "Pintura",
+        "Painting",
         &[
-            ("Desfazer", "win.undo"),
-            ("Refazer", "win.redo"),
-            ("Secar", "win.dry"),
+            ("Undo", "win.undo"),
+            ("Redo", "win.redo"),
+            ("Dry", "win.dry"),
         ],
     ),
     (
-        "Arquivo",
+        "File",
         &[
-            ("Nova pintura", "win.new"),
-            ("Abrir", "win.open"),
-            ("Salvar", "win.save"),
-            ("Salvar como", "win.save-as"),
-            ("Exportar PNG", "win.export"),
-            ("Sair", "app.quit"),
+            ("New Painting", "win.new"),
+            ("Open", "win.open"),
+            ("Save", "win.save"),
+            ("Save As", "win.save-as"),
+            ("Export PNG", "win.export"),
+            ("Quit", "app.quit"),
         ],
     ),
     (
-        "Vista",
+        "View",
         &[
-            ("Aproximar", "win.zoom-in"),
-            ("Afastar", "win.zoom-out"),
-            ("Ajustar à janela", "win.zoom-fit"),
-            ("Mostrar ou ocultar barra lateral", "win.toggle-sidebar"),
-            ("Atalhos de teclado", "app.shortcuts"),
+            ("Zoom In", "win.zoom-in"),
+            ("Zoom Out", "win.zoom-out"),
+            ("Fit to Window", "win.zoom-fit"),
+            ("Show or Hide Sidebar", "win.toggle-sidebar"),
+            ("Keyboard Shortcuts", "app.shortcuts"),
         ],
     ),
 ];
@@ -60,11 +61,11 @@ pub fn about_dialog() -> adw::AboutDialog {
         .application_name("Cadmium")
         .application_icon(APPLICATION_ICON)
         .version(env!("CARGO_PKG_VERSION"))
-        .comments("Simulador de pintura a óleo com pigmentos espectrais")
+        .comments("Oil painting simulator with spectral pigments")
         .developer_name("Marcelo")
         .license_type(gtk::License::Unknown)
         .build();
-    about.add_credit_section(Some("Dados de pigmentos"), &[PIGMENT_DATA_CREDIT]);
+    about.add_credit_section(Some("Pigment Data"), &[PIGMENT_DATA_CREDIT]);
     about
 }
 
@@ -78,7 +79,7 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
 }
 
 fn tool_shortcuts() -> adw::ShortcutsSection {
-    let tools = adw::ShortcutsSection::new(Some("Ferramentas"));
+    let tools = adw::ShortcutsSection::new(Some("Tools"));
     for tool in UiTool::ALL {
         let item = adw::ShortcutsItem::new(tool.label(), &tool_accelerator(tool));
         if let Some(handling) = tool.handling() {
@@ -101,20 +102,17 @@ fn action_shortcuts(title: &str, entries: &[(&str, &str)]) -> adw::ShortcutsSect
 
 const DISCARD_RESPONSE: &str = "discard";
 const CANCEL_RESPONSE: &str = "cancel";
-const DISCARD_PAINTING_HEADING: &str = "Descartar a pintura atual?";
-const DISCARD_UNSAVED_HEADING: &str = "Descartar alterações não salvas?";
+const DISCARD_PAINTING_HEADING: &str = "Discard the Current Painting?";
+const DISCARD_UNSAVED_HEADING: &str = "Discard Unsaved Changes?";
 
 fn discard_alert(heading: &str) -> adw::AlertDialog {
     let alert = adw::AlertDialog::builder()
         .heading(heading)
-        .body("As alterações que não foram salvas serão perdidas.")
+        .body("Unsaved changes will be lost.")
         .default_response(CANCEL_RESPONSE)
         .close_response(CANCEL_RESPONSE)
         .build();
-    alert.add_responses(&[
-        (CANCEL_RESPONSE, "Cancelar"),
-        (DISCARD_RESPONSE, "Descartar"),
-    ]);
+    alert.add_responses(&[(CANCEL_RESPONSE, "Cancel"), (DISCARD_RESPONSE, "Discard")]);
     alert.set_response_appearance(DISCARD_RESPONSE, adw::ResponseAppearance::Destructive);
     alert
 }
@@ -148,27 +146,24 @@ pub async fn unsaved_changes_discard_confirmed(parent: &impl IsA<gtk::Widget>) -
 const REPLACE_RESPONSE: &str = "replace";
 const WAIT_RESPONSE: &str = "wait";
 const QUIT_ANYWAY_RESPONSE: &str = "quit-anyway";
-const STILL_WRITING_HEADING: &str = "Ainda gravando";
+const STILL_WRITING_HEADING: &str = "Still Saving";
 const STILL_WRITING_BODY: &str =
-    "A gravação de um arquivo está demorando. Sair agora pode deixá-lo incompleto.";
+    "A file is taking a while to save. Quitting now may leave it incomplete.";
 
 pub async fn overwrite_confirmed(parent: &impl IsA<gtk::Widget>, file_name: &str) -> bool {
     let alert = adw::AlertDialog::builder()
-        .heading(format!("Substituir {file_name}?"))
-        .body("Já existe um arquivo com esse nome. Substituí-lo apaga o que ele contém.")
+        .heading(format!("Replace {file_name}?"))
+        .body("A file with this name already exists. Replacing it will overwrite its contents.")
         .default_response(CANCEL_RESPONSE)
         .close_response(CANCEL_RESPONSE)
         .build();
-    alert.add_responses(&[
-        (CANCEL_RESPONSE, "Cancelar"),
-        (REPLACE_RESPONSE, "Substituir"),
-    ]);
+    alert.add_responses(&[(CANCEL_RESPONSE, "Cancel"), (REPLACE_RESPONSE, "Replace")]);
     alert.set_response_appearance(REPLACE_RESPONSE, adw::ResponseAppearance::Destructive);
     alert.choose_future(Some(parent)).await == REPLACE_RESPONSE
 }
 
 const CLOSE_RESPONSE: &str = "close";
-const GPU_LOST_HEADING: &str = "A GPU foi reiniciada; a pintura não pôde ser recuperada";
+const GPU_LOST_HEADING: &str = "Painting Lost After a GPU Reset";
 
 pub fn announce_gpu_lost(parent: &impl IsA<gtk::Widget>, on_close: impl Fn() + 'static) {
     let alert = adw::AlertDialog::builder()
@@ -176,7 +171,7 @@ pub fn announce_gpu_lost(parent: &impl IsA<gtk::Widget>, on_close: impl Fn() + '
         .default_response(CLOSE_RESPONSE)
         .close_response(CLOSE_RESPONSE)
         .build();
-    alert.add_responses(&[(CLOSE_RESPONSE, "Fechar")]);
+    alert.add_responses(&[(CLOSE_RESPONSE, "Close")]);
     alert.choose(
         Some(parent),
         None::<&gtk::gio::Cancellable>,
@@ -195,8 +190,8 @@ pub fn ask_to_quit_while_writing(
         .close_response(WAIT_RESPONSE)
         .build();
     alert.add_responses(&[
-        (WAIT_RESPONSE, "Esperar"),
-        (QUIT_ANYWAY_RESPONSE, "Sair mesmo assim"),
+        (WAIT_RESPONSE, "Wait"),
+        (QUIT_ANYWAY_RESPONSE, "Quit Anyway"),
     ]);
     alert.set_response_appearance(QUIT_ANYWAY_RESPONSE, adw::ResponseAppearance::Destructive);
     alert.clone().choose(

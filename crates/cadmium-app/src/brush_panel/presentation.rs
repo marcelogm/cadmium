@@ -15,8 +15,8 @@ pub(super) const MAX_SIZE_PX: f64 = 500.0;
 pub(super) const SIZE_STEP: f64 = 0.01;
 pub(super) const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_UNIT: &str = "µm";
-pub(super) const EYEDROPPER_HINT: &str = "Clique na tela para pegar a tinta que está nela. \
-O botão direito do mouse e o botão inferior da caneta pegam a cor com qualquer ferramenta.";
+pub(super) const EYEDROPPER_HINT: &str = "Click the canvas to pick up the paint on it. \
+The right mouse button and the lower pen button pick a colour with any tool.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PanelTool {
@@ -124,9 +124,9 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
 }
 
 pub(super) const SHAPES: [(BrushShape, &str); 3] = [
-    (BrushShape::Round, "Redondo"),
-    (BrushShape::Flat, "Chato"),
-    (BrushShape::Fan, "Leque"),
+    (BrushShape::Round, "Round"),
+    (BrushShape::Flat, "Flat"),
+    (BrushShape::Fan, "Fan"),
 ];
 
 pub(super) fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {

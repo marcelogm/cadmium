@@ -79,5 +79,5 @@ fn applying_a_preset_replaces_the_selection() {
 
 #[test]
 fn counter_reads_n_of_eight() {
-    assert_eq!(counter_text(6), "6 de 8");
+    assert_eq!(counter_text(6), "6 of 8");
 }

@@ -56,9 +56,9 @@ struct GroundRows {
 }
 
 fn header_bar() -> (adw::HeaderBar, gtk::Button, gtk::Button) {
-    let cancel_button = gtk::Button::with_label("Cancelar");
+    let cancel_button = gtk::Button::with_label("Cancel");
     let create_button = gtk::Button::builder()
-        .label("Criar")
+        .label("Create")
         .css_classes(["suggested-action"])
         .build();
     let header = adw::HeaderBar::builder()
@@ -75,7 +75,7 @@ fn size_section(
     initial: &CanvasSpec,
 ) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow) {
     let (format_row, width_row, height_row) = size_rows(initial);
-    let size_group = adw::PreferencesGroup::builder().title("Tamanho").build();
+    let size_group = adw::PreferencesGroup::builder().title("Size").build();
     size_group.add(&format_row);
     size_group.add(&width_row);
     size_group.add(&height_row);
@@ -86,7 +86,7 @@ fn size_section(
 fn ground_section(page: &adw::PreferencesPage, db: &PigmentDb, initial: &CanvasSpec) -> GroundRows {
     let (primer_row, primer_swatch, primer_colours) = primer_combo(db, initial);
     let weave_row = weave_combo(initial);
-    let ground_group = adw::PreferencesGroup::builder().title("Fundo").build();
+    let ground_group = adw::PreferencesGroup::builder().title("Ground").build();
     ground_group.add(&primer_row);
     ground_group.add(&weave_row);
     page.add(&ground_group);
@@ -107,7 +107,7 @@ fn primer_combo(db: &PigmentDb, initial: &CanvasSpec) -> (adw::ComboRow, Swatch,
         .iter()
         .position(|(primer, _)| *primer == initial.primer)
         .unwrap_or_default();
-    let primer_row = combo_row("Base", PRIMERS.map(|(_, label)| label), primer_index);
+    let primer_row = combo_row("Primer", PRIMERS.map(|(_, label)| label), primer_index);
     let primer_swatch = Swatch::new(
         primer_colours[primer_index],
         SwatchShape::RoundedRect,
@@ -124,7 +124,7 @@ fn weave_combo(initial: &CanvasSpec) -> adw::ComboRow {
         .position(|(weave, _)| *weave == initial.weave)
         .unwrap_or_default();
     combo_row(
-        "Textura da tela",
+        "Canvas Texture",
         WEAVES.map(|(_, label)| label),
         weave_index,
     )
@@ -140,7 +140,7 @@ fn pigments_section(
         .build();
     let presets_button = gtk::MenuButton::builder()
         .icon_name("view-more-symbolic")
-        .tooltip_text("Predefinições")
+        .tooltip_text("Presets")
         .menu_model(&presets_menu())
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
@@ -150,7 +150,7 @@ fn pigments_section(
     pigments_suffix.append(&presets_button);
     let (chips_box, chips) = pigment_chips(db);
     let pigments_group = adw::PreferencesGroup::builder()
-        .title("Pigmentos")
+        .title("Pigments")
         .header_suffix(&pigments_suffix)
         .build();
     pigments_group.add(&chips_box);
@@ -189,7 +189,7 @@ fn pigment_chips(db: &PigmentDb) -> (gtk::FlowBox, Vec<(&'static str, gtk::Toggl
 fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow) {
     let format = PaintingFormat::matching(initial.width, initial.height);
     let format_row = combo_row(
-        "Formato",
+        "Format",
         PaintingFormat::ALL.map(PaintingFormat::label),
         format.index() as usize,
     );
@@ -203,8 +203,8 @@ fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow
     };
     (
         format_row,
-        side_row("Largura", initial.width),
-        side_row("Altura", initial.height),
+        side_row("Width", initial.width),
+        side_row("Height", initial.height),
     )
 }
 

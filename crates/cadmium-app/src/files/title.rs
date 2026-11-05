@@ -5,7 +5,7 @@ use adw::prelude::*;
 use crate::window::CadmiumWindow;
 
 const APPLICATION_NAME: &str = "Cadmium";
-pub(super) const UNTITLED: &str = "Sem título";
+pub(super) const UNTITLED: &str = "Untitled";
 
 pub(super) fn document_name(file: Option<&Path>) -> String {
     file.and_then(Path::file_stem)

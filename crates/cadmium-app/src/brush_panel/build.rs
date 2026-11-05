@@ -19,9 +19,9 @@ const SIZE_PAGE: f64 = 0.1;
 const UNIT_STEP: f64 = 0.01;
 const UNIT_PAGE: f64 = 0.1;
 const MEDIUM_SLIDER_MAX: f64 = 0.9;
-const PLATE_GAP_TITLE: &str = "Espessura da placa";
-const RELOAD_EACH_STROKE: &str = "Recarregar a cada traço";
-const CLEAN_EACH_STROKE: &str = "Limpar a cada traço";
+const PLATE_GAP_TITLE: &str = "Slab Thickness";
+const RELOAD_EACH_STROKE: &str = "Reload Every Stroke";
+const CLEAN_EACH_STROKE: &str = "Clean Every Stroke";
 
 pub(super) struct PigmentsGroup {
     pub(super) group: adw::PreferencesGroup,
@@ -58,7 +58,7 @@ pub(super) fn pigments_group() -> PigmentsGroup {
     let pigment_card = gtk::Box::builder().css_classes(["card"]).build();
     pigment_card.append(&flow);
     let group = adw::PreferencesGroup::builder()
-        .title("Pigmentos")
+        .title("Pigments")
         .description(tool_wording(PanelTool::Paint(Tool::Brush)).pigments)
         .build();
     group.add(&pigment_card);
@@ -68,13 +68,13 @@ pub(super) fn pigments_group() -> PigmentsGroup {
 pub(super) fn tool_group() -> ToolGroup {
     let (loaded_row, loaded_swatch, reserve_bar) = loaded_row();
     let size = size_row();
-    let load = slider_row("Carga", 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
+    let load = slider_row("Load", 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
     let plate_gap = plate_gap_row();
-    let medium = slider_row("Médium", 0.0, MEDIUM_SLIDER_MAX, UNIT_STEP, UNIT_PAGE);
+    let medium = slider_row("Medium", 0.0, MEDIUM_SLIDER_MAX, UNIT_STEP, UNIT_PAGE);
     let shape_row = shape_row();
     let reload_row = adw::SwitchRow::builder().title(RELOAD_EACH_STROKE).build();
     let clean_each_row = adw::SwitchRow::builder().title(CLEAN_EACH_STROKE).build();
-    let group = adw::PreferencesGroup::builder().title("Pincel").build();
+    let group = adw::PreferencesGroup::builder().title("Brush").build();
     group.add(&loaded_row);
     group.add(&size.row);
     group.add(&load.row);
@@ -160,7 +160,7 @@ fn plate_gap_row() -> SliderRow {
 
 fn shape_row() -> adw::ComboRow {
     adw::ComboRow::builder()
-        .title("Formato")
+        .title("Shape")
         .model(&gtk::StringList::new(&SHAPES.map(|(_, label)| label)))
         .build()
 }

@@ -4,14 +4,14 @@ use super::brush::BRUSH_WORDING;
 use super::panel::{NO_CONTROLS, ToolWording, VisibleControls};
 use super::{Press, Tool, UiToolProfile};
 
-pub(crate) const KNIFE_HANDLING: &str = "Deitada (caneta inclinada) assenta placas; em pé raspa e abre sulco; \
-pressão leve deixa a placa mais grossa";
+pub(crate) const KNIFE_HANDLING: &str = "Laid flat (pen tilted) it lays slabs; upright it scrapes and carves a groove; \
+light pressure leaves a thicker slab";
 
 pub(super) const KNIFE: UiToolProfile = UiToolProfile {
     name: "knife",
-    label: "Espátula",
+    label: "Knife",
     icon: "cadmium-knife-symbolic",
-    tooltip: "Espátula (2): deitada assenta placas, em pé raspa e abre sulco; pressão leve deixa a placa mais grossa",
+    tooltip: "Knife (2): flat lays slabs, upright scrapes and carves a groove; light pressure leaves a thicker slab",
     keys: &[gdk::Key::_2],
     keypad_keys: &[gdk::Key::KP_2],
     on_tray: Press::LoadFromPile(Tool::Knife),
@@ -32,14 +32,14 @@ pub(super) const KNIFE: UiToolProfile = UiToolProfile {
 };
 
 const KNIFE_WORDING: ToolWording = ToolWording {
-    pigments: "Clique carrega a espátula limpa, de novo pega mais; Ctrl+clique mistura um pouco",
-    loaded_title: "Na espátula",
-    loaded_tooltip: "Esquerda: mistura na paleta · direita: tinta na espátula",
-    level_tooltip: "Tinta na espátula",
-    clean: "Limpa",
-    clean_button: "Limpar espátula",
-    size_subtitle: Some("Comprimento da lâmina"),
-    reload_hint: "Repõe a tinta da espátula até a carga",
-    clean_each_hint: "Começa cada traço com a espátula limpa e recarregada",
+    pigments: "Click loads a clean knife, click again to pick up more; Ctrl+click mixes in a little",
+    loaded_title: "On the Knife",
+    loaded_tooltip: "Left: mix on the palette · right: paint on the knife",
+    level_tooltip: "Paint on the knife",
+    clean: "Clean",
+    clean_button: "Clean Knife",
+    size_subtitle: Some("Blade length"),
+    reload_hint: "Tops the knife back up to the load",
+    clean_each_hint: "Starts every stroke with a clean, reloaded knife",
     ..BRUSH_WORDING
 };

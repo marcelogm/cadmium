@@ -74,7 +74,7 @@ impl BrushPanel {
         let open_popover = popover.downgrade();
         let button = gtk::MenuButton::builder()
             .icon_name("list-add-symbolic")
-            .tooltip_text("Adicionar pigmento")
+            .tooltip_text("Add pigment")
             .popover(&popover)
             .halign(gtk::Align::Center)
             .valign(gtk::Align::Center)

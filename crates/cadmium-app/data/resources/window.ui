@@ -27,14 +27,14 @@
                 <child type="start">
                   <object class="GtkButton">
                     <property name="icon-name">edit-undo-symbolic</property>
-                    <property name="tooltip-text">Desfazer (Ctrl+Z)</property>
+                    <property name="tooltip-text">Undo (Ctrl+Z)</property>
                     <property name="action-name">win.undo</property>
                   </object>
                 </child>
                 <child type="start">
                   <object class="GtkButton">
                     <property name="icon-name">edit-redo-symbolic</property>
-                    <property name="tooltip-text">Refazer (Ctrl+Shift+Z)</property>
+                    <property name="tooltip-text">Redo (Ctrl+Shift+Z)</property>
                     <property name="action-name">win.redo</property>
                   </object>
                 </child>
@@ -44,14 +44,14 @@
                 <child type="end">
                   <object class="GtkToggleButton">
                     <property name="icon-name">sidebar-show-right-symbolic</property>
-                    <property name="tooltip-text">Painel lateral (F9)</property>
+                    <property name="tooltip-text">Toggle sidebar (F9)</property>
                     <property name="active" bind-source="split_view" bind-property="show-sidebar" bind-flags="sync-create|bidirectional"/>
                   </object>
                 </child>
                 <child type="end">
                   <object class="GtkButton">
                     <property name="icon-name">weather-clear-symbolic</property>
-                    <property name="tooltip-text">Secar (Ctrl+D)</property>
+                    <property name="tooltip-text">Dry (Ctrl+D)</property>
                     <property name="action-name">win.dry</property>
                   </object>
                 </child>
@@ -82,7 +82,7 @@
                         <child>
                           <object class="GtkButton">
                             <property name="icon-name">zoom-out-symbolic</property>
-                            <property name="tooltip-text">Afastar (Ctrl+−)</property>
+                            <property name="tooltip-text">Zoom out (Ctrl+−)</property>
                             <property name="action-name">win.zoom-out</property>
                           </object>
                         </child>
@@ -98,14 +98,14 @@
                         <child>
                           <object class="GtkButton">
                             <property name="icon-name">zoom-in-symbolic</property>
-                            <property name="tooltip-text">Aproximar (Ctrl++)</property>
+                            <property name="tooltip-text">Zoom in (Ctrl++)</property>
                             <property name="action-name">win.zoom-in</property>
                           </object>
                         </child>
                         <child>
                           <object class="GtkButton">
                             <property name="icon-name">zoom-fit-best-symbolic</property>
-                            <property name="tooltip-text">Ajustar à janela (Ctrl+0)</property>
+                            <property name="tooltip-text">Fit to window (Ctrl+0)</property>
                             <property name="action-name">win.zoom-fit</property>
                           </object>
                         </child>
@@ -131,7 +131,7 @@
                 <child type="end">
                   <object class="GtkMenuButton" id="primary_menu">
                     <property name="icon-name">open-menu-symbolic</property>
-                    <property name="tooltip-text">Menu principal</property>
+                    <property name="tooltip-text">Main menu</property>
                     <property name="menu-model">primary_menu_model</property>
                     <property name="primary">True</property>
                   </object>
@@ -147,7 +147,7 @@
                     <child>
                       <object class="AdwViewStackPage">
                         <property name="name">brush</property>
-                        <property name="title">Pincel</property>
+                        <property name="title">Brush</property>
                         <property name="icon-name">cadmium-brush-symbolic</property>
                         <property name="child">
                           <object class="GtkScrolledWindow">
@@ -182,7 +182,7 @@
                 </property>
                 <property name="bottom-bar">
                   <object class="GtkLabel">
-                    <property name="label">Bandeja</property>
+                    <property name="label">Tray</property>
                     <property name="margin-top">12</property>
                     <property name="margin-bottom">12</property>
                     <style>
@@ -199,7 +199,7 @@
                         <property name="show-end-title-buttons">False</property>
                         <child type="start">
                           <object class="GtkLabel">
-                            <property name="label">Bandeja</property>
+                            <property name="label">Tray</property>
                             <property name="margin-start">6</property>
                             <style>
                               <class name="heading"/>
@@ -209,7 +209,7 @@
                         <child type="end">
                           <object class="GtkButton">
                             <property name="icon-name">edit-clear-all-symbolic</property>
-                            <property name="tooltip-text">Limpar bandeja</property>
+                            <property name="tooltip-text">Clear tray</property>
                             <property name="action-name">win.clear-tray</property>
                             <style>
                               <class name="flat"/>
@@ -238,33 +238,33 @@
   <menu id="primary_menu_model">
     <section>
       <item>
-        <attribute name="label">Nova pintura</attribute>
+        <attribute name="label">New Painting</attribute>
         <attribute name="action">win.new</attribute>
       </item>
       <item>
-        <attribute name="label">Abrir…</attribute>
+        <attribute name="label">Open…</attribute>
         <attribute name="action">win.open</attribute>
       </item>
       <item>
-        <attribute name="label">Salvar</attribute>
+        <attribute name="label">Save</attribute>
         <attribute name="action">win.save</attribute>
       </item>
       <item>
-        <attribute name="label">Salvar como…</attribute>
+        <attribute name="label">Save As…</attribute>
         <attribute name="action">win.save-as</attribute>
       </item>
       <item>
-        <attribute name="label">Exportar PNG…</attribute>
+        <attribute name="label">Export PNG…</attribute>
         <attribute name="action">win.export</attribute>
       </item>
     </section>
     <section>
       <item>
-        <attribute name="label">Atalhos de teclado</attribute>
+        <attribute name="label">Keyboard Shortcuts</attribute>
         <attribute name="action">app.shortcuts</attribute>
       </item>
       <item>
-        <attribute name="label">Sobre o Cadmium</attribute>
+        <attribute name="label">About Cadmium</attribute>
         <attribute name="action">app.about</attribute>
       </item>
     </section>

@@ -8,17 +8,17 @@ use crate::window::CadmiumWindow;
 
 pub const PAINTING_EXTENSION: &str = "cadmium";
 pub const IMAGE_EXTENSION: &str = "png";
-const BACKGROUND_TASK_FAILED: &str = "a tarefa em segundo plano falhou";
-const FILE_NOT_FOUND: &str = "o arquivo não existe";
-const PERMISSION_DENIED: &str = "sem permissão para acessar o arquivo";
-const ALREADY_EXISTS: &str = "o arquivo já existe";
-const STORAGE_FULL: &str = "não há espaço livre no disco";
-const READ_ONLY: &str = "o local é somente leitura";
-const UNREADABLE_DATA: &str = "o arquivo está corrompido ou incompleto";
-const INPUT_OUTPUT_FAILED: &str = "falha de leitura ou gravação";
-const NOT_A_PAINTING: &str = "o arquivo não é uma pintura do Cadmium válida";
-const GPU_LOST: &str = "a GPU foi reiniciada";
-pub const OUT_OF_VIDEO_MEMORY: &str = "memória de vídeo insuficiente";
+const BACKGROUND_TASK_FAILED: &str = "the background task failed";
+const FILE_NOT_FOUND: &str = "the file does not exist";
+const PERMISSION_DENIED: &str = "no permission to access the file";
+const ALREADY_EXISTS: &str = "the file already exists";
+const STORAGE_FULL: &str = "there is no free disk space";
+const READ_ONLY: &str = "the location is read-only";
+const UNREADABLE_DATA: &str = "the file is corrupt or incomplete";
+const INPUT_OUTPUT_FAILED: &str = "read or write failure";
+const NOT_A_PAINTING: &str = "the file is not a valid Cadmium painting";
+const GPU_LOST: &str = "the GPU was reset";
+pub const OUT_OF_VIDEO_MEMORY: &str = "not enough video memory";
 
 mod close;
 mod dialogs;
@@ -36,7 +36,7 @@ pub fn describe_document_error(error: &DocumentError) -> String {
         DocumentError::Io(error) => describe_io_error(error.kind()).to_string(),
         DocumentError::Format(_) => NOT_A_PAINTING.to_string(),
         DocumentError::UnsupportedVersion(version) => {
-            format!("a pintura usa o formato {version}, que esta versão do Cadmium não sabe ler")
+            format!("the painting uses format {version}, which this version of Cadmium cannot read")
         }
         DocumentError::GpuLost => GPU_LOST.to_string(),
         DocumentError::OutOfVideoMemory => OUT_OF_VIDEO_MEMORY.to_string(),

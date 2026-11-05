@@ -58,7 +58,7 @@ fn a_new_painting_keeps_the_lab_and_starts_untitled_without_undo() {
     state.set_param(spec.key, tuned);
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let mark = state.edit_mark();
-    state.saved_to(PathBuf::from("antiga.cadmium"), mark);
+    state.saved_to(PathBuf::from("old.cadmium"), mark);
     let blank = state.session.canvas.spec.clone();
     state.start_painting(blank).unwrap();
     assert_eq!(state.file, None);

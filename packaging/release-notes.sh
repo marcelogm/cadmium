@@ -13,21 +13,21 @@ link() {
 cat <<NOTES
 ## Downloads
 
-| Sistema | Pacote | x86_64 (Intel/AMD) | arm64 |
+| System | Package | x86_64 (Intel/AMD) | arm64 |
 |---|---|---|---|
 | Linux | Flatpak | $(link Cadmium-x86_64.flatpak) | $(link Cadmium-aarch64.flatpak) |
 | Linux | AppImage | $(link Cadmium-x86_64.AppImage) | $(link Cadmium-aarch64.AppImage) |
-| Windows | Instalador | $(link Cadmium-windows-x64-setup.exe) | $(link Cadmium-windows-arm64-setup.exe) |
-| Windows | Portátil (zip) | $(link Cadmium-windows-x64.zip) | $(link Cadmium-windows-arm64.zip) |
+| Windows | Installer | $(link Cadmium-windows-x64-setup.exe) | $(link Cadmium-windows-arm64-setup.exe) |
+| Windows | Portable (zip) | $(link Cadmium-windows-x64.zip) | $(link Cadmium-windows-arm64.zip) |
 
-### Como instalar
+### How to install
 
-- **Flatpak:** \`flatpak install --user Cadmium-x86_64.flatpak\` (precisa do Flathub configurado,
-  de onde vem o runtime GNOME 51).
-- **AppImage:** \`chmod +x Cadmium-x86_64.AppImage\` e abra o arquivo. Funciona em qualquer
-  distribuição; os drivers Vulkan do Mesa (AMD e Intel) já vêm dentro.
-- **Windows, instalador:** execute o \`setup.exe\`; o Cadmium aparece no menu Iniciar.
-- **Windows, zip:** descompacte a pasta inteira e abra \`cadmium.exe\`.
+- **Flatpak:** \`flatpak install --user Cadmium-x86_64.flatpak\` (needs Flathub set up, which
+  provides the GNOME 51 runtime).
+- **AppImage:** \`chmod +x Cadmium-x86_64.AppImage\` and run the file. Works on any
+  distribution; the Mesa Vulkan drivers (AMD and Intel) are bundled.
+- **Windows, installer:** run the \`setup.exe\`; Cadmium shows up in the Start menu.
+- **Windows, zip:** unzip the whole folder and open \`cadmium.exe\`.
 
-Todos precisam de uma placa de vídeo com Vulkan. Os checksums estão em \`SHA256SUMS\`.
+All of them need a graphics card with Vulkan. Checksums are in \`SHA256SUMS\`.
 NOTES

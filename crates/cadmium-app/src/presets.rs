@@ -40,17 +40,17 @@ pub struct PigmentPreset {
 pub const PIGMENT_PRESETS: [PigmentPreset; 3] = [
     PigmentPreset {
         name: "zorn",
-        label: "Paleta limitada (Zorn)",
+        label: "Limited Palette (Zorn)",
         pigments: ZORN,
     },
     PigmentPreset {
         name: "primaries",
-        label: "Primárias",
+        label: "Primaries",
         pigments: PRIMARIES,
     },
     PigmentPreset {
         name: "earths",
-        label: "Terras",
+        label: "Earths",
         pigments: EARTHS,
     },
 ];

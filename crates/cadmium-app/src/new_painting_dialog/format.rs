@@ -23,11 +23,11 @@ impl PaintingFormat {
 
     pub(super) fn label(self) -> &'static str {
         match self {
-            PaintingFormat::Landscape4x3 => "Paisagem 4:3",
-            PaintingFormat::Portrait3x4 => "Retrato 3:4",
-            PaintingFormat::Square => "Quadrado",
-            PaintingFormat::Landscape16x9 => "Paisagem 16:9",
-            PaintingFormat::Custom => "Personalizado",
+            PaintingFormat::Landscape4x3 => "Landscape 4:3",
+            PaintingFormat::Portrait3x4 => "Portrait 3:4",
+            PaintingFormat::Square => "Square",
+            PaintingFormat::Landscape16x9 => "Landscape 16:9",
+            PaintingFormat::Custom => "Custom",
         }
     }
 

@@ -22,7 +22,7 @@ const PARAM_COUNT: usize = 23;
 const SPECS: [ParamSpec; PARAM_COUNT] = [
     ParamSpec {
         key: "transfer_fraction",
-        label: "Fração de troca",
+        label: "Exchange Fraction",
         group: ParamGroup::Transfer,
         min: 0.0,
         max: 1.0,
@@ -30,7 +30,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "velocity_cutoff",
-        label: "Corte por velocidade",
+        label: "Velocity Cutoff",
         group: ParamGroup::Transfer,
         min: 0.0,
         max: 2.0,
@@ -38,7 +38,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "residual_um",
-        label: "Resíduo mínimo (µm)",
+        label: "Minimum Residue (µm)",
         group: ParamGroup::Transfer,
         min: 0.0,
         max: 20.0,
@@ -46,7 +46,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "refill_rate",
-        label: "Reabastecimento",
+        label: "Refill Rate",
         group: ParamGroup::Transfer,
         min: 0.0,
         max: 1.0,
@@ -54,7 +54,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "reserve_factor",
-        label: "Reserva",
+        label: "Reserve",
         group: ParamGroup::Transfer,
         min: 1.0,
         max: 12.0,
@@ -62,7 +62,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "advection",
-        label: "Arrasto",
+        label: "Drag",
         group: ParamGroup::Dynamics,
         min: 0.0,
         max: 1.0,
@@ -70,7 +70,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "squeeze",
-        label: "Espremer",
+        label: "Squeeze",
         group: ParamGroup::Dynamics,
         min: 0.0,
         max: 2.0,
@@ -78,7 +78,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "penetration_um",
-        label: "Profundidade do pincel (µm)",
+        label: "Brush Depth (µm)",
         group: ParamGroup::Footprint,
         min: 0.0,
         max: 300.0,
@@ -86,7 +86,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "tilt_elongation",
-        label: "Alongamento por inclinação",
+        label: "Tilt Elongation",
         group: ParamGroup::Footprint,
         min: 0.0,
         max: 3.0,
@@ -94,7 +94,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "bristle_contrast",
-        label: "Contraste das cerdas",
+        label: "Bristle Contrast",
         group: ParamGroup::Footprint,
         min: 0.0,
         max: 1.0,
@@ -102,7 +102,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "bristle_count",
-        label: "Número de cerdas",
+        label: "Bristle Count",
         group: ParamGroup::Footprint,
         min: 4.0,
         max: 64.0,
@@ -110,7 +110,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "knife_gap_um",
-        label: "Espessura da placa (µm)",
+        label: "Slab Thickness (µm)",
         group: ParamGroup::Tools,
         min: 0.0,
         max: 300.0,
@@ -118,7 +118,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "blend_diffusion",
-        label: "Difusão (misturador)",
+        label: "Diffusion (Blender)",
         group: ParamGroup::Tools,
         min: 0.0,
         max: 1.0,
@@ -126,7 +126,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "rag_strength",
-        label: "Força do pano",
+        label: "Rag Strength",
         group: ParamGroup::Tools,
         min: 0.0,
         max: 1.0,
@@ -134,7 +134,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "tube_flow_um_per_s",
-        label: "Crescimento da gota (µm/s)",
+        label: "Blob Growth (µm/s)",
         group: ParamGroup::Tools,
         min: 20.0,
         max: 2000.0,
@@ -142,7 +142,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "tube_cord_um",
-        label: "Altura do cordão (µm)",
+        label: "Bead Height (µm)",
         group: ParamGroup::Tools,
         min: 20.0,
         max: 500.0,
@@ -150,7 +150,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "tube_max_um",
-        label: "Altura máxima do tubo (µm)",
+        label: "Maximum Tube Height (µm)",
         group: ParamGroup::Tools,
         min: 50.0,
         max: 1500.0,
@@ -158,7 +158,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "draw_up_rate",
-        label: "Carga pela bandeja (/s)",
+        label: "Tray Loading Rate (/s)",
         group: ParamGroup::Tools,
         min: 0.1,
         max: 10.0,
@@ -166,7 +166,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "impasto_scale",
-        label: "Escala do relevo",
+        label: "Relief Scale",
         group: ParamGroup::Render,
         min: 0.0,
         max: 5.0,
@@ -174,7 +174,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "light_azimuth_deg",
-        label: "Luz: azimute",
+        label: "Light Azimuth",
         group: ParamGroup::Render,
         min: 0.0,
         max: 360.0,
@@ -182,7 +182,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "light_elevation_deg",
-        label: "Luz: elevação",
+        label: "Light Elevation",
         group: ParamGroup::Render,
         min: 5.0,
         max: 90.0,
@@ -190,7 +190,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "wet_gloss",
-        label: "Brilho úmido",
+        label: "Wet Gloss",
         group: ParamGroup::Render,
         min: 0.0,
         max: 1.0,
@@ -198,7 +198,7 @@ const SPECS: [ParamSpec; PARAM_COUNT] = [
     },
     ParamSpec {
         key: "dry_roughness",
-        label: "Rugosidade seca",
+        label: "Dry Roughness",
         group: ParamGroup::Render,
         min: 0.05,
         max: 1.0,

@@ -6,8 +6,8 @@ use super::CadmiumWindow;
 use crate::state::DryOutcome;
 use crate::tools::UiTool;
 
-const DRIED_TOAST: &str = "Tela seca";
-const UNDO_LABEL: &str = "Desfazer";
+const DRIED_TOAST: &str = "Canvas dried";
+const UNDO_LABEL: &str = "Undo";
 
 type Activate = fn(&CadmiumWindow);
 
