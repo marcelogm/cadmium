@@ -5,6 +5,7 @@ rust-version.workspace = true
 version.workspace = true
 description = "Wet oil paint simulation on the GPU with spectral Kubelka-Munk pigments"
 repository.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

@@ -2,6 +2,7 @@
 <component type="desktop-application">
   <id>io.github.marcelogm.Cadmium</id>
   <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
   <name>Cadmium</name>
   <summary>Paint with wet oil paint</summary>
   <summary xml:lang="pt-BR">Pinte com tinta a óleo molhada</summary>
@@ -30,6 +31,14 @@
       dão forma a cada pincelada.
     </p>
   </description>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/docs/images/screenshot.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/docs/images/lab.png</image>
+    </screenshot>
+  </screenshots>
   <launchable type="desktop-id">io.github.marcelogm.Cadmium.desktop</launchable>
   <provides>
     <binary>cadmium</binary>

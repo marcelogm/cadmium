@@ -3,7 +3,6 @@ name: Release
 on:
   workflow_dispatch:
   push:
-    branches: [main]
     tags: ["v*"]
   pull_request:
     paths:
@@ -71,8 +70,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
+          name: Cadmium-${{ matrix.arch }}.AppImage
           path: dist/Cadmium-${{ matrix.arch }}.AppImage
-          archive: false
 
   windows:
     needs: version
@@ -127,8 +126,13 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
+          name: Cadmium-windows-${{ matrix.arch }}.zip
           path: Cadmium-windows-${{ matrix.arch }}.zip
-          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: portable-${{ matrix.arch }}
+          path: dist
 
   windows-installer:
     needs: windows
@@ -141,11 +145,8 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: Cadmium-windows-${{ matrix.arch }}.zip
-
-      - name: Unzip
-        shell: pwsh
-        run: Expand-Archive Cadmium-windows-${{ matrix.arch }}.zip -DestinationPath portable
+          name: portable-${{ matrix.arch }}
+          path: portable
 
       - name: Install Inno Setup
         shell: pwsh
@@ -165,8 +166,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
+          name: Cadmium-windows-${{ matrix.arch }}-setup.exe
           path: dist/Cadmium-windows-${{ matrix.arch }}-setup.exe
-          archive: false
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -180,11 +181,14 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
+          pattern: Cadmium-*
           merge-multiple: true
 
       - name: Checksums and notes
         run: |
           cd dist
+          for arch in x86_64 aarch64; do test -f Cadmium-$arch.flatpak && test -f Cadmium-$arch.AppImage; done
+          for arch in x64 arm64; do test -f Cadmium-windows-$arch.zip && test -f Cadmium-windows-$arch-setup.exe; done
           sha256sum * > SHA256SUMS
           ls -l
           cd ..
