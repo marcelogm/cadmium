@@ -3,9 +3,11 @@ use crate::stroke::{BrushGeometry, PressureCurve, Tool};
 
 mod hair;
 mod head;
+mod library;
 
 pub use hair::HairSpec;
 pub use head::HeadSpec;
+pub use library::{BrushSpec, default_brush, factory_brushes};
 // used by the bristle layout from the next commit
 #[allow(unused_imports)]
 pub(crate) use head::Section;
