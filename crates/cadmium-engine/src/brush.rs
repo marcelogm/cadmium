@@ -1,6 +1,23 @@
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::{BrushGeometry, PressureCurve, Tool};
 
+mod hair;
+mod head;
+
+pub use hair::HairSpec;
+pub use head::HeadSpec;
+// used by the bristle layout from the next commit
+#[allow(unused_imports)]
+pub(crate) use head::Section;
+
+pub(crate) fn within(value: f32, [min, max]: [f32; 2], fallback: f32) -> f32 {
+    if value.is_nan() {
+        fallback
+    } else {
+        value.clamp(min, max)
+    }
+}
+
 pub const FULL_RESERVOIR_VOLUME_UM: f32 = 200.0;
 pub const DEFAULT_MAX_DIAMETER_PX: f32 = 40.0;
 pub const DEFAULT_MIN_DIAMETER_RATIO: f32 = 0.3;
