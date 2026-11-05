@@ -1,14 +1,32 @@
 #!/usr/bin/env bash
-# Prints the GitHub Release body for a tag: one download link per package.
+# Prints the GitHub Release body for a tag: the commits since the previous tag
+# and one download link per package. Needs the full git history and tags.
 # Usage: packaging/release-notes.sh v0.1.0
 set -euo pipefail
 
 tag=${1:?tag}
-base="https://github.com/marcelogm/cadmium/releases/download/$tag"
+repo="https://github.com/marcelogm/cadmium"
+base="$repo/releases/download/$tag"
+
+# Commits since the previous tag, or the whole history on the first release.
+if previous=$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null); then
+    range="$previous..$tag"
+    compare="**Full changelog:** [$previous...$tag]($repo/compare/$previous...$tag)"
+else
+    range="$tag"
+    compare="**Full changelog:** [commits]($repo/commits/$tag)"
+fi
 
 link() {
     echo "[$1]($base/$1)"
 }
+
+echo "## Changes"
+echo
+git log --no-merges --reverse --format="- %s ([%h]($repo/commit/%H))" "$range"
+echo
+echo "$compare"
+echo
 
 cat <<NOTES
 ## Downloads
