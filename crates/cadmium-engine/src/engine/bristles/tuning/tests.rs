@@ -41,3 +41,24 @@ fn a_round_points_on_both_axes_a_flat_on_its_thin_axis_and_a_fan_not_at_all() {
     assert_eq!(axes(BrushShape::Flat), [0.0, 1.0]);
     assert_eq!(axes(BrushShape::Fan), [0.0, 0.0]);
 }
+
+#[test]
+fn the_default_round_brush_keeps_todays_tuning() {
+    let tuning = BristleTuning::of(&SimParams::default(), BrushShape::Round, 3.0);
+    assert_eq!(
+        tuning,
+        BristleTuning {
+            static_friction: 1.5,
+            kinetic_friction: 1.2,
+            drag_anisotropy: 0.3,
+            plasticity: 2.0,
+            clumping: 0.5,
+            pointing: 0.9,
+            point_release: 0.15,
+            point_axes: [1.0, 1.0],
+            point_film: 0.25,
+            wet_support: 0.0,
+            canvas_tooth_um: 3.0,
+        }
+    );
+}

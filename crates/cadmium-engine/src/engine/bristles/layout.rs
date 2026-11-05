@@ -155,3 +155,6 @@ fn row_texel_count(y: i32, radius_squared: f32) -> usize {
     let last = reach.min(size - half - 1);
     (last - first + 1) as usize
 }
+
+#[cfg(test)]
+mod tests;
