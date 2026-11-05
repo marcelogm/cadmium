@@ -57,26 +57,28 @@ impl Painter {
 
     /// One stroke through `path`, pressing harder in the middle like a hand does.
     fn stroke(&mut self, path: &[Point]) {
-        let samples = resample(path);
-        let last = samples.len().saturating_sub(1).max(1) as f64;
-        for (i, &(x, y)) in samples.iter().enumerate() {
-            let t = i as f64 / last;
-            let sample = StrokeSample {
+        let points = resample(path);
+        let last = points.len().saturating_sub(1).max(1) as f64;
+        let samples: Vec<StrokeSample> = points
+            .iter()
+            .enumerate()
+            .map(|(i, &(x, y))| StrokeSample {
                 x,
                 y,
-                pressure: (0.55 + 0.45 * (t * PI).sin()) as f32,
+                pressure: (0.55 + 0.45 * (i as f64 / last * PI).sin()) as f32,
                 tilt_x_deg: 20.0,
                 tilt_y_deg: 0.0,
                 time_ms: i as u32 * 8,
-            };
-            if i == 0 {
-                self.session.begin_stroke(&self.gpu, sample);
-            } else {
-                self.session.add_samples(&[sample]);
-            }
-            if i % SAMPLES_PER_FRAME == 0 {
-                self.frame();
-            }
+            })
+            .collect();
+        let Some((&first, rest)) = samples.split_first() else {
+            return;
+        };
+        self.session.begin_stroke(&self.gpu, first);
+        self.frame();
+        for chunk in rest.chunks(SAMPLES_PER_FRAME) {
+            self.session.add_samples(chunk);
+            self.frame();
         }
         self.session.end_stroke();
         self.frame();
@@ -105,7 +107,10 @@ fn resample(path: &[Point]) -> Vec<Point> {
 fn hexagon(center: Point, radius: f64) -> [Point; 6] {
     std::array::from_fn(|i| {
         let angle = -PI / 2.0 + i as f64 * PI / 3.0;
-        (center.0 + radius * angle.cos(), center.1 + radius * angle.sin())
+        (
+            center.0 + radius * angle.cos(),
+            center.1 + radius * angle.sin(),
+        )
     })
 }
 
@@ -124,26 +129,35 @@ fn row_span(center: Point, radius: f64, y: f64) -> Option<(f64, f64)> {
     Some((center.0 - width, center.0 + width))
 }
 
+const FILL_DIAMETER: f32 = 64.0;
+
+/// One row of the fill, skipped where the hexagon is narrower than the brush.
+fn row_path(center: Point, left: bool, y: f64, row: usize) -> Option<[Point; 3]> {
+    let (x0, x1) = row_span(center, RADIUS - 14.0, y)?;
+    let diameter = f64::from(FILL_DIAMETER);
+    let (x0, x1) = (x0 + diameter * 0.35, x1 - diameter * 0.35);
+    if x1 - x0 < diameter {
+        return None;
+    }
+    let (from, to) = if left {
+        (x0, center.0 + 6.0)
+    } else {
+        (center.0 - 6.0, x1)
+    };
+    let wobble = if row.is_multiple_of(2) { 6.0 } else { -6.0 };
+    Some([(from, y), ((from + to) / 2.0, y + wobble), (to, y)])
+}
+
 /// Fills one side of the hexagon with back-and-forth rows, reloading for every row.
 fn fill_half(painter: &mut Painter, center: Point, left: bool, recipe: &[(usize, f32)]) {
-    let diameter: f32 = 64.0;
     let mut y = center.1 - RADIUS + 20.0;
     let mut row = 0;
     while y < center.1 + RADIUS - 12.0 {
-        if let Some((x0, x1)) = row_span(center, RADIUS - 14.0, y) {
-            let inset = f64::from(diameter) * 0.35;
-            let (x0, x1) = (x0 + inset, x1 - inset);
-            if x1 - x0 < f64::from(diameter) {
-                y += f64::from(diameter) * 0.55;
-                continue;
-            }
-            let (from, to) = if left { (x0, center.0 + 6.0) } else { (center.0 - 6.0, x1) };
-            let wobble = if row % 2 == 0 { 6.0 } else { -6.0 };
-            let path = [(from, y), ((from + to) / 2.0, y + wobble), (to, y)];
-            painter.load(recipe, diameter);
+        if let Some(path) = row_path(center, left, y, row) {
+            painter.load(recipe, FILL_DIAMETER);
             painter.stroke(&path);
         }
-        y += f64::from(diameter) * 0.55;
+        y += f64::from(FILL_DIAMETER) * 0.55;
         row += 1;
     }
 }
@@ -190,8 +204,18 @@ fn paint_atoms(painter: &mut Painter) {
     for atom in hexagon(CENTER, INNER_RADIUS) {
         paint_disk(painter, atom, 52.0, &dark);
     }
-    paint_disk(painter, CENTER, 60.0, &[(WHITE, 3.0), (BLACK, 0.5), (BLUE, 0.35)]);
-    paint_disk(painter, (CENTER.0 - 16.0, CENTER.1 - 16.0), 18.0, &[(WHITE, 1.0)]);
+    paint_disk(
+        painter,
+        CENTER,
+        60.0,
+        &[(WHITE, 3.0), (BLACK, 0.5), (BLUE, 0.35)],
+    );
+    paint_disk(
+        painter,
+        (CENTER.0 - 16.0, CENTER.1 - 16.0),
+        18.0,
+        &[(WHITE, 1.0)],
+    );
 }
 
 fn main() {
@@ -212,6 +236,11 @@ fn main() {
     paint_bonds(&mut painter);
     paint_atoms(&mut painter);
 
-    save(&painter.gpu, &mut painter.session, &out.join("logo.cadmium")).expect("save");
+    save(
+        &painter.gpu,
+        &mut painter.session,
+        &out.join("logo.cadmium"),
+    )
+    .expect("save");
     export_png(&painter.gpu, &mut painter.session, &out.join("logo.png")).expect("export");
 }
