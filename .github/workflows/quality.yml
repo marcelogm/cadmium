@@ -15,7 +15,7 @@ jobs:
     container: registry.fedoraproject.org/fedora:44
     steps:
       - name: Install toolchain and GTK
-        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo clippy rustfmt
+        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo clippy rustfmt python3 desktop-file-utils appstream
 
       - uses: actions/checkout@v7
 
@@ -41,16 +41,29 @@ jobs:
       - name: File sizes
         run: .github/check-file-sizes.sh
 
+      - name: Flatpak cargo sources match Cargo.lock
+        run: python3 packaging/flatpak/cargo-sources.py Cargo.lock | diff -u packaging/flatpak/cargo-sources.json -
+
+      - name: Desktop entry and metainfo
+        run: |
+          desktop-file-validate crates/cadmium-app/data/io.github.marcelogm.Cadmium.desktop
+          appstreamcli validate --no-net crates/cadmium-app/data/io.github.marcelogm.Cadmium.metainfo.xml
+
   test:
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:44
+    permissions:
+      contents: write
     env:
       # No GPU on the runner: run the GPU tests on lavapipe, Mesa's software Vulkan.
       CADMIUM_SOFTWARE_GPU: "1"
       VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+      # Fedora's rustc is built on the system LLVM, so coverage uses its tools.
+      LLVM_COV: /usr/bin/llvm-cov
+      LLVM_PROFDATA: /usr/bin/llvm-profdata
     steps:
-      - name: Install toolchain, GTK, lavapipe and Xvfb
-        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo mesa-vulkan-drivers xorg-x11-server-Xvfb
+      - name: Install toolchain, GTK, lavapipe, Xvfb and LLVM
+        run: dnf install -y git gcc pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo mesa-vulkan-drivers xorg-x11-server-Xvfb llvm python3 tar
 
       - uses: actions/checkout@v7
 
@@ -64,5 +77,21 @@ jobs:
             target
           key: test-cargo-${{ hashFiles('Cargo.lock') }}
 
-      - name: Test
-        run: xvfb-run -a cargo test --workspace --release --locked --features cadmium-app/smoke
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Test with coverage
+        run: xvfb-run -a cargo llvm-cov --workspace --release --locked --features cadmium-app/smoke --json --summary-only --output-path coverage.json
+
+      - name: Coverage summary
+        run: python3 .github/coverage-badge.py coverage.json badge/coverage.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: badge
+        run: |
+          git init -q -b badges
+          git add coverage.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "coverage badge"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" badges

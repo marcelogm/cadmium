@@ -1,0 +1,200 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - packaging/**
+      - crates/cadmium-app/data/**
+      - crates/cadmium-app/build.rs
+      - Cargo.lock
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tag matches Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+
+  flatpak:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/io.github.marcelogm.Cadmium.yml
+          bundle: Cadmium-${{ matrix.arch }}.flatpak
+          arch: ${{ matrix.arch }}
+          artifact-name: Cadmium-${{ matrix.arch }}.flatpak
+
+  appimage:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    container: ghcr.io/pkgforge-dev/archlinux:latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pkgforge-dev/anylinux-setup-action@ba7321e11074f9e387a0634e653d09b115d576cd # v6
+
+      - name: Build AppImage
+        run: sh packaging/appimage/make-appimage.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Cadmium-${{ matrix.arch }}.AppImage
+          path: dist/Cadmium-${{ matrix.arch }}.AppImage
+
+  windows:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, msystem: UCRT64, cc: "gcc:p" }
+          - { arch: arm64, runner: windows-11-arm, msystem: CLANGARM64, cc: "clang:p" }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: zip
+          pacboy: >-
+            ${{ matrix.cc }} gtk4:p libadwaita:p rust:p pkgconf:p librsvg:p ntldd:p adwaita-icon-theme:p
+
+      - name: Check GTK and libadwaita
+        run: |
+          pacman -Q "${MINGW_PACKAGE_PREFIX}"-{gtk4,libadwaita,rust}
+          pkg-config --atleast-version=4.22 gtk4 || { echo "::error::MSYS2 gtk4 $(pkg-config --modversion gtk4) is older than 4.22"; exit 1; }
+          pkg-config --atleast-version=1.9 libadwaita-1 || { echo "::error::MSYS2 libadwaita $(pkg-config --modversion libadwaita-1) is older than 1.9"; exit 1; }
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: windows-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-${{ matrix.arch }}-cargo-
+
+      - name: Build
+        run: cargo build --release --locked -p cadmium-app
+
+      - name: Test the engine without a GPU
+        run: cargo test --release --locked -p cadmium-engine --lib --test spectral --test params --test pigments --test stroke
+
+      - name: Bundle
+        run: packaging/windows/bundle.sh dist/Cadmium
+
+      - name: Check that the bundled DLLs are enough to start
+        run: PATH=/c/Windows/System32:/c/Windows dist/Cadmium/cadmium.exe --help
+
+      - name: Zip
+        run: cd dist && zip -qr9 ../Cadmium-windows-${{ matrix.arch }}.zip Cadmium
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Cadmium-windows-${{ matrix.arch }}.zip
+          path: Cadmium-windows-${{ matrix.arch }}.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: portable-${{ matrix.arch }}
+          path: dist
+
+  windows-installer:
+    needs: windows
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: portable-${{ matrix.arch }}
+          path: portable
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            /DVersion=$version /DArch=${{ matrix.arch }} `
+            /DSource="$PWD\portable\Cadmium" /DOutputDir="$PWD\dist" `
+            packaging\windows\cadmium.iss
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Cadmium-windows-${{ matrix.arch }}-setup.exe
+          path: dist/Cadmium-windows-${{ matrix.arch }}-setup.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [flatpak, appimage, windows, windows-installer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: Cadmium-*
+          merge-multiple: true
+
+      - name: Checksums and notes
+        run: |
+          cd dist
+          for arch in x86_64 aarch64; do test -f Cadmium-$arch.flatpak && test -f Cadmium-$arch.AppImage; done
+          for arch in x64 arm64; do test -f Cadmium-windows-$arch.zip && test -f Cadmium-windows-$arch-setup.exe; done
+          sha256sum * > SHA256SUMS
+          ls -l
+          cd ..
+          packaging/release-notes.sh "$GITHUB_REF_NAME" > notes.md
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: notes.md
+          files: dist/*

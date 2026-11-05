@@ -5,6 +5,7 @@ rust-version.workspace = true
 version.workspace = true
 description = "GNOME oil painting simulator"
 repository.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [features]
@@ -31,6 +32,9 @@ drm-fourcc = { workspace = true }
 
 [build-dependencies]
 glib-build-tools = { workspace = true }
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = { workspace = true }
 
 [lints]
 workspace = true

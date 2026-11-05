@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Cadmium
+GenericName=Oil Painting
+GenericName[pt_BR]=Pintura a óleo
+Comment=Paint with wet oil paint that mixes like real pigments
+Comment[pt_BR]=Pinte com tinta a óleo molhada que se mistura como pigmento de verdade
+Exec=cadmium
+Icon=io.github.marcelogm.Cadmium
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+Keywords=paint;oil;brush;canvas;pigment;
+Keywords[pt_BR]=pintura;óleo;pincel;tela;pigmento;
+StartupNotify=true

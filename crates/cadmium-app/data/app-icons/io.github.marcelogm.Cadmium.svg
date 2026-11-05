@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- The wurtzite lattice of cadmium sulfide seen down its c axis, in cadmium yellow. -->
+  <path d="M64 18 L107.3 43 V93 L64 118 L20.7 93 V43 Z" fill="#b86a00"/>
+  <path d="M64 18 L107.3 43 V93 L64 118 Z" fill="#9c5400"/>
+  <path d="M64 8 L107.3 33 V83 L64 108 L20.7 83 V33 Z" fill="#f6b600"/>
+  <path d="M64 8 L107.3 33 V83 L64 108 Z" fill="#d98a00"/>
+  <path d="M64 8 L107.3 33 L64 58 L20.7 33 Z" fill="#ffffff" opacity=".12"/>
+  <path d="M64 28 L90 43 V73 L64 88 L38 73 V43 Z" fill="none" stroke="#fff4a8" stroke-width="3" stroke-linejoin="round"/>
+  <g fill="#3d3846">
+    <circle cx="64" cy="28" r="6"/>
+    <circle cx="90" cy="43" r="6"/>
+    <circle cx="90" cy="73" r="6"/>
+    <circle cx="64" cy="88" r="6"/>
+    <circle cx="38" cy="73" r="6"/>
+    <circle cx="38" cy="43" r="6"/>
+  </g>
+  <g fill="#5e5c64">
+    <circle cx="62.2" cy="26.2" r="2"/>
+    <circle cx="88.2" cy="41.2" r="2"/>
+    <circle cx="88.2" cy="71.2" r="2"/>
+    <circle cx="62.2" cy="86.2" r="2"/>
+    <circle cx="36.2" cy="71.2" r="2"/>
+    <circle cx="36.2" cy="41.2" r="2"/>
+  </g>
+  <circle cx="64" cy="58" r="7" fill="#b8c2cc"/>
+  <circle cx="61.8" cy="55.8" r="2.4" fill="#f6f5f4"/>
+</svg>
