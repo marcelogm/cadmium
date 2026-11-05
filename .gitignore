@@ -1,2 +1,9 @@
 /target
 /.superpowers
+
+# graphify: commit only the graph and its report; the rest is local or machine-specific
+/graphify-out/*
+!/graphify-out/graph.json
+!/graphify-out/GRAPH_REPORT.md
+!/graphify-out/manifest.json
+!/graphify-out/.graphify_labels.json

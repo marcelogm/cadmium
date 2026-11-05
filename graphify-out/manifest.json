@@ -1,0 +1,1598 @@
+{
+  ".github/check-file-sizes.sh": {
+    "mtime": 1793838270.3708682,
+    "seen": 1793839262.0612938,
+    "ast_hash": "d0d3b851abe2d2a5eb393f57123a2de6",
+    "semantic_hash": "d0d3b851abe2d2a5eb393f57123a2de6"
+  },
+  ".github/coverage-badge.py": {
+    "mtime": 1793838270.3712504,
+    "seen": 1793839262.061301,
+    "ast_hash": "cbaf983c1e9264210d9bd20fbb2c3f23",
+    "semantic_hash": "cbaf983c1e9264210d9bd20fbb2c3f23"
+  },
+  ".github/workflows/quality.yml": {
+    "mtime": 1793838270.3733773,
+    "seen": 1793839262.0613043,
+    "ast_hash": "6ff67c227bdebb610cf1a2d29a27ffb3",
+    "semantic_hash": "6ff67c227bdebb610cf1a2d29a27ffb3"
+  },
+  ".github/workflows/release.yml": {
+    "mtime": 1793839027.1311336,
+    "seen": 1793839262.061306,
+    "ast_hash": "d6ace86a9955fcf1304e954321ae0fc8",
+    "semantic_hash": "d6ace86a9955fcf1304e954321ae0fc8"
+  },
+  "Cargo.toml": {
+    "mtime": 1793839027.1311336,
+    "seen": 1793839262.061308,
+    "ast_hash": "1d0db5fba606044ce2a2f498db0b1d8b",
+    "semantic_hash": "1d0db5fba606044ce2a2f498db0b1d8b"
+  },
+  "crates/cadmium-app/Cargo.toml": {
+    "mtime": 1793838270.3741355,
+    "seen": 1793839262.061309,
+    "ast_hash": "db50fb057f857386750ed582332be7ff",
+    "semantic_hash": "db50fb057f857386750ed582332be7ff"
+  },
+  "crates/cadmium-app/build.rs": {
+    "mtime": 1793838270.3741589,
+    "seen": 1793839262.0613108,
+    "ast_hash": "f63a1ac96f03f6cebf767cb37a0f5f55",
+    "semantic_hash": "f63a1ac96f03f6cebf767cb37a0f5f55"
+  },
+  "crates/cadmium-app/src/application.rs": {
+    "mtime": 1793838270.3745823,
+    "seen": 1793839262.061312,
+    "ast_hash": "684f77b182d61f4b2103284843c1fca4",
+    "semantic_hash": "684f77b182d61f4b2103284843c1fca4"
+  },
+  "crates/cadmium-app/src/brush_panel.rs": {
+    "mtime": 1793838270.3747585,
+    "seen": 1793839262.061313,
+    "ast_hash": "cfc6112dcb40111d821d6f2b948eab49",
+    "semantic_hash": "cfc6112dcb40111d821d6f2b948eab49"
+  },
+  "crates/cadmium-app/src/brush_panel/build.rs": {
+    "mtime": 1793838270.3747585,
+    "seen": 1793839262.061314,
+    "ast_hash": "b4255e26b60fbe1c633e9605e9c19bf4",
+    "semantic_hash": "b4255e26b60fbe1c633e9605e9c19bf4"
+  },
+  "crates/cadmium-app/src/brush_panel/piles.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.061315,
+    "ast_hash": "d234b4872f2dc39a9deda3824c25c1f1",
+    "semantic_hash": "d234b4872f2dc39a9deda3824c25c1f1"
+  },
+  "crates/cadmium-app/src/brush_panel/presentation.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.0613163,
+    "ast_hash": "6d81e1f69c23721a50c8be53ec049488",
+    "semantic_hash": "6d81e1f69c23721a50c8be53ec049488"
+  },
+  "crates/cadmium-app/src/brush_panel/presentation/tests.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.0613172,
+    "ast_hash": "c9ab59569d4ab1910e8f0b3a3bdd739e",
+    "semantic_hash": "c9ab59569d4ab1910e8f0b3a3bdd739e"
+  },
+  "crates/cadmium-app/src/brush_panel/signals.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.0613182,
+    "ast_hash": "8435db639a67e2db3f9447142c52d3a4",
+    "semantic_hash": "8435db639a67e2db3f9447142c52d3a4"
+  },
+  "crates/cadmium-app/src/brush_panel/snapshot.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.0613189,
+    "ast_hash": "ac2ba14dbab7f38c9b1338a4b3715be0",
+    "semantic_hash": "ac2ba14dbab7f38c9b1338a4b3715be0"
+  },
+  "crates/cadmium-app/src/canvas_widget.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.0613198,
+    "ast_hash": "70c06b550d64b8664aa85d8c92ce72f2",
+    "semantic_hash": "70c06b550d64b8664aa85d8c92ce72f2"
+  },
+  "crates/cadmium-app/src/canvas_widget/frames.rs": {
+    "mtime": 1793838270.3748538,
+    "seen": 1793839262.061321,
+    "ast_hash": "e758a19755e66d5eaea04054bfb0ade2",
+    "semantic_hash": "e758a19755e66d5eaea04054bfb0ade2"
+  },
+  "crates/cadmium-app/src/canvas_widget/imp.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613217,
+    "ast_hash": "bc16932106a321064f03be61d4ea477c",
+    "semantic_hash": "bc16932106a321064f03be61d4ea477c"
+  },
+  "crates/cadmium-app/src/canvas_widget/zoom.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613227,
+    "ast_hash": "68e35e2759e67d673be251273345ff43",
+    "semantic_hash": "68e35e2759e67d673be251273345ff43"
+  },
+  "crates/cadmium-app/src/cursor_outline.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613234,
+    "ast_hash": "628d304846be476fdf293f76c8346ea2",
+    "semantic_hash": "628d304846be476fdf293f76c8346ea2"
+  },
+  "crates/cadmium-app/src/dialogs.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613244,
+    "ast_hash": "ebdf1bafd1d79004b735b1027aefc0f7",
+    "semantic_hash": "ebdf1bafd1d79004b735b1027aefc0f7"
+  },
+  "crates/cadmium-app/src/dialogs/tests.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613253,
+    "ast_hash": "8c4310343b5d938648694620743af63c",
+    "semantic_hash": "8c4310343b5d938648694620743af63c"
+  },
+  "crates/cadmium-app/src/dmabuf.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613263,
+    "ast_hash": "0504f5e8b3d1879548f156a66c579ee4",
+    "semantic_hash": "0504f5e8b3d1879548f156a66c579ee4"
+  },
+  "crates/cadmium-app/src/dmabuf/export.rs": {
+    "mtime": 1793838270.375053,
+    "seen": 1793839262.0613275,
+    "ast_hash": "ee7bd7dafb9ce75ce5fca6af5dd06b03",
+    "semantic_hash": "ee7bd7dafb9ce75ce5fca6af5dd06b03"
+  },
+  "crates/cadmium-app/src/dmabuf/modifiers.rs": {
+    "mtime": 1793838270.3752925,
+    "seen": 1793839262.0613365,
+    "ast_hash": "ac65cb633e258365afc572a7804f4424",
+    "semantic_hash": "ac65cb633e258365afc572a7804f4424"
+  },
+  "crates/cadmium-app/src/dmabuf/pool.rs": {
+    "mtime": 1793838270.3752925,
+    "seen": 1793839262.0613382,
+    "ast_hash": "6f66b2190170a52dae19c1ac9e510dda",
+    "semantic_hash": "6f66b2190170a52dae19c1ac9e510dda"
+  },
+  "crates/cadmium-app/src/dmabuf/sync.rs": {
+    "mtime": 1793838270.3752925,
+    "seen": 1793839262.0613391,
+    "ast_hash": "8cd1ff0973851fb8f45af4a62c40955a",
+    "semantic_hash": "8cd1ff0973851fb8f45af4a62c40955a"
+  },
+  "crates/cadmium-app/src/dmabuf/tests.rs": {
+    "mtime": 1793838270.3752925,
+    "seen": 1793839262.0613399,
+    "ast_hash": "1f74c8b8c6346190d558766111a8d78b",
+    "semantic_hash": "1f74c8b8c6346190d558766111a8d78b"
+  },
+  "crates/cadmium-app/src/dmabuf_off.rs": {
+    "mtime": 1793838270.3752925,
+    "seen": 1793839262.0613408,
+    "ast_hash": "15972cdd39cf8594b8495b60f9587717",
+    "semantic_hash": "15972cdd39cf8594b8495b60f9587717"
+  },
+  "crates/cadmium-app/src/dmabuf_selftest.rs": {
+    "mtime": 1793838270.3753774,
+    "seen": 1793839262.061342,
+    "ast_hash": "6d8d5e61e0448313df7cb51696ca6277",
+    "semantic_hash": "6d8d5e61e0448313df7cb51696ca6277"
+  },
+  "crates/cadmium-app/src/dmabuf_selftest/check.rs": {
+    "mtime": 1793838270.3753774,
+    "seen": 1793839262.0613427,
+    "ast_hash": "e3bc8105e4b50c7803e05fe33315412a",
+    "semantic_hash": "e3bc8105e4b50c7803e05fe33315412a"
+  },
+  "crates/cadmium-app/src/dmabuf_selftest/pattern.rs": {
+    "mtime": 1793838270.375471,
+    "seen": 1793839262.0613434,
+    "ast_hash": "e56b6bfc70d1435884343e28aab9f0e2",
+    "semantic_hash": "e56b6bfc70d1435884343e28aab9f0e2"
+  },
+  "crates/cadmium-app/src/dmabuf_selftest/run.rs": {
+    "mtime": 1793838270.375471,
+    "seen": 1793839262.0613446,
+    "ast_hash": "3707448e7fcb10263b2220669b135e0e",
+    "semantic_hash": "3707448e7fcb10263b2220669b135e0e"
+  },
+  "crates/cadmium-app/src/dmabuf_selftest/tests.rs": {
+    "mtime": 1793838270.375471,
+    "seen": 1793839262.0613456,
+    "ast_hash": "f8632124aa4e7407633e1f2b5a49ab3f",
+    "semantic_hash": "f8632124aa4e7407633e1f2b5a49ab3f"
+  },
+  "crates/cadmium-app/src/files.rs": {
+    "mtime": 1793838270.375471,
+    "seen": 1793839262.0613463,
+    "ast_hash": "c0699de02062eab125ad5d0e33c89ffc",
+    "semantic_hash": "c0699de02062eab125ad5d0e33c89ffc"
+  },
+  "crates/cadmium-app/src/files/close.rs": {
+    "mtime": 1793838270.375471,
+    "seen": 1793839262.061347,
+    "ast_hash": "367c259fbcb2b378418e8d51036d5373",
+    "semantic_hash": "367c259fbcb2b378418e8d51036d5373"
+  },
+  "crates/cadmium-app/src/files/dialogs.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613482,
+    "ast_hash": "9be7fffa1962c12a92f0295b42462744",
+    "semantic_hash": "9be7fffa1962c12a92f0295b42462744"
+  },
+  "crates/cadmium-app/src/files/dialogs/tests.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.061349,
+    "ast_hash": "dfa489f74227d80f587a0814d4cd265f",
+    "semantic_hash": "dfa489f74227d80f587a0814d4cd265f"
+  },
+  "crates/cadmium-app/src/files/read.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613499,
+    "ast_hash": "76707cb01d75bb30abda1aca1451b5bb",
+    "semantic_hash": "76707cb01d75bb30abda1aca1451b5bb"
+  },
+  "crates/cadmium-app/src/files/tests.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613506,
+    "ast_hash": "0c93d303de93908739f9bfa3954324bc",
+    "semantic_hash": "0c93d303de93908739f9bfa3954324bc"
+  },
+  "crates/cadmium-app/src/files/title.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613518,
+    "ast_hash": "38dc48db845affa5e580b0e4af4b6a49",
+    "semantic_hash": "38dc48db845affa5e580b0e4af4b6a49"
+  },
+  "crates/cadmium-app/src/files/title/tests.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613527,
+    "ast_hash": "ac697a0152d2a7713f50773de9004776",
+    "semantic_hash": "ac697a0152d2a7713f50773de9004776"
+  },
+  "crates/cadmium-app/src/files/write.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613537,
+    "ast_hash": "b2c630977b19b58b458a142f69cb91c7",
+    "semantic_hash": "b2c630977b19b58b458a142f69cb91c7"
+  },
+  "crates/cadmium-app/src/handlers.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613556,
+    "ast_hash": "11cfbb02660e1026b55fc0486b638d6e",
+    "semantic_hash": "11cfbb02660e1026b55fc0486b638d6e"
+  },
+  "crates/cadmium-app/src/input.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613565,
+    "ast_hash": "70b78b216436f9cd4539d329b6010617",
+    "semantic_hash": "70b78b216436f9cd4539d329b6010617"
+  },
+  "crates/cadmium-app/src/input/navigation.rs": {
+    "mtime": 1793838270.3756263,
+    "seen": 1793839262.0613573,
+    "ast_hash": "10edb84d66fa2e83f241c8e76f1828ca",
+    "semantic_hash": "10edb84d66fa2e83f241c8e76f1828ca"
+  },
+  "crates/cadmium-app/src/input/samples.rs": {
+    "mtime": 1793838270.3759034,
+    "seen": 1793839262.061358,
+    "ast_hash": "f57b8187f4a7d5c80628bd0944870429",
+    "semantic_hash": "f57b8187f4a7d5c80628bd0944870429"
+  },
+  "crates/cadmium-app/src/input/samples/tests.rs": {
+    "mtime": 1793838270.3759034,
+    "seen": 1793839262.0613592,
+    "ast_hash": "0624f22117427c9776b528fa9394ff72",
+    "semantic_hash": "0624f22117427c9776b528fa9394ff72"
+  },
+  "crates/cadmium-app/src/input/stylus.rs": {
+    "mtime": 1793838270.3759034,
+    "seen": 1793839262.06136,
+    "ast_hash": "759c718495f509db271c203b45bb60a2",
+    "semantic_hash": "759c718495f509db271c203b45bb60a2"
+  },
+  "crates/cadmium-app/src/input/tests.rs": {
+    "mtime": 1793838270.3759034,
+    "seen": 1793839262.0613608,
+    "ast_hash": "9dcf25fef479962aedcb78e556e63285",
+    "semantic_hash": "9dcf25fef479962aedcb78e556e63285"
+  },
+  "crates/cadmium-app/src/lab_panel.rs": {
+    "mtime": 1793838270.3759034,
+    "seen": 1793839262.0613616,
+    "ast_hash": "efc655bde9c13e166a16b6d6b9019a8b",
+    "semantic_hash": "efc655bde9c13e166a16b6d6b9019a8b"
+  },
+  "crates/cadmium-app/src/lab_panel/build.rs": {
+    "mtime": 1793838270.3759034,
+    "seen": 1793839262.0613627,
+    "ast_hash": "fd152857b022938afb9cb4ba920b5906",
+    "semantic_hash": "fd152857b022938afb9cb4ba920b5906"
+  },
+  "crates/cadmium-app/src/lab_panel/presentation.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.0613635,
+    "ast_hash": "8abd04e9e5186d01d604233ae48e23d4",
+    "semantic_hash": "8abd04e9e5186d01d604233ae48e23d4"
+  },
+  "crates/cadmium-app/src/lab_panel/presentation/tests.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.0613644,
+    "ast_hash": "ee28664f0469828e396b2e2c24e07f2d",
+    "semantic_hash": "ee28664f0469828e396b2e2c24e07f2d"
+  },
+  "crates/cadmium-app/src/lab_panel/signals.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.0613656,
+    "ast_hash": "6f16839a3b604e38a09ae75f85fb83b3",
+    "semantic_hash": "6f16839a3b604e38a09ae75f85fb83b3"
+  },
+  "crates/cadmium-app/src/lab_panel/snapshot.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.0613663,
+    "ast_hash": "907b82890f3ffc551ad74c92bf18bbc2",
+    "semantic_hash": "907b82890f3ffc551ad74c92bf18bbc2"
+  },
+  "crates/cadmium-app/src/main.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.061367,
+    "ast_hash": "b961c9499db0f42f4ed10d71900d690b",
+    "semantic_hash": "b961c9499db0f42f4ed10d71900d690b"
+  },
+  "crates/cadmium-app/src/new_painting_dialog.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.061368,
+    "ast_hash": "9b6985dbab65a588a9047d7e6cc7113f",
+    "semantic_hash": "9b6985dbab65a588a9047d7e6cc7113f"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/build.rs": {
+    "mtime": 1793838270.3760664,
+    "seen": 1793839262.0613692,
+    "ast_hash": "10a65a97f9b4131ca997fbf5ea369fee",
+    "semantic_hash": "10a65a97f9b4131ca997fbf5ea369fee"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/format.rs": {
+    "mtime": 1793838270.3762589,
+    "seen": 1793839262.06137,
+    "ast_hash": "0245aca85b931c9bf97ddf43e1024301",
+    "semantic_hash": "0245aca85b931c9bf97ddf43e1024301"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/format/tests.rs": {
+    "mtime": 1793838270.3762589,
+    "seen": 1793839262.0613708,
+    "ast_hash": "9bfa22b36212100b8cd825c3ff01e2c6",
+    "semantic_hash": "9bfa22b36212100b8cd825c3ff01e2c6"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/imp.rs": {
+    "mtime": 1793838270.3762589,
+    "seen": 1793839262.0613716,
+    "ast_hash": "f31425f9ffefe76dee486413ad320f97",
+    "semantic_hash": "f31425f9ffefe76dee486413ad320f97"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/selection.rs": {
+    "mtime": 1793838270.3762589,
+    "seen": 1793839262.0613728,
+    "ast_hash": "4c31212f26c933fc7b3a0bac938e77e3",
+    "semantic_hash": "4c31212f26c933fc7b3a0bac938e77e3"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/selection/tests.rs": {
+    "mtime": 1793838270.3762589,
+    "seen": 1793839262.0613735,
+    "ast_hash": "afb0fd2b62453e1af195741cbf264a9d",
+    "semantic_hash": "afb0fd2b62453e1af195741cbf264a9d"
+  },
+  "crates/cadmium-app/src/new_painting_dialog/signals.rs": {
+    "mtime": 1793838270.3762589,
+    "seen": 1793839262.0613744,
+    "ast_hash": "b86f13e18de950824239d256153cd72c",
+    "semantic_hash": "b86f13e18de950824239d256153cd72c"
+  },
+  "crates/cadmium-app/src/presenter.rs": {
+    "mtime": 1793838270.3763773,
+    "seen": 1793839262.0613751,
+    "ast_hash": "292f46dca367b1355fc8cf3052834500",
+    "semantic_hash": "292f46dca367b1355fc8cf3052834500"
+  },
+  "crates/cadmium-app/src/presenter/by_dmabuf.rs": {
+    "mtime": 1793838270.3763773,
+    "seen": 1793839262.061376,
+    "ast_hash": "00e77f1c8fccb89e27dac1e9dfdabef1",
+    "semantic_hash": "00e77f1c8fccb89e27dac1e9dfdabef1"
+  },
+  "crates/cadmium-app/src/presenter/by_dmabuf/tests.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.061377,
+    "ast_hash": "415c0d1a47b03d8761229308bcb579e5",
+    "semantic_hash": "415c0d1a47b03d8761229308bcb579e5"
+  },
+  "crates/cadmium-app/src/presenter/by_readback.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613778,
+    "ast_hash": "33f829ea86c3c9bc8695a088989def88",
+    "semantic_hash": "33f829ea86c3c9bc8695a088989def88"
+  },
+  "crates/cadmium-app/src/presenter/mode.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613787,
+    "ast_hash": "f1759799149fd152994eb1b651d18b71",
+    "semantic_hash": "f1759799149fd152994eb1b651d18b71"
+  },
+  "crates/cadmium-app/src/presenter/mode/tests.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613797,
+    "ast_hash": "a2001369fc593df2443b0b53c4085ec4",
+    "semantic_hash": "a2001369fc593df2443b0b53c4085ec4"
+  },
+  "crates/cadmium-app/src/presenter/tests.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613806,
+    "ast_hash": "f636758c163dbff02228f8b765458293",
+    "semantic_hash": "f636758c163dbff02228f8b765458293"
+  },
+  "crates/cadmium-app/src/presets.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613816,
+    "ast_hash": "c4388ea85b928fdc186e8f6e1e2ce25e",
+    "semantic_hash": "c4388ea85b928fdc186e8f6e1e2ce25e"
+  },
+  "crates/cadmium-app/src/presets/tests.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613823,
+    "ast_hash": "ab2d860f4f3074e24196cba3bc796b7b",
+    "semantic_hash": "ab2d860f4f3074e24196cba3bc796b7b"
+  },
+  "crates/cadmium-app/src/side_panel.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613835,
+    "ast_hash": "6719a2438e80a7708a284dfc185c5119",
+    "semantic_hash": "6719a2438e80a7708a284dfc185c5119"
+  },
+  "crates/cadmium-app/src/sliders.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613844,
+    "ast_hash": "d8511a50fbc1023f3dbf8a310871a2e5",
+    "semantic_hash": "d8511a50fbc1023f3dbf8a310871a2e5"
+  },
+  "crates/cadmium-app/src/sliders/tests.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613852,
+    "ast_hash": "69201c84cb4150708dc06ca5902fdf24",
+    "semantic_hash": "69201c84cb4150708dc06ca5902fdf24"
+  },
+  "crates/cadmium-app/src/smoke.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613859,
+    "ast_hash": "b528148f7748646a88e9825d76a338c0",
+    "semantic_hash": "b528148f7748646a88e9825d76a338c0"
+  },
+  "crates/cadmium-app/src/smoke/config.rs": {
+    "mtime": 1793838270.376452,
+    "seen": 1793839262.0613873,
+    "ast_hash": "dc6a9e79e3cde28856b535c311942408",
+    "semantic_hash": "dc6a9e79e3cde28856b535c311942408"
+  },
+  "crates/cadmium-app/src/smoke/steps.rs": {
+    "mtime": 1793838270.3767245,
+    "seen": 1793839262.061388,
+    "ast_hash": "277bde4b5655d2a37e4b82498258999b",
+    "semantic_hash": "277bde4b5655d2a37e4b82498258999b"
+  },
+  "crates/cadmium-app/src/smoke/tests.rs": {
+    "mtime": 1793838270.3767245,
+    "seen": 1793839262.061389,
+    "ast_hash": "d3664bc12431723fe96d05e68151ebd0",
+    "semantic_hash": "d3664bc12431723fe96d05e68151ebd0"
+  },
+  "crates/cadmium-app/src/smoke_off.rs": {
+    "mtime": 1793838270.3767245,
+    "seen": 1793839262.0613902,
+    "ast_hash": "a8e1ee4701323c1ca6fad801897ea2a9",
+    "semantic_hash": "a8e1ee4701323c1ca6fad801897ea2a9"
+  },
+  "crates/cadmium-app/src/state.rs": {
+    "mtime": 1793838270.3767245,
+    "seen": 1793839262.0613909,
+    "ast_hash": "87955bbf5e7fcdc6d121016c3c3ff0bd",
+    "semantic_hash": "87955bbf5e7fcdc6d121016c3c3ff0bd"
+  },
+  "crates/cadmium-app/src/state/dip.rs": {
+    "mtime": 1793838270.3767245,
+    "seen": 1793839262.0613918,
+    "ast_hash": "517acfdb5aa9d0ad45f739162136e627",
+    "semantic_hash": "517acfdb5aa9d0ad45f739162136e627"
+  },
+  "crates/cadmium-app/src/state/dip/tests.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613925,
+    "ast_hash": "001d73217867c40ec54557afce075bbf",
+    "semantic_hash": "001d73217867c40ec54557afce075bbf"
+  },
+  "crates/cadmium-app/src/state/document.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613935,
+    "ast_hash": "f6a6913f903b63cb6162647f714875b2",
+    "semantic_hash": "f6a6913f903b63cb6162647f714875b2"
+  },
+  "crates/cadmium-app/src/state/document/tests.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613954,
+    "ast_hash": "873bd0cffb5170d80fa9434d1ff1cea7",
+    "semantic_hash": "873bd0cffb5170d80fa9434d1ff1cea7"
+  },
+  "crates/cadmium-app/src/state/frames.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613966,
+    "ast_hash": "2eec4aa4d22801ce7fbd6aea1b704154",
+    "semantic_hash": "2eec4aa4d22801ce7fbd6aea1b704154"
+  },
+  "crates/cadmium-app/src/state/frames/tests.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613976,
+    "ast_hash": "f094ca7ec14bc0f543850ab516763ea5",
+    "semantic_hash": "f094ca7ec14bc0f543850ab516763ea5"
+  },
+  "crates/cadmium-app/src/state/gesture.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613983,
+    "ast_hash": "c826db7d5d3a54f7ff56233a9921629c",
+    "semantic_hash": "c826db7d5d3a54f7ff56233a9921629c"
+  },
+  "crates/cadmium-app/src/state/gesture/contact.rs": {
+    "mtime": 1793838270.3770022,
+    "seen": 1793839262.0613992,
+    "ast_hash": "060b93e3df7e9cff0260c18b78564c97",
+    "semantic_hash": "060b93e3df7e9cff0260c18b78564c97"
+  },
+  "crates/cadmium-app/src/state/gesture/contact/tests.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614004,
+    "ast_hash": "43ba165c838e60dce9760eed4e1be77f",
+    "semantic_hash": "43ba165c838e60dce9760eed4e1be77f"
+  },
+  "crates/cadmium-app/src/state/gesture/hold.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614011,
+    "ast_hash": "2c4bd2c3c16bf30cd80e94e883c6da2e",
+    "semantic_hash": "2c4bd2c3c16bf30cd80e94e883c6da2e"
+  },
+  "crates/cadmium-app/src/state/gesture/hold/tests.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614018,
+    "ast_hash": "925a9199ad14e97a7746ce42380a87f5",
+    "semantic_hash": "925a9199ad14e97a7746ce42380a87f5"
+  },
+  "crates/cadmium-app/src/state/gesture/press.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614026,
+    "ast_hash": "c1cf8d1bcdc9e237cf2c51b625fd4925",
+    "semantic_hash": "c1cf8d1bcdc9e237cf2c51b625fd4925"
+  },
+  "crates/cadmium-app/src/state/gesture/press/tests.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614038,
+    "ast_hash": "4750f731fef4b72eb5cb48c2e59e23c3",
+    "semantic_hash": "4750f731fef4b72eb5cb48c2e59e23c3"
+  },
+  "crates/cadmium-app/src/state/gesture/stroke.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614047,
+    "ast_hash": "e3462e8eddb548abceb59914ee512d06",
+    "semantic_hash": "e3462e8eddb548abceb59914ee512d06"
+  },
+  "crates/cadmium-app/src/state/gesture/stroke/tests.rs": {
+    "mtime": 1793838270.3772657,
+    "seen": 1793839262.0614057,
+    "ast_hash": "a170f281900228ab1fc78fa73a08d5fd",
+    "semantic_hash": "a170f281900228ab1fc78fa73a08d5fd"
+  },
+  "crates/cadmium-app/src/state/hand.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614064,
+    "ast_hash": "6312f8a8a127e0a441e6750504d6a0c0",
+    "semantic_hash": "6312f8a8a127e0a441e6750504d6a0c0"
+  },
+  "crates/cadmium-app/src/state/hand/tests.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614076,
+    "ast_hash": "d05ac0f91d3e196cadded8b7795b8383",
+    "semantic_hash": "d05ac0f91d3e196cadded8b7795b8383"
+  },
+  "crates/cadmium-app/src/state/history.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614083,
+    "ast_hash": "4fd13d7d0682ec8badb96b20fc911942",
+    "semantic_hash": "4fd13d7d0682ec8badb96b20fc911942"
+  },
+  "crates/cadmium-app/src/state/history/tests.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.061409,
+    "ast_hash": "44a1092cb9808b17f534d67fe9155e78",
+    "semantic_hash": "44a1092cb9808b17f534d67fe9155e78"
+  },
+  "crates/cadmium-app/src/state/lab.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614097,
+    "ast_hash": "99ec974532cc45601e1b82cf360d133b",
+    "semantic_hash": "99ec974532cc45601e1b82cf360d133b"
+  },
+  "crates/cadmium-app/src/state/lab/tests.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.061411,
+    "ast_hash": "5fc0130c0343ca5a50dd707efd710d1f",
+    "semantic_hash": "5fc0130c0343ca5a50dd707efd710d1f"
+  },
+  "crates/cadmium-app/src/state/pen.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614116,
+    "ast_hash": "aa2e801d87fee2e8765dd284be09fa61",
+    "semantic_hash": "aa2e801d87fee2e8765dd284be09fa61"
+  },
+  "crates/cadmium-app/src/state/pen/tests.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614123,
+    "ast_hash": "0f7c9273f6ef1eb9348873af40504f7d",
+    "semantic_hash": "0f7c9273f6ef1eb9348873af40504f7d"
+  },
+  "crates/cadmium-app/src/state/recipe.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614135,
+    "ast_hash": "68b5325c4e56f969640549125ff7ce51",
+    "semantic_hash": "68b5325c4e56f969640549125ff7ce51"
+  },
+  "crates/cadmium-app/src/state/recipe/tests.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614145,
+    "ast_hash": "b2c96c89433229cc83cca47dd2dacb19",
+    "semantic_hash": "b2c96c89433229cc83cca47dd2dacb19"
+  },
+  "crates/cadmium-app/src/state/test_support.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614154,
+    "ast_hash": "6596addd3e76b8dcfe684a8716956fda",
+    "semantic_hash": "6596addd3e76b8dcfe684a8716956fda"
+  },
+  "crates/cadmium-app/src/state/tray.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614161,
+    "ast_hash": "d9aa5398f742c8cec82e50efb2c91885",
+    "semantic_hash": "d9aa5398f742c8cec82e50efb2c91885"
+  },
+  "crates/cadmium-app/src/state/tray/tests.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.0614169,
+    "ast_hash": "7a06c99a8cdf54190c07638ff3d0c122",
+    "semantic_hash": "7a06c99a8cdf54190c07638ff3d0c122"
+  },
+  "crates/cadmium-app/src/surface_scale.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.061418,
+    "ast_hash": "0c86af9e63816183fad2afa5b0b3bc07",
+    "semantic_hash": "0c86af9e63816183fad2afa5b0b3bc07"
+  },
+  "crates/cadmium-app/src/swatch.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.061419,
+    "ast_hash": "8aeefaf38dd61be1527bc66627c349c1",
+    "semantic_hash": "8aeefaf38dd61be1527bc66627c349c1"
+  },
+  "crates/cadmium-app/src/swatch/imp.rs": {
+    "mtime": 1793838270.3773773,
+    "seen": 1793839262.06142,
+    "ast_hash": "4e2af42feb12d9645309ca416942cd97",
+    "semantic_hash": "4e2af42feb12d9645309ca416942cd97"
+  },
+  "crates/cadmium-app/src/swatch/tests.rs": {
+    "mtime": 1793838270.3777585,
+    "seen": 1793839262.061421,
+    "ast_hash": "21ffa7231426ba728ca87fdd51d4c6e6",
+    "semantic_hash": "21ffa7231426ba728ca87fdd51d4c6e6"
+  },
+  "crates/cadmium-app/src/tools.rs": {
+    "mtime": 1793838270.3777585,
+    "seen": 1793839262.0614219,
+    "ast_hash": "da7a7bb53e09de7d4395be0141b46f25",
+    "semantic_hash": "da7a7bb53e09de7d4395be0141b46f25"
+  },
+  "crates/cadmium-app/src/tools/blender.rs": {
+    "mtime": 1793838270.3777585,
+    "seen": 1793839262.0614228,
+    "ast_hash": "b67afb5f5b2f186b0bfc29e98a52a5e7",
+    "semantic_hash": "b67afb5f5b2f186b0bfc29e98a52a5e7"
+  },
+  "crates/cadmium-app/src/tools/brush.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614235,
+    "ast_hash": "f83e851a395bfe9504f2a96104b80340",
+    "semantic_hash": "f83e851a395bfe9504f2a96104b80340"
+  },
+  "crates/cadmium-app/src/tools/eyedropper.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614247,
+    "ast_hash": "2461663b73ec3494cff75d07e7c0f912",
+    "semantic_hash": "2461663b73ec3494cff75d07e7c0f912"
+  },
+  "crates/cadmium-app/src/tools/keys.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614257,
+    "ast_hash": "8acad9474e8913392db6070d8aec866a",
+    "semantic_hash": "8acad9474e8913392db6070d8aec866a"
+  },
+  "crates/cadmium-app/src/tools/keys/tests.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614266,
+    "ast_hash": "999ec596a5937abb685359bcd7694771",
+    "semantic_hash": "999ec596a5937abb685359bcd7694771"
+  },
+  "crates/cadmium-app/src/tools/knife.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614274,
+    "ast_hash": "8f415af56fcb4a2ece23b538259a8cd8",
+    "semantic_hash": "8f415af56fcb4a2ece23b538259a8cd8"
+  },
+  "crates/cadmium-app/src/tools/moving.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614285,
+    "ast_hash": "3c6957904d431857b5fd86493ca0d714",
+    "semantic_hash": "3c6957904d431857b5fd86493ca0d714"
+  },
+  "crates/cadmium-app/src/tools/panel.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614293,
+    "ast_hash": "26c4c60e3535a382f3c192a5cc66d16f",
+    "semantic_hash": "26c4c60e3535a382f3c192a5cc66d16f"
+  },
+  "crates/cadmium-app/src/tools/rag.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614302,
+    "ast_hash": "ea6ba081e32c68ed5962f54019eeb511",
+    "semantic_hash": "ea6ba081e32c68ed5962f54019eeb511"
+  },
+  "crates/cadmium-app/src/tools/tests.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614314,
+    "ast_hash": "ab6bd1a0ca5ab7d525cfed7cf6d407eb",
+    "semantic_hash": "ab6bd1a0ca5ab7d525cfed7cf6d407eb"
+  },
+  "crates/cadmium-app/src/tools/tube.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614321,
+    "ast_hash": "d9a28183b221222dd95e66ef1678e51c",
+    "semantic_hash": "d9a28183b221222dd95e66ef1678e51c"
+  },
+  "crates/cadmium-app/src/tray_view.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.061433,
+    "ast_hash": "1a6f1251796ea15f07e6aac5b631fdfa",
+    "semantic_hash": "1a6f1251796ea15f07e6aac5b631fdfa"
+  },
+  "crates/cadmium-app/src/tray_view/frames.rs": {
+    "mtime": 1793838270.3778415,
+    "seen": 1793839262.0614338,
+    "ast_hash": "00c0fd001ed1039d54068f8f4397dd17",
+    "semantic_hash": "00c0fd001ed1039d54068f8f4397dd17"
+  },
+  "crates/cadmium-app/src/tray_view/geometry.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.061435,
+    "ast_hash": "76790816d41213cb79e7d000d8b0925d",
+    "semantic_hash": "76790816d41213cb79e7d000d8b0925d"
+  },
+  "crates/cadmium-app/src/tray_view/geometry/tests.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614357,
+    "ast_hash": "077b4c995465c4ba03dad9dd11fbf3cc",
+    "semantic_hash": "077b4c995465c4ba03dad9dd11fbf3cc"
+  },
+  "crates/cadmium-app/src/tray_view/imp.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614367,
+    "ast_hash": "0e7bd1c8b6fae85b85f19143f74824da",
+    "semantic_hash": "0e7bd1c8b6fae85b85f19143f74824da"
+  },
+  "crates/cadmium-app/src/tray_view/ring.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614374,
+    "ast_hash": "7773fe5b51409abecc4013f494481948",
+    "semantic_hash": "7773fe5b51409abecc4013f494481948"
+  },
+  "crates/cadmium-app/src/tray_view/ring/tests.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614383,
+    "ast_hash": "a2d7a5aa3367ca4939b9280789bdf565",
+    "semantic_hash": "a2d7a5aa3367ca4939b9280789bdf565"
+  },
+  "crates/cadmium-app/src/view.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614393,
+    "ast_hash": "08d8ad59718836abc22cb8d4007c40d3",
+    "semantic_hash": "08d8ad59718836abc22cb8d4007c40d3"
+  },
+  "crates/cadmium-app/src/view/tests.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614402,
+    "ast_hash": "ebc704589f4da2615981d965083dd0c4",
+    "semantic_hash": "ebc704589f4da2615981d965083dd0c4"
+  },
+  "crates/cadmium-app/src/window.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.061441,
+    "ast_hash": "f6d0c24296999b36d72374f8d2099f70",
+    "semantic_hash": "f6d0c24296999b36d72374f8d2099f70"
+  },
+  "crates/cadmium-app/src/window/actions.rs": {
+    "mtime": 1793838270.3781145,
+    "seen": 1793839262.0614421,
+    "ast_hash": "c1c0c615ec56b5dae79eb37dc02c5bfb",
+    "semantic_hash": "c1c0c615ec56b5dae79eb37dc02c5bfb"
+  },
+  "crates/cadmium-app/src/window/document.rs": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.0614429,
+    "ast_hash": "6237a28a49fa52dd8d649270a126c9d4",
+    "semantic_hash": "6237a28a49fa52dd8d649270a126c9d4"
+  },
+  "crates/cadmium-app/src/window/imp.rs": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.0614438,
+    "ast_hash": "4f6c74f6dd8ed5e11668c6e8c362685b",
+    "semantic_hash": "4f6c74f6dd8ed5e11668c6e8c362685b"
+  },
+  "crates/cadmium-app/src/window/surface_events.rs": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.0614445,
+    "ast_hash": "a6321757b3022d6fc78756985e3d30d2",
+    "semantic_hash": "a6321757b3022d6fc78756985e3d30d2"
+  },
+  "crates/cadmium-app/src/window/tool_toggles.rs": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.0614457,
+    "ast_hash": "4078a7d6438843073dc949d75833c49c",
+    "semantic_hash": "4078a7d6438843073dc949d75833c49c"
+  },
+  "crates/cadmium-app/src/writes.rs": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.0614464,
+    "ast_hash": "23148df1c607636effd52b63b8dac651",
+    "semantic_hash": "23148df1c607636effd52b63b8dac651"
+  },
+  "crates/cadmium-app/src/writes/tests.rs": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.0614474,
+    "ast_hash": "0b7a7a7a1438dbdd2a14be86c7a24fad",
+    "semantic_hash": "0b7a7a7a1438dbdd2a14be86c7a24fad"
+  },
+  "crates/cadmium-engine/Cargo.toml": {
+    "mtime": 1793838270.3783238,
+    "seen": 1793839262.061448,
+    "ast_hash": "54abbf2d0cbcc35ebc65a0fd5af6c7a9",
+    "semantic_hash": "54abbf2d0cbcc35ebc65a0fd5af6c7a9"
+  },
+  "crates/cadmium-engine/examples/paint_logo.rs": {
+    "mtime": 1793838270.3783774,
+    "seen": 1793839262.0614588,
+    "ast_hash": "c7a76538e0e7237c513f63aee9591f13",
+    "semantic_hash": "c7a76538e0e7237c513f63aee9591f13"
+  },
+  "crates/cadmium-engine/src/brush.rs": {
+    "mtime": 1793838270.3783774,
+    "seen": 1793839262.06146,
+    "ast_hash": "0828e0249d982602b0dda5b4716d3fc3",
+    "semantic_hash": "0828e0249d982602b0dda5b4716d3fc3"
+  },
+  "crates/cadmium-engine/src/canvas.rs": {
+    "mtime": 1793838270.378526,
+    "seen": 1793839262.0614607,
+    "ast_hash": "98edb69d597d1dc6c7b7794b82986586",
+    "semantic_hash": "98edb69d597d1dc6c7b7794b82986586"
+  },
+  "crates/cadmium-engine/src/canvas/pigment_slots.rs": {
+    "mtime": 1793838270.378526,
+    "seen": 1793839262.0614617,
+    "ast_hash": "6b2c6226f5362e44462f53b56577cdbb",
+    "semantic_hash": "6b2c6226f5362e44462f53b56577cdbb"
+  },
+  "crates/cadmium-engine/src/canvas/primer.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614626,
+    "ast_hash": "99dd459f7e4c5cb1e489bd1a69a36733",
+    "semantic_hash": "99dd459f7e4c5cb1e489bd1a69a36733"
+  },
+  "crates/cadmium-engine/src/canvas/spec.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614636,
+    "ast_hash": "4b2125a0af87348542ea28931b88747e",
+    "semantic_hash": "4b2125a0af87348542ea28931b88747e"
+  },
+  "crates/cadmium-engine/src/canvas/state_texture.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614645,
+    "ast_hash": "ec1c8c01abf70c8aa3c9358ebca3fc89",
+    "semantic_hash": "ec1c8c01abf70c8aa3c9358ebca3fc89"
+  },
+  "crates/cadmium-engine/src/canvas/texels.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614653,
+    "ast_hash": "ae47a3982363aedfdedbfefba5d2d3a7",
+    "semantic_hash": "ae47a3982363aedfdedbfefba5d2d3a7"
+  },
+  "crates/cadmium-engine/src/canvas/tiles.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614665,
+    "ast_hash": "f0775d48fb9a2d9b9f544e1d1d4ddcf9",
+    "semantic_hash": "f0775d48fb9a2d9b9f544e1d1d4ddcf9"
+  },
+  "crates/cadmium-engine/src/canvas/weave.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614672,
+    "ast_hash": "8b7efc6d9869df635b7f731e89c47082",
+    "semantic_hash": "8b7efc6d9869df635b7f731e89c47082"
+  },
+  "crates/cadmium-engine/src/compute.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614681,
+    "ast_hash": "ca76fab6339dc201090babbf6668eb2d",
+    "semantic_hash": "ca76fab6339dc201090babbf6668eb2d"
+  },
+  "crates/cadmium-engine/src/document.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614688,
+    "ast_hash": "2397fdcd27b1c18050c18679b6a8afe1",
+    "semantic_hash": "2397fdcd27b1c18050c18679b6a8afe1"
+  },
+  "crates/cadmium-engine/src/document/export.rs": {
+    "mtime": 1793838270.378613,
+    "seen": 1793839262.0614698,
+    "ast_hash": "f0a2363c636fcaf217468a6546024182",
+    "semantic_hash": "f0a2363c636fcaf217468a6546024182"
+  },
+  "crates/cadmium-engine/src/document/read.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614707,
+    "ast_hash": "cdee7a3f43928df11f3369cd541afb15",
+    "semantic_hash": "cdee7a3f43928df11f3369cd541afb15"
+  },
+  "crates/cadmium-engine/src/document/relief.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614717,
+    "ast_hash": "5a57736216b7e5e8c0c98d0f58a9189b",
+    "semantic_hash": "5a57736216b7e5e8c0c98d0f58a9189b"
+  },
+  "crates/cadmium-engine/src/document/write.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614727,
+    "ast_hash": "629e8fcd1e47ea5e0692d225bd7ed8b4",
+    "semantic_hash": "629e8fcd1e47ea5e0692d225bd7ed8b4"
+  },
+  "crates/cadmium-engine/src/draw_up.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614736,
+    "ast_hash": "b1abd5bddc65d302ae8448296d86856c",
+    "semantic_hash": "b1abd5bddc65d302ae8448296d86856c"
+  },
+  "crates/cadmium-engine/src/draw_up/tests.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614746,
+    "ast_hash": "bfaf7736bae69606e384caeb91e41cb3",
+    "semantic_hash": "bfaf7736bae69606e384caeb91e41cb3"
+  },
+  "crates/cadmium-engine/src/engine.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614753,
+    "ast_hash": "f3cc91d5428b96b2c473b988999cff5d",
+    "semantic_hash": "f3cc91d5428b96b2c473b988999cff5d"
+  },
+  "crates/cadmium-engine/src/engine/dab_record.rs": {
+    "mtime": 1793838270.378821,
+    "seen": 1793839262.0614765,
+    "ast_hash": "ab3453224a33d9b6f41067de31a0df8a",
+    "semantic_hash": "ab3453224a33d9b6f41067de31a0df8a"
+  },
+  "crates/cadmium-engine/src/engine/footprint.rs": {
+    "mtime": 1793838270.3791826,
+    "seen": 1793839262.0614774,
+    "ast_hash": "bfb763980df71cb54e91f844a9fd8769",
+    "semantic_hash": "bfb763980df71cb54e91f844a9fd8769"
+  },
+  "crates/cadmium-engine/src/engine/knife_load.rs": {
+    "mtime": 1793838270.3791826,
+    "seen": 1793839262.0614781,
+    "ast_hash": "21c96dc12ac8793129845357c6254034",
+    "semantic_hash": "21c96dc12ac8793129845357c6254034"
+  },
+  "crates/cadmium-engine/src/engine/knife_load/tests.rs": {
+    "mtime": 1793838270.3791826,
+    "seen": 1793839262.061479,
+    "ast_hash": "ac1ceb7b73b88e6289852447405f59dc",
+    "semantic_hash": "ac1ceb7b73b88e6289852447405f59dc"
+  },
+  "crates/cadmium-engine/src/engine/pass.rs": {
+    "mtime": 1793838270.3791826,
+    "seen": 1793839262.0614803,
+    "ast_hash": "63cae2c62e52ca154cc06959f0c80121",
+    "semantic_hash": "63cae2c62e52ca154cc06959f0c80121"
+  },
+  "crates/cadmium-engine/src/engine/pass/apply.rs": {
+    "mtime": 1793838270.3791826,
+    "seen": 1793839262.0614812,
+    "ast_hash": "7b9f366e6b2dea58386058be6649903d",
+    "semantic_hash": "7b9f366e6b2dea58386058be6649903d"
+  },
+  "crates/cadmium-engine/src/engine/pass/blade.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.061482,
+    "ast_hash": "e020f4846e4b5a4dd7fa0a51e83a08bd",
+    "semantic_hash": "e020f4846e4b5a4dd7fa0a51e83a08bd"
+  },
+  "crates/cadmium-engine/src/engine/pass/capillary.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.0614848,
+    "ast_hash": "61131d8838d5b2b43d1a86bd3836610c",
+    "semantic_hash": "61131d8838d5b2b43d1a86bd3836610c"
+  },
+  "crates/cadmium-engine/src/engine/pass/dip.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.0614855,
+    "ast_hash": "479833e59d746618c9a2191766f42fd4",
+    "semantic_hash": "479833e59d746618c9a2191766f42fd4"
+  },
+  "crates/cadmium-engine/src/engine/pass/dry.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.0614865,
+    "ast_hash": "82b01530438037f49abd5bbb1de8a1f5",
+    "semantic_hash": "82b01530438037f49abd5bbb1de8a1f5"
+  },
+  "crates/cadmium-engine/src/engine/pass/exchange.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.0614877,
+    "ast_hash": "dc5cf25f54060e06948ee47494c1c738",
+    "semantic_hash": "dc5cf25f54060e06948ee47494c1c738"
+  },
+  "crates/cadmium-engine/src/engine/pass/pick.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.0614884,
+    "ast_hash": "33ccf721528fcabfac2f8dcc117e3302",
+    "semantic_hash": "33ccf721528fcabfac2f8dcc117e3302"
+  },
+  "crates/cadmium-engine/src/engine/pass/refill.rs": {
+    "mtime": 1793838270.3792992,
+    "seen": 1793839262.0614893,
+    "ast_hash": "fd93c60c098d4485464978701a06ddf1",
+    "semantic_hash": "fd93c60c098d4485464978701a06ddf1"
+  },
+  "crates/cadmium-engine/src/engine/pass/spread.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.06149,
+    "ast_hash": "4dc1fb63af5c60917fa778405e71105e",
+    "semantic_hash": "4dc1fb63af5c60917fa778405e71105e"
+  },
+  "crates/cadmium-engine/src/engine/pass/wipe.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.0614913,
+    "ast_hash": "2c519b7abee090f5ce9ddee9ca44b8bb",
+    "semantic_hash": "2c519b7abee090f5ce9ddee9ca44b8bb"
+  },
+  "crates/cadmium-engine/src/engine/placement.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.061492,
+    "ast_hash": "4f424d07b976246ea04d77027480527d",
+    "semantic_hash": "4f424d07b976246ea04d77027480527d"
+  },
+  "crates/cadmium-engine/src/engine/readout.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.061493,
+    "ast_hash": "6511f7765f2e58aca4e55110862f408e",
+    "semantic_hash": "6511f7765f2e58aca4e55110862f408e"
+  },
+  "crates/cadmium-engine/src/engine/reservoir.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.0614939,
+    "ast_hash": "e2d0550c4b7420c02d3d004b149b6aaa",
+    "semantic_hash": "e2d0550c4b7420c02d3d004b149b6aaa"
+  },
+  "crates/cadmium-engine/src/engine/shader.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.0614948,
+    "ast_hash": "9a7cf32999f35c4956214c346558e619",
+    "semantic_hash": "9a7cf32999f35c4956214c346558e619"
+  },
+  "crates/cadmium-engine/src/gpu.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.0614958,
+    "ast_hash": "e84c9d20971586bb2d5710c35930c986",
+    "semantic_hash": "e84c9d20971586bb2d5710c35930c986"
+  },
+  "crates/cadmium-engine/src/history.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.0614965,
+    "ast_hash": "e3740f7578bed863939a703d2df8419b",
+    "semantic_hash": "e3740f7578bed863939a703d2df8419b"
+  },
+  "crates/cadmium-engine/src/history/atlas.rs": {
+    "mtime": 1793838270.3793774,
+    "seen": 1793839262.0614974,
+    "ast_hash": "8c83a4498af0485786854b437e6ee731",
+    "semantic_hash": "8c83a4498af0485786854b437e6ee731"
+  },
+  "crates/cadmium-engine/src/history/slots.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0614984,
+    "ast_hash": "003a7e9106d8a340bc8ba5e7a2a020aa",
+    "semantic_hash": "003a7e9106d8a340bc8ba5e7a2a020aa"
+  },
+  "crates/cadmium-engine/src/history/tiles.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.061499,
+    "ast_hash": "f9740b8e3c63c2428678647db24de25d",
+    "semantic_hash": "f9740b8e3c63c2428678647db24de25d"
+  },
+  "crates/cadmium-engine/src/lib.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0615,
+    "ast_hash": "213288c4a8677038c7a52a12bbd86f28",
+    "semantic_hash": "213288c4a8677038c7a52a12bbd86f28"
+  },
+  "crates/cadmium-engine/src/params.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.061501,
+    "ast_hash": "e86cbc6262713d5803c6d78934eb2625",
+    "semantic_hash": "e86cbc6262713d5803c6d78934eb2625"
+  },
+  "crates/cadmium-engine/src/pigments.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0615017,
+    "ast_hash": "b988f35ef6193b23180e33528e5b99e0",
+    "semantic_hash": "b988f35ef6193b23180e33528e5b99e0"
+  },
+  "crates/cadmium-engine/src/present.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0615027,
+    "ast_hash": "05cc933372cc0ee80d57d43089f040e8",
+    "semantic_hash": "05cc933372cc0ee80d57d43089f040e8"
+  },
+  "crates/cadmium-engine/src/region.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0615034,
+    "ast_hash": "0bdac03ec0f904bb8c63abf86958f3cf",
+    "semantic_hash": "0bdac03ec0f904bb8c63abf86958f3cf"
+  },
+  "crates/cadmium-engine/src/render.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0615044,
+    "ast_hash": "5a74ed243c78b86eb925a7ff8ff2575f",
+    "semantic_hash": "5a74ed243c78b86eb925a7ff8ff2575f"
+  },
+  "crates/cadmium-engine/src/session.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.0615053,
+    "ast_hash": "e5de46935645dedd4dd443068db671eb",
+    "semantic_hash": "e5de46935645dedd4dd443068db671eb"
+  },
+  "crates/cadmium-engine/src/session/brush.rs": {
+    "mtime": 1793838270.3797016,
+    "seen": 1793839262.061506,
+    "ast_hash": "f5e238147ddc0fe4e030766b8677a639",
+    "semantic_hash": "f5e238147ddc0fe4e030766b8677a639"
+  },
+  "crates/cadmium-engine/src/session/hold.rs": {
+    "mtime": 1793838270.3799639,
+    "seen": 1793839262.0615067,
+    "ast_hash": "1ebbcf5c04551f8e7e50044fbbbe99c6",
+    "semantic_hash": "1ebbcf5c04551f8e7e50044fbbbe99c6"
+  },
+  "crates/cadmium-engine/src/session/removal.rs": {
+    "mtime": 1793838270.3799639,
+    "seen": 1793839262.061508,
+    "ast_hash": "c5cd42a80ad0943f04222eaef094e329",
+    "semantic_hash": "c5cd42a80ad0943f04222eaef094e329"
+  },
+  "crates/cadmium-engine/src/session/replacement.rs": {
+    "mtime": 1793838270.3799639,
+    "seen": 1793839262.0615087,
+    "ast_hash": "da8461626afed2b584b5c9ab4c55062b",
+    "semantic_hash": "da8461626afed2b584b5c9ab4c55062b"
+  },
+  "crates/cadmium-engine/src/session/stroke.rs": {
+    "mtime": 1793838270.3799639,
+    "seen": 1793839262.0615096,
+    "ast_hash": "145c6fef4e3e08386ad6326b6ff53f25",
+    "semantic_hash": "145c6fef4e3e08386ad6326b6ff53f25"
+  },
+  "crates/cadmium-engine/src/spectral.rs": {
+    "mtime": 1793838270.3803773,
+    "seen": 1793839262.0615103,
+    "ast_hash": "d7ea2a8b1629cda17fa88f08d841a0f0",
+    "semantic_hash": "d7ea2a8b1629cda17fa88f08d841a0f0"
+  },
+  "crates/cadmium-engine/src/stroke.rs": {
+    "mtime": 1793838270.3803773,
+    "seen": 1793839262.0615115,
+    "ast_hash": "d0b1668c19b12ae02a3ee1f6d78553ca",
+    "semantic_hash": "d0b1668c19b12ae02a3ee1f6d78553ca"
+  },
+  "crates/cadmium-engine/src/surface.rs": {
+    "mtime": 1793838270.3803773,
+    "seen": 1793839262.0615122,
+    "ast_hash": "57ee79cd781b9c87d0c5f13998fbdb5c",
+    "semantic_hash": "57ee79cd781b9c87d0c5f13998fbdb5c"
+  },
+  "crates/cadmium-engine/src/tool.rs": {
+    "mtime": 1793838270.3803773,
+    "seen": 1793839262.061513,
+    "ast_hash": "d7b5d30a848450ffe7923e73c14127d5",
+    "semantic_hash": "d7b5d30a848450ffe7923e73c14127d5"
+  },
+  "crates/cadmium-engine/src/tool/blender.rs": {
+    "mtime": 1793838270.3803773,
+    "seen": 1793839262.061514,
+    "ast_hash": "a6fa2611775293fa0253a7931797d496",
+    "semantic_hash": "a6fa2611775293fa0253a7931797d496"
+  },
+  "crates/cadmium-engine/src/tool/brush.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.0615149,
+    "ast_hash": "885996d73e5ece10d2e92f37126979ab",
+    "semantic_hash": "885996d73e5ece10d2e92f37126979ab"
+  },
+  "crates/cadmium-engine/src/tool/eyedropper.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.0615156,
+    "ast_hash": "f46d915b310030e3d2a83dd1b9483661",
+    "semantic_hash": "f46d915b310030e3d2a83dd1b9483661"
+  },
+  "crates/cadmium-engine/src/tool/knife.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.0615165,
+    "ast_hash": "202745a6be896c1282292853c403c39c",
+    "semantic_hash": "202745a6be896c1282292853c403c39c"
+  },
+  "crates/cadmium-engine/src/tool/rag.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.0615175,
+    "ast_hash": "ca52acf20d16ceec540c2265f609b3a3",
+    "semantic_hash": "ca52acf20d16ceec540c2265f609b3a3"
+  },
+  "crates/cadmium-engine/src/tool/tests.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.0615187,
+    "ast_hash": "51f74c7687ebacad4fb5299b97032ae8",
+    "semantic_hash": "51f74c7687ebacad4fb5299b97032ae8"
+  },
+  "crates/cadmium-engine/src/tube.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.0615194,
+    "ast_hash": "f1d202599b43ecbadd1c69b6af3b7579",
+    "semantic_hash": "f1d202599b43ecbadd1c69b6af3b7579"
+  },
+  "crates/cadmium-engine/src/tube/tests.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.06152,
+    "ast_hash": "d0cb8b9f7b64df70f015543b18df5c92",
+    "semantic_hash": "d0cb8b9f7b64df70f015543b18df5c92"
+  },
+  "crates/cadmium-engine/tests/brush_loading.rs": {
+    "mtime": 1793838270.3805382,
+    "seen": 1793839262.061521,
+    "ast_hash": "71b920833cc70312bbfc35f185c8c369",
+    "semantic_hash": "71b920833cc70312bbfc35f185c8c369"
+  },
+  "crates/cadmium-engine/tests/brush_reservoir.rs": {
+    "mtime": 1793838270.3807235,
+    "seen": 1793839262.061522,
+    "ast_hash": "88869707700d86413e132fb9739e8897",
+    "semantic_hash": "88869707700d86413e132fb9739e8897"
+  },
+  "crates/cadmium-engine/tests/canvas/main.rs": {
+    "mtime": 1793838270.3807235,
+    "seen": 1793839262.0615227,
+    "ast_hash": "4ec956bddd33b638c567f76e4bb81893",
+    "semantic_hash": "4ec956bddd33b638c567f76e4bb81893"
+  },
+  "crates/cadmium-engine/tests/canvas/new_canvas.rs": {
+    "mtime": 1793838270.3807747,
+    "seen": 1793839262.0615237,
+    "ast_hash": "f0351dec85f53ef7a4ecc8dff0d36647",
+    "semantic_hash": "f0351dec85f53ef7a4ecc8dff0d36647"
+  },
+  "crates/cadmium-engine/tests/canvas/slots.rs": {
+    "mtime": 1793838270.3807747,
+    "seen": 1793839262.0615244,
+    "ast_hash": "69d3717548744cb9fe60558025425871",
+    "semantic_hash": "69d3717548744cb9fe60558025425871"
+  },
+  "crates/cadmium-engine/tests/canvas/spec_validation.rs": {
+    "mtime": 1793838270.3807747,
+    "seen": 1793839262.0615256,
+    "ast_hash": "43b0667ae164fbd1fbb871abb3889860",
+    "semantic_hash": "43b0667ae164fbd1fbb871abb3889860"
+  },
+  "crates/cadmium-engine/tests/canvas/textures.rs": {
+    "mtime": 1793838270.3807747,
+    "seen": 1793839262.0615265,
+    "ast_hash": "f1441c5bdb258db64b91b8f50f8feaef",
+    "semantic_hash": "f1441c5bdb258db64b91b8f50f8feaef"
+  },
+  "crates/cadmium-engine/tests/canvas/tiles.rs": {
+    "mtime": 1793838270.3807747,
+    "seen": 1793839262.0615275,
+    "ast_hash": "08668deed852182906abc94f84536898",
+    "semantic_hash": "08668deed852182906abc94f84536898"
+  },
+  "crates/cadmium-engine/tests/document/entries.rs": {
+    "mtime": 1793838270.3807747,
+    "seen": 1793839262.0615282,
+    "ast_hash": "0dd335312fcaca0d17cea8f05ac88e67",
+    "semantic_hash": "0dd335312fcaca0d17cea8f05ac88e67"
+  },
+  "crates/cadmium-engine/tests/document/export.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615294,
+    "ast_hash": "f78f0240d67e81b2a24f5d815334e262",
+    "semantic_hash": "f78f0240d67e81b2a24f5d815334e262"
+  },
+  "crates/cadmium-engine/tests/document/main.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615304,
+    "ast_hash": "ec2020866394ebaa0bb5d3ab8dad7f11",
+    "semantic_hash": "ec2020866394ebaa0bb5d3ab8dad7f11"
+  },
+  "crates/cadmium-engine/tests/document/read.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.061531,
+    "ast_hash": "c1e047ff3163839a3058eb14e803e634",
+    "semantic_hash": "c1e047ff3163839a3058eb14e803e634"
+  },
+  "crates/cadmium-engine/tests/document/save.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615323,
+    "ast_hash": "d0840ba72c74ac1e91f81ff60ebd1457",
+    "semantic_hash": "d0840ba72c74ac1e91f81ff60ebd1457"
+  },
+  "crates/cadmium-engine/tests/document/tray.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.061533,
+    "ast_hash": "b8e6c23bbc9306b3f2aa749d1a3a774f",
+    "semantic_hash": "b8e6c23bbc9306b3f2aa749d1a3a774f"
+  },
+  "crates/cadmium-engine/tests/engine_big_brush.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.061534,
+    "ast_hash": "04e95d52b4d5970d01430a4ac41b7555",
+    "semantic_hash": "04e95d52b4d5970d01430a4ac41b7555"
+  },
+  "crates/cadmium-engine/tests/engine_brush.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615346,
+    "ast_hash": "d6acfa03527c38151ccc0ef815359d69",
+    "semantic_hash": "d6acfa03527c38151ccc0ef815359d69"
+  },
+  "crates/cadmium-engine/tests/engine_fading.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615356,
+    "ast_hash": "40dfc29d703d66627ba24ec135d268e3",
+    "semantic_hash": "40dfc29d703d66627ba24ec135d268e3"
+  },
+  "crates/cadmium-engine/tests/engine_finish.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615366,
+    "ast_hash": "6748c8449729ecc8a0dad067ed543fa4",
+    "semantic_hash": "6748c8449729ecc8a0dad067ed543fa4"
+  },
+  "crates/cadmium-engine/tests/engine_rings.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615373,
+    "ast_hash": "ac8051dca75a7a205939a7535fd4a3d9",
+    "semantic_hash": "ac8051dca75a7a205939a7535fd4a3d9"
+  },
+  "crates/cadmium-engine/tests/engine_shapes.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615382,
+    "ast_hash": "097c59c4ec929c8bee8f72c0ee8e801d",
+    "semantic_hash": "097c59c4ec929c8bee8f72c0ee8e801d"
+  },
+  "crates/cadmium-engine/tests/engine_tools/knife.rs": {
+    "mtime": 1793838270.3808959,
+    "seen": 1793839262.0615392,
+    "ast_hash": "3e8281bd41f190ce57204def1cedb78a",
+    "semantic_hash": "3e8281bd41f190ce57204def1cedb78a"
+  },
+  "crates/cadmium-engine/tests/engine_tools/main.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.06154,
+    "ast_hash": "6348d171a724363e026ee33991e2eeae",
+    "semantic_hash": "6348d171a724363e026ee33991e2eeae"
+  },
+  "crates/cadmium-engine/tests/engine_tools/spreading.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615408,
+    "ast_hash": "a71718da7deddd802c40b7d43c09a0bc",
+    "semantic_hash": "a71718da7deddd802c40b7d43c09a0bc"
+  },
+  "crates/cadmium-engine/tests/gpu.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615416,
+    "ast_hash": "737cac42e52da738798f9d72c1667dbb",
+    "semantic_hash": "737cac42e52da738798f9d72c1667dbb"
+  },
+  "crates/cadmium-engine/tests/history.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615427,
+    "ast_hash": "af3cbe3b96294034192ba94d37ece79b",
+    "semantic_hash": "af3cbe3b96294034192ba94d37ece79b"
+  },
+  "crates/cadmium-engine/tests/params.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615437,
+    "ast_hash": "9f43e5b84475349c821df3c576f76575",
+    "semantic_hash": "9f43e5b84475349c821df3c576f76575"
+  },
+  "crates/cadmium-engine/tests/pigments.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615444,
+    "ast_hash": "d776fc2f434f9a8b0133213a39eebf95",
+    "semantic_hash": "d776fc2f434f9a8b0133213a39eebf95"
+  },
+  "crates/cadmium-engine/tests/render.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615454,
+    "ast_hash": "7d41882f4c3ee0014d4345cb5fe40fea",
+    "semantic_hash": "7d41882f4c3ee0014d4345cb5fe40fea"
+  },
+  "crates/cadmium-engine/tests/spectral.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615466,
+    "ast_hash": "a7f0227886f9eb28c08fc790d9019138",
+    "semantic_hash": "a7f0227886f9eb28c08fc790d9019138"
+  },
+  "crates/cadmium-engine/tests/stroke.rs": {
+    "mtime": 1793838270.3812292,
+    "seen": 1793839262.0615475,
+    "ast_hash": "cb92d47282ece8ede85247b72cf50455",
+    "semantic_hash": "cb92d47282ece8ede85247b72cf50455"
+  },
+  "crates/cadmium-engine/tests/support/mod.rs": {
+    "mtime": 1793838270.3813775,
+    "seen": 1793839262.0615482,
+    "ast_hash": "eebfef16645c2604a520f348abe314cd",
+    "semantic_hash": "eebfef16645c2604a520f348abe314cd"
+  },
+  "crates/cadmium-engine/tests/tray/cord.rs": {
+    "mtime": 1793838270.3813775,
+    "seen": 1793839262.0615494,
+    "ast_hash": "91eb873fe5a48699a24140948571d6a8",
+    "semantic_hash": "91eb873fe5a48699a24140948571d6a8"
+  },
+  "crates/cadmium-engine/tests/tray/draw_up.rs": {
+    "mtime": 1793838270.3814902,
+    "seen": 1793839262.0615501,
+    "ast_hash": "484d6232b5f4f2656dfc6314a917cc44",
+    "semantic_hash": "484d6232b5f4f2656dfc6314a917cc44"
+  },
+  "crates/cadmium-engine/tests/tray/main.rs": {
+    "mtime": 1793838270.3814902,
+    "seen": 1793839262.0615509,
+    "ast_hash": "2c0db5b5fe2a6198577f61e7ce061b2e",
+    "semantic_hash": "2c0db5b5fe2a6198577f61e7ce061b2e"
+  },
+  "crates/cadmium-engine/tests/tray/strokes.rs": {
+    "mtime": 1793838270.3814902,
+    "seen": 1793839262.0615518,
+    "ast_hash": "e81a81c8e94286ab46ab549dba93a7e5",
+    "semantic_hash": "e81a81c8e94286ab46ab549dba93a7e5"
+  },
+  "crates/cadmium-engine/tests/tray/surface.rs": {
+    "mtime": 1793838270.3814902,
+    "seen": 1793839262.061553,
+    "ast_hash": "ce78c49a07c34be49e0bffe3f1dbf023",
+    "semantic_hash": "ce78c49a07c34be49e0bffe3f1dbf023"
+  },
+  "crates/cadmium-engine/tests/tray/tube.rs": {
+    "mtime": 1793838270.3814902,
+    "seen": 1793839262.0615537,
+    "ast_hash": "c1e1d811415eed4307a321765dd309b1",
+    "semantic_hash": "c1e1d811415eed4307a321765dd309b1"
+  },
+  "packaging/appimage/make-appimage.sh": {
+    "mtime": 1793838270.3815885,
+    "seen": 1793839262.0615547,
+    "ast_hash": "ed69f8c2cd3a0cfa4b9ec0582c582576",
+    "semantic_hash": "ed69f8c2cd3a0cfa4b9ec0582c582576"
+  },
+  "packaging/flatpak/cargo-sources.json": {
+    "mtime": 1793838270.3815885,
+    "seen": 1793839262.0615554,
+    "ast_hash": "707bdb63a1284296123f259af32a0c6e",
+    "semantic_hash": "707bdb63a1284296123f259af32a0c6e"
+  },
+  "packaging/flatpak/cargo-sources.py": {
+    "mtime": 1793838270.3817208,
+    "seen": 1793839262.0615563,
+    "ast_hash": "19623a9136f509376df9e79c409db0b4",
+    "semantic_hash": "19623a9136f509376df9e79c409db0b4"
+  },
+  "packaging/flatpak/io.github.marcelogm.Cadmium.yml": {
+    "mtime": 1793838270.3817208,
+    "seen": 1793839262.0615573,
+    "ast_hash": "799a0fde941c6e284ca500ef7d2624b0",
+    "semantic_hash": "799a0fde941c6e284ca500ef7d2624b0"
+  },
+  "packaging/release-notes.sh": {
+    "mtime": 1793838711.8622572,
+    "seen": 1793839262.061558,
+    "ast_hash": "695fd9f83f378ca85abcf4037077e4b2",
+    "semantic_hash": "695fd9f83f378ca85abcf4037077e4b2"
+  },
+  "packaging/set-version.sh": {
+    "mtime": 1793839027.1321337,
+    "seen": 1793839262.061559,
+    "ast_hash": "737aa868f464d87bad8dfb39c2211e4a",
+    "semantic_hash": "737aa868f464d87bad8dfb39c2211e4a"
+  },
+  "packaging/windows/bundle.sh": {
+    "mtime": 1793838270.3817208,
+    "seen": 1793839262.06156,
+    "ast_hash": "67baffe0131f3dc3aa729126248b2fb0",
+    "semantic_hash": "67baffe0131f3dc3aa729126248b2fb0"
+  },
+  "README.md": {
+    "mtime": 1793838270.3738859,
+    "seen": 1793839262.0615606,
+    "ast_hash": "5c258ab917fae591ba5c8602e217fac2",
+    "semantic_hash": "5c258ab917fae591ba5c8602e217fac2"
+  },
+  ".github/images/screenshot.png": {
+    "mtime": 1793838270.3733773,
+    "seen": 1793839262.0615616,
+    "ast_hash": "fe706af2c67f01b6a964498e1b8bc3c9",
+    "semantic_hash": "fe706af2c67f01b6a964498e1b8bc3c9"
+  },
+  "crates/cadmium-app/data/app-icons/io.github.marcelogm.Cadmium-symbolic.svg": {
+    "mtime": 1793838270.3743773,
+    "seen": 1793839262.0615623,
+    "ast_hash": "b46adadd1acea89e5c2ba41e4376667e",
+    "semantic_hash": "b46adadd1acea89e5c2ba41e4376667e"
+  },
+  "crates/cadmium-app/data/app-icons/io.github.marcelogm.Cadmium.svg": {
+    "mtime": 1793838270.3743773,
+    "seen": 1793839262.0615635,
+    "ast_hash": "1bde111c3b2b63cb0424f1e14a11b1ff",
+    "semantic_hash": "1bde111c3b2b63cb0424f1e14a11b1ff"
+  },
+  "crates/cadmium-app/data/resources/icons/scalable/actions/cadmium-blender-symbolic.svg": {
+    "mtime": 1793838270.3745553,
+    "seen": 1793839262.0615642,
+    "ast_hash": "a9c511efc9471bc8a4a65af0ee765097",
+    "semantic_hash": "a9c511efc9471bc8a4a65af0ee765097"
+  },
+  "crates/cadmium-app/data/resources/icons/scalable/actions/cadmium-brush-symbolic.svg": {
+    "mtime": 1793838270.3745823,
+    "seen": 1793839262.0615652,
+    "ast_hash": "948d65cc980955fc9041e5844fd25a18",
+    "semantic_hash": "948d65cc980955fc9041e5844fd25a18"
+  },
+  "crates/cadmium-app/data/resources/icons/scalable/actions/cadmium-knife-symbolic.svg": {
+    "mtime": 1793838270.3745823,
+    "seen": 1793839262.061566,
+    "ast_hash": "5d6f533198564dec8f6b59d0d099f47e",
+    "semantic_hash": "5d6f533198564dec8f6b59d0d099f47e"
+  },
+  "crates/cadmium-app/data/resources/icons/scalable/actions/cadmium-move-symbolic.svg": {
+    "mtime": 1793838270.3745823,
+    "seen": 1793839262.061567,
+    "ast_hash": "7c858706b805dd7d6f991bd797e21a5a",
+    "semantic_hash": "7c858706b805dd7d6f991bd797e21a5a"
+  },
+  "crates/cadmium-app/data/resources/icons/scalable/actions/cadmium-rag-symbolic.svg": {
+    "mtime": 1793838270.3745823,
+    "seen": 1793839262.061568,
+    "ast_hash": "36067f888f602c136e1507059458816e",
+    "semantic_hash": "36067f888f602c136e1507059458816e"
+  },
+  "crates/cadmium-app/data/resources/icons/scalable/actions/cadmium-tube-symbolic.svg": {
+    "mtime": 1793838270.3745823,
+    "seen": 1793839262.0615687,
+    "ast_hash": "d98d50d8f39e8d57405fba524992d860",
+    "semantic_hash": "d98d50d8f39e8d57405fba524992d860"
+  }
+}
