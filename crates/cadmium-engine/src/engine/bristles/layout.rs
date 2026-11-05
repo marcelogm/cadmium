@@ -123,12 +123,35 @@ fn tip_position(root: &Root) -> [f32; 2] {
     [half + root.position_px[0], half + root.position_px[1]]
 }
 
-pub(super) fn disc_texel_count(radius_px: f32) -> usize {
+pub(crate) fn disc_texel_count(radius_px: f32) -> usize {
     let half = TIP_HALF as i32;
     let size = crate::engine::TIP_SIZE as i32;
     let radius_squared = radius_px * radius_px;
     (-half..size - half)
-        .flat_map(|y| (-half..size - half).map(move |x| (x as f32, y as f32)))
-        .filter(|(x, y)| x * x + y * y <= radius_squared)
-        .count()
+        .map(|y| row_texel_count(y, radius_squared))
+        .sum()
+}
+
+fn inside_disc(x: i32, y: i32, radius_squared: f32) -> bool {
+    let (x, y) = (x as f32, y as f32);
+    x * x + y * y <= radius_squared
+}
+
+fn row_texel_count(y: i32, radius_squared: f32) -> usize {
+    if !inside_disc(0, y, radius_squared) {
+        return 0;
+    }
+    let half = TIP_HALF as i32;
+    let size = crate::engine::TIP_SIZE as i32;
+    let row_squared = (y * y) as f32;
+    let mut reach = ((radius_squared - row_squared).max(0.0).sqrt() as i32).min(size);
+    while reach < size && inside_disc(reach + 1, y, radius_squared) {
+        reach += 1;
+    }
+    while !inside_disc(reach, y, radius_squared) {
+        reach -= 1;
+    }
+    let first = (-reach).max(-half);
+    let last = reach.min(size - half - 1);
+    (last - first + 1) as usize
 }

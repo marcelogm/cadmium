@@ -15,6 +15,7 @@ const EMPTY_VOLUME_UM: f32 = 1e-4;
 @group(0) @binding(5) var wet_pig1: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(6) var wet_vol: texture_storage_2d<r32float, write>;
 @group(0) @binding(7) var scratch_motion: texture_storage_2d<rgba32float, read>;
+@group(0) @binding(8) var<storage, read_write> tile_changes: array<atomic<u32>>;
 
 fn scratch_texel(pixel: vec2<i32>) -> vec2<i32> {
     return pixel - dab.canvas_origin;
@@ -59,12 +60,7 @@ fn store_amounts(pixel: vec2<i32>, amounts: array<f32, 9>) {
     textureStore(wet_pig1, pixel, vec4<f32>(fractions[4], fractions[5], fractions[6], fractions[7]));
 }
 
-@compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    if (id.x >= dab.spread_size.x || id.y >= dab.spread_size.y) {
-        return;
-    }
-    let pixel = dab.spread_origin + vec2<i32>(id.xy);
+fn advect_pixel(pixel: vec2<i32>) -> bool {
     let own = motion(pixel);
     let own_amounts = amounts_at(pixel);
     var amounts = own_amounts;
@@ -100,4 +96,21 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (changed) {
         store_amounts(pixel, amounts);
     }
+    return changed;
+}
+
+@compute @workgroup_size(BLOCK_SIDE_PX, BLOCK_SIDE_PX)
+fn main(
+    @builtin(global_invocation_id) id: vec3<u32>,
+    @builtin(workgroup_id) group: vec3<u32>,
+    @builtin(local_invocation_index) thread: u32,
+) {
+    let block_origin = dab.spread_origin + vec2<i32>(group.xy * BLOCK_SIDE_PX);
+    let pixel = dab.spread_origin + vec2<i32>(id.xy);
+    let inside = id.x < dab.spread_size.x && id.y < dab.spread_size.y;
+    if (inside && advect_pixel(pixel)) {
+        note_change(pixel, block_origin);
+    }
+    workgroupBarrier();
+    publish_changes(thread, block_origin);
 }

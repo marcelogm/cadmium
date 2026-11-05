@@ -6,16 +6,18 @@ use super::bristles::{
     PLASTIC_BEND_THRESHOLD_RAD, RELIEF_UM_PER_PX, TOUCH_TOLERANCE_PX,
 };
 use super::pass::bristle_contact::{
-    BRISTLE_SEGMENTS, CONTACT_ALONG_HIGH, CONTACT_ALONG_LOW, CONTACT_BIN_BITS,
-    CONTACT_BRISTLE_BITS, CONTACT_EXTENT_HIGH, CONTACT_EXTENT_LOW, CONTACT_EXTENT_SCALE,
-    CONTACT_EXTENT_WORDS, CONTACT_LEVELS, CONTACT_WORKGROUP_SIZE, SWEPT_VECTORS,
+    BRISTLE_SEGMENTS, CONTACT_ALONG_HIGH, CONTACT_ALONG_LOW, CONTACT_BIN_BITS, CONTACT_BOX_FIRST,
+    CONTACT_BOX_LAST, CONTACT_BRISTLE_BITS, CONTACT_EXTENT_HIGH, CONTACT_EXTENT_LOW,
+    CONTACT_EXTENT_SCALE, CONTACT_EXTENT_WORDS, CONTACT_LEVELS, CONTACT_WORKGROUP_SIZE,
+    SWEPT_VECTORS,
 };
 use super::{
     BLADE_CELL_GROUP_SIZE, BLADE_DELTA_CHANNELS, BLADE_SPILL_BAND_PX, BLADE_SPILL_VALUES,
     DELTA_SCALE, DRY_WORKGROUP_SIZE, MAX_TIP_THICKNESS_UM, PIGMENT_CHANNELS, TIP_CHANNELS,
     TIP_HALF, TIP_SIZE, VOLUME_CHANNEL,
 };
-use crate::canvas::TILE_SIZE;
+use crate::canvas::{TILE_CHANGE_HEADER_WORDS, TILE_SIZE};
+use crate::compute::WORKGROUP_SIZE;
 use crate::tool::TOOL_MODE_KNIFE;
 
 const TIP_SUM_INVOCATIONS: u32 = 256;
@@ -27,6 +29,17 @@ pub(super) const DAB_SNIPPETS: [&str; 3] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/nearest_half.wgsl"),
     include_str!("../shaders/footprint.wgsl"),
+];
+pub(super) const ADVECT_SNIPPETS: [&str; 4] = [
+    include_str!("../shaders/brush_tip.wgsl"),
+    include_str!("../shaders/nearest_half.wgsl"),
+    include_str!("../shaders/footprint.wgsl"),
+    include_str!("../shaders/tile_changes.wgsl"),
+];
+pub(super) const TOUCHED_TILE_SNIPPETS: [&str; 3] = [
+    include_str!("../shaders/brush_tip.wgsl"),
+    include_str!("../shaders/contact_mask.wgsl"),
+    include_str!("../shaders/tile_changes.wgsl"),
 ];
 pub(super) const EXCHANGE_SNIPPETS: [&str; 6] = [
     include_str!("../shaders/brush_tip.wgsl"),
@@ -104,6 +117,8 @@ fn bristle_constants() -> String {
          const CONTACT_ALONG_LOW: u32 = {CONTACT_ALONG_LOW}u;\n\
          const CONTACT_ALONG_HIGH: u32 = {CONTACT_ALONG_HIGH}u;\n\
          const CONTACT_EXTENT_WORDS: u32 = {CONTACT_EXTENT_WORDS}u;\n\
+         const CONTACT_BOX_FIRST: u32 = {CONTACT_BOX_FIRST}u;\n\
+         const CONTACT_BOX_LAST: u32 = {CONTACT_BOX_LAST}u;\n\
          const BRISTLE_SEGMENTS: u32 = {BRISTLE_SEGMENTS}u;\n\
          const SWEPT_VECTORS: u32 = {SWEPT_VECTORS}u;\n\
          const CONTACT_BRISTLE_BITS: u32 = {CONTACT_BRISTLE_BITS}u;\n\
@@ -122,6 +137,8 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
          const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
          const TILE_SIZE: u32 = {TILE_SIZE}u;\n\
+         const TILE_CHANGE_HEADER_WORDS: u32 = {TILE_CHANGE_HEADER_WORDS}u;\n\
+         const BLOCK_SIDE_PX: u32 = {WORKGROUP_SIZE}u;\n\
          const DRY_WORKGROUP_SIZE: u32 = {DRY_WORKGROUP_SIZE}u;\n\
          const PICK_INVOCATIONS: u32 = {PICK_INVOCATIONS}u;\n\
          const TIP_SUM_INVOCATIONS: u32 = {TIP_SUM_INVOCATIONS}u;\n\

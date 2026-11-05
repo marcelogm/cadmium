@@ -25,6 +25,7 @@ const FULL_LOAD: f32 = 1.0;
 const FULL_DIP: f32 = 1.0;
 const REST_BEFORE_MEASURING_MS: f64 = 5000.0;
 const STILL_FRAMES: usize = 120;
+const LONG_STROKE_PASSES: usize = 4;
 
 pub(crate) struct Bench<'gpu> {
     pub(crate) gpu: &'gpu GpuContext,
@@ -165,6 +166,22 @@ fn s_curve_point(along: f64) -> (f64, f64) {
         centre_x + CURVE_SPAN_PX * (along - 0.5),
         centre_y + CURVE_AMPLITUDE_PX * (TAU * along).sin(),
     )
+}
+
+pub(crate) fn long_stroke(pressure: f32) -> Vec<StrokeSample> {
+    let forward = s_curve(pressure);
+    let mut samples = Vec::new();
+    for pass in 0..LONG_STROKE_PASSES {
+        let mut leg = forward.clone();
+        if pass % 2 == 1 {
+            leg.reverse();
+        }
+        samples.extend(leg);
+    }
+    for (index, sample) in samples.iter_mut().enumerate() {
+        sample.time_ms = (index as f64 * 1000.0 / SAMPLES_PER_SECOND) as u32;
+    }
+    samples
 }
 
 pub(crate) fn s_curve(pressure: f32) -> Vec<StrokeSample> {

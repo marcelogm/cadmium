@@ -1,17 +1,18 @@
 use wgpu::util::DeviceExt;
 
-use crate::canvas::{Canvas, StateTexture, TILE_SIZE};
+use crate::canvas::{Canvas, StateTexture, TILE_CHANGE_HEADER_WORDS, TILE_SIZE, TileCoord};
 use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
 use crate::spectral::{BANDS, band_xyz_weights};
 
-const SHADE_SOURCE: &str = concat!(
+const SHADE_BODY: &str = concat!(
     include_str!("shaders/pigment_slots.wgsl"),
     include_str!("shaders/slot_lane.wgsl"),
     include_str!("shaders/kubelka_munk.wgsl"),
     include_str!("shaders/shade.wgsl")
 );
+const TILE_CHANGES_BINDING: u32 = 10;
 const SHADE_WORKGROUP_SIZE: u32 = 8;
 const WORKGROUPS_PER_TILE_SIDE: u32 = TILE_SIZE / SHADE_WORKGROUP_SIZE;
 const BANDS_PER_VEC4: usize = 4;
@@ -61,11 +62,11 @@ struct ShadeParams {
     dry_roughness: f32,
     view_mode: u32,
     view_slot: u32,
-    _pad: u32,
+    first_possible_tile: u32,
 }
 
 impl ShadeParams {
-    fn new(params: &SimParams, mode: ViewMode) -> Self {
+    fn new(params: &SimParams, mode: ViewMode, first_possible_tile: u32) -> Self {
         let (view_mode, view_slot) = mode.shader_selector();
         ShadeParams {
             xyz_weights: xyz_weight_vec4s(),
@@ -76,7 +77,7 @@ impl ShadeParams {
             dry_roughness: params.get("dry_roughness"),
             view_mode,
             view_slot,
-            _pad: 0,
+            first_possible_tile,
         }
     }
 }
@@ -104,7 +105,7 @@ pub struct ShadeRequest<'a> {
 impl Renderer {
     pub fn new(gpu: &GpuContext) -> Self {
         Renderer {
-            compute: AutoLayoutStage::new(gpu, "shade", SHADE_SOURCE),
+            compute: AutoLayoutStage::new(gpu, "shade", &shade_source()),
         }
     }
 
@@ -115,13 +116,14 @@ impl Renderer {
         request: ShadeRequest<'_>,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let tiles = canvas.dirty.take();
-        if tiles.is_empty() {
+        let tiles = shaded_tiles(canvas);
+        if tiles.list.is_empty() {
             return;
         }
-        let tile_list: Vec<[u32; 2]> = tiles.iter().map(|tile| [tile.x, tile.y]).collect();
+        let tile_list: Vec<[u32; 2]> = tiles.list.iter().map(|tile| [tile.x, tile.y]).collect();
         let tile_buffer = shade_tile_buffer(gpu, &tile_list);
-        let params_buffer = shade_params_buffer(gpu, request.params, request.mode);
+        let params = ShadeParams::new(request.params, request.mode, tiles.first_possible);
+        let params_buffer = shade_params_buffer(gpu, &params);
         let bind_group = self.shade_bind_group(gpu, canvas, &params_buffer, &tile_buffer);
         self.compute.encode(
             encoder,
@@ -132,6 +134,9 @@ impl Renderer {
                 tile_list.len() as u32,
             ],
         );
+        if tiles.first_possible < tile_list.len() as u32 {
+            canvas.tile_changes().encode_forget(encoder);
+        }
     }
 
     fn shade_bind_group(
@@ -152,6 +157,10 @@ impl Renderer {
                 .zip(textures)
                 .map(|(binding, which)| texture_binding(binding, canvas, *which)),
         );
+        entries.push(buffer_binding(
+            TILE_CHANGES_BINDING,
+            canvas.tile_changes().buffer(),
+        ));
         self.compute.bind_group(gpu, &entries)
     }
 }
@@ -165,11 +174,36 @@ fn shade_tile_buffer(gpu: &GpuContext, tile_list: &[[u32; 2]]) -> wgpu::Buffer {
         })
 }
 
-fn shade_params_buffer(gpu: &GpuContext, params: &SimParams, mode: ViewMode) -> wgpu::Buffer {
+struct ShadedTiles {
+    list: Vec<TileCoord>,
+    first_possible: u32,
+}
+
+fn shaded_tiles(canvas: &mut Canvas) -> ShadedTiles {
+    let possible: Vec<TileCoord> = canvas
+        .possibly_dirty
+        .take()
+        .into_iter()
+        .filter(|tile| !canvas.dirty.contains(*tile))
+        .collect();
+    let mut list = canvas.dirty.take();
+    let first_possible = list.len() as u32;
+    list.extend(possible);
+    ShadedTiles {
+        list,
+        first_possible,
+    }
+}
+
+fn shade_source() -> String {
+    format!("const TILE_CHANGE_HEADER_WORDS: u32 = {TILE_CHANGE_HEADER_WORDS}u;\n{SHADE_BODY}")
+}
+
+fn shade_params_buffer(gpu: &GpuContext, params: &ShadeParams) -> wgpu::Buffer {
     gpu.device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("shade_params"),
-            contents: bytemuck::bytes_of(&ShadeParams::new(params, mode)),
+            contents: bytemuck::bytes_of(params),
             usage: wgpu::BufferUsages::UNIFORM,
         })
 }

@@ -59,6 +59,7 @@ impl PaintSession {
         let stroke_pending = !self.queued.is_empty() || self.step_awaits_commit();
         (self.stroke_surface == surface && stroke_pending)
             || !self.canvas_of(surface).dirty.is_empty()
+            || !self.canvas_of(surface).possibly_dirty.is_empty()
     }
 
     fn step_awaits_commit(&self) -> bool {

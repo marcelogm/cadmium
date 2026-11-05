@@ -14,6 +14,7 @@ pub(crate) enum Ground {
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Motion {
     Stroke,
+    LongStroke,
     Settle,
     Shade,
     Present,
@@ -27,7 +28,7 @@ pub(crate) struct Scenario {
     pub(crate) motion: Motion,
 }
 
-pub(crate) const SCENARIOS: [Scenario; 10] = [
+pub(crate) const SCENARIOS: [Scenario; 12] = [
     scenario(
         "brush, default size",
         Tool::Brush,
@@ -70,6 +71,24 @@ pub(crate) const SCENARIOS: [Scenario; 10] = [
         DEFAULT_MAX_DIAMETER_PX,
         Ground::Impasto,
     ),
+    Scenario {
+        motion: Motion::LongStroke,
+        ..scenario(
+            "long brush stroke over impasto",
+            Tool::Brush,
+            DEFAULT_MAX_DIAMETER_PX,
+            Ground::Impasto,
+        )
+    },
+    Scenario {
+        motion: Motion::LongStroke,
+        ..scenario(
+            "long 200 px stroke over impasto",
+            Tool::Brush,
+            LARGE_DIAMETER_PX,
+            Ground::Impasto,
+        )
+    },
     Scenario {
         motion: Motion::Settle,
         ..scenario(

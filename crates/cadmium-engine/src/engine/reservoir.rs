@@ -1,7 +1,5 @@
-use super::{
-    FULL_DIP, MAX_TIP_THICKNESS_UM, PIGMENT_CHANNELS, TIP_HALF, TIP_SIZE, VOLUME_CHANNEL,
-    WetOilEngine,
-};
+use super::bristles::disc_texel_count;
+use super::{FULL_DIP, MAX_TIP_THICKNESS_UM, PIGMENT_CHANNELS, VOLUME_CHANNEL, WetOilEngine};
 use crate::brush::{DEFAULT_LOAD, FULL_RESERVOIR_VOLUME_UM};
 use crate::canvas::PaintTotals;
 use crate::compute::read_buffer;
@@ -129,7 +127,7 @@ impl WetOilEngine {
     }
 
     pub(super) fn reserve_volume(&self, thickness_um: f32) -> f32 {
-        self.params.get("reserve_factor") * thickness_um * disk_texels(self.tip_radius) as f32
+        self.params.get("reserve_factor") * thickness_um * disc_texel_count(self.tip_radius) as f32
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
@@ -183,21 +181,4 @@ pub(super) fn dip_fractions(mixture: &Mixture) -> [f32; PIGMENT_CHANNELS] {
             0.0
         }
     })
-}
-
-fn disk_texels(radius: f32) -> u32 {
-    let radius_squared = radius * radius;
-    let offsets = -(TIP_HALF as i32)..(TIP_SIZE - TIP_HALF) as i32;
-    offsets
-        .clone()
-        .map(|y| {
-            offsets
-                .clone()
-                .filter(|&x| {
-                    let (x, y) = (x as f32, y as f32);
-                    x * x + y * y <= radius_squared
-                })
-                .count() as u32
-        })
-        .sum()
 }

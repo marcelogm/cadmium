@@ -41,6 +41,7 @@ impl ExchangePass {
                 storage_entry(9, true),
                 storage_entry(10, true),
                 storage_entry(11, true),
+                storage_entry(12, true),
             ],
         );
         ExchangePass {
@@ -76,6 +77,7 @@ impl ExchangePass {
                 buffer_binding(9, &contact.loads),
                 buffer_binding(10, &resources.buffers.bristles.cell_grids),
                 buffer_binding(11, &resources.buffers.bristles.hair_loads),
+                buffer_binding(12, &contact.extent),
             ],
         )
     }

@@ -13,6 +13,7 @@ use capillary::CapillaryPass;
 use exchange::ExchangePass;
 use refill::RefillPass;
 use spread::{HairContact, SpreadBindGroups, SpreadPass};
+use touched_tiles::TouchedTilesPass;
 use wipe::WipePass;
 
 mod apply;
@@ -26,6 +27,7 @@ mod exchange;
 pub(super) mod pick;
 mod refill;
 mod spread;
+mod touched_tiles;
 mod wipe;
 
 pub(super) struct DabResources<'a> {
@@ -54,6 +56,7 @@ pub(super) struct DabPasses {
     bristles: BristleStepPass,
     contact: ContactPass,
     exchange: ExchangePass,
+    touched: TouchedTilesPass,
     apply: ApplyPass,
     capillary: CapillaryPass,
     refill: RefillPass,
@@ -66,6 +69,7 @@ pub(super) struct DabBindGroups {
     bristles: wgpu::BindGroup,
     contact: wgpu::BindGroup,
     exchange: wgpu::BindGroup,
+    touched: wgpu::BindGroup,
     apply: wgpu::BindGroup,
     refill: wgpu::BindGroup,
     wipe: wgpu::BindGroup,
@@ -80,6 +84,7 @@ impl DabPasses {
             bristles: BristleStepPass::new(gpu),
             contact: ContactPass::new(gpu),
             exchange: ExchangePass::new(gpu),
+            touched: TouchedTilesPass::new(gpu),
             apply: ApplyPass::new(gpu),
             capillary: CapillaryPass::new(gpu, &refill.compute),
             refill,
@@ -99,6 +104,7 @@ impl DabPasses {
             bristles: self.bristles.bind_group(resources),
             contact: self.contact.bind_group(resources),
             exchange: self.exchange.bind_group(resources, &self.contact),
+            touched: self.touched.bind_group(resources, &self.contact),
             apply: self.apply.bind_group(resources),
             refill: self.refill.bind_group(resources),
             wipe: self.wipe.bind_group(resources),
@@ -158,7 +164,10 @@ impl DabPasses {
         match stage {
             DabStage::Bristles => self.bristles.encode(pass, &bind_groups.bristles, dab),
             DabStage::Contact => self.contact.encode(pass, &bind_groups.contact, dab),
-            DabStage::Exchange => self.exchange.encode(pass, &bind_groups.exchange, dab),
+            DabStage::Exchange => {
+                self.exchange.encode(pass, &bind_groups.exchange, dab);
+                self.touched.encode(pass, &bind_groups.touched, dab);
+            }
             DabStage::Apply => self.apply.encode(pass, &bind_groups.apply, dab),
             DabStage::Capillary => self.capillary.encode(pass, &bind_groups.refill, dab),
             DabStage::Refill => self.refill.encode(pass, &bind_groups.refill, dab),

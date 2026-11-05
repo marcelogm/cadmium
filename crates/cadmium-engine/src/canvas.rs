@@ -3,6 +3,7 @@ use wgpu::util::DeviceExt;
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_mapped, staging_buffer};
 use crate::pigments::PigmentDb;
 
+mod changes;
 mod pigment_slots;
 mod primer;
 mod spec;
@@ -11,6 +12,7 @@ mod texels;
 mod tiles;
 mod weave;
 
+pub(crate) use changes::{TILE_CHANGE_HEADER_WORDS, TileChanges};
 pub use pigment_slots::PigmentSlotsUniform;
 pub use primer::{primer_reflectance, primer_srgb8};
 pub use spec::{CanvasSpec, MAX_CANVAS_SIZE, Primer, Weave};
@@ -65,7 +67,9 @@ impl std::error::Error for CanvasError {}
 pub struct Canvas {
     pub spec: CanvasSpec,
     pub dirty: DirtyTiles,
+    pub possibly_dirty: DirtyTiles,
     pub wet_tiles: DirtyTiles,
+    changes: TileChanges,
     surfaces: Vec<StateSurface>,
     slot_table: wgpu::Buffer,
 }
@@ -99,7 +103,9 @@ impl Canvas {
             });
         let mut canvas = Canvas {
             dirty: DirtyTiles::new(spec.width, spec.height),
+            possibly_dirty: DirtyTiles::new(spec.width, spec.height),
             wet_tiles: DirtyTiles::new(spec.width, spec.height),
+            changes: TileChanges::new(gpu, spec.width, spec.height),
             spec,
             surfaces,
             slot_table,
@@ -119,6 +125,10 @@ impl Canvas {
 
     pub fn view(&self, which: StateTexture) -> &wgpu::TextureView {
         &self.surfaces[which.index()].view
+    }
+
+    pub(crate) fn tile_changes(&self) -> &TileChanges {
+        &self.changes
     }
 
     pub fn slot_table(&self) -> &wgpu::Buffer {
