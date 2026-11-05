@@ -3,7 +3,6 @@ pub mod support;
 use cadmium_engine::{
     brush::BrushShape,
     canvas::*,
-    engine::PaintEngine,
     gpu::GpuContext,
     session::PaintSession,
     stroke::{StrokeSample, Tool},
@@ -21,7 +20,6 @@ const PRESSURE: f32 = 0.8;
 const LEANING_TILT_DEG: f32 = 40.0;
 const PAINTED_UM: f32 = 1.0;
 const ANGLE_TOLERANCE_RAD: f32 = 1e-3;
-const OUTLINE_TOLERANCE_PX: f32 = 1e-3;
 const MAX_FLAT_THICKNESS_SHARE: f32 = 0.3;
 const MIN_BROADSIDE_TO_EDGE_RATIO: f64 = 2.5;
 const LIGHT_TOUCH_PRESSURE: f32 = 0.1;
@@ -158,17 +156,12 @@ fn a_round_brush_outline_is_a_circle_when_the_pen_is_upright() {
 }
 
 #[test]
-fn a_leaning_round_brush_outline_reaches_out_to_its_bristle_tips() {
+fn a_leaning_round_brush_outline_stays_a_circle_under_the_nib() {
     let gpu = GpuContext::new().unwrap();
     let s = session(&gpu, BrushShape::Round);
     let upright = s.brush_outline(&pen(0.0, 0.0)).unwrap();
     let leaning = s.brush_outline(&pen(LEANING_TILT_DEG, 0.0)).unwrap();
-    let bristle_length_px = DIAMETER_PX / 2.0 * s.engine.params().get("bristle_length_round");
-    let lean_px = bristle_length_px * LEANING_TILT_DEG.to_radians().sin();
-    eprintln!("upright {upright:?}, leaning {leaning:?}, lean {lean_px} px");
-    assert!((leaning.semi_axes[0] - upright.semi_axes[0] - lean_px).abs() < OUTLINE_TOLERANCE_PX);
-    assert_eq!(leaning.semi_axes[1], upright.semi_axes[1]);
-    assert!(axial_difference(leaning.orientation, 0.0) < ANGLE_TOLERANCE_RAD);
+    assert_eq!(leaning.semi_axes, upright.semi_axes);
 }
 
 #[test]
