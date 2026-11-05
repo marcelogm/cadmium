@@ -39,6 +39,7 @@ var<workgroup> weights: array<f32, REFERENCE_THREADS>;
 @group(0) @binding(9) var<storage, read> texel_load: array<u32>;
 @group(0) @binding(10) var<storage, read> cell_grids: array<u32>;
 @group(0) @binding(11) var<storage, read> hair_loads: array<f32>;
+@group(0) @binding(12) var<storage, read> contact_extent: array<i32, CONTACT_EXTENT_WORDS>;
 
 fn contact_mask_word(index: u32) -> u32 {
     return contact_mask[index];
@@ -108,17 +109,27 @@ fn centre_height() -> f32 {
     return surface_height(pixel);
 }
 
+fn first_lane_index(low: u32, thread: u32) -> u32 {
+    return low + (thread + REFERENCE_THREADS - low % REFERENCE_THREADS) % REFERENCE_THREADS;
+}
+
 @compute @workgroup_size(REFERENCE_THREADS)
 fn reference(@builtin(local_invocation_index) thread: u32) {
     var weighted = 0.0;
     var weight = 0.0;
     let width = dab.canvas_size.x;
-    let count = width * dab.canvas_size.y;
-    for (var index = thread; index < count; index += REFERENCE_THREADS) {
-        let pixel = dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
-        let cover = contact_at(pixel).coverage;
-        weighted += cover * surface_height(pixel);
-        weight += cover;
+    let first = vec2<i32>(contact_extent[CONTACT_BOX_FIRST], contact_extent[CONTACT_BOX_FIRST + 1u]);
+    let last = vec2<i32>(contact_extent[CONTACT_BOX_LAST], contact_extent[CONTACT_BOX_LAST + 1u]);
+    for (var row = first.y; row <= last.y; row++) {
+        let row_start = u32(row - dab.canvas_origin.y) * width;
+        let low = row_start + u32(first.x - dab.canvas_origin.x);
+        let high = row_start + u32(last.x - dab.canvas_origin.x);
+        for (var index = first_lane_index(low, thread); index <= high; index += REFERENCE_THREADS) {
+            let pixel = dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
+            let cover = contact_at(pixel).coverage;
+            weighted += cover * surface_height(pixel);
+            weight += cover;
+        }
     }
     weighted_heights[thread] = weighted;
     weights[thread] = weight;

@@ -220,6 +220,13 @@ fn widen_contact_extent(sweep: Sweep) {
     widen_words(CONTACT_ALONG_LOW, CONTACT_ALONG_HIGH, along_before, along_now, reach_px);
 }
 
+fn widen_contact_box(bounds: vec4<i32>) {
+    atomicMin(&contact_extent[CONTACT_BOX_FIRST], bounds.x);
+    atomicMin(&contact_extent[CONTACT_BOX_FIRST + 1u], bounds.y);
+    atomicMax(&contact_extent[CONTACT_BOX_LAST], bounds.z);
+    atomicMax(&contact_extent[CONTACT_BOX_LAST + 1u], bounds.w);
+}
+
 fn rasterize_sweep(sweep: Sweep, bristle: u32, thread: u32) {
     if (thread == 0u) {
         widen_contact_extent(sweep);
@@ -229,6 +236,9 @@ fn rasterize_sweep(sweep: Sweep, bristle: u32, thread: u32) {
     let height = bounds.w - bounds.y + 1;
     if (width <= 0 || height <= 0) {
         return;
+    }
+    if (thread == 0u) {
+        widen_contact_box(bounds);
     }
     let pixels = u32(width) * u32(height);
     for (var index = thread; index < pixels; index += CONTACT_WORKGROUP_SIZE) {
@@ -249,6 +259,10 @@ fn clear_mask(@builtin(global_invocation_id) id: vec3<u32>) {
         atomicStore(&contact_extent[CONTACT_EXTENT_HIGH], -NO_EXTENT_Q);
         atomicStore(&contact_extent[CONTACT_ALONG_LOW], NO_EXTENT_Q);
         atomicStore(&contact_extent[CONTACT_ALONG_HIGH], -NO_EXTENT_Q);
+        atomicStore(&contact_extent[CONTACT_BOX_FIRST], NO_EXTENT_Q);
+        atomicStore(&contact_extent[CONTACT_BOX_FIRST + 1u], NO_EXTENT_Q);
+        atomicStore(&contact_extent[CONTACT_BOX_LAST], -NO_EXTENT_Q);
+        atomicStore(&contact_extent[CONTACT_BOX_LAST + 1u], -NO_EXTENT_Q);
     }
 }
 
