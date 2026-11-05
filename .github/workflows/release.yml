@@ -9,19 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  # The tag is the version: v1.2.3 builds 1.2.3. Without a tag, Cargo.toml's.
   version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Tag matches Cargo.toml
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Version from the tag
+        id: version
         run: |
-          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
-            exit 1
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version=${GITHUB_REF_NAME#v}
+          else
+            version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
           fi
+          packaging/set-version.sh "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   flatpak:
     needs: version
@@ -36,6 +41,9 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set the version
+        run: sh packaging/set-version.sh "${{ needs.version.outputs.version }}"
 
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
@@ -55,6 +63,9 @@ jobs:
     container: ghcr.io/pkgforge-dev/archlinux:latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set the version
+        run: sh packaging/set-version.sh "${{ needs.version.outputs.version }}"
 
       - uses: pkgforge-dev/anylinux-setup-action@ba7321e11074f9e387a0634e653d09b115d576cd # v6
 
@@ -79,6 +90,9 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set the version
+        run: sh packaging/set-version.sh "${{ needs.version.outputs.version }}"
 
       - uses: msys2/setup-msys2@v2
         with:
@@ -128,7 +142,7 @@ jobs:
           path: dist
 
   windows-installer:
-    needs: windows
+    needs: [version, windows]
     strategy:
       matrix:
         arch: [x64, arm64]
@@ -151,7 +165,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $version = "${{ needs.version.outputs.version }}"
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             /DVersion=$version /DArch=${{ matrix.arch }} `
             /DSource="$PWD\portable\Cadmium" /DOutputDir="$PWD\dist" `
