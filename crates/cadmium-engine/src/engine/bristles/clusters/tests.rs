@@ -1,5 +1,5 @@
 use super::{CLUSTER_SPAN_WORDS, MAX_CLUSTERS, MEMBERS_START, cluster_index};
-use crate::brush::BrushShape;
+use crate::brush::HeadSpec;
 use crate::engine::bristles::layout::{LayoutRequest, layout};
 
 fn members_of(index: &[u32], cluster: usize) -> &[u32] {
@@ -20,12 +20,13 @@ fn the_cluster_index_lists_each_bristle_once_under_its_own_cluster() {
 
 #[test]
 fn a_laid_out_brush_indexes_every_bristle_in_its_cluster() {
-    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
+    for head in [HeadSpec::ROUND, HeadSpec::FLAT, HeadSpec::FAN] {
         let laid = layout(&LayoutRequest {
-            shape,
+            head: HeadSpec {
+                length: 2.0,
+                ..head
+            },
             ferrule_radius_px: 120.0,
-            length_ratio: 2.0,
-            density_per_px: 1.6,
             seed: 3,
         });
         let mut seen = vec![false; laid.bristles.len()];
@@ -38,10 +39,10 @@ fn a_laid_out_brush_indexes_every_bristle_in_its_cluster() {
             assert_eq!(laid.bristles[member as usize].cluster as usize, cluster);
             assert!(
                 !seen[member as usize],
-                "{shape:?} bristle {member} listed twice"
+                "{head:?} bristle {member} listed twice"
             );
             seen[member as usize] = true;
         }
-        assert!(seen.into_iter().all(|listed| listed), "{shape:?}");
+        assert!(seen.into_iter().all(|listed| listed), "{head:?}");
     }
 }

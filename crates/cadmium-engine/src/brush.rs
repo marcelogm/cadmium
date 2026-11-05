@@ -7,10 +7,8 @@ mod library;
 
 pub use hair::HairSpec;
 pub use head::HeadSpec;
-pub use library::{BrushSpec, default_brush, factory_brushes};
-// used by the bristle layout from the next commit
-#[allow(unused_imports)]
 pub(crate) use head::Section;
+pub use library::{BrushSpec, default_brush, factory_brushes};
 
 pub(crate) fn within(value: f32, [min, max]: [f32; 2], fallback: f32) -> f32 {
     if value.is_nan() {
@@ -29,17 +27,11 @@ pub const DEFAULT_MEDIUM: f32 = 0.1;
 pub const MAX_MEDIUM: f32 = 0.95;
 pub const KNIFE_MAX_STEP_PX: f32 = 2.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BrushShape {
-    Round,
-    Flat,
-    Fan,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct BrushSettings {
     pub tool: Tool,
-    pub shape: BrushShape,
+    pub head: HeadSpec,
+    pub hair: HairSpec,
     pub geometry: BrushGeometry,
     pub load: f32,
     pub medium: f32,
@@ -50,7 +42,8 @@ impl Default for BrushSettings {
     fn default() -> Self {
         BrushSettings {
             tool: Tool::Brush,
-            shape: BrushShape::Round,
+            head: HeadSpec::ROUND,
+            hair: HairSpec::default(),
             geometry: BrushGeometry {
                 max_diameter_px: DEFAULT_MAX_DIAMETER_PX,
                 min_diameter_ratio: DEFAULT_MIN_DIAMETER_RATIO,
@@ -65,6 +58,13 @@ impl Default for BrushSettings {
 }
 
 impl BrushSettings {
+    /// Takes up a brush: its head, its hair and its suggested size.
+    pub fn wear(&mut self, brush: &BrushSpec) {
+        self.head = brush.head;
+        self.hair = brush.hair;
+        self.geometry.max_diameter_px = brush.size_px;
+    }
+
     pub fn stroke_geometry(&self) -> BrushGeometry {
         let profile = self.tool.profile();
         let mut geometry = full_diameter_spacing(self.geometry, profile.has_bristle_footprint());

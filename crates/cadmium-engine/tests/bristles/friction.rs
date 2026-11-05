@@ -45,7 +45,7 @@ fn pressed(x: f64, y: f64, pressure: f32, time_ms: u32) -> StrokeSample {
 }
 
 fn nominal_length_px(s: &PaintSession) -> f32 {
-    s.engine.params().get("bristle_length_round") * FERRULE_RADIUS_PX
+    s.brush.head.length * FERRULE_RADIUS_PX
 }
 
 fn handle(snapshot: &BristleSnapshot) -> [f32; 2] {

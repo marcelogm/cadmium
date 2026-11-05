@@ -1,5 +1,5 @@
 use super::{BristleLayout, LayoutRequest, layout};
-use crate::brush::BrushShape;
+use crate::brush::HeadSpec;
 
 const REFERENCE_SEED: u64 = 0x00C4_D317_B215_7E55;
 const FNV_OFFSET: u64 = 0xCBF2_9CE4_8422_2325;
@@ -46,12 +46,10 @@ fn fingerprint(laid: &BristleLayout) -> u64 {
     floats.chain(words).fold(FNV_OFFSET, fnv)
 }
 
-fn reference_layout(shape: BrushShape, length_ratio: f32, radius_px: f32) -> BristleLayout {
+fn reference_layout(head: HeadSpec, radius_px: f32) -> BristleLayout {
     layout(&LayoutRequest {
-        shape,
+        head,
         ferrule_radius_px: radius_px,
-        length_ratio,
-        density_per_px: 1.6,
         seed: REFERENCE_SEED,
     })
 }
@@ -60,12 +58,8 @@ fn reference_fingerprints() -> Vec<u64> {
     REFERENCE_RADII_PX
         .iter()
         .flat_map(|&radius_px| {
-            [
-                (BrushShape::Round, 2.5),
-                (BrushShape::Flat, 2.0),
-                (BrushShape::Fan, 2.0),
-            ]
-            .map(|(shape, length)| fingerprint(&reference_layout(shape, length, radius_px)))
+            [HeadSpec::ROUND, HeadSpec::FLAT, HeadSpec::FAN]
+                .map(|head| fingerprint(&reference_layout(head, radius_px)))
         })
         .collect()
 }

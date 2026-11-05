@@ -5,49 +5,49 @@ use super::layout::{
 };
 use super::roots::{bundle_gain, capped_count_onset_radius_px};
 use super::*;
-use crate::brush::BrushShape;
+use crate::brush::HeadSpec;
 use crate::engine::{TIP_HALF, TIP_SIZE};
-use crate::params::SimParams;
 
-fn request(shape: BrushShape, ferrule_radius_px: f32) -> LayoutRequest {
+fn request(head: HeadSpec, ferrule_radius_px: f32) -> LayoutRequest {
     LayoutRequest {
-        shape,
+        head: HeadSpec {
+            length: 1.5,
+            ..head
+        },
         ferrule_radius_px,
-        length_ratio: 1.5,
-        density_per_px: SimParams::default().get("bristle_density"),
         seed: 7,
     }
 }
 
 #[test]
 fn the_same_seed_lays_out_the_same_bristles() {
-    let first = layout(&request(BrushShape::Round, 20.0));
-    let second = layout(&request(BrushShape::Round, 20.0));
+    let first = layout(&request(HeadSpec::ROUND, 20.0));
+    let second = layout(&request(HeadSpec::ROUND, 20.0));
     assert_eq!(first.bristles, second.bristles);
     assert_eq!(first.owners, second.owners);
     let other = layout(&LayoutRequest {
         seed: 8,
-        ..request(BrushShape::Round, 20.0)
+        ..request(HeadSpec::ROUND, 20.0)
     });
     assert_ne!(first.bristles, other.bristles);
 }
 
 #[test]
 fn a_default_round_brush_has_about_sixty_four_bristles() {
-    let count = layout(&request(BrushShape::Round, 20.0)).bristles.len();
+    let count = layout(&request(HeadSpec::ROUND, 20.0)).bristles.len();
     assert!((48..=80).contains(&count), "{count}");
 }
 
 #[test]
 fn a_huge_brush_stops_at_the_bristle_cap() {
-    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
-        let count = layout(&request(shape, 250.0)).bristles.len();
+    for head in ALL_HEADS {
+        let count = layout(&request(head, 250.0)).bristles.len();
         assert_eq!(count, MAX_BRISTLES);
     }
 }
 
 fn default_density() -> f32 {
-    SimParams::default().get("bristle_density")
+    HeadSpec::ROUND.density_per_px
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn bundles_widen_steadily_past_the_cap_up_to_the_covering_gain() {
 
 #[test]
 fn a_tiny_brush_keeps_at_least_three_bristles() {
-    let laid = layout(&request(BrushShape::Round, 1.0));
+    let laid = layout(&request(HeadSpec::ROUND, 1.0));
     assert!(laid.bristles.len() >= MIN_BRISTLES);
     assert!(
         laid.bristles
@@ -87,7 +87,7 @@ fn a_tiny_brush_keeps_at_least_three_bristles() {
 
 #[test]
 fn round_roots_sit_inside_the_ferrule() {
-    let laid = layout(&request(BrushShape::Round, 20.0));
+    let laid = layout(&request(HeadSpec::ROUND, 20.0));
     for bristle in &laid.bristles {
         assert!(bristle.root_px[0].hypot(bristle.root_px[1]) <= 20.0);
     }
@@ -95,7 +95,7 @@ fn round_roots_sit_inside_the_ferrule() {
 
 #[test]
 fn flat_roots_sit_in_a_thin_bar() {
-    let laid = layout(&request(BrushShape::Flat, 20.0));
+    let laid = layout(&request(HeadSpec::FLAT, 20.0));
     for bristle in &laid.bristles {
         assert!(bristle.root_px[0].abs() <= 20.0);
         assert!(bristle.root_px[1].abs() <= 20.0 * 0.25 + 1e-3);
@@ -104,7 +104,7 @@ fn flat_roots_sit_in_a_thin_bar() {
 
 #[test]
 fn fan_bristles_splay_sideways_only() {
-    let laid = layout(&request(BrushShape::Fan, 20.0));
+    let laid = layout(&request(HeadSpec::FAN, 20.0));
     let limit = 50.0_f32.to_radians().sin() + 1e-3;
     for bristle in &laid.bristles {
         assert!(bristle.splay[0] * bristle.root_px[0] >= 0.0);
@@ -117,7 +117,7 @@ fn fan_bristles_splay_sideways_only() {
 
 #[test]
 fn fan_roots_centre_on_the_handle_axis() {
-    let laid = layout(&request(BrushShape::Fan, 20.0));
+    let laid = layout(&request(HeadSpec::FAN, 20.0));
     let count = laid.bristles.len() as f32;
     let mean = laid.bristles.iter().fold([0.0f32; 2], |sum, bristle| {
         [sum[0] + bristle.root_px[0], sum[1] + bristle.root_px[1]]
@@ -129,7 +129,7 @@ fn fan_roots_centre_on_the_handle_axis() {
 #[test]
 fn every_texel_of_the_tip_disc_belongs_to_a_bristle() {
     let radius_px = 20.0;
-    let laid = layout(&request(BrushShape::Round, radius_px));
+    let laid = layout(&request(HeadSpec::ROUND, radius_px));
     assert_eq!(laid.owners.len(), (TIP_SIZE * TIP_SIZE) as usize);
     let count = laid.bristles.len() as u32;
     let inside = laid.owners.iter().filter(|&&owner| owner < count).count();
@@ -167,20 +167,20 @@ fn lanes_stray(laid: &BristleLayout) -> Vec<usize> {
 
 #[test]
 fn every_lane_lies_inside_the_cell_of_its_bristle() {
-    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
-        let laid = layout(&request(shape, 20.0));
-        assert_eq!(lanes_stray(&laid), Vec::<usize>::new(), "{shape:?}");
+    for head in ALL_HEADS {
+        let laid = layout(&request(head, 20.0));
+        assert_eq!(lanes_stray(&laid), Vec::<usize>::new(), "{head:?}");
     }
 }
 
 #[test]
 fn the_largest_brush_lays_out_every_bristle() {
-    let laid = layout(&request(BrushShape::Round, 250.0));
+    let laid = layout(&request(HeadSpec::ROUND, 250.0));
     assert_eq!(laid.bristles.len(), MAX_BRISTLES);
 }
 
 const EDGE_RADII_PX: [f32; 3] = [1.0, 20.0, 250.0];
-const ALL_SHAPES: [BrushShape; 3] = [BrushShape::Round, BrushShape::Flat, BrushShape::Fan];
+const ALL_HEADS: [HeadSpec; 3] = [HeadSpec::ROUND, HeadSpec::FLAT, HeadSpec::FAN];
 
 fn tip_distance_px2(bristle: &BristleRest, x: usize, y: usize) -> f32 {
     let half = TIP_HALF as f32;
@@ -218,8 +218,8 @@ fn census_texel(laid: &BristleLayout, census: &mut OwnerCensus, x: usize, y: usi
     }
 }
 
-fn check_owner_map(shape: BrushShape, radius_px: f32) {
-    let laid = layout(&request(shape, radius_px));
+fn check_owner_map(head: HeadSpec, radius_px: f32) {
+    let laid = layout(&request(head, radius_px));
     let size = TIP_SIZE as usize;
     let mut census = OwnerCensus {
         natural: vec![0; laid.bristles.len()],
@@ -233,37 +233,37 @@ fn check_owner_map(shape: BrushShape, radius_px: f32) {
             assert_eq!(
                 laid.owners[y * size + x],
                 u32::MAX,
-                "{shape:?} {radius_px} ({x},{y})"
+                "{head:?} {radius_px} ({x},{y})"
             );
         }
     }
     for thief in census.mismatches {
-        assert_eq!(census.natural[thief], 0, "{shape:?} {radius_px}");
+        assert_eq!(census.natural[thief], 0, "{head:?} {radius_px}");
     }
 }
 
 #[test]
 fn the_owner_map_is_the_nearest_root_except_texels_given_to_rootless_bristles() {
-    for shape in ALL_SHAPES {
+    for head in ALL_HEADS {
         for radius_px in EDGE_RADII_PX {
-            check_owner_map(shape, radius_px);
+            check_owner_map(head, radius_px);
         }
     }
 }
 
 #[test]
 fn every_bristle_owns_a_texel_and_every_lane_stays_in_its_cell_at_every_size() {
-    for shape in ALL_SHAPES {
+    for head in ALL_HEADS {
         for radius_px in EDGE_RADII_PX {
-            let laid = layout(&request(shape, radius_px));
+            let laid = layout(&request(head, radius_px));
             assert!(laid.bristles.len() >= MIN_BRISTLES.min(disc_texel_count(radius_px)));
             let ownerless =
                 (0..laid.bristles.len()).find(|&index| !laid.owners.contains(&(index as u32)));
-            assert_eq!(ownerless, None, "{shape:?} {radius_px}");
+            assert_eq!(ownerless, None, "{head:?} {radius_px}");
             assert_eq!(
                 lanes_stray(&laid),
                 Vec::<usize>::new(),
-                "{shape:?} {radius_px}"
+                "{head:?} {radius_px}"
             );
         }
     }
@@ -271,7 +271,7 @@ fn every_bristle_owns_a_texel_and_every_lane_stays_in_its_cell_at_every_size() {
 
 #[test]
 fn a_disc_with_fewer_texels_than_bristles_gets_one_bristle_per_texel() {
-    let laid = layout(&request(BrushShape::Round, 0.5));
+    let laid = layout(&request(HeadSpec::ROUND, 0.5));
     assert_eq!(laid.bristles.len(), disc_texel_count(0.5));
     for index in 0..laid.bristles.len() {
         assert!(laid.owners.contains(&(index as u32)));

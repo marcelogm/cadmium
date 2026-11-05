@@ -1,4 +1,4 @@
-use crate::brush::BrushShape;
+use crate::brush::HeadSpec;
 use crate::params::SimParams;
 
 pub(super) const BRISTLE_TUNING_BYTES: u64 = std::mem::size_of::<BristleTuning>() as u64;
@@ -22,7 +22,7 @@ pub(crate) struct BristleTuning {
 }
 
 impl BristleTuning {
-    pub(crate) fn of(params: &SimParams, shape: BrushShape, canvas_tooth_um: f32) -> BristleTuning {
+    pub(crate) fn of(params: &SimParams, head: &HeadSpec, canvas_tooth_um: f32) -> BristleTuning {
         let static_friction = params.get("bristle_static_friction");
         BristleTuning {
             static_friction,
@@ -32,19 +32,11 @@ impl BristleTuning {
             clumping: params.get("bristle_clumping"),
             pointing: params.get("bristle_pointing"),
             point_release: params.get("bristle_point_release"),
-            point_axes: point_axes(shape),
+            point_axes: head.point_axes(),
             point_film: params.get("bristle_point_film"),
             wet_support: params.get("bristle_wet_support"),
             canvas_tooth_um,
         }
-    }
-}
-
-fn point_axes(shape: BrushShape) -> [f32; 2] {
-    match shape {
-        BrushShape::Round => [1.0, 1.0],
-        BrushShape::Flat => [0.0, 1.0],
-        BrushShape::Fan => [0.0, 0.0],
     }
 }
 

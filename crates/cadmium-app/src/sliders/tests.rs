@@ -10,7 +10,6 @@ fn spec_named(key: &str) -> &'static ParamSpec {
 
 #[test]
 fn param_values_show_as_many_decimals_as_their_slider_step() {
-    assert_eq!(format_param(spec_named("bristle_density"), 1.6), "1.60");
     assert_eq!(format_param(spec_named("transfer_fraction"), 0.1), "0.10");
     assert_eq!(format_param(spec_named("residual_um"), 2.0), "2.0");
     assert_eq!(format_param(spec_named("penetration_um"), 120.0), "120");

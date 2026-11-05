@@ -1,4 +1,4 @@
-use cadmium_engine::brush::BrushShape;
+use cadmium_engine::brush::BrushSpec;
 
 use super::AppState;
 use crate::tools::UiTool;
@@ -19,9 +19,9 @@ impl AppState {
         self.session.resize_tip();
     }
 
-    pub fn set_brush_shape(&mut self, shape: BrushShape) {
+    pub fn wear_brush(&mut self, brush: &BrushSpec) {
         self.release();
-        self.session.brush.shape = shape;
+        self.session.brush.wear(brush);
         self.session.resize_tip();
     }
 

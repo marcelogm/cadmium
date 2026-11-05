@@ -2,6 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
+use cadmium_engine::brush::BrushSpec;
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
@@ -18,9 +19,8 @@ mod snapshot;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
-    PanelTool, SHAPES, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text,
-    size_to_slider, slider_needs_sync, tool_group_description, tool_hint, tool_wording,
-    visible_controls,
+    PanelTool, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text, size_to_slider,
+    slider_needs_sync, tool_group_description, tool_hint, tool_wording, visible_controls,
 };
 use snapshot::Snapshot;
 
@@ -30,6 +30,7 @@ pub struct BrushPanel {
     window: glib::WeakRef<CadmiumWindow>,
     pigments: PigmentsGroup,
     tool_group: ToolGroup,
+    brushes: Vec<BrushSpec>,
     clean_button: gtk::Button,
     hint: gtk::Label,
     pigment_swatches: RefCell<Vec<Swatch>>,
@@ -41,7 +42,8 @@ impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
         let root = panel_root();
         let pigments = build::pigments_group();
-        let tool_group = build::tool_group();
+        let brushes = cadmium_engine::brush::factory_brushes();
+        let tool_group = build::tool_group(&brushes);
         let clean_button = build::clean_button();
         let hint = build::hint_label();
         root.append(&pigments.group);
@@ -54,6 +56,7 @@ impl BrushPanel {
             window: window.downgrade(),
             pigments,
             tool_group,
+            brushes,
             clean_button,
             hint,
             pigment_swatches: RefCell::new(Vec::new()),
@@ -71,7 +74,7 @@ impl BrushPanel {
     }
 
     pub fn refresh(self: &Rc<Self>) {
-        let snapshot = Snapshot::of(&self.state.borrow());
+        let snapshot = Snapshot::of(&self.state.borrow(), &self.brushes);
         self.syncing.set(true);
         if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {
             self.rebuild_pigments(&snapshot);
@@ -148,11 +151,10 @@ impl BrushPanel {
 
     fn show_stroke_options(&self, snapshot: &Snapshot) {
         let group = &self.tool_group;
-        let shape_index = SHAPES
-            .iter()
-            .position(|(shape, _)| *shape == snapshot.shape)
-            .unwrap_or_default();
-        group.shape_row.set_selected(shape_index as u32);
+        let selected = snapshot
+            .brush_index
+            .map_or(gtk::INVALID_LIST_POSITION, |index| index as u32);
+        group.brush_row.set_selected(selected);
         group.reload_row.set_active(snapshot.reload_each_stroke);
         group.clean_each_row.set_active(snapshot.clean_each_stroke);
     }
@@ -203,7 +205,7 @@ impl BrushPanel {
         group.load.row.set_visible(shown.load);
         group.medium.row.set_visible(shown.medium);
         group.plate_gap.row.set_visible(shown.plate_gap);
-        group.shape_row.set_visible(shown.shape);
+        group.brush_row.set_visible(shown.shape);
         group.reload_row.set_visible(shown.stroke_loading);
         group.clean_each_row.set_visible(shown.stroke_loading);
         self.clean_button.set_visible(shown.clean);

@@ -1,9 +1,9 @@
-use cadmium_engine::brush::BrushShape;
+use cadmium_engine::brush::BrushSpec;
 use cadmium_engine::canvas::primer_srgb8;
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 
-use super::presentation::{PLATE_GAP_KEY, PanelTool, panel_tool};
+use super::presentation::{PLATE_GAP_KEY, PanelTool, panel_tool, worn_brush};
 use crate::state::AppState;
 
 pub(super) struct PigmentChoice {
@@ -30,13 +30,13 @@ pub(super) struct Snapshot {
     pub(super) load: f32,
     pub(super) plate_gap: f32,
     pub(super) medium: f32,
-    pub(super) shape: BrushShape,
+    pub(super) brush_index: Option<usize>,
     pub(super) reload_each_stroke: bool,
     pub(super) clean_each_stroke: bool,
 }
 
 impl Snapshot {
-    pub(super) fn of(state: &AppState) -> Snapshot {
+    pub(super) fn of(state: &AppState, brushes: &[BrushSpec]) -> Snapshot {
         let session = &state.session;
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
@@ -63,7 +63,7 @@ impl Snapshot {
             load: session.brush.load,
             plate_gap: session.engine.params().get(PLATE_GAP_KEY),
             medium: session.brush.medium,
-            shape: session.brush.shape,
+            brush_index: worn_brush(brushes, &session.brush),
             reload_each_stroke: state.reload_each_stroke,
             clean_each_stroke: state.clean_each_stroke,
         }

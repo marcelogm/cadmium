@@ -1,7 +1,7 @@
 pub mod support;
 
 use cadmium_engine::{
-    brush::BrushShape,
+    brush::HeadSpec,
     canvas::*,
     gpu::GpuContext,
     session::PaintSession,
@@ -27,7 +27,7 @@ const FULL_PRESSURE: f32 = 1.0;
 const MAX_LIGHT_TOUCH_WIDTH_SHARE: f64 = 0.4;
 const MIN_FULL_PRESS_WIDTH_SHARE: f64 = 0.9;
 
-fn session(gpu: &GpuContext, shape: BrushShape) -> PaintSession {
+fn session(gpu: &GpuContext, head: HeadSpec) -> PaintSession {
     let mut s = PaintSession::new(
         gpu,
         CanvasSpec {
@@ -39,7 +39,7 @@ fn session(gpu: &GpuContext, shape: BrushShape) -> PaintSession {
         },
     )
     .unwrap();
-    s.brush.shape = shape;
+    s.brush.head = head;
     s.brush.geometry.max_diameter_px = DIAMETER_PX;
     s.brush.recipe = vec![(0, 1.0)];
     s.reload_brush(gpu);
@@ -170,7 +170,7 @@ fn paint_straight_with(
 #[test]
 fn a_round_brush_outline_is_a_circle_when_the_pen_is_upright() {
     let gpu = GpuContext::new().unwrap();
-    let s = session(&gpu, BrushShape::Round);
+    let s = session(&gpu, HeadSpec::ROUND);
     let outline = s.brush_outline(&pen(0.0, 0.0)).unwrap();
     assert_eq!(outline.semi_axes[0], outline.semi_axes[1]);
 }
@@ -178,7 +178,7 @@ fn a_round_brush_outline_is_a_circle_when_the_pen_is_upright() {
 #[test]
 fn a_leaning_round_brush_outline_stays_a_circle_under_the_nib() {
     let gpu = GpuContext::new().unwrap();
-    let s = session(&gpu, BrushShape::Round);
+    let s = session(&gpu, HeadSpec::ROUND);
     let upright = s.brush_outline(&pen(0.0, 0.0)).unwrap();
     let leaning = s.brush_outline(&pen(LEANING_TILT_DEG, 0.0)).unwrap();
     assert_eq!(leaning.semi_axes, upright.semi_axes);
@@ -187,7 +187,7 @@ fn a_leaning_round_brush_outline_stays_a_circle_under_the_nib() {
 #[test]
 fn the_blender_shows_the_outline_of_its_bristles() {
     let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu, BrushShape::Round);
+    let mut s = session(&gpu, HeadSpec::ROUND);
     s.brush.tool = Tool::Blender;
     let outline = s.brush_outline(&pen(0.0, 0.0)).unwrap();
     assert_eq!(outline.semi_axes, [DIAMETER_PX / 2.0; 2]);
@@ -196,7 +196,7 @@ fn the_blender_shows_the_outline_of_its_bristles() {
 #[test]
 fn a_flat_brush_outline_is_a_horizontal_bar_when_the_pen_is_upright() {
     let gpu = GpuContext::new().unwrap();
-    let s = session(&gpu, BrushShape::Flat);
+    let s = session(&gpu, HeadSpec::FLAT);
     let outline = s.brush_outline(&pen(0.0, 0.0)).unwrap();
     let [thickness, width] = outline.semi_axes;
     assert!(
@@ -211,8 +211,8 @@ fn a_flat_brush_outline_is_a_horizontal_bar_when_the_pen_is_upright() {
 #[test]
 fn a_fan_brush_outline_is_thinner_than_a_flat_one() {
     let gpu = GpuContext::new().unwrap();
-    let flat = session(&gpu, BrushShape::Flat);
-    let fan = session(&gpu, BrushShape::Fan);
+    let flat = session(&gpu, HeadSpec::FLAT);
+    let fan = session(&gpu, HeadSpec::FAN);
     let flat_outline = flat.brush_outline(&pen(0.0, 0.0)).unwrap();
     let fan_outline = fan.brush_outline(&pen(0.0, 0.0)).unwrap();
     assert!(fan_outline.semi_axes[0] < flat_outline.semi_axes[0]);
@@ -222,7 +222,7 @@ fn a_fan_brush_outline_is_thinner_than_a_flat_one() {
 #[test]
 fn a_flat_brush_turns_its_thin_side_towards_the_lean_of_the_pen() {
     let gpu = GpuContext::new().unwrap();
-    let s = session(&gpu, BrushShape::Flat);
+    let s = session(&gpu, HeadSpec::FLAT);
     let outline = s.brush_outline(&pen(LEANING_TILT_DEG, 0.0)).unwrap();
     assert!(axial_difference(outline.orientation, 0.0) < ANGLE_TOLERANCE_RAD);
 }
@@ -230,10 +230,10 @@ fn a_flat_brush_turns_its_thin_side_towards_the_lean_of_the_pen() {
 #[test]
 fn a_flat_brush_paints_broadside_wide_and_edgewise_thin() {
     let gpu = GpuContext::new().unwrap();
-    let mut edgewise = session(&gpu, BrushShape::Flat);
+    let mut edgewise = session(&gpu, HeadSpec::FLAT);
     paint_straight(&gpu, &mut edgewise, true);
     let edge = painted_width(&gpu, &edgewise, true);
-    let mut broadside = session(&gpu, BrushShape::Flat);
+    let mut broadside = session(&gpu, HeadSpec::FLAT);
     paint_straight(&gpu, &mut broadside, false);
     let broad = painted_width(&gpu, &broadside, false);
     eprintln!("edgewise {edge} px, broadside {broad} px");
@@ -247,7 +247,7 @@ fn a_flat_brush_paints_broadside_wide_and_edgewise_thin() {
 #[test]
 fn a_fan_brush_paints_separate_tufts() {
     let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu, BrushShape::Fan);
+    let mut s = session(&gpu, HeadSpec::FAN);
     paint_straight(&gpu, &mut s, false);
     let runs: Vec<usize> = body_cross_sections(&gpu, &s, false)
         .iter()
@@ -262,7 +262,7 @@ fn a_fan_brush_paints_separate_tufts() {
 }
 
 fn round_width_at(gpu: &GpuContext, pressure: f32) -> f64 {
-    let mut s = session(gpu, BrushShape::Round);
+    let mut s = session(gpu, HeadSpec::ROUND);
     paint_straight_pressed(gpu, &mut s, true, pressure);
     painted_extent(gpu, &s, true)
 }
@@ -288,7 +288,7 @@ fn a_light_touch_with_a_wet_round_brush_paints_a_thin_line() {
 fn a_fan_brush_paints_whichever_way_the_pen_leans() {
     let gpu = GpuContext::new().unwrap();
     for tilt_x_deg in [LEANING_TILT_DEG, -LEANING_TILT_DEG] {
-        let mut s = session(&gpu, BrushShape::Fan);
+        let mut s = session(&gpu, HeadSpec::FAN);
         paint_leaning(&gpu, &mut s, tilt_x_deg);
         let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
         assert!(

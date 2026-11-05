@@ -145,7 +145,7 @@ impl WetOilEngine {
         if profile.has_blade_footprint() && !heading_known(dab) {
             return None;
         }
-        let footprint = Footprint::of(dab, brush, &self.params, self.tip_radius);
+        let footprint = Footprint::of(dab, brush, self.tip_radius);
         let regions = DabRegions::around(dab, step.sweep, footprint, canvas)?;
         Some(Placement {
             record: self.record(brush, dab, step, &regions),

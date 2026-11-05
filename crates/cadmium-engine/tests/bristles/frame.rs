@@ -1,4 +1,4 @@
-use cadmium_engine::brush::BrushShape;
+use cadmium_engine::brush::HeadSpec;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::StrokeSample;
@@ -44,12 +44,12 @@ fn roots_around_centre(gpu: &GpuContext, s: &PaintSession) -> Vec<[f32; 2]> {
 
 fn roots_before_and_after_turning(
     gpu: &GpuContext,
-    shape: BrushShape,
+    head: HeadSpec,
     from: Lean,
     to: Lean,
 ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
     let mut s = session(gpu);
-    s.brush.shape = shape;
+    s.brush.head = head;
     s.begin_stroke(gpu, leaning_sample(0, &from));
     let first_pose = (1..SAMPLES_PER_POSE).map(|index| leaning_sample(index, &from));
     s.add_samples(&first_pose.collect::<Vec<_>>());
@@ -79,7 +79,7 @@ fn a_leaning_flat_brush_turning_through_a_right_angle_keeps_its_roots_in_place()
     let gpu = GpuContext::new().unwrap();
     let (before, after) = roots_before_and_after_turning(
         &gpu,
-        BrushShape::Flat,
+        HeadSpec::FLAT,
         Lean {
             tilt_deg: 30.0,
             azimuth_deg: 89.0,
@@ -98,7 +98,7 @@ fn a_round_brush_keeps_its_roots_when_the_pen_turns() {
     let gpu = GpuContext::new().unwrap();
     let (before, after) = roots_before_and_after_turning(
         &gpu,
-        BrushShape::Round,
+        HeadSpec::ROUND,
         Lean {
             tilt_deg: 10.0,
             azimuth_deg: 0.0,

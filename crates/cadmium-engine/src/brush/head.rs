@@ -4,10 +4,10 @@ use super::within;
 
 const ROUND_POINT_ONSET: f32 = 0.5;
 const FAN_POINT_FADE_DEG: f32 = 10.0;
-// used by the bristle layout from the next commit
+// used by the bristle layout in a later commit
 #[allow(dead_code)]
 const BELLY_SPLAY_SHARE: f32 = 0.35;
-// used by the bristle layout from the next commit
+// used by the bristle layout in a later commit
 #[allow(dead_code)]
 pub(crate) const MIN_LENGTH_SHARE: f32 = 0.2;
 
@@ -24,8 +24,6 @@ pub struct HeadSpec {
     pub density_per_px: f32,
 }
 
-// used by the bristle layout from the next commit
-#[allow(dead_code)]
 /// How the roots are laid out across the ferrule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Section {
@@ -109,8 +107,6 @@ impl HeadSpec {
         self.thickness >= Self::THICKNESS_RANGE[1]
     }
 
-    // used by the bristle layout from the next commit
-    #[allow(dead_code)]
     pub(crate) fn section(&self) -> Section {
         if self.is_round() {
             Section::Round
@@ -121,8 +117,6 @@ impl HeadSpec {
         }
     }
 
-    // used by the bristle layout from the next commit
-    #[allow(dead_code)]
     /// How strongly a wet head draws to a point across its width and its thickness.
     pub(crate) fn point_axes(&self) -> [f32; 2] {
         let round_share = ((self.thickness - ROUND_POINT_ONSET)
@@ -132,7 +126,7 @@ impl HeadSpec {
         [self.point * round_share * open, self.point * open]
     }
 
-    // used by the bristle layout from the next commit
+    // used by the bristle layout in a later commit
     #[allow(dead_code)]
     /// Share of the full hair length for a root at `[across, thick]` in ferrule radii.
     pub(crate) fn length_share(&self, root: [f32; 2]) -> f32 {
@@ -147,7 +141,7 @@ impl HeadSpec {
         (domed * slanted).max(MIN_LENGTH_SHARE)
     }
 
-    // used by the bristle layout from the next commit
+    // used by the bristle layout in a later commit
     #[allow(dead_code)]
     /// Outward splay of the rest pose, per ferrule radius from the axis.
     pub(crate) fn bulge(&self) -> f32 {

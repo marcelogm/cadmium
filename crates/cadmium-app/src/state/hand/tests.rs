@@ -1,9 +1,9 @@
-use super::*;
 use crate::state::test_support::{
     PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, brush_totals, painting_state, present_one_frame,
     row_samples, stroke, wet_volume,
 };
 use crate::tools::UiTool;
+use cadmium_engine::brush::factory_brushes;
 use cadmium_engine::stroke::Tool;
 
 #[test]
@@ -26,8 +26,21 @@ fn resizing_the_brush_keeps_the_paint_on_its_tip() {
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let before = brush_totals(&state);
     state.set_brush_size(TEST_BRUSH_DIAMETER_PX * 2.0);
-    state.set_brush_shape(BrushShape::Flat);
+    state.wear_brush(&factory_brushes()[3]);
     assert_eq!(brush_totals(&state), before);
+}
+
+#[test]
+fn wearing_a_brush_takes_its_size_head_and_hair() {
+    let mut state = painting_state();
+    let mop = factory_brushes()
+        .into_iter()
+        .find(|brush| brush.name.starts_with("Mop"))
+        .unwrap();
+    state.wear_brush(&mop);
+    assert_eq!(state.session.brush.head, mop.head);
+    assert_eq!(state.session.brush.hair, mop.hair);
+    assert_eq!(state.session.brush.geometry.max_diameter_px, mop.size_px);
 }
 
 #[test]

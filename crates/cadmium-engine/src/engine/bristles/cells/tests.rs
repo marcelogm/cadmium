@@ -1,21 +1,22 @@
 use super::{CELL_GRID_BINS, CellFrame, cell_grids};
-use crate::brush::BrushShape;
+use crate::brush::HeadSpec;
 use crate::engine::bristles::layout::{LayoutRequest, layout};
 
-fn laid(shape: BrushShape) -> super::super::layout::BristleLayout {
+fn laid(head: HeadSpec) -> super::super::layout::BristleLayout {
     layout(&LayoutRequest {
-        shape,
+        head: HeadSpec {
+            length: 2.5,
+            ..head
+        },
         ferrule_radius_px: 20.0,
-        length_ratio: 2.5,
-        density_per_px: 1.6,
         seed: 7,
     })
 }
 
 #[test]
 fn every_grid_bin_points_into_its_own_bristles_cell() {
-    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
-        let laid = laid(shape);
+    for head in [HeadSpec::ROUND, HeadSpec::FLAT, HeadSpec::FAN] {
+        let laid = laid(head);
         let (grids, _) = laid.cell_grids.as_chunks::<CELL_GRID_BINS>();
         for (bristle, grid) in grids.iter().enumerate() {
             let owned = laid.owners.contains(&(bristle as u32));
@@ -24,7 +25,7 @@ fn every_grid_bin_points_into_its_own_bristles_cell() {
                     || grid
                         .iter()
                         .all(|&slot| laid.owners[slot as usize] == bristle as u32),
-                "{shape:?} bristle {bristle}"
+                "{head:?} bristle {bristle}"
             );
         }
     }
@@ -32,7 +33,7 @@ fn every_grid_bin_points_into_its_own_bristles_cell() {
 
 #[test]
 fn a_cells_grid_reaches_most_of_its_texels() {
-    let laid = laid(BrushShape::Round);
+    let laid = laid(HeadSpec::ROUND);
     let (grids, _) = laid.cell_grids.as_chunks::<CELL_GRID_BINS>();
     for (bristle, grid) in grids.iter().enumerate() {
         let owned = laid
