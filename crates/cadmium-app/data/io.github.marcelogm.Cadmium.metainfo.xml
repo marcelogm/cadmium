@@ -33,10 +33,10 @@
   </description>
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/docs/images/screenshot.png</image>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/screenshot.png</image>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/docs/images/lab.png</image>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/lab.png</image>
     </screenshot>
   </screenshots>
   <launchable type="desktop-id">io.github.marcelogm.Cadmium.desktop</launchable>
