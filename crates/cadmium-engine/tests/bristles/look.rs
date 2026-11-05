@@ -31,7 +31,7 @@ const CURVE_PRESSURE: f32 = 0.7;
 const MIN_APEX_ASYMMETRY_PX: f64 = 2.0;
 
 const DRY_RUN_DIAMETER_PX: f32 = 30.0;
-const DRY_RUN_LOAD: f32 = 0.08;
+const DRY_RUN_LOAD: f32 = 0.03;
 const DRY_RUN_PRESSURE: f32 = 0.8;
 const MIN_END_SPREAD_SHARE: f64 = 0.1;
 
