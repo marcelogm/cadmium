@@ -9,6 +9,9 @@
 @group(0) @binding(8) var wet_vol: texture_storage_2d<r32float, read>;
 @group(0) @binding(9) var<storage, read_write> hair_loads: array<f32>;
 
+// Mirrors MIN_AXIS_RISE in engine/bristles/handle.rs.
+const MIN_AXIS_RISE: f32 = 0.0175;
+
 struct Travel {
     start: Pose,
     end: Pose,
@@ -26,18 +29,18 @@ struct Motion {
     velocity_change: vec3<f32>,
 };
 
+fn pose_at_height(height_px: f32, base_px: f32) -> Pose {
+    let axis = vec3<f32>(dab.handle_axis_x, dab.handle_axis_y, dab.handle_axis_z);
+    let over_nib = dab.center + axis.xy * (height_px / max(axis.z, MIN_AXIS_RISE));
+    return Pose(vec3<f32>(over_nib, height_px + base_px), axis, dab.bristle_orientation);
+}
+
 fn current_pose(base_px: f32) -> Pose {
-    return Pose(
-        vec3<f32>(dab.center, dab.handle_height_px + base_px),
-        vec3<f32>(dab.handle_axis_x, dab.handle_axis_y, dab.handle_axis_z),
-        dab.bristle_orientation,
-    );
+    return pose_at_height(dab.handle_height_px, base_px);
 }
 
 fn lifted_pose(base_px: f32) -> Pose {
-    var lifted = current_pose(base_px);
-    lifted.ferrule.z = dab.handle_rest_height_px + base_px;
-    return lifted;
+    return pose_at_height(dab.handle_rest_height_px, base_px);
 }
 
 fn starting_pose(base_px: f32) -> Pose {

@@ -46,10 +46,10 @@ fn elapsed_time_is_clamped_to_one_step_and_never_runs_backwards() {
 #[test]
 fn pressing_lowers_the_ferrule_by_the_press_depth() {
     let upright = std::f32::consts::FRAC_PI_2;
-    assert_eq!(
-        gauge().lifted(&dab(1.0, upright)).ferrule_px,
-        [10.0, 20.0, 40.0]
-    );
+    let lifted = gauge().lifted(&dab(1.0, upright)).ferrule_px;
+    for (got, want) in lifted.into_iter().zip([10.0, 20.0, 40.0]) {
+        assert!((got - want).abs() < 1e-4, "{lifted:?}");
+    }
     assert_eq!(gauge().pose(&dab(1.0, upright)).ferrule_px[2], 20.0);
 }
 
@@ -78,4 +78,16 @@ fn a_leaning_brush_presses_from_where_its_hanging_tips_reach() {
     let pressed = gauge().pose(&dab(1.0, altitude)).ferrule_px[2];
     assert!((lifted - hanging_px).abs() < 1e-4, "{lifted}");
     assert!((pressed - 0.5 * hanging_px).abs() < 1e-4, "{pressed}");
+}
+
+#[test]
+fn a_leaning_brush_hangs_its_tips_onto_the_nib() {
+    let altitude = std::f32::consts::FRAC_PI_4;
+    let pose = gauge().lifted(&dab(0.0, altitude));
+    let tip: Vec<f32> = (0..3)
+        .map(|axis| pose.ferrule_px[axis] - pose.axis[axis] * 40.0)
+        .collect();
+    assert!((tip[0] - 10.0).abs() < 1e-3, "{tip:?}");
+    assert!((tip[1] - 20.0).abs() < 1e-3, "{tip:?}");
+    assert!(tip[2].abs() < 1e-3, "{tip:?}");
 }
