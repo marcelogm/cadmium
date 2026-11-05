@@ -128,7 +128,7 @@ impl WetOilEngine {
         self.reserve_volume(FULL_RESERVOIR_VOLUME_UM)
     }
 
-    fn reserve_volume(&self, thickness_um: f32) -> f32 {
+    pub(super) fn reserve_volume(&self, thickness_um: f32) -> f32 {
         self.params.get("reserve_factor") * thickness_um * disk_texels(self.tip_radius) as f32
     }
 
@@ -138,8 +138,9 @@ impl WetOilEngine {
         encoder.clear_buffer(&self.buffers.tip_delta, 0, None);
         encoder.clear_buffer(&self.buffers.body, 0, None);
         encoder.clear_buffer(&self.buffers.wanted, 0, None);
-        encoder.clear_buffer(&self.buffers.capillary_rows, 0, None);
+        encoder.clear_buffer(&self.buffers.capillary_pools, 0, None);
         gpu.queue.submit([encoder.finish()]);
+        self.bristles.reset();
     }
 
     pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {

@@ -13,12 +13,14 @@ use cadmium_engine::stroke::Tool;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
 use crate::writes::EditCounter;
+use clock::{Clock, SystemClock};
 use gesture::Contact;
 pub use gesture::LoadRing;
 pub use history::DryOutcome;
 pub use pen::PenReadout;
 pub use recipe::PigmentClick;
 
+mod clock;
 mod dip;
 mod document;
 mod frames;
@@ -61,6 +63,7 @@ pub struct AppState {
     resting_tool: Tool,
     samples_since_frame: u32,
     last_sample_time_ms: Option<u32>,
+    clock: Box<dyn Clock>,
     wakers: Vec<Waker>,
 }
 
@@ -97,10 +100,20 @@ impl AppState {
             resting_tool,
             samples_since_frame: 0,
             last_sample_time_ms: None,
+            clock: Box::new(SystemClock::new()),
             wakers: Vec::new(),
         };
         state.reload_brush();
         Ok(state)
+    }
+
+    pub fn now_ms(&self) -> f64 {
+        self.clock.now_ms()
+    }
+
+    #[cfg(test)]
+    fn use_clock(&mut self, clock: Box<dyn Clock>) {
+        self.clock = clock;
     }
 
     pub fn add_waker(&mut self, waker: Waker) {

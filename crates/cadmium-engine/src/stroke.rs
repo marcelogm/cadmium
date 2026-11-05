@@ -89,6 +89,7 @@ pub struct Dab {
     pub azimuth: f32,
     pub direction: f32,
     pub speed: f32,
+    pub time_ms: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -115,6 +116,7 @@ pub struct StrokeBuilder {
     geometry: BrushGeometry,
     last_sample: Option<StrokeSample>,
     distance_since_dab: f64,
+    first_time_ms: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -124,16 +126,18 @@ struct PenPoint {
     pressure: f32,
     tilt_x_deg: f32,
     tilt_y_deg: f32,
+    time_ms: f32,
 }
 
 impl PenPoint {
-    fn of(sample: &StrokeSample) -> Self {
+    fn of(sample: &StrokeSample, first_time_ms: u32) -> Self {
         PenPoint {
             x: sample.x,
             y: sample.y,
             pressure: sample.pressure,
             tilt_x_deg: sample.tilt_x_deg,
             tilt_y_deg: sample.tilt_y_deg,
+            time_ms: sample.time_ms.saturating_sub(first_time_ms) as f32,
         }
     }
 
@@ -144,6 +148,7 @@ impl PenPoint {
             pressure: lerp_f32(self.pressure, to.pressure, t),
             tilt_x_deg: lerp_f32(self.tilt_x_deg, to.tilt_x_deg, t),
             tilt_y_deg: lerp_f32(self.tilt_y_deg, to.tilt_y_deg, t),
+            time_ms: lerp_f32(self.time_ms, to.time_ms, t),
         }
     }
 }
@@ -163,6 +168,7 @@ impl StrokeBuilder {
             geometry,
             last_sample: None,
             distance_since_dab: 0.0,
+            first_time_ms: 0,
         }
     }
 
@@ -172,7 +178,8 @@ impl StrokeBuilder {
         }
         let dabs = match self.last_sample {
             None => {
-                let point = PenPoint::of(&sample);
+                self.first_time_ms = sample.time_ms;
+                let point = PenPoint::of(&sample, self.first_time_ms);
                 let azimuth = pen_angles(point.tilt_x_deg, point.tilt_y_deg).azimuth_rad;
                 vec![self.dab_at(&point, azimuth, 0.0)]
             }
@@ -204,8 +211,8 @@ impl StrokeBuilder {
         let elapsed_ms =
             f64::from(to.time_ms.saturating_sub(from.time_ms)).max(MIN_SPEED_INTERVAL_MS);
         let segment = Segment {
-            start: PenPoint::of(from),
-            end: PenPoint::of(to),
+            start: PenPoint::of(from, self.first_time_ms),
+            end: PenPoint::of(to, self.first_time_ms),
             length,
             shortest_step: length / (MAX_DABS_PER_SEGMENT - 1) as f64,
             direction: dy.atan2(dx) as f32,
@@ -245,6 +252,7 @@ impl StrokeBuilder {
             azimuth: angles.azimuth_rad,
             direction,
             speed,
+            time_ms: point.time_ms,
         }
     }
 }

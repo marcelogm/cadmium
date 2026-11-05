@@ -13,6 +13,8 @@ use cadmium_engine::{
     tube::Nozzle,
 };
 
+const FROZEN_FRAME_CLOCK_MS: f64 = 0.0;
+
 fn spec() -> CanvasSpec {
     CanvasSpec {
         width: 512,
@@ -29,8 +31,8 @@ fn session(gpu: &GpuContext) -> PaintSession {
 
 fn frame(gpu: &GpuContext, s: &mut PaintSession) {
     let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
-    s.encode_tray_frame(gpu, &mut e);
+    s.encode_frame(gpu, FROZEN_FRAME_CLOCK_MS, &mut e);
+    s.encode_tray_frame(gpu, FROZEN_FRAME_CLOCK_MS, &mut e);
     gpu.queue.submit([e.finish()]);
 }
 

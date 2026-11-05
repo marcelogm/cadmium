@@ -1,4 +1,4 @@
-use super::TOOL_MODE_KNIFE;
+use super::{DabStage, TOOL_MODE_KNIFE};
 use crate::stroke::Tool;
 
 #[test]
@@ -20,6 +20,21 @@ fn a_tool_places_dabs_exactly_when_it_has_dab_stages() {
         assert_eq!(
             profile.places_dabs(),
             !profile.dab_stages.is_empty(),
+            "{tool:?}"
+        );
+    }
+}
+
+#[test]
+fn only_the_brush_and_the_blender_hold_bristles() {
+    for tool in Tool::ALL {
+        let profile = tool.profile();
+        let bristled = matches!(tool, Tool::Brush | Tool::Blender);
+        assert_eq!(profile.has_bristle_footprint(), bristled, "{tool:?}");
+        assert_eq!(profile.moves_bristles(), bristled, "{tool:?}");
+        assert_eq!(
+            profile.dab_stages.contains(&DabStage::Contact),
+            bristled,
             "{tool:?}"
         );
     }

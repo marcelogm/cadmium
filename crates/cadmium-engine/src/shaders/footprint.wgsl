@@ -1,4 +1,3 @@
-const TAU: f32 = 6.283185307;
 const EDGE_SOFTNESS_PX: f32 = 1.5;
 const ALONG_HEADING_SOFTNESS_SHARE: f32 = 0.2;
 const BLADE_COVERAGE_HALF_PX: f32 = 0.5;
@@ -45,53 +44,19 @@ fn tuft_footprint(position: vec2<f32>) -> f32 {
     return smoothstep(0.0, softness, (1.0 - normalized_distance) * thinnest);
 }
 
-fn across_heading(position: vec2<f32>) -> f32 {
-    let ahead = heading();
-    return dot(canvas_offset(position), vec2<f32>(-ahead.y, ahead.x));
-}
-
-fn bristles(position: vec2<f32>) -> f32 {
-    let phase = TAU * dab.bristle_count * across_heading(position) / (2.0 * dab.radius);
-    return 1.0 - dab.bristle_contrast * 0.5 * (1.0 + sin(phase));
-}
-
-fn outline_footprint(position: vec2<f32>) -> f32 {
+fn footprint(position: vec2<f32>) -> f32 {
     if (dab.tool_mode == TOOL_MODE_KNIFE) {
         return blade_footprint(position);
     }
     return tuft_footprint(position);
 }
 
-fn footprint(position: vec2<f32>) -> f32 {
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
-        return blade_footprint(position);
-    }
-    return tuft_footprint(position) * bristles(position);
-}
-
-fn tuft_drag_weight(position: vec2<f32>) -> f32 {
+fn blade_pressure_gradient(position: vec2<f32>) -> vec2<f32> {
     let normalized = position / semi_axes();
-    return smoothstep(0.0, 1.0, 1.0 - dot(normalized, normalized));
-}
-
-fn drag_weight(position: vec2<f32>) -> f32 {
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
-        return blade_footprint(position);
-    }
-    return tuft_drag_weight(position);
-}
-
-fn pressure_envelope_gradient(position: vec2<f32>) -> vec2<f32> {
-    let normalized = position / semi_axes();
-    let slope = -2.0 * dab.pressure * normalized;
     var gradient = vec2<f32>(0.0);
-    let inside = 1.0 - dot(normalized, normalized);
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
-        if (all(abs(normalized) < vec2<f32>(1.0))) {
-            gradient = slope * (vec2<f32>(1.0) - normalized * normalized).yx;
-        }
-    } else if (inside > 0.0) {
-        gradient = 2.0 * inside * slope;
+    if (all(abs(normalized) < vec2<f32>(1.0))) {
+        let slope = -2.0 * dab.pressure * normalized;
+        gradient = slope * (vec2<f32>(1.0) - normalized * normalized).yx;
     }
     return canvas_offset(gradient);
 }
@@ -101,4 +66,9 @@ fn inside_outline(offset: vec2<f32>) -> bool {
         return all(abs(offset) <= semi_axes());
     }
     return length(offset / semi_axes()) <= 1.0;
+}
+
+fn inside_spread_region(pixel: vec2<i32>) -> bool {
+    let local = pixel - dab.spread_origin;
+    return all(local >= vec2<i32>(0)) && all(local < vec2<i32>(dab.spread_size));
 }

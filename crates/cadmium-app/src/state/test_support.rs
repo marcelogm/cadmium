@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use cadmium_engine::canvas::{CanvasSpec, PaintTotals, StateTexture};
@@ -6,6 +7,7 @@ use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 
 use super::AppState;
+use super::clock::Clock;
 use crate::presets::starting_canvas_spec;
 use crate::tools::UiTool;
 
@@ -129,4 +131,33 @@ pub(super) fn settle_both_surfaces(state: &mut AppState) {
     present_one_tray_frame(state);
     assert!(!state.session.has_pending_work());
     assert!(!state.session.tray_has_pending_work());
+}
+
+#[derive(Clone)]
+pub(super) struct ScriptedClock {
+    now_ms: Rc<Cell<f64>>,
+}
+
+impl ScriptedClock {
+    pub(super) fn starting_at(now_ms: f64) -> ScriptedClock {
+        ScriptedClock {
+            now_ms: Rc::new(Cell::new(now_ms)),
+        }
+    }
+
+    pub(super) fn advance(&self, elapsed_ms: f64) {
+        self.now_ms.set(self.now_ms.get() + elapsed_ms);
+    }
+}
+
+impl Clock for ScriptedClock {
+    fn now_ms(&self) -> f64 {
+        self.now_ms.get()
+    }
+}
+
+pub(super) fn scripted_painting_state(clock: &ScriptedClock) -> AppState {
+    let mut state = painting_state();
+    state.use_clock(Box::new(clock.clone()));
+    state
 }

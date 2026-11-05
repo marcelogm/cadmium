@@ -10,6 +10,7 @@ use cadmium_engine::{
 
 const PREVIEW_WIDTH: u32 = 512;
 const PREVIEW_HEIGHT: u32 = 256;
+pub const FROZEN_FRAME_CLOCK_MS: f64 = 0.0;
 
 pub fn without_wgpu_errors<T>(gpu: &GpuContext, work: impl FnOnce() -> T) -> T {
     let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -42,9 +43,17 @@ pub fn session_of_width(gpu: &GpuContext, width: u32) -> PaintSession {
 }
 
 pub fn encode_frame(gpu: &GpuContext, s: &mut PaintSession) {
+    encode_frame_at(gpu, s, FROZEN_FRAME_CLOCK_MS);
+}
+
+pub fn encode_frame_at(gpu: &GpuContext, s: &mut PaintSession, frame_clock_ms: f64) {
     let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(gpu, &mut e);
+    s.encode_frame(gpu, frame_clock_ms, &mut e);
     gpu.queue.submit([e.finish()]);
+}
+
+pub fn frame_at(gpu: &GpuContext, s: &mut PaintSession, frame_clock_ms: f64) {
+    without_wgpu_errors(gpu, || encode_frame_at(gpu, s, frame_clock_ms));
 }
 
 pub fn frame(gpu: &GpuContext, s: &mut PaintSession) {
@@ -127,4 +136,9 @@ pub fn write_png(name: &str, width: u32, height: u32, rgba: &[u8]) {
 pub fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
     let rgba = presented_rgba(gpu, s, PREVIEW_WIDTH, PREVIEW_HEIGHT);
     write_png(name, PREVIEW_WIDTH, PREVIEW_HEIGHT, &rgba);
+}
+
+pub fn median(mut values: Vec<usize>) -> usize {
+    values.sort_unstable();
+    values[values.len() / 2]
 }

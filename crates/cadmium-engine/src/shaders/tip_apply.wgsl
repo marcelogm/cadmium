@@ -1,5 +1,3 @@
-const TOLERATED_NEGATIVE: f32 = -1e-3;
-
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var<storage, read_write> tip: array<f32>;
 @group(0) @binding(2) var<storage, read_write> tip_delta: array<atomic<i32>>;
@@ -15,10 +13,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         if (change == 0) {
             continue;
         }
-        var amount = tip[base + channel] + f32(change) / DELTA_SCALE;
-        if (amount < 0.0 && amount > TOLERATED_NEGATIVE) {
-            amount = 0.0;
-        }
-        tip[base + channel] = amount;
+        tip[base + channel] += f32(change) / DELTA_SCALE;
     }
 }

@@ -31,7 +31,7 @@ impl ExportedImage {
         session.canvas.dirty.mark_all();
         let target = session.presenter.create_target(gpu, width, height);
         let mut encoder = new_encoder(gpu, "export_png");
-        session.encode_frame(gpu, &mut encoder);
+        session.encode_still_frame(gpu, &mut encoder);
         session.presenter.encode_present(
             gpu,
             PresentRequest {

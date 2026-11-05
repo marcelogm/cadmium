@@ -7,14 +7,18 @@ use crate::gpu::GpuContext;
 use crate::tool::DabStage;
 use apply::ApplyPass;
 use blade::BladePass;
+use bristle_contact::ContactPass;
+use bristle_step::BristleStepPass;
 use capillary::CapillaryPass;
 use exchange::ExchangePass;
 use refill::RefillPass;
-use spread::{SpreadBindGroups, SpreadPass};
+use spread::{HairContact, SpreadBindGroups, SpreadPass};
 use wipe::WipePass;
 
 mod apply;
 mod blade;
+pub(super) mod bristle_contact;
+mod bristle_step;
 mod capillary;
 pub(super) mod dip;
 pub(super) mod dry;
@@ -47,6 +51,8 @@ impl<'a> PlacedDab<'a> {
 }
 
 pub(super) struct DabPasses {
+    bristles: BristleStepPass,
+    contact: ContactPass,
     exchange: ExchangePass,
     apply: ApplyPass,
     capillary: CapillaryPass,
@@ -57,6 +63,8 @@ pub(super) struct DabPasses {
 }
 
 pub(super) struct DabBindGroups {
+    bristles: wgpu::BindGroup,
+    contact: wgpu::BindGroup,
     exchange: wgpu::BindGroup,
     apply: wgpu::BindGroup,
     refill: wgpu::BindGroup,
@@ -69,6 +77,8 @@ impl DabPasses {
     pub(super) fn new(gpu: &GpuContext) -> DabPasses {
         let refill = RefillPass::new(gpu);
         DabPasses {
+            bristles: BristleStepPass::new(gpu),
+            contact: ContactPass::new(gpu),
             exchange: ExchangePass::new(gpu),
             apply: ApplyPass::new(gpu),
             capillary: CapillaryPass::new(gpu, &refill.compute),
@@ -79,23 +89,27 @@ impl DabPasses {
         }
     }
 
-    pub(super) fn fit_scratch(
-        &mut self,
-        gpu: &GpuContext,
-        canvas: &Canvas,
-        placements: &[Placement],
-    ) {
-        self.spread.fit_scratch(gpu, canvas, placements);
+    pub(super) fn fit_scratch(&mut self, gpu: &GpuContext, placements: &[Placement]) {
+        self.spread.fit_scratch(gpu, placements);
+        self.contact.fit(gpu, placements);
     }
 
     pub(super) fn bind_groups(&self, resources: &DabResources<'_>) -> DabBindGroups {
         DabBindGroups {
-            exchange: self.exchange.bind_group(resources),
+            bristles: self.bristles.bind_group(resources),
+            contact: self.contact.bind_group(resources),
+            exchange: self.exchange.bind_group(resources, &self.contact),
             apply: self.apply.bind_group(resources),
             refill: self.refill.bind_group(resources),
             wipe: self.wipe.bind_group(resources),
             blade: self.blade.bind_group(resources),
-            spread: self.spread.bind_groups(resources),
+            spread: self.spread.bind_groups(
+                resources,
+                HairContact {
+                    contact: &self.contact,
+                    reference: self.exchange.contact_reference(),
+                },
+            ),
         }
     }
 
@@ -108,6 +122,19 @@ impl DabPasses {
         for (index, placement) in placements.iter().enumerate() {
             self.encode_dab(bind_groups, pass, PlacedDab::at(index, placement));
         }
+    }
+
+    pub(super) fn encode_bristles_alone(
+        &self,
+        resources: &DabResources<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let bind_group = self.bristles.bind_group(resources);
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("bristle_settle"),
+            timestamp_writes: None,
+        });
+        self.bristles.encode_first(&mut pass, &bind_group);
     }
 
     fn encode_dab(
@@ -129,6 +156,8 @@ impl DabPasses {
         dab: PlacedDab<'_>,
     ) {
         match stage {
+            DabStage::Bristles => self.bristles.encode(pass, &bind_groups.bristles, dab),
+            DabStage::Contact => self.contact.encode(pass, &bind_groups.contact, dab),
             DabStage::Exchange => self.exchange.encode(pass, &bind_groups.exchange, dab),
             DabStage::Apply => self.apply.encode(pass, &bind_groups.apply, dab),
             DabStage::Capillary => self.capillary.encode(pass, &bind_groups.refill, dab),

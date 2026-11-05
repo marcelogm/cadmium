@@ -1,58 +1,84 @@
 pub mod support;
 
-use cadmium_engine::{canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample};
+use cadmium_engine::{
+    brush::DEFAULT_SPACING, canvas::*, gpu::GpuContext, session::PaintSession, stroke::StrokeSample,
+};
 use support::{encode_frame, presented_rgba, total_volume};
 
-const SIDE: u32 = 1024;
-const ARC_CENTRE: [f64; 2] = [512.0, 560.0];
-const ARC_RADIUS: f64 = 330.0;
 const ARC_FROM_RAD: f64 = 3.6;
 const ARC_TO_RAD: f64 = 6.0;
-const ARC_SAMPLES: u32 = 220;
 const SAMPLE_INTERVAL_MS: u32 = 4;
 const FRAME_EVERY_SAMPLES: usize = 4;
-const MAX_DIAMETER_PX: f32 = 110.0;
 const TILT_DEG: f32 = 25.0;
 const PRESSURE_WAVES: f64 = 9.0;
-const INTERIOR_HALF_WIDTH_PX: f64 = 19.0;
 const END_MARGIN_RAD: f64 = 0.35;
-const ALONG_REACH_PX: i32 = 6;
-const MAX_RELATIVE_HEIGHT_RIPPLE: f64 = 0.02;
-const MAX_LUMINANCE_RIPPLE: f64 = 0.005;
+const SAMPLE_STEP_PX: f64 = 0.5;
+const CIRCLE_STEP_PX: f64 = 1.5;
+const HARMONICS: [f64; 2] = [1.0, 2.0];
+const NEIGHBOUR_FREQUENCY_SHARES: [f64; 8] = [0.65, 0.7, 0.75, 0.8, 1.2, 1.25, 1.3, 1.35];
+const MAX_STAMP_PROMINENCE: f64 = 1.0;
+const TAU: f64 = std::f64::consts::TAU;
 const CONSERVATION_TOLERANCE: f64 = 1e-6;
 
-struct Ripple {
-    height_um: f64,
-    mean_height_um: f64,
-    luminance: f64,
+struct Arc {
+    side: u32,
+    centre: [f64; 2],
+    radius_px: f64,
+    samples: u32,
+    diameter_px: f32,
+    circle_spread_px: f64,
 }
 
-fn session(gpu: &GpuContext) -> PaintSession {
+const SMALL_BRUSH_ARC: Arc = Arc {
+    side: 1024,
+    centre: [512.0, 560.0],
+    radius_px: 330.0,
+    samples: 220,
+    diameter_px: 110.0,
+    circle_spread_px: 18.0,
+};
+
+const LARGE_BRUSH_ARC: Arc = Arc {
+    side: 2048,
+    centre: [1024.0, 1200.0],
+    radius_px: 700.0,
+    samples: 470,
+    diameter_px: 400.0,
+    circle_spread_px: 64.0,
+};
+
+impl Arc {
+    fn dab_spacing_px(&self) -> f64 {
+        f64::from(DEFAULT_SPACING) * f64::from(self.diameter_px)
+    }
+}
+
+fn session(gpu: &GpuContext, arc: &Arc) -> PaintSession {
     let mut s = PaintSession::new(
         gpu,
         CanvasSpec {
-            width: SIDE,
-            height: SIDE,
+            width: arc.side,
+            height: arc.side,
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["ultramarine_blue".into(), "titanium_white".into()],
         },
     )
     .unwrap();
-    s.brush.geometry.max_diameter_px = MAX_DIAMETER_PX;
+    s.brush.geometry.max_diameter_px = arc.diameter_px;
     s.brush.recipe = vec![(0, 0.6), (1, 0.4)];
     s.reload_brush(gpu);
     s
 }
 
-fn arc_samples() -> Vec<StrokeSample> {
-    (0..=ARC_SAMPLES)
+fn arc_samples(arc: &Arc) -> Vec<StrokeSample> {
+    (0..=arc.samples)
         .map(|i| {
-            let t = f64::from(i) / f64::from(ARC_SAMPLES);
+            let t = f64::from(i) / f64::from(arc.samples);
             let angle = ARC_FROM_RAD + (ARC_TO_RAD - ARC_FROM_RAD) * t;
             StrokeSample {
-                x: ARC_CENTRE[0] + ARC_RADIUS * angle.cos(),
-                y: ARC_CENTRE[1] + ARC_RADIUS * angle.sin(),
+                x: arc.centre[0] + arc.radius_px * angle.cos(),
+                y: arc.centre[1] + arc.radius_px * angle.sin(),
                 pressure: (0.8 + 0.2 * (t * PRESSURE_WAVES).sin()) as f32,
                 tilt_x_deg: TILT_DEG,
                 tilt_y_deg: 0.0,
@@ -62,8 +88,8 @@ fn arc_samples() -> Vec<StrokeSample> {
         .collect()
 }
 
-fn paint_arc(gpu: &GpuContext, s: &mut PaintSession) {
-    for (i, sample) in arc_samples().into_iter().enumerate() {
+fn paint_arc(gpu: &GpuContext, s: &mut PaintSession, arc: &Arc) {
+    for (i, sample) in arc_samples(arc).into_iter().enumerate() {
         if i == 0 {
             s.begin_stroke(gpu, sample)
         } else {
@@ -77,8 +103,8 @@ fn paint_arc(gpu: &GpuContext, s: &mut PaintSession) {
     encode_frame(gpu, s);
 }
 
-fn colour_view(gpu: &GpuContext, s: &PaintSession) -> Vec<u8> {
-    presented_rgba(gpu, s, SIDE, SIDE)
+fn colour_view(gpu: &GpuContext, s: &PaintSession, arc: &Arc) -> Vec<u8> {
+    presented_rgba(gpu, s, arc.side, arc.side)
 }
 
 fn srgb_to_linear(channel: u8) -> f32 {
@@ -102,67 +128,83 @@ fn luminance(rgba: &[u8]) -> Vec<f32> {
         .collect()
 }
 
-fn bilinear(field: &[f32], x: f64, y: f64) -> f64 {
+fn bilinear(field: &[f32], side: u32, x: f64, y: f64) -> f64 {
     let x0 = x.floor() as usize;
     let y0 = y.floor() as usize;
     let fx = x - x0 as f64;
     let fy = y - y0 as f64;
-    let at = |xx: usize, yy: usize| f64::from(field[yy * SIDE as usize + xx]);
+    let at = |xx: usize, yy: usize| f64::from(field[yy * side as usize + xx]);
     (1.0 - fy) * ((1.0 - fx) * at(x0, y0) + fx * at(x0 + 1, y0))
         + fy * ((1.0 - fx) * at(x0, y0 + 1) + fx * at(x0 + 1, y0 + 1))
 }
 
-fn along_stroke_high_pass(field: &[f32], [x, y]: [f64; 2]) -> f64 {
-    let radial = [x - ARC_CENTRE[0], y - ARC_CENTRE[1]];
-    let length = radial[0].hypot(radial[1]);
-    let tangent = [-radial[1] / length, radial[0] / length];
-    let neighbourhood = (-ALONG_REACH_PX..=ALONG_REACH_PX)
-        .map(|step| {
-            let step = f64::from(step);
-            bilinear(field, x + step * tangent[0], y + step * tangent[1])
+fn circle_profile(field: &[f32], arc: &Arc, radius: f64) -> Vec<f64> {
+    let first = ARC_FROM_RAD + END_MARGIN_RAD;
+    let last = ARC_TO_RAD - END_MARGIN_RAD;
+    let count = ((last - first) * radius / SAMPLE_STEP_PX) as usize;
+    let samples: Vec<f64> = (0..count)
+        .map(|index| {
+            let angle = first + index as f64 * SAMPLE_STEP_PX / radius;
+            let x = arc.centre[0] + radius * angle.cos();
+            let y = arc.centre[1] + radius * angle.sin();
+            bilinear(field, arc.side, x, y)
         })
-        .sum::<f64>()
-        / f64::from(2 * ALONG_REACH_PX + 1);
-    (bilinear(field, x, y) - neighbourhood).abs()
-}
-
-fn stroke_interior() -> Vec<[f64; 2]> {
-    (0..SIDE)
-        .flat_map(|y| (0..SIDE).map(move |x| [f64::from(x), f64::from(y)]))
-        .filter(|[x, y]| {
-            let dx = x - ARC_CENTRE[0];
-            let dy = y - ARC_CENTRE[1];
-            let angle = dy.atan2(dx).rem_euclid(std::f64::consts::TAU);
-            let along_body =
-                angle > ARC_FROM_RAD + END_MARGIN_RAD && angle < ARC_TO_RAD - END_MARGIN_RAD;
-            along_body && (dx.hypot(dy) - ARC_RADIUS).abs() < INTERIOR_HALF_WIDTH_PX
+        .collect();
+    let mean = samples.iter().sum::<f64>() / count as f64;
+    samples
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let window = 0.5 - 0.5 * (TAU * index as f64 / (count - 1) as f64).cos();
+            (value - mean) * window
         })
         .collect()
 }
 
-fn ripple(height: &[f32], lum: &[f32]) -> Ripple {
-    let interior = stroke_interior();
-    let count = interior.len() as f64;
-    let mean_high_pass = |field: &[f32]| {
-        interior
+fn power_at(profile: &[f64], period_samples: f64) -> f64 {
+    let step = TAU / period_samples;
+    let (real, imaginary) =
+        profile
             .iter()
-            .map(|pixel| along_stroke_high_pass(field, *pixel))
-            .sum::<f64>()
-            / count
-    };
-    Ripple {
-        height_um: mean_high_pass(height),
-        mean_height_um: interior
-            .iter()
-            .map(|[x, y]| f64::from(height[*y as usize * SIDE as usize + *x as usize]))
-            .sum::<f64>()
-            / count,
-        luminance: mean_high_pass(lum),
-    }
+            .enumerate()
+            .fold((0.0, 0.0), |(real, imaginary), (index, value)| {
+                let phase = step * index as f64;
+                (real + value * phase.cos(), imaginary + value * phase.sin())
+            });
+    (real * real + imaginary * imaginary) / profile.len() as f64
 }
 
-fn write_png(name: &str, rgba: &[u8]) {
-    support::write_png(name, SIDE, SIDE, rgba);
+fn stamp_prominence(field: &[f32], arc: &Arc) -> f64 {
+    let circles = (2.0 * arc.circle_spread_px / CIRCLE_STEP_PX) as usize;
+    let profiles: Vec<(Vec<f64>, f64)> = (0..=circles)
+        .map(|index| {
+            let radius = arc.radius_px - arc.circle_spread_px + index as f64 * CIRCLE_STEP_PX;
+            let period = arc.dab_spacing_px() * radius / arc.radius_px / SAMPLE_STEP_PX;
+            (circle_profile(field, arc, radius), period)
+        })
+        .collect();
+    let power = |period_share: f64| {
+        profiles
+            .iter()
+            .map(|(profile, period)| power_at(profile, period * period_share))
+            .sum::<f64>()
+    };
+    HARMONICS
+        .iter()
+        .map(|harmonic| {
+            let peak = power(1.0 / harmonic);
+            let neighbours = NEIGHBOUR_FREQUENCY_SHARES
+                .iter()
+                .map(|share| power(1.0 / (harmonic * share)))
+                .sum::<f64>()
+                / NEIGHBOUR_FREQUENCY_SHARES.len() as f64;
+            peak / neighbours.max(f64::MIN_POSITIVE)
+        })
+        .fold(0.0, f64::max)
+}
+
+fn write_png(name: &str, side: u32, rgba: &[u8]) {
+    support::write_png(name, side, side, rgba);
 }
 
 fn height_view(height: &[f32]) -> Vec<u8> {
@@ -176,28 +218,42 @@ fn height_view(height: &[f32]) -> Vec<u8> {
         .collect()
 }
 
-#[test]
-fn a_thick_stroke_has_no_dab_spaced_ridges_inside() {
+fn assert_no_dab_spaced_ridges(arc: &Arc, preview: &str) {
     let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu);
+    let mut s = session(&gpu, arc);
     let before = total_volume(&gpu, &s);
-    paint_arc(&gpu, &mut s);
+    paint_arc(&gpu, &mut s, arc);
     let drift = (total_volume(&gpu, &s) - before) / before;
     let height = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
-    let rgba = colour_view(&gpu, &s);
-    write_png("engine-rings.png", &rgba);
-    write_png("engine-rings-height.png", &height_view(&height));
-    let found = ripple(&height, &luminance(&rgba));
-    let relative = found.height_um / found.mean_height_um;
-    eprintln!(
-        "along-stroke ripple: height {:.3} um of {:.1} um ({relative:.4}), luminance {:.5}, volume drift {drift:e}",
-        found.height_um, found.mean_height_um, found.luminance
+    let rgba = colour_view(&gpu, &s, arc);
+    write_png(&format!("{preview}.png"), arc.side, &rgba);
+    write_png(
+        &format!("{preview}-height.png"),
+        arc.side,
+        &height_view(&height),
     );
-    assert!(relative < MAX_RELATIVE_HEIGHT_RIPPLE, "{relative}");
+    assert!(height.iter().any(|&h| h > 0.0), "the arc laid no paint");
+    let height_stamps = stamp_prominence(&height, arc);
+    let luminance_stamps = stamp_prominence(&luminance(&rgba), arc);
+    eprintln!(
+        "{} px brush dab-period prominence: height {height_stamps:.3}, \
+         luminance {luminance_stamps:.3}, volume drift {drift:e}",
+        arc.diameter_px
+    );
+    assert!(height_stamps < MAX_STAMP_PROMINENCE, "{height_stamps}");
     assert!(
-        found.luminance < MAX_LUMINANCE_RIPPLE,
-        "{}",
-        found.luminance
+        luminance_stamps < MAX_STAMP_PROMINENCE,
+        "{luminance_stamps}"
     );
     assert!(drift.abs() < CONSERVATION_TOLERANCE, "{drift:e}");
+}
+
+#[test]
+fn a_thick_stroke_has_no_dab_spaced_ridges_inside() {
+    assert_no_dab_spaced_ridges(&SMALL_BRUSH_ARC, "engine-rings");
+}
+
+#[test]
+fn a_large_brush_stroke_has_no_dab_spaced_scallops_inside() {
+    assert_no_dab_spaced_ridges(&LARGE_BRUSH_ARC, "engine-rings-large");
 }

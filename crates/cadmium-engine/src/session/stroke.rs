@@ -6,7 +6,7 @@ use crate::gpu::{GpuContext, new_encoder};
 use crate::stroke::{StrokeBuilder, StrokeSample};
 use crate::surface::Surface;
 
-use super::{PaintSession, surface_canvas};
+use super::{MotionAnchor, PaintSession, surface_canvas};
 
 const SAVE_MARGIN_PX: f32 = 4.0;
 
@@ -22,6 +22,7 @@ impl PaintSession {
         self.step_open = true;
         self.stroke_brush = self.brush.clone();
         self.engine.begin_stroke();
+        self.motion_anchor = None;
         let mut builder = StrokeBuilder::new(self.stroke_brush.stroke_geometry());
         self.queued.extend(builder.push(sample));
         self.stroke = Some(builder);
@@ -84,7 +85,8 @@ impl PaintSession {
         gpu: &GpuContext,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        if !self.queued.is_empty() {
+        if let Some(latest) = self.queued.last() {
+            self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.time_ms));
             let touched = self.tiles_touched_by_queued_dabs();
             let canvas = surface_canvas(self.stroke_surface, &mut self.canvas, &mut self.tray);
             self.history
@@ -97,6 +99,7 @@ impl PaintSession {
             self.queued.clear();
         }
         if self.stroke.is_none() {
+            self.engine.end_stroke();
             self.commit_open_step();
         }
     }

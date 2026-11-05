@@ -15,9 +15,11 @@ mod brush;
 mod hold;
 mod removal;
 mod replacement;
+mod settle;
 mod stroke;
 
 use hold::Hold;
+use settle::MotionAnchor;
 
 const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
@@ -47,6 +49,7 @@ pub struct PaintSession {
     step_open: bool,
     stroke_surface: Surface,
     hold: Option<Hold>,
+    motion_anchor: Option<MotionAnchor>,
     tube: Tube,
     drawer: DrawUp,
 }
@@ -73,6 +76,7 @@ impl PaintSession {
             step_open: false,
             stroke_surface: Surface::Painting,
             hold: None,
+            motion_anchor: None,
             tube: Tube::new(gpu),
             drawer: DrawUp::new(gpu),
         };
@@ -94,8 +98,26 @@ impl PaintSession {
         Ok(slot)
     }
 
-    pub fn encode_frame(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
+    pub fn encode_frame(
+        &mut self,
+        gpu: &GpuContext,
+        frame_clock_ms: f64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.encode_dabs_or_settle(gpu, Surface::Painting, frame_clock_ms, encoder);
+        self.encode_painting_shade(gpu, encoder);
+    }
+
+    pub(crate) fn encode_still_frame(
+        &mut self,
+        gpu: &GpuContext,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         self.encode_queued_dabs(gpu, encoder);
+        self.encode_painting_shade(gpu, encoder);
+    }
+
+    fn encode_painting_shade(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
         self.renderer.encode_shade(
             gpu,
             &mut self.canvas,
@@ -107,8 +129,13 @@ impl PaintSession {
         );
     }
 
-    pub fn encode_tray_frame(&mut self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
-        self.encode_queued_dabs(gpu, encoder);
+    pub fn encode_tray_frame(
+        &mut self,
+        gpu: &GpuContext,
+        frame_clock_ms: f64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.encode_dabs_or_settle(gpu, Surface::Tray, frame_clock_ms, encoder);
         self.renderer.encode_shade(
             gpu,
             &mut self.tray,

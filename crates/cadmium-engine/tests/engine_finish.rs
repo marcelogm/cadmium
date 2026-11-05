@@ -208,6 +208,7 @@ fn dabs_with_non_finite_geometry_are_skipped() {
         azimuth: 0.0,
         direction: 0.0,
         speed: 0.0,
+        time_ms: 0.0,
     };
     let mut broken = [dab; 3];
     broken[1].x = f32::INFINITY;

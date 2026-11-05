@@ -23,6 +23,8 @@ impl RefillPass {
                 storage_entry(3, false),
                 storage_entry(4, false),
                 storage_entry(5, false),
+                storage_entry(6, true),
+                storage_entry(7, true),
             ],
         );
         RefillPass {
@@ -43,7 +45,9 @@ impl RefillPass {
                 buffer_binding(2, &buffers.tip_delta),
                 buffer_binding(3, &buffers.body),
                 buffer_binding(4, &buffers.wanted),
-                buffer_binding(5, &buffers.capillary_rows),
+                buffer_binding(5, &buffers.capillary_pools),
+                buffer_binding(6, &buffers.bristles.owners),
+                buffer_binding(7, &buffers.bristles.ranks),
             ],
         )
     }
