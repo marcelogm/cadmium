@@ -123,7 +123,7 @@ fn tip_position(root: &Root) -> [f32; 2] {
     [half + root.position_px[0], half + root.position_px[1]]
 }
 
-pub(super) fn disc_texel_count(radius_px: f32) -> usize {
+pub(crate) fn disc_texel_count(radius_px: f32) -> usize {
     let half = TIP_HALF as i32;
     let size = crate::engine::TIP_SIZE as i32;
     let radius_squared = radius_px * radius_px;
