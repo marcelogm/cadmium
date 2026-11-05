@@ -164,10 +164,12 @@ fn every_lane_lies_inside_the_cell_of_its_bristle() {
 
 #[test]
 fn laying_out_the_largest_brush_finishes_within_a_hang_guard() {
+    // Only catches a hang: coverage builds on a shared CI runner, next to the
+    // CPU-heavy tests, take over a second for what runs in 60 ms locally.
     let started = std::time::Instant::now();
     let laid = layout(&request(BrushShape::Round, 250.0));
     assert_eq!(laid.bristles.len(), MAX_BRISTLES);
-    assert!(started.elapsed().as_secs() < 1, "{:?}", started.elapsed());
+    assert!(started.elapsed().as_secs() < 10, "{:?}", started.elapsed());
 }
 
 const EDGE_RADII_PX: [f32; 3] = [1.0, 20.0, 250.0];
