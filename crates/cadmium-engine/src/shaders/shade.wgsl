@@ -7,7 +7,7 @@ struct ShadeParams {
     dry_roughness: f32,
     view_mode: u32,
     view_slot: u32,
-    _pad: u32,
+    first_possible_tile: u32,
 };
 
 const TILE_SIZE: u32 = 64u;
@@ -49,6 +49,15 @@ const VOLUME_VIEW_FULL_SCALE_UM: f32 = 200.0;
 @group(0) @binding(7) var dry_refl1: texture_storage_2d<rgba16float, read>;
 @group(0) @binding(8) var dry_height: texture_storage_2d<r32float, read>;
 @group(0) @binding(9) var display: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(10) var<storage, read> tile_changes: array<u32>;
+
+fn unchanged(slot: u32, tile: vec2<u32>) -> bool {
+    if (slot < params.first_possible_tile) {
+        return false;
+    }
+    let columns = tile_changes[0];
+    return tile_changes[TILE_CHANGE_HEADER_WORDS + tile.y * columns + tile.x] == 0u;
+}
 
 fn saunderson_display(reflectance: f32) -> f32 {
     return (1.0 - SURFACE_REFLECTION_K1) * (1.0 - INTERNAL_REFLECTION_K2) * reflectance
@@ -119,6 +128,9 @@ fn main(
 ) {
     let size = textureDimensions(display);
     let tile = tiles[group.z];
+    if (unchanged(group.z, tile)) {
+        return;
+    }
     let texel = tile * TILE_SIZE + group.xy * WORKGROUP_SIZE + local.xy;
     if (texel.x >= size.x || texel.y >= size.y) {
         return;

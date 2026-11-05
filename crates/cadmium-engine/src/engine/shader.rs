@@ -16,7 +16,8 @@ use super::{
     DELTA_SCALE, DRY_WORKGROUP_SIZE, MAX_TIP_THICKNESS_UM, PIGMENT_CHANNELS, TIP_CHANNELS,
     TIP_HALF, TIP_SIZE, VOLUME_CHANNEL,
 };
-use crate::canvas::TILE_SIZE;
+use crate::canvas::{TILE_CHANGE_HEADER_WORDS, TILE_SIZE};
+use crate::compute::WORKGROUP_SIZE;
 use crate::tool::TOOL_MODE_KNIFE;
 
 const TIP_SUM_INVOCATIONS: u32 = 256;
@@ -28,6 +29,17 @@ pub(super) const DAB_SNIPPETS: [&str; 3] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/nearest_half.wgsl"),
     include_str!("../shaders/footprint.wgsl"),
+];
+pub(super) const ADVECT_SNIPPETS: [&str; 4] = [
+    include_str!("../shaders/brush_tip.wgsl"),
+    include_str!("../shaders/nearest_half.wgsl"),
+    include_str!("../shaders/footprint.wgsl"),
+    include_str!("../shaders/tile_changes.wgsl"),
+];
+pub(super) const TOUCHED_TILE_SNIPPETS: [&str; 3] = [
+    include_str!("../shaders/brush_tip.wgsl"),
+    include_str!("../shaders/contact_mask.wgsl"),
+    include_str!("../shaders/tile_changes.wgsl"),
 ];
 pub(super) const EXCHANGE_SNIPPETS: [&str; 6] = [
     include_str!("../shaders/brush_tip.wgsl"),
@@ -125,6 +137,8 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
          const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
          const TILE_SIZE: u32 = {TILE_SIZE}u;\n\
+         const TILE_CHANGE_HEADER_WORDS: u32 = {TILE_CHANGE_HEADER_WORDS}u;\n\
+         const BLOCK_SIDE_PX: u32 = {WORKGROUP_SIZE}u;\n\
          const DRY_WORKGROUP_SIZE: u32 = {DRY_WORKGROUP_SIZE}u;\n\
          const PICK_INVOCATIONS: u32 = {PICK_INVOCATIONS}u;\n\
          const TIP_SUM_INVOCATIONS: u32 = {TIP_SUM_INVOCATIONS}u;\n\

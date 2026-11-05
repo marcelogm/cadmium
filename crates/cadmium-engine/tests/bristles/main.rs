@@ -14,5 +14,6 @@ mod paint;
 mod reentry;
 mod relief;
 mod settle;
+mod shading;
 mod sizes;
 mod threads;
