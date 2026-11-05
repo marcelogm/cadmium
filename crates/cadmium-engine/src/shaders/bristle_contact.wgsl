@@ -220,13 +220,20 @@ fn widen_contact_extent(sweep: Sweep) {
     widen_words(CONTACT_ALONG_LOW, CONTACT_ALONG_HIGH, along_before, along_now, reach_px);
 }
 
-fn rasterize_sweep(sweep: Sweep, bristle: u32) {
-    widen_contact_extent(sweep);
+fn rasterize_sweep(sweep: Sweep, bristle: u32, thread: u32) {
+    if (thread == 0u) {
+        widen_contact_extent(sweep);
+    }
     let bounds = swept_bounds(sweep);
-    for (var y = bounds.y; y <= bounds.w; y++) {
-        for (var x = bounds.x; x <= bounds.z; x++) {
-            mark_pixel(vec2<i32>(x, y), sweep, bristle);
-        }
+    let width = bounds.z - bounds.x + 1;
+    let height = bounds.w - bounds.y + 1;
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    let pixels = u32(width) * u32(height);
+    for (var index = thread; index < pixels; index += CONTACT_WORKGROUP_SIZE) {
+        let offset = vec2<i32>(vec2<u32>(index % u32(width), index / u32(width)));
+        mark_pixel(bounds.xy + offset, sweep, bristle);
     }
 }
 
@@ -254,9 +261,12 @@ fn clear_loads(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 @compute @workgroup_size(CONTACT_WORKGROUP_SIZE)
-fn rasterize(@builtin(global_invocation_id) id: vec3<u32>) {
-    let bristle = id.x / BRISTLE_SEGMENTS;
-    let segment = id.x % BRISTLE_SEGMENTS;
+fn rasterize(
+    @builtin(workgroup_id) group: vec3<u32>,
+    @builtin(local_invocation_index) thread: u32,
+) {
+    let bristle = group.x / BRISTLE_SEGMENTS;
+    let segment = group.x % BRISTLE_SEGMENTS;
     if (bristle >= dab.bristle_total) {
         return;
     }
@@ -268,11 +278,14 @@ fn rasterize(@builtin(global_invocation_id) id: vec3<u32>) {
     if (continues_previous_dab() && remembered.touching) {
         before = remembered;
     }
-    remember_span(slot, now);
+    storageBarrier();
+    if (thread == 0u) {
+        remember_span(slot, now);
+    }
     if (now.touching) {
         let first = first_touching_arc(bristle, rest.radius_px);
         let sweep = Sweep(before, now, rest.radius_px, first, hair_draw_log(bristle));
-        rasterize_sweep(sweep, bristle);
+        rasterize_sweep(sweep, bristle, thread);
     }
 }
 
