@@ -10,6 +10,7 @@ mod tuning;
 
 pub(crate) use cells::CELL_GRID_SIDE;
 pub(crate) use clusters::{CLUSTER_SPAN_WORDS, MAX_CLUSTERS};
+pub(super) use layout::disc_texel_count;
 pub(crate) use layout::{
     BRISTLE_VERTICES, LayoutRequest, MAX_BRISTLES, ReachRequest, reach_bound_px,
 };

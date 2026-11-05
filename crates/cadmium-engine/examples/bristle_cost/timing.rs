@@ -124,3 +124,18 @@ pub(crate) fn report(name: &str, costs: &[FrameCost]) {
         costs.len()
     );
 }
+
+const QUARTERS: usize = 4;
+const QUARTER_NAMES: [&str; QUARTERS] = [
+    "  first quarter",
+    "  second quarter",
+    "  third quarter",
+    "  last quarter",
+];
+
+pub(crate) fn report_quarters(costs: &[FrameCost]) {
+    let quarter = costs.len().div_ceil(QUARTERS).max(1);
+    for (name, chunk) in QUARTER_NAMES.iter().zip(costs.chunks(quarter)) {
+        report(name, chunk);
+    }
+}

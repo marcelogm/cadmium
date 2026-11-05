@@ -272,7 +272,11 @@ impl DabRegions {
 pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
     for placement in placements {
         let [x0, y0, x1, y1] = placement.canvas_rect;
-        canvas.dirty.mark_rect(x0, y0, x1, y1);
+        if placement.profile.has_bristle_footprint() {
+            canvas.possibly_dirty.mark_rect(x0, y0, x1, y1);
+        } else {
+            canvas.dirty.mark_rect(x0, y0, x1, y1);
+        }
         canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
     }
 }
