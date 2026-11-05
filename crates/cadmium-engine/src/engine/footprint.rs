@@ -11,7 +11,6 @@ const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
 const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
-const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
 const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
 
 pub(super) struct Footprint {
@@ -37,7 +36,7 @@ impl Footprint {
         if profile.has_bristle_footprint() {
             return Footprint::of_bristles(dab, brush, params, ferrule_radius_px);
         }
-        Footprint::of_ellipse(dab, brush)
+        Footprint::of_disc(dab)
     }
 
     fn of_blade(dab: &Dab, brush: &BrushSettings) -> Footprint {
@@ -74,15 +73,11 @@ impl Footprint {
         }
     }
 
-    fn of_ellipse(dab: &Dab, brush: &BrushSettings) -> Footprint {
-        let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-        let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
-        let elongation = (shape_thickness(brush.shape) * (1.0 + ELLIPSE_TILT_ELONGATION * tilt))
-            .min(MAX_TIP_RADIUS / radius);
+    fn of_disc(dab: &Dab) -> Footprint {
         Footprint {
-            radius,
-            elongation,
-            orientation: blade_orientation(brush.shape, dab.altitude, dab.azimuth),
+            radius: dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS),
+            elongation: 1.0,
+            orientation: 0.0,
             rectangular: false,
             lateral_reach: 0.0,
             bristle_reach_px: None,
@@ -111,14 +106,6 @@ impl Footprint {
             (along * along * cos * cos + across * across * sin * sin).sqrt(),
             (along * along * sin * sin + across * across * cos * cos).sqrt(),
         ]
-    }
-}
-
-fn shape_thickness(shape: BrushShape) -> f32 {
-    match shape {
-        BrushShape::Round => 1.0,
-        BrushShape::Flat => FLAT_THICKNESS_SHARE,
-        BrushShape::Fan => FAN_THICKNESS_SHARE,
     }
 }
 

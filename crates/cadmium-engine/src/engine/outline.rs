@@ -57,7 +57,7 @@ impl WetOilEngine {
         if profile.has_bristle_footprint() {
             return Some(self.bristle_outline(brush, &dab));
         }
-        if !profile.has_ellipse_footprint() {
+        if !profile.has_disc_footprint() {
             return None;
         }
         let footprint = Footprint::of(&dab, brush, &self.params, self.tip_radius);

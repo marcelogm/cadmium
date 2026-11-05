@@ -32,7 +32,7 @@ pub enum Holder {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FootprintShape {
-    Ellipse,
+    Disc,
     Blade,
     Bristles,
 }
@@ -59,8 +59,8 @@ impl ToolProfile {
         self.footprint == Some(FootprintShape::Blade)
     }
 
-    pub(crate) fn has_ellipse_footprint(&self) -> bool {
-        self.footprint == Some(FootprintShape::Ellipse)
+    pub(crate) fn has_disc_footprint(&self) -> bool {
+        self.footprint == Some(FootprintShape::Disc)
     }
 
     pub(crate) fn has_bristle_footprint(&self) -> bool {

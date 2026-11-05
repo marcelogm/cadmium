@@ -363,3 +363,20 @@ fn a_dab_paints_inside_the_cursor_outline() {
         }
     }
 }
+
+#[test]
+fn a_rag_wipes_a_round_patch_whatever_the_brush_shape_or_lean() {
+    let gpu = GpuContext::new().unwrap();
+    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
+        let mut s = session(&gpu, shape);
+        s.brush.tool = Tool::Rag;
+        for tilt_x_deg in [0.0, LEANING_TILT_DEG] {
+            let outline = s.brush_outline(&pen(tilt_x_deg, 0.0));
+            let round = Some(BrushOutline::Ellipse {
+                semi_axes: [DIAMETER_PX / 2.0; 2],
+                orientation: 0.0,
+            });
+            assert_eq!(outline, round, "{shape:?} at {tilt_x_deg}°");
+        }
+    }
+}
