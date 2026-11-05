@@ -1,10 +1,8 @@
 use super::bristles::{ReachRequest, length_ratio, reach_bound_px};
-use super::{
-    BLADE_COVERAGE_MARGIN_PX, BLADE_SPILL_BAND_PX, MAX_TIP_RADIUS, MIN_DAB_RADIUS, WetOilEngine,
-};
+use super::{BLADE_COVERAGE_MARGIN_PX, BLADE_SPILL_BAND_PX, MAX_TIP_RADIUS, MIN_DAB_RADIUS};
 use crate::brush::{BrushSettings, BrushShape};
 use crate::params::SimParams;
-use crate::stroke::{Dab, PenAngles, StrokeSample, pen_angles};
+use crate::stroke::Dab;
 
 pub(super) const FLAT_THICKNESS_SHARE: f32 = 0.25;
 pub(super) const FAN_THICKNESS_SHARE: f32 = 0.12;
@@ -15,12 +13,6 @@ const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
 const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
 const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BrushOutline {
-    pub semi_axes: [f32; 2],
-    pub orientation: f32,
-}
 
 pub(super) struct Footprint {
     pub(super) radius: f32,
@@ -130,7 +122,7 @@ fn shape_thickness(shape: BrushShape) -> f32 {
     }
 }
 
-fn blade_orientation(shape: BrushShape, altitude: f32, azimuth: f32) -> f32 {
+pub(super) fn blade_orientation(shape: BrushShape, altitude: f32, azimuth: f32) -> f32 {
     if shape == BrushShape::Round {
         return azimuth;
     }
@@ -153,45 +145,4 @@ fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
 
 pub(super) fn knife_half_width(radius: f32) -> f32 {
     (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX)
-}
-
-impl WetOilEngine {
-    pub fn brush_outline(
-        &self,
-        brush: &BrushSettings,
-        sample: &StrokeSample,
-    ) -> Option<BrushOutline> {
-        let profile = brush.tool.profile();
-        let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
-        if profile.has_bristle_footprint() {
-            return Some(bristle_outline(brush, angles));
-        }
-        if !profile.has_ellipse_footprint() {
-            return None;
-        }
-        let dab = Dab {
-            x: sample.x as f32,
-            y: sample.y as f32,
-            radius: brush.geometry.max_diameter_px / 2.0,
-            pressure: 1.0,
-            altitude: angles.altitude_rad,
-            azimuth: angles.azimuth_rad,
-            direction: 0.0,
-            speed: 0.0,
-            time_ms: 0.0,
-        };
-        let footprint = Footprint::of(&dab, brush, &self.params, self.tip_radius);
-        Some(BrushOutline {
-            semi_axes: footprint.semi_axes(),
-            orientation: footprint.orientation,
-        })
-    }
-}
-
-fn bristle_outline(brush: &BrushSettings, angles: PenAngles) -> BrushOutline {
-    let radius = (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-    BrushOutline {
-        semi_axes: [radius * shape_thickness(brush.shape), radius],
-        orientation: blade_orientation(brush.shape, angles.altitude_rad, angles.azimuth_rad),
-    }
 }

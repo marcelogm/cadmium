@@ -1,3 +1,4 @@
+use cadmium_engine::engine::BrushOutline;
 use cadmium_engine::stroke::StrokeSample;
 use gtk::prelude::*;
 use gtk::{gdk, graphene, gsk};
@@ -6,13 +7,21 @@ use crate::state::AppState;
 use crate::tools::UiTool;
 
 const OUTLINE_WIDTH: f32 = 1.0;
+const DARK_RIM_WIDTHS: f32 = 3.0;
 const OUTLINE_MIN_RADIUS: f32 = 2.0;
 const OUTLINE_LIGHT: gdk::RGBA = gdk::RGBA::new(1.0, 1.0, 1.0, 0.9);
 const OUTLINE_DARK: gdk::RGBA = gdk::RGBA::new(0.0, 0.0, 0.0, 0.7);
 
+enum OutlineShape {
+    Ellipse {
+        semi_axes: [f32; 2],
+        rotation_deg: f32,
+    },
+    Polygon(Vec<(f32, f32)>),
+}
+
 pub(crate) struct CursorOutline {
-    pub semi_axes: [f32; 2],
-    pub rotation_deg: f32,
+    shape: OutlineShape,
 }
 
 impl CursorOutline {
@@ -30,18 +39,35 @@ impl CursorOutline {
             time_ms: 0,
         };
         let canvas_radius = brush.geometry.max_diameter_px / 2.0;
-        let (semi_axes, rotation_deg) = match state.session.engine.brush_outline(&brush, &pen) {
-            Some(outline) => (outline.semi_axes, outline.orientation.to_degrees()),
-            None => ([canvas_radius; 2], 0.0),
+        let shape = match state.session.engine.brush_outline(&brush, &pen) {
+            Some(BrushOutline::Ellipse {
+                semi_axes,
+                orientation,
+            }) => OutlineShape::Ellipse {
+                semi_axes: semi_axes.map(|semi| semi * to_widget),
+                rotation_deg: orientation.to_degrees(),
+            },
+            Some(BrushOutline::Bristles(points)) => OutlineShape::Polygon(
+                points
+                    .iter()
+                    .map(|[x, y]| (x * to_widget, y * to_widget))
+                    .collect(),
+            ),
+            None => OutlineShape::Ellipse {
+                semi_axes: [canvas_radius * to_widget; 2],
+                rotation_deg: 0.0,
+            },
         };
-        CursorOutline {
-            semi_axes: semi_axes.map(|semi| semi * to_widget),
-            rotation_deg,
-        }
+        CursorOutline { shape }
     }
 
     pub(crate) fn radius(&self) -> f32 {
-        self.semi_axes[0].max(self.semi_axes[1])
+        match &self.shape {
+            OutlineShape::Ellipse { semi_axes, .. } => semi_axes[0].max(semi_axes[1]),
+            OutlineShape::Polygon(points) => {
+                points.iter().map(|(x, y)| x.hypot(*y)).fold(0.0, f32::max)
+            }
+        }
     }
 
     pub(crate) fn is_visible(&self) -> bool {
@@ -49,28 +75,62 @@ impl CursorOutline {
     }
 
     pub(crate) fn append_to(&self, snapshot: &gtk::Snapshot, centre: (f32, f32)) {
-        let [along, across] = self.semi_axes;
-        append_ring(
-            snapshot,
-            &RingStroke {
-                centre,
-                semi_axes: [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
-                rotation_deg: self.rotation_deg,
-                colour: OUTLINE_DARK,
-                width: OUTLINE_WIDTH,
-            },
-        );
-        append_ring(
-            snapshot,
-            &RingStroke {
-                centre,
-                semi_axes: self.semi_axes,
-                rotation_deg: self.rotation_deg,
-                colour: OUTLINE_LIGHT,
-                width: OUTLINE_WIDTH,
-            },
-        );
+        match &self.shape {
+            OutlineShape::Ellipse {
+                semi_axes,
+                rotation_deg,
+            } => append_ellipse(snapshot, centre, *semi_axes, *rotation_deg),
+            OutlineShape::Polygon(points) => append_polygon(snapshot, centre, points),
+        }
     }
+}
+
+fn append_ellipse(
+    snapshot: &gtk::Snapshot,
+    centre: (f32, f32),
+    semi_axes: [f32; 2],
+    rotation_deg: f32,
+) {
+    let [along, across] = semi_axes;
+    append_ring(
+        snapshot,
+        &RingStroke {
+            centre,
+            semi_axes: [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
+            rotation_deg,
+            colour: OUTLINE_DARK,
+            width: OUTLINE_WIDTH,
+        },
+    );
+    append_ring(
+        snapshot,
+        &RingStroke {
+            centre,
+            semi_axes,
+            rotation_deg,
+            colour: OUTLINE_LIGHT,
+            width: OUTLINE_WIDTH,
+        },
+    );
+}
+
+fn append_polygon(snapshot: &gtk::Snapshot, (x, y): (f32, f32), points: &[(f32, f32)]) {
+    let Some(((first_x, first_y), rest)) = points.split_first() else {
+        return;
+    };
+    let path = gsk::PathBuilder::new();
+    path.move_to(x + first_x, y + first_y);
+    for (point_x, point_y) in rest {
+        path.line_to(x + point_x, y + point_y);
+    }
+    path.close();
+    let path = path.to_path();
+    snapshot.append_stroke(
+        &path,
+        &gsk::Stroke::new(DARK_RIM_WIDTHS * OUTLINE_WIDTH),
+        &OUTLINE_DARK,
+    );
+    snapshot.append_stroke(&path, &gsk::Stroke::new(OUTLINE_WIDTH), &OUTLINE_LIGHT);
 }
 
 pub(crate) struct RingStroke {
