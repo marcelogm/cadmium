@@ -219,6 +219,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let pixel = dab.canvas_origin + vec2<i32>(id.xy);
+    if (contact_at(pixel).coverage <= 0.0) {
+        return;
+    }
     let volume = textureLoad(wet_vol, pixel).x;
     let site = Site(pixel, volume, textureLoad(dry_height, pixel).x, read_fractions(pixel));
     var ledger = Ledger(max(quantize_down(volume), 0), 0, 0, array<i32, 8>(), array<i32, 8>());
