@@ -9,14 +9,14 @@ use crate::LOG_DOMAIN;
 use crate::dialogs::overwrite_confirmed;
 use crate::window::CadmiumWindow;
 
-const PAINTING_FILTER_NAME: &str = "Pintura Cadmium (*.cadmium)";
-const IMAGE_FILTER_NAME: &str = "Imagem PNG (*.png)";
+const PAINTING_FILTER_NAME: &str = "Cadmium painting (*.cadmium)";
+const IMAGE_FILTER_NAME: &str = "PNG image (*.png)";
 const PAINTING_MIME_TYPE: &str = "application/x-cadmium";
 const IMAGE_MIME_TYPE: &str = "image/png";
-const OPEN_TITLE: &str = "Abrir pintura";
-const SAVE_AS_TITLE: &str = "Salvar pintura";
-const EXPORT_TITLE: &str = "Exportar PNG";
-const NOT_A_LOCAL_FILE: &str = "o arquivo escolhido não é local";
+const OPEN_TITLE: &str = "Open Painting";
+const SAVE_AS_TITLE: &str = "Save Painting";
+const EXPORT_TITLE: &str = "Export PNG";
+const NOT_A_LOCAL_FILE: &str = "The chosen file is not local";
 
 fn overwrite_needs_confirmation(chosen: &Path, target: &Path, target_exists: bool) -> bool {
     chosen != target && target_exists

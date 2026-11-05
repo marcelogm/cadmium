@@ -19,15 +19,13 @@
 ![The Cadmium logo, painted in Cadmium](.github/images/screenshot.png)
 
 Paint stays wet on the canvas. The brush deposits, drags and mixes what is already there, the
-palette knife lays thick slabs and carves grooves, and colours mix like pigments, not light:
+palette knife lays thick slabs and carves grooves, and colors mix like pigments, not light:
 each pigment is an absorption and scattering spectrum (Kubelka-Munk), simulated on the GPU.
 
 - Brush, palette knife, blender and rag, shaped by pen pressure and tilt
 - Twelve pigments, up to eight per painting, on linen, cotton or smooth canvas
 - Paintings save wet, so you can pick up where you left off; export to PNG
 - A Lab panel to look inside the simulation: height, wetness, pigment amounts, every parameter
-
-![The Lab panel](.github/images/lab.png)
 
 ## Install
 

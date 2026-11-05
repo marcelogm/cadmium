@@ -19,14 +19,14 @@ use selection::PigmentSelection;
 const CONTENT_WIDTH: i32 = 560;
 
 const PRIMERS: [(Primer, &str); 2] = [
-    (Primer::WhiteGesso, "Gesso branco"),
-    (Primer::SiennaImprimatura, "Imprimatura siena"),
+    (Primer::WhiteGesso, "White gesso"),
+    (Primer::SiennaImprimatura, "Sienna imprimatura"),
 ];
 
 const WEAVES: [(Weave, &str); 3] = [
-    (Weave::Linen, "Linho"),
-    (Weave::Cotton, "Algodão"),
-    (Weave::Smooth, "Lisa"),
+    (Weave::Linen, "Linen"),
+    (Weave::Cotton, "Cotton"),
+    (Weave::Smooth, "Smooth"),
 ];
 
 struct Widgets {
@@ -53,7 +53,7 @@ glib::wrapper! {
 impl NewPaintingDialog {
     pub fn new(db: &PigmentDb, initial: &CanvasSpec) -> Self {
         let dialog: NewPaintingDialog = glib::Object::builder()
-            .property("title", "Nova pintura")
+            .property("title", "New Painting")
             .property("content-width", CONTENT_WIDTH)
             .build();
         dialog

@@ -11,12 +11,12 @@ use crate::LOG_DOMAIN;
 use crate::window::CadmiumWindow;
 use crate::writes::{EditMark, WriteKind};
 
-const SAVED_TOAST: &str = "Salvo";
-const SAVING_TOAST: &str = "Salvando…";
-const EXPORTING_TOAST: &str = "Exportando…";
-const EXPORTED_TOAST: &str = "Exportado";
-const CANNOT_SAVE: &str = "Não foi possível salvar";
-const CANNOT_EXPORT: &str = "Não foi possível exportar";
+const SAVED_TOAST: &str = "Saved";
+const SAVING_TOAST: &str = "Saving…";
+const EXPORTING_TOAST: &str = "Exporting…";
+const EXPORTED_TOAST: &str = "Exported";
+const CANNOT_SAVE: &str = "Could not save";
+const CANNOT_EXPORT: &str = "Could not export";
 
 impl CadmiumWindow {
     pub fn save_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {

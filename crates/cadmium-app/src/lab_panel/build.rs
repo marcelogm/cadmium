@@ -10,8 +10,7 @@ use crate::swatch::{Swatch, SwatchShape};
 const VIEW_SPACING: i32 = 12;
 const PIGMENT_SWATCH_SIZE: (i32, i32) = (28, 20);
 const PIGMENT_SWATCH_SPACING: i32 = 4;
-const PROVISIONAL_NOTICE: &str =
-    "Os dados espectrais são provisórios (ajustados à mão, não medidos).";
+const PROVISIONAL_NOTICE: &str = "Spectral data is provisional (hand-tuned, not measured).";
 
 pub(super) struct ViewControls {
     pub(super) group: adw::PreferencesGroup,
@@ -26,7 +25,7 @@ pub(super) fn view_controls() -> ViewControls {
         view_group.add(adw::Toggle::builder().name(name).label(label).build());
     }
     let pigment_dropdown = gtk::DropDown::builder().valign(gtk::Align::Center).build();
-    let pigment_row = adw::ActionRow::builder().title("Pigmento").build();
+    let pigment_row = adw::ActionRow::builder().title("Pigment").build();
     pigment_row.add_suffix(&pigment_dropdown);
     let pigment_list = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::None)
@@ -39,7 +38,7 @@ pub(super) fn view_controls() -> ViewControls {
         .build();
     view_box.append(&view_group);
     view_box.append(&pigment_list);
-    let view = adw::PreferencesGroup::builder().title("Visualizar").build();
+    let view = adw::PreferencesGroup::builder().title("View").build();
     view.add(&view_box);
     ViewControls {
         group: view,
@@ -69,15 +68,15 @@ pub(super) fn param_groups(root: &gtk::Box) -> Vec<ParamControl> {
 
 pub(super) fn reset_button() -> gtk::Button {
     gtk::Button::builder()
-        .label("Restaurar padrões")
+        .label("Restore Defaults")
         .halign(gtk::Align::Center)
         .css_classes(["pill"])
         .build()
 }
 
 pub(super) fn pen_group() -> (adw::PreferencesGroup, [gtk::Label; 4]) {
-    let pen = adw::PreferencesGroup::builder().title("Caneta").build();
-    let pen_labels = ["Pressão", "Inclinação", "Amostras por quadro", "Taxa"].map(|title| {
+    let pen = adw::PreferencesGroup::builder().title("Pen").build();
+    let pen_labels = ["Pressure", "Tilt", "Samples per Frame", "Rate"].map(|title| {
         let label = gtk::Label::builder()
             .css_classes(["numeric", "dim-label"])
             .build();
@@ -91,8 +90,8 @@ pub(super) fn pen_group() -> (adw::PreferencesGroup, [gtk::Label; 4]) {
 
 pub(super) fn pigments_group() -> adw::PreferencesGroup {
     adw::PreferencesGroup::builder()
-        .title("Pigmentos")
-        .description("Massa, tinta 1:1 com branco, veladura sobre branco e preto")
+        .title("Pigments")
+        .description("Masstone, 1:1 tint with white, glaze over white and black")
         .build()
 }
 
@@ -115,10 +114,10 @@ pub(super) fn slot_row(info: &SlotInfo) -> adw::ActionRow {
         .spacing(PIGMENT_SWATCH_SPACING)
         .valign(gtk::Align::Center)
         .build();
-    let glaze = lab_swatch(info.glaze_over_white, "Veladura sobre branco e preto");
+    let glaze = lab_swatch(info.glaze_over_white, "Glaze over white and black");
     glaze.set_right_half_colour(Some(info.glaze_over_black));
-    swatches.append(&lab_swatch(info.masstone, "Massa"));
-    swatches.append(&lab_swatch(info.tint, "Tinta 1:1 com branco"));
+    swatches.append(&lab_swatch(info.masstone, "Masstone"));
+    swatches.append(&lab_swatch(info.tint, "1:1 tint with white"));
     swatches.append(&glaze);
     row.add_suffix(&swatches);
     row

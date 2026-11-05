@@ -61,7 +61,7 @@ impl PigmentSelection {
 }
 
 pub(super) fn counter_text(count: usize) -> String {
-    format!("{count} de {MAX_SLOTS}")
+    format!("{count} of {MAX_SLOTS}")
 }
 
 #[cfg(test)]

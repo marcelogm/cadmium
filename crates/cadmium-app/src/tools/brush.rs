@@ -5,9 +5,9 @@ use super::{Press, Tool, UiToolProfile};
 
 pub(super) const BRUSH: UiToolProfile = UiToolProfile {
     name: "brush",
-    label: "Pincel",
+    label: "Brush",
     icon: "cadmium-brush-symbolic",
-    tooltip: "Pincel (1)",
+    tooltip: "Brush (1)",
     keys: &[gdk::Key::_1],
     keypad_keys: &[gdk::Key::KP_1],
     on_tray: Press::LoadFromPile(Tool::Brush),
@@ -29,14 +29,14 @@ pub(super) const BRUSH: UiToolProfile = UiToolProfile {
 };
 
 pub(super) const BRUSH_WORDING: ToolWording = ToolWording {
-    pigments: "Clique carrega o pincel limpo, de novo mergulha mais; Ctrl+clique mistura um pouco",
-    loaded_title: "No pincel",
-    loaded_tooltip: "Esquerda: mistura na paleta · direita: ponta do pincel",
-    level_tooltip: "Tinta na reserva do pincel",
+    pigments: "Click loads a clean brush, click again to dip deeper; Ctrl+click mixes in a little",
+    loaded_title: "On the Brush",
+    loaded_tooltip: "Left: mix on the palette · right: brush tip",
+    level_tooltip: "Paint in the brush reservoir",
     clean: CLEAN_LABEL,
-    clean_button: "Limpar pincel",
-    size_title: "Tamanho",
+    clean_button: "Clean Brush",
+    size_title: "Size",
     size_subtitle: None,
-    reload_hint: "Repõe a reserva com a mistura da paleta",
-    clean_each_hint: "Começa cada traço com o pincel limpo e recarregado",
+    reload_hint: "Refills the reservoir with the palette mix",
+    clean_each_hint: "Starts every stroke with a clean, reloaded brush",
 };

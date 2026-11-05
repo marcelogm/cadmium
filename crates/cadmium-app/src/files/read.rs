@@ -8,7 +8,7 @@ use super::{OUT_OF_VIDEO_MEMORY, finished};
 use crate::dialogs::painting_discard_confirmed;
 use crate::window::CadmiumWindow;
 
-const CANNOT_OPEN: &str = "Não foi possível abrir";
+const CANNOT_OPEN: &str = "Could not open";
 
 impl CadmiumWindow {
     pub fn open_path(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {

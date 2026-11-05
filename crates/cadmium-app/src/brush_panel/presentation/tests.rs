@@ -3,21 +3,21 @@ use crate::tools::knife::KNIFE_HANDLING;
 
 #[test]
 fn recipe_description_names_a_single_pigment() {
-    assert_eq!(describe_recipe(&["Branco", "Azul"], &[(1, 1.0)]), "Azul");
+    assert_eq!(describe_recipe(&["White", "Blue"], &[(1, 1.0)]), "Blue");
 }
 
 #[test]
 fn recipe_description_lists_shares_largest_first() {
     assert_eq!(
-        describe_recipe(&["Branco", "Azul", "Amarelo"], &[(1, 1.0), (2, 3.0)]),
-        "Amarelo 75% · Azul 25%"
+        describe_recipe(&["White", "Blue", "Yellow"], &[(1, 1.0), (2, 3.0)]),
+        "Yellow 75% · Blue 25%"
     );
 }
 
 #[test]
 fn empty_recipe_reads_as_a_clean_brush() {
-    assert_eq!(describe_recipe(&["Branco"], &[]), CLEAN_LABEL);
-    assert_eq!(describe_recipe(&["Branco"], &[(0, 0.0)]), CLEAN_LABEL);
+    assert_eq!(describe_recipe(&["White"], &[]), CLEAN_LABEL);
+    assert_eq!(describe_recipe(&["White"], &[(0, 0.0)]), CLEAN_LABEL);
 }
 
 #[test]
@@ -54,13 +54,13 @@ fn rag_shows_only_the_size() {
 #[test]
 fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
     let knife = tool_wording(PanelTool::Paint(Tool::Knife));
-    assert_eq!(knife.clean_button, "Limpar espátula");
-    assert_eq!(knife.loaded_title, "Na espátula");
-    assert_eq!(knife.size_title, "Tamanho");
+    assert_eq!(knife.clean_button, "Clean Knife");
+    assert_eq!(knife.loaded_title, "On the Knife");
+    assert_eq!(knife.size_title, "Size");
     assert_eq!(tool_hint(PanelTool::Paint(Tool::Knife)), KNIFE_HANDLING);
     assert_eq!(
         tool_wording(PanelTool::Paint(Tool::Brush)).clean_button,
-        "Limpar pincel"
+        "Clean Brush"
     );
     assert_eq!(
         tool_hint(PanelTool::Paint(Tool::Eyedropper)),
@@ -79,7 +79,7 @@ fn the_tube_shows_only_pigments_and_nozzle_size() {
 #[test]
 fn the_tube_names_its_size_nozzle_without_a_subtitle() {
     let tube = tool_wording(PanelTool::Tube);
-    assert_eq!(tube.size_title, "Bico");
+    assert_eq!(tube.size_title, "Nozzle");
     assert_eq!(tube.size_subtitle, None);
 }
 
@@ -87,7 +87,7 @@ fn the_tube_names_its_size_nozzle_without_a_subtitle() {
 fn the_tube_asks_for_a_pile_to_squeeze() {
     assert_eq!(
         tool_wording(PanelTool::Tube).pigments,
-        "Clique escolhe o tubo"
+        "Click to pick the tube"
     );
 }
 
@@ -116,10 +116,10 @@ fn the_tube_highlights_its_own_pile_not_the_recipe() {
 
 #[test]
 fn the_tube_group_names_the_chosen_pigment() {
-    let names = ["Branco", "Azul"];
+    let names = ["White", "Blue"];
     assert_eq!(
         tool_group_description(PanelTool::Tube, &names, 1),
-        Some("Azul")
+        Some("Blue")
     );
     assert_eq!(
         tool_group_description(PanelTool::Paint(Tool::Brush), &names, 1),

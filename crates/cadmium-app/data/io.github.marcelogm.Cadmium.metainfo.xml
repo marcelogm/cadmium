@@ -13,7 +13,7 @@
     <p>
       Cadmium is an oil painting simulator. Paint stays wet on the canvas and behaves like oil:
       the brush deposits, drags and mixes the paint already there, the palette knife lays thick
-      slabs and carves grooves, and colours mix like pigments, not like light.
+      slabs and carves grooves, and colors mix like pigments, not like light.
     </p>
     <p>
       Each pigment is described by its absorption and scattering spectra (Kubelka-Munk), and the
@@ -34,9 +34,6 @@
   <screenshots>
     <screenshot type="default">
       <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/screenshot.png</image>
-    </screenshot>
-    <screenshot>
-      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/lab.png</image>
     </screenshot>
   </screenshots>
   <launchable type="desktop-id">io.github.marcelogm.Cadmium.desktop</launchable>

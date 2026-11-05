@@ -9,7 +9,7 @@ use crate::dialogs::confirm_discard;
 use crate::files::OUT_OF_VIDEO_MEMORY;
 use crate::new_painting_dialog::NewPaintingDialog;
 
-const CANNOT_START_PAINTING: &str = "Não foi possível criar a pintura";
+const CANNOT_START_PAINTING: &str = "Could not create the painting";
 
 impl CadmiumWindow {
     pub(super) fn open_new_painting_dialog(&self) {

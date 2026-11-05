@@ -9,17 +9,17 @@ const VIEW_WETNESS: &str = "wetness";
 const VIEW_PIGMENT: &str = "pigment";
 
 pub(super) const VIEW_TOGGLES: [(&str, &str); 4] = [
-    (VIEW_COLOR, "Cor"),
-    (VIEW_HEIGHT, "Altura"),
-    (VIEW_WETNESS, "Umidade"),
-    (VIEW_PIGMENT, "Pigmento"),
+    (VIEW_COLOR, "Color"),
+    (VIEW_HEIGHT, "Height"),
+    (VIEW_WETNESS, "Wetness"),
+    (VIEW_PIGMENT, "Pigment"),
 ];
 
 pub(super) const PARAM_GROUPS: [(ParamGroup, &str); 5] = [
-    (ParamGroup::Transfer, "Transferência"),
-    (ParamGroup::Dynamics, "Dinâmica"),
-    (ParamGroup::Tools, "Ferramentas"),
-    (ParamGroup::Footprint, "Pegada"),
+    (ParamGroup::Transfer, "Transfer"),
+    (ParamGroup::Dynamics, "Dynamics"),
+    (ParamGroup::Tools, "Tools"),
+    (ParamGroup::Footprint, "Footprint"),
     (ParamGroup::Render, "Render"),
 ];
 

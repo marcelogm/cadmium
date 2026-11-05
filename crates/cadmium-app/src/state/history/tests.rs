@@ -22,7 +22,7 @@ fn drying_wet_paint_can_be_undone() {
     let mut state = painting_state();
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let mark = state.edit_mark();
-    state.saved_to(PathBuf::from("seca.cadmium"), mark);
+    state.saved_to(PathBuf::from("dry.cadmium"), mark);
     assert_eq!(state.dry(), DryOutcome::Dried { undoable: true });
     assert!(state.has_unsaved_edits());
 }

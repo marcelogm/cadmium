@@ -41,7 +41,7 @@ fn every_toggle_tooltip_names_the_tool_and_its_first_key() {
 #[test]
 fn the_tube_is_not_an_engine_tool() {
     assert_eq!(UiTool::from_name(UiTool::Tube.name()), Some(UiTool::Tube));
-    assert_eq!(UiTool::Tube.label(), "Tubo");
+    assert_eq!(UiTool::Tube.label(), "Tube");
 }
 
 #[test]

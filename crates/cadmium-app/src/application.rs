@@ -13,9 +13,9 @@ use crate::state::{AppState, SharedState};
 use crate::window::CadmiumWindow;
 
 const ICON_RESOURCE_PATH: &str = "/io/github/marcelogm/Cadmium/icons";
-const MISSING_GPU_HEADING: &str = "Nenhuma GPU Vulkan disponível";
-const MISSING_GPU_BODY: &str = "O Cadmium precisa de uma GPU com Vulkan para simular a tinta.";
-const OUT_OF_VIDEO_MEMORY_HEADING: &str = "Memória de vídeo insuficiente";
+const MISSING_GPU_HEADING: &str = "No Vulkan GPU Available";
+const MISSING_GPU_BODY: &str = "Cadmium needs a GPU with Vulkan to simulate the paint.";
+const OUT_OF_VIDEO_MEMORY_HEADING: &str = "Not Enough Video Memory";
 
 pub const ACCELERATORS: [(&str, &[&str]); 14] = [
     ("win.undo", &["<Control>z"]),
@@ -117,7 +117,7 @@ fn report_startup_failure(app: &adw::Application, heading: &str, body: &str) {
         .default_response("close")
         .close_response("close")
         .build();
-    alert.add_response("close", "Sair");
+    alert.add_response("close", "Quit");
     alert.choose(
         None::<&gtk::Widget>,
         None::<&gio::Cancellable>,

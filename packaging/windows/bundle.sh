@@ -22,14 +22,14 @@ for binary in "$dist/cadmium.exe" "$dist/$pixbuf"/loaders/*.dll; do ntldd -R "$b
     | sed -E 's|^"[^"]*(lib[\\/]+gdk-pixbuf-2\.0)|"\1|' > "$dist/$pixbuf/loaders.cache"
 cat "$dist/$pixbuf/loaders.cache"
 
-cat > "$dist/LEIA-ME.txt" <<'TEXT'
-Cadmium - simulador de pintura a óleo
+cat > "$dist/README.txt" <<'TEXT'
+Cadmium - oil painting simulator
 
-1. Descompacte esta pasta inteira em qualquer lugar.
-2. Abra cadmium.exe.
+1. Unzip this whole folder anywhere.
+2. Open cadmium.exe.
 
-O Cadmium precisa de uma placa de vídeo com Vulkan e com o driver atualizado
-(NVIDIA, AMD, Intel ou Qualcomm). Mesas digitalizadoras funcionam pelo Windows Ink.
+Cadmium needs a graphics card with Vulkan and an up-to-date driver
+(NVIDIA, AMD, Intel or Qualcomm). Pen tablets work through Windows Ink.
 TEXT
 
 ls "$dist"

@@ -6,9 +6,9 @@ use super::{Press, Tool, UiToolProfile};
 
 pub(super) const RAG: UiToolProfile = UiToolProfile {
     name: "rag",
-    label: "Pano",
+    label: "Rag",
     icon: "cadmium-rag-symbolic",
-    tooltip: "Pano (4 ou R)",
+    tooltip: "Rag (4 or R)",
     keys: &[gdk::Key::_4, gdk::Key::r],
     keypad_keys: &[gdk::Key::KP_4],
     on_tray: Press::Stroke(Tool::Rag),

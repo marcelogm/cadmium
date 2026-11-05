@@ -4,13 +4,6 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
-  pull_request:
-    paths:
-      - packaging/**
-      - crates/cadmium-app/data/**
-      - crates/cadmium-app/build.rs
-      - Cargo.lock
-      - .github/workflows/release.yml
 
 permissions:
   contents: read
