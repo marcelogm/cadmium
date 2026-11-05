@@ -53,28 +53,73 @@ pub(crate) struct LayoutRequest {
     pub(crate) seed: u64,
 }
 
-pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
+/// The shape of one bristle at rest, without its share of the tip.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Strand {
+    pub(crate) root_px: [f32; 2],
+    pub(crate) splay: [f32; 2],
+    pub(crate) length_px: f32,
+    pub(crate) stiffness: f32,
+    pub(crate) radius_px: f32,
+}
+
+struct LaidStrands {
+    radius_px: f32,
+    roots: Vec<Root>,
+    strands: Vec<Strand>,
+}
+
+fn lay_strands(request: &LayoutRequest) -> LaidStrands {
     let radius_px = request
         .ferrule_radius_px
         .clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
     let mut random = SplitMix::new(request.seed);
     let count = bristle_count(radius_px, request.density_per_px).min(disc_texel_count(radius_px));
     let roots = place_roots(request.shape, radius_px, count, &mut random);
-    let clusters = assign_clusters(&roots);
-    let tip_roots: Vec<[f32; 2]> = roots.iter().map(tip_position).collect();
-    let map = build_owner_map(&tip_roots, &roots, radius_px);
     let coverage_radius_px =
         (covered_area_px2(request.shape, radius_px) / (std::f32::consts::PI * count as f32)).sqrt()
             * bundle_gain(radius_px, request.density_per_px);
-    let bristles = roots
+    let strands = roots
         .iter()
-        .enumerate()
-        .map(|(index, root)| BristleRest {
+        .map(|root| Strand {
             root_px: root.position_px,
             splay: root.splay,
             length_px: radius_px * request.length_ratio * (1.0 + random.jitter()),
             stiffness: BASE_STIFFNESS * (1.0 + random.jitter()),
             radius_px: (coverage_radius_px * (1.0 + random.jitter())).max(MIN_BRISTLE_RADIUS_PX),
+        })
+        .collect();
+    LaidStrands {
+        radius_px,
+        roots,
+        strands,
+    }
+}
+
+/// The bristles' rest shape alone: cheap enough to recompute whenever the
+/// brush changes, unlike the full layout and its tip ownership.
+pub(crate) fn strands(request: &LayoutRequest) -> Vec<Strand> {
+    lay_strands(request).strands
+}
+
+pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
+    let LaidStrands {
+        radius_px,
+        roots,
+        strands,
+    } = lay_strands(request);
+    let clusters = assign_clusters(&roots);
+    let tip_roots: Vec<[f32; 2]> = roots.iter().map(tip_position).collect();
+    let map = build_owner_map(&tip_roots, &roots, radius_px);
+    let bristles = strands
+        .iter()
+        .enumerate()
+        .map(|(index, strand)| BristleRest {
+            root_px: strand.root_px,
+            splay: strand.splay,
+            length_px: strand.length_px,
+            stiffness: strand.stiffness,
+            radius_px: strand.radius_px,
             cluster: clusters[index],
             lane_start: map.lanes[index].0,
             lane_end: map.lanes[index].1,

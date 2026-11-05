@@ -4,7 +4,7 @@ pub(super) const RAG: ToolProfile = ToolProfile {
     shader_mode: TOOL_MODE_RAG,
     spreading: Spreading::Advect,
     holder: None,
-    footprint: Some(FootprintShape::Ellipse),
+    footprint: Some(FootprintShape::Disc),
     rest_follow: CONTACT_REST_FOLLOW,
     dab_stages: &[DabStage::Wipe],
 };

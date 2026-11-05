@@ -1,6 +1,7 @@
 mod cells;
 mod clusters;
 mod handle;
+mod hang;
 mod layout;
 mod owners;
 mod rig;
@@ -10,13 +11,15 @@ mod tuning;
 
 pub(crate) use cells::CELL_GRID_SIDE;
 pub(crate) use clusters::{CLUSTER_SPAN_WORDS, MAX_CLUSTERS};
+pub(crate) use hang::{PenLean, RestingBrush, RestingTip, resting_tips};
 pub(super) use layout::disc_texel_count;
 pub(crate) use layout::{
     BRISTLE_VERTICES, LayoutRequest, MAX_BRISTLES, ReachRequest, reach_bound_px,
 };
+pub(crate) use layout::{Strand, strands};
 pub(crate) use owners::OUTSIDE_TIP;
 pub use rig::BRISTLE_SETTLE_MS;
-pub(crate) use rig::{BristleRig, length_ratio};
+pub(crate) use rig::{BristleRig, LayoutKey, length_ratio};
 pub(crate) use state::{
     BRISTLE_FLARE_SHARE, BRISTLE_SOLVER_ITERATIONS, BRISTLE_STATE_VECTORS,
     BRISTLE_TIP_STIFFNESS_SHARE, BRISTLE_WORKGROUP_SIZE, BRISTLES_PER_THREAD, BristleBuffers,

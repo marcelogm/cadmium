@@ -5,11 +5,14 @@ use crate::gpu::{GpuContext, GpuLost};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::Dab;
+use outline::OutlineStrands;
+use std::cell::RefCell;
 
 mod bristles;
 mod dab_record;
 mod footprint;
 mod knife_load;
+mod outline;
 mod pass;
 mod placement;
 mod readout;
@@ -18,7 +21,7 @@ pub(crate) mod shader;
 
 pub use bristles::{BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX};
 pub use dab_record::blade_gap_um;
-pub use footprint::BrushOutline;
+pub use outline::BrushOutline;
 pub use readout::BrushReadout;
 
 pub(crate) use pass::pick::PickRequest;
@@ -148,6 +151,7 @@ pub struct WetOilEngine {
     pick_pass: PickPass,
     dry_pass: DryPass,
     dip_pass: DipPass,
+    outline_strands: RefCell<OutlineStrands>,
 }
 
 impl WetOilEngine {
@@ -164,6 +168,7 @@ impl WetOilEngine {
             pick_pass: PickPass::new(gpu),
             dry_pass: DryPass::new(gpu),
             dip_pass: DipPass::new(gpu),
+            outline_strands: RefCell::default(),
         }
     }
 

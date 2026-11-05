@@ -3,6 +3,7 @@ pub mod support;
 use cadmium_engine::{
     brush::BrushShape,
     canvas::*,
+    engine::BrushOutline,
     gpu::GpuContext,
     session::PaintSession,
     stroke::{StrokeSample, Tool},
@@ -19,8 +20,11 @@ const MIN_FAN_TUFTS: usize = 4;
 const PRESSURE: f32 = 0.8;
 const LEANING_TILT_DEG: f32 = 40.0;
 const PAINTED_UM: f32 = 1.0;
-const ANGLE_TOLERANCE_RAD: f32 = 1e-3;
-const MAX_FLAT_THICKNESS_SHARE: f32 = 0.3;
+const ROUND_OUTLINE_TOLERANCE: f32 = 0.2;
+const NIB_OFFSET_SHARE: f32 = 0.1;
+const MIN_BAR_ASPECT: f32 = 3.0;
+const OUTLINE_MARGIN_PX: f32 = 2.0;
+const MIN_PAINT_INSIDE_OUTLINE: f32 = 0.85;
 const MIN_BROADSIDE_TO_EDGE_RATIO: f64 = 2.5;
 const LIGHT_TOUCH_PRESSURE: f32 = 0.1;
 const FULL_PRESSURE: f32 = 1.0;
@@ -55,11 +59,6 @@ fn pen(tilt_x_deg: f32, tilt_y_deg: f32) -> StrokeSample {
         tilt_y_deg,
         time_ms: 0,
     }
-}
-
-fn axial_difference(a: f32, b: f32) -> f32 {
-    let difference = (a - b).rem_euclid(std::f32::consts::PI);
-    difference.min(std::f32::consts::PI - difference)
 }
 
 fn cross_section(volume: &[f32], horizontal_stroke: bool, along: usize) -> Vec<bool> {
@@ -167,64 +166,83 @@ fn paint_straight_with(
     encode_frame(gpu, s);
 }
 
-#[test]
-fn a_round_brush_outline_is_a_circle_when_the_pen_is_upright() {
-    let gpu = GpuContext::new().unwrap();
-    let s = session(&gpu, BrushShape::Round);
-    let outline = s.brush_outline(&pen(0.0, 0.0)).unwrap();
-    assert_eq!(outline.semi_axes[0], outline.semi_axes[1]);
+fn outline_points(s: &PaintSession, tilt_x_deg: f32) -> Vec<[f32; 2]> {
+    match s.brush_outline(&pen(tilt_x_deg, 0.0)).unwrap() {
+        BrushOutline::Bristles(points) => points,
+        other => panic!("a bristle brush outlined as {other:?}"),
+    }
+}
+
+fn span(points: &[[f32; 2]], axis: usize) -> f32 {
+    let values = points.iter().map(|point| point[axis]);
+    values.clone().fold(f32::MIN, f32::max) - values.fold(f32::MAX, f32::min)
+}
+
+fn middle(points: &[[f32; 2]]) -> [f32; 2] {
+    [0, 1].map(|axis| {
+        let values = points.iter().map(|point| point[axis]);
+        (values.clone().fold(f32::MIN, f32::max) + values.fold(f32::MAX, f32::min)) / 2.0
+    })
 }
 
 #[test]
-fn a_leaning_round_brush_outline_stays_a_circle_under_the_nib() {
+fn a_round_brush_outline_is_a_circle_its_size_when_the_pen_is_upright() {
     let gpu = GpuContext::new().unwrap();
     let s = session(&gpu, BrushShape::Round);
-    let upright = s.brush_outline(&pen(0.0, 0.0)).unwrap();
-    let leaning = s.brush_outline(&pen(LEANING_TILT_DEG, 0.0)).unwrap();
-    assert_eq!(leaning.semi_axes, upright.semi_axes);
+    let points = outline_points(&s, 0.0);
+    let (wide, tall) = (span(&points, 0), span(&points, 1));
+    eprintln!("round outline {wide} x {tall} for a {DIAMETER_PX} px brush");
+    assert!((wide - tall).abs() < ROUND_OUTLINE_TOLERANCE * DIAMETER_PX);
+    assert!((wide - DIAMETER_PX).abs() < ROUND_OUTLINE_TOLERANCE * DIAMETER_PX);
+}
+
+#[test]
+fn a_leaning_brush_outline_stays_around_the_nib() {
+    let gpu = GpuContext::new().unwrap();
+    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
+        let s = session(&gpu, shape);
+        let [x, y] = middle(&outline_points(&s, LEANING_TILT_DEG));
+        assert!(
+            x.hypot(y) < NIB_OFFSET_SHARE * DIAMETER_PX,
+            "{shape:?} outline centred at {x}, {y}"
+        );
+    }
 }
 
 #[test]
 fn the_blender_shows_the_outline_of_its_bristles() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu, BrushShape::Round);
+    let brush_points = outline_points(&s, 0.0);
     s.brush.tool = Tool::Blender;
-    let outline = s.brush_outline(&pen(0.0, 0.0)).unwrap();
-    assert_eq!(outline.semi_axes, [DIAMETER_PX / 2.0; 2]);
+    assert_eq!(outline_points(&s, 0.0), brush_points);
 }
 
 #[test]
 fn a_flat_brush_outline_is_a_horizontal_bar_when_the_pen_is_upright() {
     let gpu = GpuContext::new().unwrap();
     let s = session(&gpu, BrushShape::Flat);
-    let outline = s.brush_outline(&pen(0.0, 0.0)).unwrap();
-    let [thickness, width] = outline.semi_axes;
-    assert!(
-        thickness < MAX_FLAT_THICKNESS_SHARE * width,
-        "{thickness} vs {width}"
-    );
-    assert!(
-        axial_difference(outline.orientation, std::f32::consts::FRAC_PI_2) < ANGLE_TOLERANCE_RAD
-    );
+    let points = outline_points(&s, 0.0);
+    let (wide, thin) = (span(&points, 0), span(&points, 1));
+    assert!(wide > MIN_BAR_ASPECT * thin, "{wide} x {thin}");
 }
 
 #[test]
-fn a_fan_brush_outline_is_thinner_than_a_flat_one() {
+fn a_fan_brush_outline_is_wider_and_thinner_than_a_flat_one() {
     let gpu = GpuContext::new().unwrap();
-    let flat = session(&gpu, BrushShape::Flat);
-    let fan = session(&gpu, BrushShape::Fan);
-    let flat_outline = flat.brush_outline(&pen(0.0, 0.0)).unwrap();
-    let fan_outline = fan.brush_outline(&pen(0.0, 0.0)).unwrap();
-    assert!(fan_outline.semi_axes[0] < flat_outline.semi_axes[0]);
-    assert_eq!(fan_outline.semi_axes[1], flat_outline.semi_axes[1]);
+    let flat = outline_points(&session(&gpu, BrushShape::Flat), 0.0);
+    let fan = outline_points(&session(&gpu, BrushShape::Fan), 0.0);
+    assert!(span(&fan, 0) > span(&flat, 0));
+    assert!(span(&fan, 1) < span(&flat, 1));
 }
 
 #[test]
 fn a_flat_brush_turns_its_thin_side_towards_the_lean_of_the_pen() {
     let gpu = GpuContext::new().unwrap();
     let s = session(&gpu, BrushShape::Flat);
-    let outline = s.brush_outline(&pen(LEANING_TILT_DEG, 0.0)).unwrap();
-    assert!(axial_difference(outline.orientation, 0.0) < ANGLE_TOLERANCE_RAD);
+    let points = outline_points(&s, LEANING_TILT_DEG);
+    let (along_lean, across_lean) = (span(&points, 0), span(&points, 1));
+    assert!(along_lean < across_lean, "{along_lean} x {across_lean}");
 }
 
 #[test]
@@ -295,5 +313,70 @@ fn a_fan_brush_paints_whichever_way_the_pen_leans() {
             volume.iter().any(|&um| um > PAINTED_UM),
             "a fan leaning {tilt_x_deg}° laid no paint"
         );
+    }
+}
+
+fn painted_around_centre(volume: &[f32]) -> Vec<[f32; 2]> {
+    (0..volume.len())
+        .filter(|&index| volume[index] > PAINTED_UM)
+        .map(pixel_from_centre)
+        .collect()
+}
+
+fn pixel_from_centre(index: usize) -> [f32; 2] {
+    let [x, y] = [index % SIDE as usize, index / SIDE as usize];
+    [x as f32 + 0.5, y as f32 + 0.5].map(|at| at - CENTRE as f32)
+}
+
+fn inside_hull(hull: &[[f32; 2]], point: [f32; 2], margin_px: f32) -> bool {
+    (0..hull.len()).all(|i| {
+        let [a, b] = [hull[i], hull[(i + 1) % hull.len()]];
+        let edge = [b[0] - a[0], b[1] - a[1]];
+        let cross = edge[0] * (point[1] - a[1]) - edge[1] * (point[0] - a[0]);
+        cross / edge[0].hypot(edge[1]) >= -margin_px
+    })
+}
+
+#[test]
+fn a_dab_paints_inside_the_cursor_outline() {
+    let gpu = GpuContext::new().unwrap();
+    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
+        for tilt_x_deg in [0.0, LEANING_TILT_DEG, -LEANING_TILT_DEG] {
+            let mut s = session(&gpu, shape);
+            let outline = outline_points(&s, tilt_x_deg);
+            s.begin_stroke(&gpu, pen(tilt_x_deg, 0.0));
+            s.end_stroke();
+            encode_frame(&gpu, &mut s);
+            let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+            let painted = painted_around_centre(&volume);
+            let inside = painted
+                .iter()
+                .filter(|&&point| inside_hull(&outline, point, OUTLINE_MARGIN_PX))
+                .count();
+            let share = inside as f32 / painted.len() as f32;
+            assert!(
+                share > MIN_PAINT_INSIDE_OUTLINE,
+                "{shape:?} leaning {tilt_x_deg}°: {:.0}% of {} painted px inside the outline",
+                100.0 * share,
+                painted.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn a_rag_wipes_a_round_patch_whatever_the_brush_shape_or_lean() {
+    let gpu = GpuContext::new().unwrap();
+    for shape in [BrushShape::Round, BrushShape::Flat, BrushShape::Fan] {
+        let mut s = session(&gpu, shape);
+        s.brush.tool = Tool::Rag;
+        for tilt_x_deg in [0.0, LEANING_TILT_DEG] {
+            let outline = s.brush_outline(&pen(tilt_x_deg, 0.0));
+            let round = Some(BrushOutline::Ellipse {
+                semi_axes: [DIAMETER_PX / 2.0; 2],
+                orientation: 0.0,
+            });
+            assert_eq!(outline, round, "{shape:?} at {tilt_x_deg}°");
+        }
     }
 }

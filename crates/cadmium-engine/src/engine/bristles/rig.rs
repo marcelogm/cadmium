@@ -7,11 +7,11 @@ use crate::gpu::GpuContext;
 use crate::params::SimParams;
 use crate::stroke::{Dab, Tool};
 
-const ROUND_ROOT_ORIENTATION: [f32; 2] = [0.0, 1.0];
+pub(super) const ROUND_ROOT_ORIENTATION: [f32; 2] = [0.0, 1.0];
 pub const BRISTLE_SETTLE_MS: f32 = 1500.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct LayoutKey {
+pub(crate) struct LayoutKey {
     shape: BrushShape,
     ferrule_radius_bits: u32,
     length_ratio_bits: u32,
@@ -19,7 +19,7 @@ struct LayoutKey {
 }
 
 impl LayoutKey {
-    fn of(request: &LayoutRequest) -> LayoutKey {
+    pub(crate) fn of(request: &LayoutRequest) -> LayoutKey {
         LayoutKey {
             shape: request.shape,
             ferrule_radius_bits: request.ferrule_radius_px.to_bits(),
