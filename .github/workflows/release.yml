@@ -91,9 +91,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set the version
-        run: sh packaging/set-version.sh "${{ needs.version.outputs.version }}"
-
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
@@ -101,6 +98,10 @@ jobs:
           install: zip
           pacboy: >-
             ${{ matrix.cc }} gtk4:p libadwaita:p rust:p pkgconf:p librsvg:p ntldd:p adwaita-icon-theme:p
+
+      # Runs in the msys2 shell, so it must come after setup-msys2.
+      - name: Set the version
+        run: sh packaging/set-version.sh "${{ needs.version.outputs.version }}"
 
       - name: Check GTK and libadwaita
         run: |
