@@ -103,16 +103,27 @@ fn flat_roots_sit_in_a_thin_bar() {
 }
 
 #[test]
-fn fan_bristles_splay_outward() {
+fn fan_bristles_splay_sideways_only() {
     let laid = layout(&request(BrushShape::Fan, 20.0));
     let limit = 50.0_f32.to_radians().sin() + 1e-3;
     for bristle in &laid.bristles {
         assert!(bristle.splay[0] * bristle.root_px[0] >= 0.0);
         assert!(bristle.splay[0].abs() <= limit);
-        assert!((bristle.splay[0].hypot(bristle.splay[1]) - 1.0).abs() < 1e-4);
+        assert_eq!(bristle.splay[1], 0.0);
     }
     assert!(laid.bristles.iter().any(|bristle| bristle.splay[0] > 0.3));
     assert!(laid.bristles.iter().any(|bristle| bristle.splay[0] < -0.3));
+}
+
+#[test]
+fn fan_roots_centre_on_the_handle_axis() {
+    let laid = layout(&request(BrushShape::Fan, 20.0));
+    let count = laid.bristles.len() as f32;
+    let mean = laid.bristles.iter().fold([0.0f32; 2], |sum, bristle| {
+        [sum[0] + bristle.root_px[0], sum[1] + bristle.root_px[1]]
+    });
+    assert!(mean[0].abs() / count < 1.0, "{mean:?}");
+    assert!(mean[1].abs() / count < 1.0, "{mean:?}");
 }
 
 #[test]

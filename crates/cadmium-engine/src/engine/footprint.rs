@@ -164,7 +164,7 @@ impl WetOilEngine {
         let profile = brush.tool.profile();
         let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
         if profile.has_bristle_footprint() {
-            return Some(bristle_outline(brush, &self.params, angles));
+            return Some(bristle_outline(brush, angles));
         }
         if !profile.has_ellipse_footprint() {
             return None;
@@ -188,12 +188,10 @@ impl WetOilEngine {
     }
 }
 
-fn bristle_outline(brush: &BrushSettings, params: &SimParams, angles: PenAngles) -> BrushOutline {
+fn bristle_outline(brush: &BrushSettings, angles: PenAngles) -> BrushOutline {
     let radius = (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-    let tilt = std::f32::consts::FRAC_PI_2 - angles.altitude_rad;
-    let lean_px = radius * length_ratio(brush.shape, params) * tilt.sin().max(0.0);
     BrushOutline {
-        semi_axes: [radius * shape_thickness(brush.shape) + lean_px, radius],
+        semi_axes: [radius * shape_thickness(brush.shape), radius],
         orientation: blade_orientation(brush.shape, angles.altitude_rad, angles.azimuth_rad),
     }
 }

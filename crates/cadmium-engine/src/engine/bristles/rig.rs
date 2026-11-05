@@ -1,4 +1,4 @@
-use super::handle::{HandleClock, HandleGauge, substeps};
+use super::handle::{HandleClock, HandleGauge, ferrule_over_nib, substeps};
 use super::layout::{BristleLayout, LayoutRequest, layout};
 use super::state::BristleBuffers;
 use crate::brush::BrushShape;
@@ -183,7 +183,8 @@ impl BristleRig {
         if !self.pressed {
             record.handle_height_px += self.reach_px;
         }
-        let ferrule_px = [record.center[0], record.center[1], record.handle_height_px];
+        let ferrule_px =
+            ferrule_over_nib(record.center, record.handle_height_px, record.handle_axis);
         let travel_px = self.clock.travel_px(ferrule_px, ferrule_px);
         record.substeps = substeps(travel_px, self.mean_radius_px);
         record.bristle_total = self.count;

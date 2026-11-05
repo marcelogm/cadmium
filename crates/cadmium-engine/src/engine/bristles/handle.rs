@@ -4,6 +4,7 @@ const MAX_STEP_MS: f64 = 50.0;
 const MAX_SUBSTEPS: u32 = 16;
 const SUBSTEP_TRAVEL_SHARE: f32 = 0.5;
 const MILLISECONDS_PER_SECOND: f64 = 1000.0;
+const MIN_AXIS_RISE: f32 = 0.0175;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct HandlePose {
@@ -27,9 +28,14 @@ impl HandleGauge {
     }
 
     fn pose_at(&self, dab: &Dab, pressure: f32) -> HandlePose {
+        let axis = pen_axis(dab.altitude, dab.azimuth);
         HandlePose {
-            ferrule_px: [dab.x, dab.y, self.height_px(pressure, dab.altitude)],
-            axis: pen_axis(dab.altitude, dab.azimuth),
+            ferrule_px: ferrule_over_nib(
+                [dab.x, dab.y],
+                self.height_px(pressure, dab.altitude),
+                axis,
+            ),
+            axis,
         }
     }
 
@@ -39,6 +45,17 @@ impl HandleGauge {
         let ferrule_clearance_px = self.ferrule_radius_px * altitude.cos().max(0.0);
         pressed_px.max(ferrule_clearance_px)
     }
+}
+
+/// The pen nib marks where the bristle tips meet the canvas, so the ferrule
+/// sits up the pen's axis from the nib rather than straight above it.
+pub(super) fn ferrule_over_nib(nib_px: [f32; 2], height_px: f32, axis: [f32; 3]) -> [f32; 3] {
+    let run = height_px / axis[2].max(MIN_AXIS_RISE);
+    [
+        nib_px[0] + axis[0] * run,
+        nib_px[1] + axis[1] * run,
+        height_px,
+    ]
 }
 
 pub(super) fn pen_axis(altitude: f32, azimuth: f32) -> [f32; 3] {

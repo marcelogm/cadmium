@@ -29,6 +29,7 @@ const BLENDER_MEASURED_ROW: usize = 120;
 const CHANGED_UM: f32 = 1e-2;
 const FERRULE_DIAMETER_PX: f32 = 40.0;
 const SPLAYED_WIDTH_SHARE: f32 = 1.1;
+const NIB_OFFSET_SHARE: f32 = 0.2;
 
 fn pen(x: f64, y: f64, pressure: f32, time_ms: u32) -> StrokeSample {
     StrokeSample {
@@ -238,4 +239,43 @@ fn the_blender_moves_paint_through_its_bristles_too() {
         span > SPLAYED_WIDTH_SHARE * FERRULE_DIAMETER_PX,
         "the blender reached only {span} px across, no wider than its ferrule"
     );
+}
+
+fn painted_centroid_px(volume: &[f32]) -> [f64; 2] {
+    let (mut sum, mut weight) = ([0.0f64; 2], 0.0f64);
+    for (index, &um) in volume.iter().enumerate() {
+        if um > PAINTED_UM {
+            let [x, y] = pixel_centre(index);
+            sum[0] += f64::from(x) * f64::from(um);
+            sum[1] += f64::from(y) * f64::from(um);
+            weight += f64::from(um);
+        }
+    }
+    [sum[0] / weight, sum[1] / weight]
+}
+
+#[test]
+fn a_leaning_brush_paints_under_the_pen_nib() {
+    let gpu = GpuContext::new().unwrap();
+    let leans = [
+        (PRESS_TILT_DEG, 0.0),
+        (-PRESS_TILT_DEG, 0.0),
+        (0.0, PRESS_TILT_DEG),
+        (0.0, -PRESS_TILT_DEG),
+    ];
+    for (tilt_x_deg, tilt_y_deg) in leans {
+        let mut s = session(&gpu);
+        let nib = StrokeSample {
+            tilt_x_deg,
+            tilt_y_deg,
+            ..pen(PRESS_X, PRESS_Y, PRESS_PRESSURE, 0)
+        };
+        drag(&gpu, &mut s, &[nib]);
+        let [x, y] = painted_centroid_px(&wet_volume(&gpu, &s));
+        let off_px = (x - PRESS_X).hypot(y - PRESS_Y);
+        assert!(
+            off_px < f64::from(NIB_OFFSET_SHARE * FERRULE_DIAMETER_PX),
+            "tilt ({tilt_x_deg}, {tilt_y_deg}) painted {off_px:.1} px from the nib"
+        );
+    }
 }
