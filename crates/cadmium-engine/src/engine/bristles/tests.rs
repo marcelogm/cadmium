@@ -268,3 +268,25 @@ fn a_disc_with_fewer_texels_than_bristles_gets_one_bristle_per_texel() {
         assert!(laid.owners.contains(&(index as u32)));
     }
 }
+
+fn texels_inside_by_scanning(radius_px: f32) -> usize {
+    let half = TIP_HALF as i32;
+    let size = crate::engine::TIP_SIZE as i32;
+    let radius_squared = radius_px * radius_px;
+    (-half..size - half)
+        .flat_map(|y| (-half..size - half).map(move |x| (x as f32, y as f32)))
+        .filter(|(x, y)| x * x + y * y <= radius_squared)
+        .count()
+}
+
+#[test]
+fn the_disc_texel_count_matches_a_scan_of_every_tip_texel() {
+    let radii = (0..=2000).map(|step| 0.5 + step as f32 * 0.137);
+    for radius_px in radii.chain([0.0, 0.25, 1.0, 1.5, 2.0, 255.5, 256.0, 300.0, 400.0]) {
+        assert_eq!(
+            disc_texel_count(radius_px),
+            texels_inside_by_scanning(radius_px),
+            "radius {radius_px}"
+        );
+    }
+}
