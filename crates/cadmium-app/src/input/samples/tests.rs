@@ -73,3 +73,15 @@ fn missing_pressure_axis_means_a_mouse_at_full_pressure() {
     assert_eq!(pressure_or(None, MOUSE_PRESSURE), 1.0);
     assert_eq!(pressure_or(Some(1.4), MOUSE_PRESSURE), 1.0);
 }
+
+#[test]
+fn a_history_point_where_the_event_happened_lands_where_the_event_landed() {
+    let to_widget = SurfaceToWidget::anchored((300.0, 120.0), (40.0, 70.0));
+    assert_eq!(to_widget.point(300.0, 120.0), (40.0, 70.0));
+}
+
+#[test]
+fn a_history_point_keeps_its_distance_from_the_event() {
+    let to_widget = SurfaceToWidget::anchored((300.0, 120.0), (40.0, 70.0));
+    assert_eq!(to_widget.point(295.0, 132.0), (35.0, 82.0));
+}

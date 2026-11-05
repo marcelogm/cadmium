@@ -123,7 +123,7 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
         return;
     }
-    let samples = motion_samples(widget, stylus, &event, x, y);
+    let samples = motion_samples(widget, &event, x, y);
     state.borrow_mut().motion(&samples);
 }
 

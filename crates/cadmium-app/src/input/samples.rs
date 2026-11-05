@@ -19,6 +19,25 @@ fn tilt_degrees_or(value: Option<f64>, fallback: f32) -> f32 {
     value.map_or(fallback, |tilt| (tilt * TILT_AXIS_TO_DEGREES) as f32)
 }
 
+struct SurfaceToWidget {
+    offset: (f64, f64),
+}
+
+impl SurfaceToWidget {
+    fn anchored(event_on_surface: (f64, f64), event_on_widget: (f64, f64)) -> Self {
+        SurfaceToWidget {
+            offset: (
+                event_on_widget.0 - event_on_surface.0,
+                event_on_widget.1 - event_on_surface.1,
+            ),
+        }
+    }
+
+    fn point(&self, surface_x: f64, surface_y: f64) -> (f64, f64) {
+        (surface_x + self.offset.0, surface_y + self.offset.1)
+    }
+}
+
 fn history_sample(
     coord: &gdk::TimeCoord,
     to_canvas: impl Fn(f64, f64) -> (f64, f64),
@@ -71,18 +90,24 @@ pub(super) fn event_sample<W: PaintSurfaceWidget>(
 
 pub(super) fn motion_samples<W: PaintSurfaceWidget>(
     widget: &W,
-    stylus: &gtk::GestureStylus,
     event: &gdk::Event,
     x: f64,
     y: f64,
 ) -> Vec<StrokeSample> {
     let current = event_sample(widget, event, x, y);
-    let backlog = stylus.backlog().unwrap_or_default();
-    let mut samples = Vec::with_capacity(backlog.len() + 1);
-    samples.extend(backlog.iter().map(|coord| {
+    let Some(event_position) = event.position() else {
+        return vec![current];
+    };
+    let to_widget = SurfaceToWidget::anchored(event_position, (x, y));
+    let history = event.history();
+    let mut samples = Vec::with_capacity(history.len() + 1);
+    samples.extend(history.iter().map(|coord| {
         history_sample(
             coord,
-            |widget_x, widget_y| widget.surface_point(widget_x, widget_y),
+            |surface_x, surface_y| {
+                let (widget_x, widget_y) = to_widget.point(surface_x, surface_y);
+                widget.surface_point(widget_x, widget_y)
+            },
             &current,
         )
     }));
