@@ -136,9 +136,14 @@ fn fan_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) -
     let band_px = 2.0 * radius_px * FAN_THICKNESS_SHARE;
     let distance_px = FAN_ARC_RADIUS_SHARE * radius_px + (thick - 0.5) * band_px;
     let outward = [angle.sin(), angle.cos()];
+    let spread = FAN_SPREAD_DEG.to_radians();
+    let arc_centroid_px = FAN_ARC_RADIUS_SHARE * radius_px * spread.sin() / spread;
     Root {
-        position_px: [outward[0] * distance_px, outward[1] * distance_px],
-        splay: outward,
+        position_px: [
+            outward[0] * distance_px,
+            outward[1] * distance_px - arc_centroid_px,
+        ],
+        splay: [outward[0], 0.0],
         lane_direction: outward,
     }
 }

@@ -122,6 +122,27 @@ fn paint_straight(gpu: &GpuContext, s: &mut PaintSession, horizontal: bool) {
 }
 
 fn paint_straight_pressed(gpu: &GpuContext, s: &mut PaintSession, horizontal: bool, pressure: f32) {
+    paint_straight_with(
+        gpu,
+        s,
+        horizontal,
+        StrokeSample {
+            pressure,
+            ..pen(0.0, 0.0)
+        },
+    );
+}
+
+fn paint_leaning(gpu: &GpuContext, s: &mut PaintSession, tilt_x_deg: f32) {
+    paint_straight_with(gpu, s, false, pen(tilt_x_deg, 0.0));
+}
+
+fn paint_straight_with(
+    gpu: &GpuContext,
+    s: &mut PaintSession,
+    horizontal: bool,
+    nib: StrokeSample,
+) {
     let count = (2.0 * STROKE_HALF_LENGTH_PX / SAMPLE_SPACING_PX) as u32;
     for i in 0..=count {
         let along = -STROKE_HALF_LENGTH_PX + f64::from(i) * SAMPLE_SPACING_PX;
@@ -133,9 +154,8 @@ fn paint_straight_pressed(gpu: &GpuContext, s: &mut PaintSession, horizontal: bo
         let sample = StrokeSample {
             x,
             y,
-            pressure,
             time_ms: i * 4,
-            ..pen(0.0, 0.0)
+            ..nib
         };
         if i == 0 {
             s.begin_stroke(gpu, sample)
@@ -262,4 +282,18 @@ fn a_light_touch_with_a_wet_round_brush_paints_a_thin_line() {
         full >= MIN_FULL_PRESS_WIDTH_SHARE * ferrule,
         "a full press paints only {full} px"
     );
+}
+
+#[test]
+fn a_fan_brush_paints_whichever_way_the_pen_leans() {
+    let gpu = GpuContext::new().unwrap();
+    for tilt_x_deg in [LEANING_TILT_DEG, -LEANING_TILT_DEG] {
+        let mut s = session(&gpu, BrushShape::Fan);
+        paint_leaning(&gpu, &mut s, tilt_x_deg);
+        let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+        assert!(
+            volume.iter().any(|&um| um > PAINTED_UM),
+            "a fan leaning {tilt_x_deg}° laid no paint"
+        );
+    }
 }
