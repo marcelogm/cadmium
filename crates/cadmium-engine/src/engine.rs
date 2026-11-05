@@ -6,6 +6,7 @@ use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::Dab;
 
+mod bristles;
 mod dab_record;
 mod footprint;
 mod knife_load;
@@ -15,18 +16,22 @@ mod readout;
 mod reservoir;
 pub(crate) mod shader;
 
+pub use bristles::{BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX};
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use readout::BrushReadout;
 
 pub(crate) use pass::pick::PickRequest;
 
-use dab_record::upload_dab_records;
+use bristles::{
+    BristleBuffers, BristleRig, BristleTuning, LayoutRequest, MAX_BRISTLES, length_ratio,
+};
+use dab_record::{upload_dab_records, upload_records};
 use pass::dip::DipPass;
 use pass::dry::DryPass;
 use pass::pick::PickPass;
 use pass::{DabPasses, DabResources};
-use placement::mark_dab_regions;
+use placement::{PreviousDab, mark_dab_regions};
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -45,8 +50,8 @@ const TIP_BYTES: u64 = (TIP_VALUES * std::mem::size_of::<f32>()) as u64;
 pub const FULL_DIP: f32 = 1.0;
 const TIP_SUM_CHANNELS: usize = TIP_CHANNELS + 1;
 const TIP_SUMS_BYTES: u64 = (TIP_SUM_CHANNELS * std::mem::size_of::<f32>()) as u64;
-const CAPILLARY_POOLS: u64 = TIP_SIZE as u64 + 1;
-const CAPILLARY_BYTES: u64 = (3 * CAPILLARY_POOLS * TIP_CHANNELS as u64 + 2 * CAPILLARY_POOLS)
+const CAPILLARY_POOLS: u64 = MAX_BRISTLES as u64;
+const CAPILLARY_BYTES: u64 = (3 * CAPILLARY_POOLS * TIP_CHANNELS as u64 + CAPILLARY_POOLS)
     * std::mem::size_of::<u32>() as u64;
 const KNIFE_DIP_LENGTH_PX: f32 = 380.0;
 const KNIFE_LAID_CAPACITY_UM: f32 = MAX_TIP_THICKNESS_UM * KNIFE_DIP_LENGTH_PX;
@@ -62,6 +67,7 @@ const BLADE_DELTA_BYTES: u64 =
     (BLADE_CELLS * BLADE_DELTA_CHANNELS * std::mem::size_of::<i32>()) as u64;
 const BLADE_CELL_GROUP_SIZE: u32 = 64;
 const DRY_WORKGROUP_SIZE: u32 = 8;
+const BRISTLE_LAYOUT_SEED: u64 = 0x00C4_D317_B215_7E55;
 
 pub struct DabBatch<'a> {
     pub brush: &'a BrushSettings,
@@ -70,11 +76,19 @@ pub struct DabBatch<'a> {
 
 pub trait PaintEngine {
     fn begin_stroke(&mut self);
+    fn end_stroke(&mut self);
     fn encode_dabs(
         &mut self,
         gpu: &GpuContext,
         canvas: &mut Canvas,
         batch: DabBatch<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+    );
+    fn settle_bristles(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        now_ms: f32,
         encoder: &mut wgpu::CommandEncoder,
     );
     fn params(&self) -> &SimParams;
@@ -99,10 +113,11 @@ struct Buffers {
     tip_delta: wgpu::Buffer,
     body: wgpu::Buffer,
     wanted: wgpu::Buffer,
-    capillary_rows: wgpu::Buffer,
+    capillary_pools: wgpu::Buffer,
     tip_sums: wgpu::Buffer,
     blade_load: wgpu::Buffer,
     blade_delta: wgpu::Buffer,
+    bristles: BristleBuffers,
 }
 
 impl Buffers {
@@ -112,10 +127,11 @@ impl Buffers {
             tip_delta: storage_buffer(gpu, "brush_tip_delta", TIP_BYTES),
             body: storage_buffer(gpu, "brush_body", BODY_BYTES),
             wanted: storage_buffer(gpu, "brush_refill_wanted", WANTED_BYTES),
-            capillary_rows: storage_buffer(gpu, "brush_capillary_rows", CAPILLARY_BYTES),
+            capillary_pools: storage_buffer(gpu, "brush_capillary_pools", CAPILLARY_BYTES),
             tip_sums: storage_buffer(gpu, "brush_tip_sums", TIP_SUMS_BYTES),
             blade_load: storage_buffer(gpu, "knife_blade_load", BLADE_LOAD_BYTES),
             blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
+            bristles: BristleBuffers::new(gpu),
         }
     }
 }
@@ -126,7 +142,8 @@ pub struct WetOilEngine {
     loaded_thickness_um: f32,
     buffers: Buffers,
     rest_pending: bool,
-    previous_dab: Option<[f32; 2]>,
+    previous_dab: Option<PreviousDab>,
+    bristles: BristleRig,
     dab_passes: DabPasses,
     pick_pass: PickPass,
     dry_pass: DryPass,
@@ -142,6 +159,7 @@ impl WetOilEngine {
             buffers: Buffers::new(gpu),
             rest_pending: true,
             previous_dab: None,
+            bristles: BristleRig::new(),
             dab_passes: DabPasses::new(gpu),
             pick_pass: PickPass::new(gpu),
             dry_pass: DryPass::new(gpu),
@@ -153,6 +171,35 @@ impl WetOilEngine {
         if radius_px.is_finite() {
             self.tip_radius = radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
         }
+    }
+
+    fn fit_bristles(
+        &mut self,
+        gpu: &GpuContext,
+        brush: &BrushSettings,
+        canvas: &Canvas,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if !brush.tool.profile().moves_bristles() {
+            self.bristles.put_down();
+            return;
+        }
+        self.bristles.take_up(brush.tool);
+        let request = LayoutRequest {
+            shape: brush.shape,
+            ferrule_radius_px: self.tip_radius,
+            length_ratio: length_ratio(brush.shape, &self.params),
+            density_per_px: self.params.get("bristle_density"),
+            seed: BRISTLE_LAYOUT_SEED,
+        };
+        self.bristles
+            .fit(gpu, &self.buffers.bristles, &request, encoder);
+        let tuning = BristleTuning::of(&self.params, brush.shape, canvas.tooth_height_um());
+        self.buffers.bristles.tune(gpu, &tuning, encoder);
+    }
+
+    pub fn bristles_settling(&self, now_ms: f32) -> bool {
+        self.bristles.settling(now_ms)
     }
 
     pub(crate) fn encode_eyedropper(
@@ -184,6 +231,11 @@ impl PaintEngine for WetOilEngine {
     fn begin_stroke(&mut self) {
         self.rest_pending = true;
         self.previous_dab = None;
+        self.bristles.begin_stroke();
+    }
+
+    fn end_stroke(&mut self) {
+        self.bristles.lift();
     }
 
     fn encode_dabs(
@@ -193,13 +245,14 @@ impl PaintEngine for WetOilEngine {
         batch: DabBatch<'_>,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        self.fit_bristles(gpu, batch.brush, canvas, encoder);
         let mut placements = self.place_all(canvas, batch.brush, batch.dabs);
         if placements.is_empty() {
             return;
         }
         self.take_first_rest(&mut placements);
         let dab_records = upload_dab_records(gpu, &placements);
-        self.dab_passes.fit_scratch(gpu, canvas, &placements);
+        self.dab_passes.fit_scratch(gpu, &placements);
         let resources = DabResources {
             gpu,
             canvas,
@@ -214,6 +267,32 @@ impl PaintEngine for WetOilEngine {
         self.dab_passes.encode(&bind_groups, &mut pass, &placements);
         drop(pass);
         mark_dab_regions(canvas, &placements);
+    }
+
+    fn settle_bristles(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &Canvas,
+        now_ms: f32,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let Some(record) = self.bristles.settle(now_ms) else {
+            return;
+        };
+        let tuning = BristleTuning::of(
+            &self.params,
+            self.bristles.shape(),
+            canvas.tooth_height_um(),
+        );
+        self.buffers.bristles.tune(gpu, &tuning, encoder);
+        let records = upload_records(gpu, &[record]);
+        let resources = DabResources {
+            gpu,
+            canvas,
+            dab_records: &records,
+            buffers: &self.buffers,
+        };
+        self.dab_passes.encode_bristles_alone(&resources, encoder);
     }
 
     fn params(&self) -> &SimParams {

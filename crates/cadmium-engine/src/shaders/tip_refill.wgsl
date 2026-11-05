@@ -6,6 +6,7 @@ struct Wanted {
 const LOW_WORD_MAX: u32 = 0xffffffffu;
 const HIGH_WORD_WEIGHT: f32 = 4294967296.0;
 const QUANTIZE_LIMIT: f32 = 2.0e9;
+const TEXEL_HALF_WIDTH: f32 = 0.5;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var<storage, read_write> tip: array<f32>;
@@ -21,18 +22,37 @@ fn inside_footprint(texel: vec2<u32>) -> bool {
     return inside_outline(vec2<f32>(vec2<i32>(texel) - vec2<i32>(TIP_HALF)));
 }
 
+fn belly_fill() -> f32 {
+    if (dab.full_reserve_volume <= 0.0) {
+        return 0.0;
+    }
+    return clamp(body.volume / dab.full_reserve_volume, 0.0, 1.0);
+}
+
+fn wetted_by_belly(texel: vec2<u32>) -> bool {
+    let fill = belly_fill();
+    if (fill <= 0.0) {
+        return false;
+    }
+    let offset = vec2<f32>(vec2<i32>(texel) - vec2<i32>(TIP_HALF));
+    let axes = semi_axes();
+    let half_texel = TEXEL_HALF_WIDTH / min(axes.x, axes.y);
+    return length(offset / axes) - half_texel <= sqrt(fill);
+}
+
 @compute @workgroup_size(8, 8)
 fn gather(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= dab.tip_size.x || id.y >= dab.tip_size.y) {
         return;
     }
     let texel = refill_texel(id);
-    if (!inside_footprint(texel)) {
+    if (!inside_footprint(texel) || !wetted_by_belly(texel)) {
         return;
     }
     let base = tip_index(texel);
     let shortfall = max(dab.loaded_thickness_um - tip[base + VOLUME_CHANNEL], 0.0);
-    let want = u32(round(clamp(dab.refill_rate * shortfall * DELTA_SCALE, 0.0, QUANTIZE_LIMIT)));
+    let flow = dab.refill_rate * shortfall;
+    let want = u32(round(clamp(flow * DELTA_SCALE, 0.0, QUANTIZE_LIMIT)));
     if (want == 0u) {
         return;
     }

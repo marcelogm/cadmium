@@ -34,10 +34,13 @@ pub enum Holder {
 pub(crate) enum FootprintShape {
     Ellipse,
     Blade,
+    Bristles,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DabStage {
+    Bristles,
+    Contact,
     Exchange,
     Apply,
     Capillary,
@@ -60,8 +63,16 @@ impl ToolProfile {
         self.footprint == Some(FootprintShape::Ellipse)
     }
 
+    pub(crate) fn has_bristle_footprint(&self) -> bool {
+        self.footprint == Some(FootprintShape::Bristles)
+    }
+
     pub(crate) fn places_dabs(&self) -> bool {
         self.footprint.is_some()
+    }
+
+    pub(crate) fn moves_bristles(&self) -> bool {
+        self.dab_stages.contains(&DabStage::Bristles)
     }
 
     pub(crate) fn wipes(&self) -> bool {
@@ -80,27 +91,32 @@ pub(crate) struct SpreadingRates {
     pub(crate) advection: f32,
     pub(crate) squeeze: f32,
     pub(crate) diffusion: f32,
+    pub(crate) slump: f32,
 }
 
 impl Spreading {
     pub(crate) fn rates(self, params: &SimParams) -> SpreadingRates {
         let advection = params.get("advection");
         let squeeze = params.get("squeeze");
+        let slump = params.get("slump_rate");
         match self {
             Spreading::Drag(drag) => SpreadingRates {
                 advection: drag,
                 squeeze: 0.0,
                 diffusion: 0.0,
+                slump: 0.0,
             },
             Spreading::AdvectAndDiffuse => SpreadingRates {
                 advection,
                 squeeze,
                 diffusion: params.get("blend_diffusion"),
+                slump,
             },
             Spreading::Advect => SpreadingRates {
                 advection,
                 squeeze,
                 diffusion: 0.0,
+                slump,
             },
         }
     }

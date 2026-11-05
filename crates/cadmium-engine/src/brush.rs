@@ -47,8 +47,9 @@ impl Default for BrushSettings {
 
 impl BrushSettings {
     pub fn stroke_geometry(&self) -> BrushGeometry {
-        let mut geometry = self.geometry;
-        if self.tool.profile().has_blade_footprint() && geometry.max_diameter_px > 0.0 {
+        let profile = self.tool.profile();
+        let mut geometry = full_diameter_spacing(self.geometry, profile.has_bristle_footprint());
+        if profile.has_blade_footprint() && geometry.max_diameter_px > 0.0 {
             geometry.spacing = geometry
                 .spacing
                 .min(KNIFE_MAX_STEP_PX / geometry.max_diameter_px);
@@ -75,3 +76,16 @@ impl BrushSettings {
         }
     }
 }
+
+fn full_diameter_spacing(
+    mut geometry: BrushGeometry,
+    has_bristle_footprint: bool,
+) -> BrushGeometry {
+    if has_bristle_footprint {
+        geometry.min_diameter_ratio = 1.0;
+    }
+    geometry
+}
+
+#[cfg(test)]
+mod tests;

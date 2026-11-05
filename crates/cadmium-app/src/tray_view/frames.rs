@@ -42,6 +42,7 @@ impl TrayView {
         }
         self.imp().needs_present.get()
             || state.session.tray_has_pending_work()
+            || state.session.tray_bristles_settling(state.now_ms())
             || state.holds_on(Surface::Tray)
             || !presenter.matches_size(width_px, height_px)
     }

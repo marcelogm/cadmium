@@ -1,10 +1,8 @@
 use super::dab_record::{
-    DabRecord, blade_capacity_um, blade_gap_um, bristle_spread, capillary_scale, rate_over_step,
+    DabRecord, blade_capacity_um, blade_gap_um, capillary_scale, rate_over_step,
 };
-use super::footprint::{Footprint, knife_half_width};
-use super::{
-    BLADE_COVERAGE_MARGIN_PX, BLADE_SPILL_BAND_PX, MAX_TIP_RADIUS, TIP_HALF, WetOilEngine,
-};
+use super::footprint::Footprint;
+use super::{MAX_TIP_RADIUS, TIP_HALF, WetOilEngine};
 use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING};
 use crate::canvas::Canvas;
 use crate::compute::WORKGROUP_SIZE;
@@ -16,12 +14,17 @@ const REFERENCE_STEP_PX: f32 = DEFAULT_SPACING * DEFAULT_MAX_DIAMETER_PX;
 const DAB_APRON_PX: i32 = 2;
 const MAX_SWEEP_PX: f32 = 32.0;
 const CAPILLARY_SHARE: f32 = 0.2;
-const CROSS_CAPILLARY_SHARE: f32 = 0.01;
 const SPREAD_APRON_PX: i32 = 1;
 const TIP_APRON_TEXELS: f32 = 1.0;
-const MIN_BRISTLE_PERIOD_PX: f32 = 3.0;
 const KNIFE_SPILL_SHARE: f32 = 0.5;
 const FIRST_REST_FOLLOW: f32 = 1.0;
+const _: () = assert!(DEFAULT_SPACING * 2.0 * MAX_TIP_RADIUS < MAX_SWEEP_PX);
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct PreviousDab {
+    at: [f32; 2],
+    placed: bool,
+}
 
 struct DabStep {
     px: f32,
@@ -60,12 +63,25 @@ impl WetOilEngine {
         brush: &BrushSettings,
         dabs: &[Dab],
     ) -> Vec<Placement> {
-        let mut placements = Vec::with_capacity(dabs.len());
-        for dab in dabs {
-            let step = self.step_since_previous_dab(dab);
-            placements.extend(self.place(canvas, brush, dab, step));
+        dabs.iter()
+            .filter_map(|dab| self.place_dab(canvas, brush, dab))
+            .collect()
+    }
+
+    fn place_dab(
+        &mut self,
+        canvas: &Canvas,
+        brush: &BrushSettings,
+        dab: &Dab,
+    ) -> Option<Placement> {
+        let step = self.step_since_previous_dab(dab);
+        let mut placement = self.place(canvas, brush, dab, step)?;
+        self.mark_previous_dab_placed();
+        if placement.profile.moves_bristles() {
+            self.bristles
+                .advance(&mut placement.record, dab, &self.params);
         }
-        placements
+        Some(placement)
     }
 
     pub(super) fn take_first_rest(&mut self, placements: &mut [Placement]) {
@@ -83,14 +99,26 @@ impl WetOilEngine {
         if !is_finite(dab) {
             return STILL_STEP;
         }
-        let back = self.previous_dab.map(|[x, y]| [x - dab.x, y - dab.y]);
-        self.previous_dab = Some([dab.x, dab.y]);
-        let Some(back) = back else {
+        let previous = self.previous_dab.replace(PreviousDab {
+            at: [dab.x, dab.y],
+            placed: false,
+        });
+        let Some(PreviousDab { at: [x, y], placed }) = previous else {
             return STILL_STEP;
         };
+        let back = [x - dab.x, y - dab.y];
         let step = back[0].hypot(back[1]);
-        let sweep = if step <= MAX_SWEEP_PX { back } else { [0.0; 2] };
-        DabStep { px: step, sweep }
+        let sweeps = placed && step <= MAX_SWEEP_PX;
+        DabStep {
+            px: step,
+            sweep: if sweeps { back } else { [0.0; 2] },
+        }
+    }
+
+    fn mark_previous_dab_placed(&mut self) {
+        if let Some(previous) = self.previous_dab.as_mut() {
+            previous.placed = true;
+        }
     }
 
     pub fn dab_bounds(
@@ -117,7 +145,7 @@ impl WetOilEngine {
         if profile.has_blade_footprint() && !heading_known(dab) {
             return None;
         }
-        let footprint = Footprint::of(dab, brush, &self.params);
+        let footprint = Footprint::of(dab, brush, &self.params, self.tip_radius);
         let regions = DabRegions::around(dab, step.sweep, footprint, canvas)?;
         Some(Placement {
             record: self.record(brush, dab, step, &regions),
@@ -170,24 +198,19 @@ impl WetOilEngine {
     ) -> DabRecord {
         let params = &self.params;
         let profile = brush.tool.profile();
-        let (bristle_contrast, bristle_count) = bristle_spread(brush.shape, params);
         let spreading = profile.spreading.rates(params);
         DabRecord {
             transfer_fraction: params.get("transfer_fraction"),
             velocity_cutoff: params.get("velocity_cutoff"),
             residual_um: params.get("residual_um"),
             penetration_um: params.get("penetration_um"),
-            bristle_contrast: if profile.wipes() {
-                0.0
-            } else {
-                bristle_contrast
-            },
-            bristle_count: bristle_count
-                .min(2.0 * regions.footprint.radius / MIN_BRISTLE_PERIOD_PX),
+            bristle_contact: u32::from(profile.has_bristle_footprint()),
             refill_rate: rate_over_step(params.get("refill_rate"), step_ratio),
             loaded_thickness_um: self.loaded_thickness_um,
+            full_reserve_volume: self.reserve_volume(self.loaded_thickness_um),
             advection: spreading.advection,
             squeeze: spreading.squeeze,
+            ferrule_press_share: params.get("ferrule_press_share"),
             diffusion: spreading.diffusion,
             blade_gap_um: blade_gap_um(params, dab.pressure, dab.altitude),
             rag_strength: params.get("rag_strength"),
@@ -196,7 +219,10 @@ impl WetOilEngine {
             blade_spill_share: KNIFE_SPILL_SHARE,
             step_ratio,
             capillary_rate: rate_over_step(CAPILLARY_SHARE, step_ratio),
-            cross_capillary_rate: rate_over_step(CROSS_CAPILLARY_SHARE, step_ratio),
+            wicking_rate: rate_over_step(params.get("wicking_share"), step_ratio),
+            slump_rate: rate_over_step(spreading.slump, step_ratio),
+            slump_yield_um2_per_px: params.get("slump_yield_um2_per_px"),
+            hair_load_limit: params.get("bristle_load_limit"),
             capillary_scale: capillary_scale(regions.tip_size),
             ..bytemuck::Zeroable::zeroed()
         }
@@ -243,12 +269,6 @@ impl DabRegions {
     }
 }
 
-impl Placement {
-    pub(super) fn fits_within(&self, size: [u32; 2]) -> bool {
-        (0..2).all(|axis| self.record.canvas_size[axis] <= size[axis])
-    }
-}
-
 pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
     for placement in placements {
         let [x0, y0, x1, y1] = placement.canvas_rect;
@@ -281,11 +301,4 @@ fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
     let origin = reach.map(|r| (TIP_HALF - r) as i32);
     let size = reach.map(|r| 2 * r + 1);
     (origin, size)
-}
-
-pub(super) fn max_dab_region_side() -> u32 {
-    let along = knife_half_width(MAX_TIP_RADIUS) + BLADE_COVERAGE_MARGIN_PX;
-    let across = MAX_TIP_RADIUS + BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX;
-    let half_extent = across.hypot(along).ceil() as u32;
-    2 * (half_extent + 1 + DAB_APRON_PX as u32) + 2 * MAX_SWEEP_PX as u32
 }

@@ -1,9 +1,15 @@
+use super::bristle_contact::ContactPass;
 use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
-use crate::canvas::{Canvas, StateTexture};
-use crate::compute::{ComputeStage, texture_entry};
-use crate::engine::placement::{Placement, max_dab_region_side};
-use crate::engine::shader::{DAB_SNIPPETS, shader_source};
+use crate::canvas::StateTexture;
+use crate::compute::{ComputeStage, buffer_binding, storage_entry, texture_binding, texture_entry};
+use crate::engine::placement::Placement;
+use crate::engine::shader::{DAB_SNIPPETS, SPREAD_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
+
+const CONTACT_MASK_BINDING: u32 = 8;
+const CONTACT_EXTENT_BINDING: u32 = 9;
+const DRY_HEIGHT_BINDING: u32 = 10;
+const CONTACT_REFERENCE_BINDING: u32 = 11;
 
 struct ScratchSurface {
     _texture: wgpu::Texture,
@@ -77,35 +83,20 @@ pub(super) struct SpreadPass {
 
 impl SpreadPass {
     pub(super) fn new(gpu: &GpuContext) -> SpreadPass {
-        use wgpu::StorageTextureAccess::{ReadOnly, WriteOnly};
-        use wgpu::TextureFormat::{R32Float, Rgba16Float, Rgba32Float};
-
-        let spreading_entries = |motion_access| {
-            [
-                dab_record_entry(),
-                texture_entry(1, ReadOnly, Rgba16Float),
-                texture_entry(2, ReadOnly, Rgba16Float),
-                texture_entry(3, ReadOnly, R32Float),
-                texture_entry(4, WriteOnly, Rgba16Float),
-                texture_entry(5, WriteOnly, Rgba16Float),
-                texture_entry(6, WriteOnly, R32Float),
-                texture_entry(7, motion_access, Rgba32Float),
-            ]
-        };
         let copy_compute = ComputeStage::new(
             gpu,
             "region_copy",
             &shader_source(
-                &DAB_SNIPPETS,
+                &SPREAD_SNIPPETS,
                 include_str!("../../shaders/region_copy.wgsl"),
             ),
-            &spreading_entries(WriteOnly),
+            &copy_entries(),
         );
         let advect_compute = ComputeStage::new(
             gpu,
             "advect",
             &shader_source(&DAB_SNIPPETS, include_str!("../../shaders/advect.wgsl")),
-            &spreading_entries(ReadOnly),
+            &spreading_entries(wgpu::StorageTextureAccess::ReadOnly),
         );
         SpreadPass {
             copy: copy_compute.pipeline(gpu, "region_copy", "main"),
@@ -116,28 +107,23 @@ impl SpreadPass {
         }
     }
 
-    pub(super) fn fit_scratch(
-        &mut self,
-        gpu: &GpuContext,
-        canvas: &Canvas,
-        placements: &[Placement],
-    ) {
-        let side = max_dab_region_side();
-        let size = [canvas.spec.width.min(side), canvas.spec.height.min(side)];
-        if self
-            .scratch
-            .as_ref()
-            .is_none_or(|scratch| scratch.size != size)
-        {
-            self.scratch = Some(Scratch::new(gpu, size));
+    pub(super) fn fit_scratch(&mut self, gpu: &GpuContext, placements: &[Placement]) {
+        let needed = placements.iter().fold([0, 0], |size, placement| {
+            let region = placement.record.canvas_size;
+            [size[0].max(region[0]), size[1].max(region[1])]
+        });
+        let held = self.scratch.as_ref().map_or([0; 2], |scratch| scratch.size);
+        if needed[0] > held[0] || needed[1] > held[1] {
+            let grown = [needed[0].max(held[0]), needed[1].max(held[1])];
+            self.scratch = Some(Scratch::new(gpu, grown));
         }
-        debug_assert!(placements.iter().all(|placement| {
-            let scratch_size = self.scratch.as_ref().map_or([0; 2], |scratch| scratch.size);
-            placement.fits_within(scratch_size)
-        }));
     }
 
-    pub(super) fn bind_groups(&self, resources: &DabResources<'_>) -> SpreadBindGroups {
+    pub(super) fn bind_groups(
+        &self,
+        resources: &DabResources<'_>,
+        contact: HairContact<'_>,
+    ) -> SpreadBindGroups {
         let scratch = self
             .scratch
             .as_ref()
@@ -154,16 +140,22 @@ impl SpreadPass {
             copy: spreading_bind_group(
                 &self.copy_compute,
                 resources,
-                wet_views,
-                scratch_views,
-                motion_view,
+                SpreadViews {
+                    from: wet_views,
+                    to: scratch_views,
+                    motion: motion_view,
+                },
+                Some(contact),
             ),
             advect: spreading_bind_group(
                 &self.advect_compute,
                 resources,
-                scratch_views,
-                wet_views,
-                motion_view,
+                SpreadViews {
+                    from: scratch_views,
+                    to: wet_views,
+                    motion: motion_view,
+                },
+                None,
             ),
         }
     }
@@ -181,24 +173,78 @@ impl SpreadPass {
     }
 }
 
+fn spreading_entries(motion_access: wgpu::StorageTextureAccess) -> [wgpu::BindGroupLayoutEntry; 8] {
+    use wgpu::StorageTextureAccess::{ReadOnly, WriteOnly};
+    use wgpu::TextureFormat::{R32Float, Rgba16Float, Rgba32Float};
+
+    [
+        dab_record_entry(),
+        texture_entry(1, ReadOnly, Rgba16Float),
+        texture_entry(2, ReadOnly, Rgba16Float),
+        texture_entry(3, ReadOnly, R32Float),
+        texture_entry(4, WriteOnly, Rgba16Float),
+        texture_entry(5, WriteOnly, Rgba16Float),
+        texture_entry(6, WriteOnly, R32Float),
+        texture_entry(7, motion_access, Rgba32Float),
+    ]
+}
+
+fn copy_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
+    let mut entries = spreading_entries(wgpu::StorageTextureAccess::WriteOnly).to_vec();
+    entries.extend([
+        storage_entry(CONTACT_MASK_BINDING, true),
+        storage_entry(CONTACT_EXTENT_BINDING, true),
+        texture_entry(
+            DRY_HEIGHT_BINDING,
+            wgpu::StorageTextureAccess::ReadOnly,
+            wgpu::TextureFormat::R32Float,
+        ),
+        storage_entry(CONTACT_REFERENCE_BINDING, true),
+    ]);
+    entries
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct HairContact<'a> {
+    pub(super) contact: &'a ContactPass,
+    pub(super) reference: &'a wgpu::Buffer,
+}
+
+struct SpreadViews<'a> {
+    from: [&'a wgpu::TextureView; 3],
+    to: [&'a wgpu::TextureView; 3],
+    motion: &'a wgpu::TextureView,
+}
+
 fn spreading_bind_group(
     compute: &ComputeStage,
     resources: &DabResources<'_>,
-    from: [&wgpu::TextureView; 3],
-    to: [&wgpu::TextureView; 3],
-    motion: &wgpu::TextureView,
+    views: SpreadViews<'_>,
+    hairs: Option<HairContact<'_>>,
 ) -> wgpu::BindGroup {
-    let views = from.into_iter().chain(to).chain([motion]);
+    let textures = views.from.into_iter().chain(views.to).chain([views.motion]);
     let entries: Vec<wgpu::BindGroupEntry> =
         std::iter::once(dab_record_binding(resources.dab_records))
             .chain(
                 (1..)
-                    .zip(views)
+                    .zip(textures)
                     .map(|(binding, view)| wgpu::BindGroupEntry {
                         binding,
                         resource: wgpu::BindingResource::TextureView(view),
                     }),
             )
+            .chain(hairs.into_iter().flat_map(|hairs| {
+                [
+                    buffer_binding(CONTACT_MASK_BINDING, &hairs.contact.mask),
+                    buffer_binding(CONTACT_EXTENT_BINDING, &hairs.contact.extent),
+                    texture_binding(
+                        DRY_HEIGHT_BINDING,
+                        resources.canvas,
+                        StateTexture::DryHeight,
+                    ),
+                    buffer_binding(CONTACT_REFERENCE_BINDING, hairs.reference),
+                ]
+            }))
             .collect();
     compute.bind_group(resources.gpu, &entries)
 }

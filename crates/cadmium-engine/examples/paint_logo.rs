@@ -14,6 +14,7 @@ use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::StrokeSample;
 
 const SIZE: u32 = 1024;
+const FROZEN_FRAME_CLOCK_MS: f64 = 0.0;
 const CENTER: (f64, f64) = (512.0, 452.0);
 const RADIUS: f64 = 400.0;
 const INNER_RADIUS: f64 = 240.0;
@@ -51,7 +52,8 @@ impl Painter {
 
     fn frame(&mut self) {
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-        self.session.encode_frame(&self.gpu, &mut encoder);
+        self.session
+            .encode_frame(&self.gpu, FROZEN_FRAME_CLOCK_MS, &mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
     }
 

@@ -279,3 +279,75 @@ fn a_wide_brush_keeps_its_spacing() {
         "{step}"
     );
 }
+
+#[test]
+fn dabs_carry_the_time_of_the_point_they_were_placed_at() {
+    let mut builder = StrokeBuilder::new(geometry());
+    let mut dabs = builder.push(sample(0.0, 0));
+    dabs.extend(builder.push(sample(100.0, 40)));
+    assert!(dabs.len() > 3);
+    assert!(dabs.iter().all(|dab| (0.0..=40.0).contains(&dab.time_ms)));
+    assert!(
+        dabs.windows(2)
+            .all(|pair| pair[0].time_ms < pair[1].time_ms)
+    );
+    let middle = dabs[dabs.len() / 2];
+    assert!((middle.time_ms - 20.0).abs() < 1.0, "{}", middle.time_ms);
+}
+
+#[test]
+fn dab_times_count_from_the_first_sample_of_the_stroke() {
+    let late_ms = 4_000_000_000;
+    let mut builder = StrokeBuilder::new(geometry());
+    let mut dabs = builder.push(sample(0.0, late_ms));
+    dabs.extend(builder.push(sample(100.0, late_ms + 40)));
+    assert_eq!(dabs[0].time_ms, 0.0);
+    assert!(dabs.iter().all(|dab| (0.0..=40.0).contains(&dab.time_ms)));
+    assert!(
+        dabs.windows(2)
+            .all(|pair| pair[0].time_ms < pair[1].time_ms)
+    );
+    builder.finish();
+    let next = builder.push(sample(0.0, late_ms + 900));
+    assert_eq!(next[0].time_ms, 0.0);
+}
+
+fn dab_count_over_200_px(settings: &cadmium_engine::brush::BrushSettings, pressure: f32) -> usize {
+    let mut builder = StrokeBuilder::new(settings.stroke_geometry());
+    let mut dabs = builder.push(StrokeSample {
+        pressure,
+        ..sample(0.0, 0)
+    });
+    dabs.extend(builder.push(StrokeSample {
+        pressure,
+        ..sample(200.0, 100)
+    }));
+    dabs.len()
+}
+
+#[test]
+fn a_bristle_tool_spaces_dabs_by_its_full_diameter_whatever_the_pressure() {
+    let brush = cadmium_engine::brush::BrushSettings {
+        tool: Tool::Brush,
+        ..Default::default()
+    };
+    assert_eq!(
+        dab_count_over_200_px(&brush, 0.1),
+        dab_count_over_200_px(&brush, 1.0)
+    );
+}
+
+#[test]
+fn the_brush_steps_by_its_full_diameter_and_the_rag_by_its_pressed_one() {
+    let brush = cadmium_engine::brush::BrushSettings::default();
+    assert_eq!(brush.stroke_geometry().min_diameter_ratio, 1.0);
+    let rag = cadmium_engine::brush::BrushSettings {
+        tool: Tool::Rag,
+        ..Default::default()
+    };
+    assert_eq!(
+        rag.stroke_geometry().min_diameter_ratio,
+        rag.geometry.min_diameter_ratio
+    );
+    assert!(rag.geometry.min_diameter_ratio < 1.0);
+}

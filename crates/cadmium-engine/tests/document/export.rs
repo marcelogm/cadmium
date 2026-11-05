@@ -42,7 +42,7 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
     s.view_mode = ViewMode::Height;
     let mut e = gpu.device.create_command_encoder(&Default::default());
     s.canvas.dirty.mark_all();
-    s.encode_frame(&gpu, &mut e);
+    s.encode_frame(&gpu, crate::support::FROZEN_FRAME_CLOCK_MS, &mut e);
     gpu.queue.submit([e.finish()]);
     let height_display = s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap();
     let dir = TempDir::new("export-mode");
@@ -50,7 +50,7 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
     document::export_png(&gpu, &mut s, &path).unwrap();
     assert_eq!(s.view_mode, ViewMode::Height);
     let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(&gpu, &mut e);
+    s.encode_frame(&gpu, crate::support::FROZEN_FRAME_CLOCK_MS, &mut e);
     gpu.queue.submit([e.finish()]);
     assert_eq!(
         s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap(),

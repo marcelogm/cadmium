@@ -6,9 +6,11 @@ pub(super) const BLENDER: ToolProfile = ToolProfile {
     shader_mode: TOOL_MODE_BLENDER,
     spreading: Spreading::AdvectAndDiffuse,
     holder: None,
-    footprint: Some(FootprintShape::Ellipse),
+    footprint: Some(FootprintShape::Bristles),
     rest_follow: CONTACT_REST_FOLLOW,
     dab_stages: &[
+        DabStage::Bristles,
+        DabStage::Contact,
         DabStage::Exchange,
         DabStage::Apply,
         DabStage::Capillary,

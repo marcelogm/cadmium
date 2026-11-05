@@ -1,14 +1,27 @@
 use cadmium_engine::{
     canvas::StateTexture,
-    engine::PaintEngine,
     gpu::GpuContext,
+    session::PaintSession,
     stroke::{StrokeSample, Tool},
 };
 
 use crate::support::{drag, line, session, stroke, write_preview};
 use crate::{CONSERVATION_TOLERANCE, column, cross_section, relative_drift, total};
 
-const STROKE_EXTENT_SHARE: f32 = 0.05;
+const STROKE_EXTENT_SHARE: f32 = 0.25;
+const RIDGE_PASSES: usize = 8;
+const MAX_RIDGE_GROWTH: f32 = 5.0;
+const RIDGE_SECTION_ROWS: std::ops::Range<usize> = 64..193;
+const RIDGE_SECTION_COLUMNS: std::ops::Range<usize> = 150..350;
+const RIDGE_SECTIONS: usize = 5;
+const RIDGE_TOP_ROWS: usize = 4;
+const IMPASTO_ROWS: std::ops::Range<usize> = 64..172;
+const BESIDE_IMPASTO_ROW: f64 = 205.0;
+const STANDING_TOLERANCE_UM: f32 = 0.01;
+const IMPASTO_ACROSS_X: f64 = 400.0;
+const IMPASTO_ACROSS_HALF_WIDTH: usize = 40;
+const SHORT_OF_IMPASTO_X: f64 = 330.0;
+const PIGMENT_DRIFT_TOLERANCE: f64 = 1e-4;
 
 #[test]
 fn spreading_conserves_volume() {
@@ -103,12 +116,145 @@ fn strokes_running_off_the_canvas_edges_conserve_volume() {
 fn brush_stroke_piles_paint_at_its_edges() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    s.engine.params_mut().set("bristle_contrast", 0.0);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let profile = cross_section(&gpu, &s, 96..161);
     eprintln!("cross-section {profile:?}");
     let (outer, central) = band_means(&profile);
+    eprintln!("outer band {outer} um, central band {central} um");
     assert!(outer > central, "outer band {outer} central band {central}");
+}
+
+fn mean_of_top_rows(mut section: Vec<f32>) -> f32 {
+    section.sort_by(f32::total_cmp);
+    section.iter().rev().take(RIDGE_TOP_ROWS).sum::<f32>() / RIDGE_TOP_ROWS as f32
+}
+
+fn ridge_um(gpu: &GpuContext, s: &PaintSession) -> f32 {
+    let volume = s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap();
+    let width = s.canvas.spec.width as usize;
+    let section_width = RIDGE_SECTION_COLUMNS.len() / RIDGE_SECTIONS;
+    let sections = (0..RIDGE_SECTIONS).map(|index| {
+        let first = RIDGE_SECTION_COLUMNS.start + index * section_width;
+        let section = RIDGE_SECTION_ROWS
+            .map(|y| {
+                let row = &volume[y * width + first..y * width + first + section_width];
+                row.iter().sum::<f32>() / section_width as f32
+            })
+            .collect();
+        mean_of_top_rows(section)
+    });
+    sections.sum::<f32>() / RIDGE_SECTIONS as f32
+}
+
+#[test]
+fn repeated_passes_do_not_wall_paint_up_at_the_stroke_edges() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let mut ridges = Vec::with_capacity(RIDGE_PASSES);
+    for _ in 0..RIDGE_PASSES {
+        s.reload_brush(&gpu);
+        stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+        ridges.push(ridge_um(&gpu, &s));
+    }
+    write_preview(&gpu, &s, "engine-repeated-passes.png");
+    eprintln!("ridge after each pass {ridges:?} um");
+    let (first, last) = (ridges[0], ridges[RIDGE_PASSES - 1]);
+    assert!(
+        last <= MAX_RIDGE_GROWTH * first,
+        "the ridge grew from {first} to {last} um"
+    );
+}
+
+fn build_impasto(gpu: &GpuContext, s: &mut PaintSession) {
+    for _ in 0..RIDGE_PASSES {
+        s.reload_brush(gpu);
+        stroke(gpu, s, 128.0, 40.0, 470.0);
+    }
+}
+
+#[test]
+fn a_brush_passing_beside_wet_impasto_leaves_it_standing() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    build_impasto(&gpu, &mut s);
+    let before = cross_section(&gpu, &s, IMPASTO_ROWS);
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, BESIDE_IMPASTO_ROW, 40.0, 470.0);
+    let after = cross_section(&gpu, &s, IMPASTO_ROWS);
+    let moved = before
+        .iter()
+        .zip(&after)
+        .map(|(before, after)| (after - before).abs())
+        .fold(0.0, f32::max);
+    eprintln!("the impasto beside the stroke moved by up to {moved} um");
+    assert!(
+        moved <= STANDING_TOLERANCE_UM,
+        "paint the brush never touched slumped by {moved} um"
+    );
+}
+
+#[test]
+fn building_thick_impasto_with_the_slump_conserves_paint() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let mut drifts = Vec::with_capacity(RIDGE_PASSES);
+    for _ in 0..RIDGE_PASSES {
+        s.reload_brush(&gpu);
+        let before = total(&gpu, &s);
+        stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+        drifts.push(relative_drift(&before, &total(&gpu, &s)));
+    }
+    eprintln!("volume and pigment drift of each pass {drifts:?}");
+    for (volume, pigments) in &drifts {
+        assert!(
+            volume.abs() < CONSERVATION_TOLERANCE,
+            "volume drift {volume:e}"
+        );
+        assert!(
+            pigments
+                .iter()
+                .all(|drift| drift.abs() < PIGMENT_DRIFT_TOLERANCE),
+            "pigment drift {pigments:?}"
+        );
+    }
+}
+
+fn impasto_columns_um(gpu: &GpuContext, s: &PaintSession) -> Vec<f32> {
+    let volume = s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap();
+    let centre = IMPASTO_ACROSS_X as usize;
+    let columns = centre - IMPASTO_ACROSS_HALF_WIDTH..centre + IMPASTO_ACROSS_HALF_WIDTH;
+    volume
+        .chunks(crate::CANVAS_WIDTH)
+        .flat_map(|row| row[columns.clone()].to_vec())
+        .collect()
+}
+
+#[test]
+fn wet_impasto_across_the_path_ahead_stands_until_the_hairs_reach_it() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    for _ in 0..RIDGE_PASSES {
+        s.reload_brush(&gpu);
+        drag(
+            &gpu,
+            &mut s,
+            &column(IMPASTO_ACROSS_X, 16.0, 240.0, 0.8, 20.0),
+        );
+    }
+    let before = impasto_columns_um(&gpu, &s);
+    s.reload_brush(&gpu);
+    stroke(&gpu, &mut s, 128.0, 40.0, SHORT_OF_IMPASTO_X);
+    let after = impasto_columns_um(&gpu, &s);
+    let moved = before
+        .iter()
+        .zip(&after)
+        .map(|(before, after)| (after - before).abs())
+        .fold(0.0, f32::max);
+    eprintln!("the impasto ahead of the stroke moved by up to {moved} um");
+    assert!(
+        moved <= STANDING_TOLERANCE_UM,
+        "paint ahead of the hairs slumped by {moved} um"
+    );
 }
 
 #[test]

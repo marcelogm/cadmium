@@ -113,6 +113,10 @@ impl Canvas {
         &self.surfaces[which.index()].texture
     }
 
+    pub fn tooth_height_um(&self) -> f32 {
+        weave::tooth_height_um(self.spec.weave)
+    }
+
     pub fn view(&self, which: StateTexture) -> &wgpu::TextureView {
         &self.surfaces[which.index()].view
     }

@@ -78,6 +78,16 @@ impl WetOilEngine {
         Ok(totals)
     }
 
+    pub fn tip_volumes_um(&self, gpu: &GpuContext) -> Result<Vec<f32>, GpuLost> {
+        let tip = read_buffer(gpu, &self.buffers.tip)?;
+        Ok(tip
+            .as_chunks::<TIP_CHANNELS>()
+            .0
+            .iter()
+            .map(|texel| texel[VOLUME_CHANNEL])
+            .collect())
+    }
+
     fn encode_sum_tip(&self, gpu: &GpuContext, encoder: &mut wgpu::CommandEncoder) {
         self.dip_pass
             .encode_sum_tip(gpu, self.tip_radius, &self.buffers, encoder);

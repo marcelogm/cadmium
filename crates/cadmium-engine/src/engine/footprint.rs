@@ -1,17 +1,20 @@
+use super::bristles::{ReachRequest, length_ratio, reach_bound_px};
 use super::{
     BLADE_COVERAGE_MARGIN_PX, BLADE_SPILL_BAND_PX, MAX_TIP_RADIUS, MIN_DAB_RADIUS, WetOilEngine,
 };
 use crate::brush::{BrushSettings, BrushShape};
 use crate::params::SimParams;
-use crate::stroke::{Dab, StrokeSample, pen_angles};
+use crate::stroke::{Dab, PenAngles, StrokeSample, pen_angles};
 
-const FLAT_THICKNESS_SHARE: f32 = 0.25;
-const FAN_THICKNESS_SHARE: f32 = 0.12;
+pub(super) const FLAT_THICKNESS_SHARE: f32 = 0.25;
+pub(super) const FAN_THICKNESS_SHARE: f32 = 0.12;
 const UPRIGHT_TILT_RAD: f32 = 5.0 * std::f32::consts::PI / 180.0;
 const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
 const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
+const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
+const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BrushOutline {
@@ -25,33 +28,72 @@ pub(super) struct Footprint {
     pub(super) orientation: f32,
     rectangular: bool,
     lateral_reach: f32,
+    bristle_reach_px: Option<f32>,
 }
 
 impl Footprint {
-    pub(super) fn of(dab: &Dab, brush: &BrushSettings, params: &SimParams) -> Footprint {
-        if brush.tool.profile().has_blade_footprint() {
-            let radius =
-                (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-            return Footprint {
-                radius,
-                elongation: knife_half_width(radius) / radius,
-                orientation: dab.direction,
-                rectangular: true,
-                lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
-            };
+    pub(super) fn of(
+        dab: &Dab,
+        brush: &BrushSettings,
+        params: &SimParams,
+        ferrule_radius_px: f32,
+    ) -> Footprint {
+        let profile = brush.tool.profile();
+        if profile.has_blade_footprint() {
+            return Footprint::of_blade(dab, brush);
         }
+        if profile.has_bristle_footprint() {
+            return Footprint::of_bristles(dab, brush, params, ferrule_radius_px);
+        }
+        Footprint::of_ellipse(dab, brush)
+    }
+
+    fn of_blade(dab: &Dab, brush: &BrushSettings) -> Footprint {
+        let radius = (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+        Footprint {
+            radius,
+            elongation: knife_half_width(radius) / radius,
+            orientation: dab.direction,
+            rectangular: true,
+            lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
+            bristle_reach_px: None,
+        }
+    }
+
+    fn of_bristles(
+        dab: &Dab,
+        brush: &BrushSettings,
+        params: &SimParams,
+        ferrule_radius_px: f32,
+    ) -> Footprint {
+        let radius = ferrule_radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+        let reach_px = reach_bound_px(&ReachRequest {
+            ferrule_radius_px: radius,
+            length_ratio: length_ratio(brush.shape, params),
+            density_per_px: params.get("bristle_density"),
+        });
+        Footprint {
+            radius,
+            elongation: 1.0,
+            orientation: blade_orientation(brush.shape, dab.altitude, dab.azimuth),
+            rectangular: false,
+            lateral_reach: 0.0,
+            bristle_reach_px: Some(reach_px + BRISTLE_BOUND_MARGIN_PX),
+        }
+    }
+
+    fn of_ellipse(dab: &Dab, brush: &BrushSettings) -> Footprint {
         let radius = dab.radius.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
         let tilt = 1.0 - dab.altitude.sin().clamp(0.0, 1.0);
-        let elongation = (shape_thickness(brush.shape)
-            * (1.0 + params.get("tilt_elongation") * tilt))
+        let elongation = (shape_thickness(brush.shape) * (1.0 + ELLIPSE_TILT_ELONGATION * tilt))
             .min(MAX_TIP_RADIUS / radius);
-        let orientation = blade_orientation(brush.shape, dab.altitude, dab.azimuth);
         Footprint {
             radius,
             elongation,
-            orientation,
+            orientation: blade_orientation(brush.shape, dab.altitude, dab.azimuth),
             rectangular: false,
             lateral_reach: 0.0,
+            bristle_reach_px: None,
         }
     }
 
@@ -60,6 +102,9 @@ impl Footprint {
     }
 
     pub(super) fn canvas_half_extents(&self) -> [f32; 2] {
+        if let Some(reach_px) = self.bristle_reach_px {
+            return [reach_px; 2];
+        }
         let [along, across] = self.semi_axes();
         let (sin, cos) = self.orientation.sin_cos();
         if self.rectangular {
@@ -116,10 +161,14 @@ impl WetOilEngine {
         brush: &BrushSettings,
         sample: &StrokeSample,
     ) -> Option<BrushOutline> {
-        if !brush.tool.profile().has_ellipse_footprint() {
+        let profile = brush.tool.profile();
+        let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
+        if profile.has_bristle_footprint() {
+            return Some(bristle_outline(brush, &self.params, angles));
+        }
+        if !profile.has_ellipse_footprint() {
             return None;
         }
-        let angles = pen_angles(sample.tilt_x_deg, sample.tilt_y_deg);
         let dab = Dab {
             x: sample.x as f32,
             y: sample.y as f32,
@@ -129,11 +178,22 @@ impl WetOilEngine {
             azimuth: angles.azimuth_rad,
             direction: 0.0,
             speed: 0.0,
+            time_ms: 0.0,
         };
-        let footprint = Footprint::of(&dab, brush, &self.params);
+        let footprint = Footprint::of(&dab, brush, &self.params, self.tip_radius);
         Some(BrushOutline {
             semi_axes: footprint.semi_axes(),
             orientation: footprint.orientation,
         })
+    }
+}
+
+fn bristle_outline(brush: &BrushSettings, params: &SimParams, angles: PenAngles) -> BrushOutline {
+    let radius = (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+    let tilt = std::f32::consts::FRAC_PI_2 - angles.altitude_rad;
+    let lean_px = radius * length_ratio(brush.shape, params) * tilt.sin().max(0.0);
+    BrushOutline {
+        semi_axes: [radius * shape_thickness(brush.shape) + lean_px, radius],
+        orientation: blade_orientation(brush.shape, angles.altitude_rad, angles.azimuth_rad),
     }
 }

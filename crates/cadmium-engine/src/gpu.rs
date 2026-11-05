@@ -50,6 +50,8 @@ impl std::error::Error for GpuError {}
 const DMABUF_EXPORT_FEATURES: wgpu::Features =
     wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF.union(wgpu::Features::VULKAN_EXTERNAL_MEMORY_FD);
 
+const OPTIONAL_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY;
+
 const DMABUF_SYNC_EXTENSIONS: [&std::ffi::CStr; 2] = [
     ash::khr::external_semaphore_fd::NAME,
     ash::ext::queue_family_foreign::NAME,
@@ -111,7 +113,8 @@ fn open_device(
     adapter: &wgpu::Adapter,
     supports_dmabuf_export: bool,
 ) -> Result<(wgpu::Device, wgpu::Queue), GpuError> {
-    let mut required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+    let mut required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+        | (adapter.features() & OPTIONAL_FEATURES);
     if supports_dmabuf_export {
         required_features |= DMABUF_EXPORT_FEATURES;
     }

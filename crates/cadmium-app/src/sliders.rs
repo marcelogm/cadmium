@@ -5,8 +5,6 @@ const SCALE_WIDTH: i32 = 140;
 const VALUE_LABEL_CHARS: i32 = 6;
 const PARAM_STEPS: f64 = 100.0;
 const PARAM_PAGES: f64 = 10.0;
-const WHOLE_NUMBER_PARAMS: [&str; 1] = ["bristle_count"];
-const WHOLE_STEP: f64 = 1.0;
 const STEP_DECIMALS_SLACK: f64 = 1e-6;
 
 pub(crate) struct SliderRow {
@@ -43,16 +41,8 @@ pub(crate) fn slider_row(title: &str, lower: f64, upper: f64, step: f64, page: f
     }
 }
 
-fn is_whole_number_param(spec: &ParamSpec) -> bool {
-    WHOLE_NUMBER_PARAMS.contains(&spec.key)
-}
-
 fn param_step(spec: &ParamSpec) -> f64 {
-    if is_whole_number_param(spec) {
-        WHOLE_STEP
-    } else {
-        f64::from(spec.max - spec.min) / PARAM_STEPS
-    }
+    f64::from(spec.max - spec.min) / PARAM_STEPS
 }
 
 fn decimals_for_step(step: f64) -> usize {
@@ -69,17 +59,13 @@ pub(crate) fn format_param(spec: &ParamSpec, value: f32) -> String {
 
 pub(crate) fn param_row(spec: &ParamSpec) -> SliderRow {
     let range = f64::from(spec.max - spec.min);
-    let slider = slider_row(
+    slider_row(
         spec.label,
         f64::from(spec.min),
         f64::from(spec.max),
         param_step(spec),
         range / PARAM_PAGES,
-    );
-    if is_whole_number_param(spec) {
-        slider.scale.set_round_digits(0);
-    }
-    slider
+    )
 }
 
 #[cfg(test)]

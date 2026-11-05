@@ -2,13 +2,10 @@ use wgpu::util::DeviceExt;
 
 use super::placement::Placement;
 use super::{DELTA_SCALE, KNIFE_LAID_CAPACITY_UM, MAX_TIP_THICKNESS_UM};
-use crate::brush::BrushShape;
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
 
 pub(super) const DAB_RECORD_STRIDE: u64 = 256;
-const FAN_BRISTLE_CONTRAST: f32 = 0.9;
-const FAN_BRISTLE_COUNT_SHARE: f32 = 0.5;
 const CAPILLARY_POOL_BUDGET: f32 = 4.0e9;
 const KNIFE_LAID_ALTITUDE_RAD: f32 = std::f32::consts::FRAC_PI_4;
 const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
@@ -35,8 +32,8 @@ pub(super) struct DabRecord {
     pub(super) velocity_cutoff: f32,
     pub(super) residual_um: f32,
     pub(super) penetration_um: f32,
-    pub(super) bristle_contrast: f32,
-    pub(super) bristle_count: f32,
+    pub(super) bristle_contact: u32,
+    pub(super) full_reserve_volume: f32,
     pub(super) refill_rate: f32,
     pub(super) loaded_thickness_um: f32,
     pub(super) advection: f32,
@@ -52,28 +49,50 @@ pub(super) struct DabRecord {
     pub(super) step_ratio: f32,
     pub(super) sweep: [f32; 2],
     pub(super) capillary_rate: f32,
-    pub(super) cross_capillary_rate: f32,
+    pub(super) wicking_rate: f32,
     pub(super) capillary_scale: f32,
-    pub(super) _pad: [f32; 2],
+    pub(super) handle_height_px: f32,
+    pub(super) handle_axis: [f32; 3],
+    pub(super) handle_rest_height_px: f32,
+    pub(super) ferrule_radius_px: f32,
+    pub(super) dt_seconds: f32,
+    pub(super) substeps: u32,
+    pub(super) bristle_total: u32,
+    pub(super) bristle_stiffness: f32,
+    pub(super) bristle_damping: f32,
+    pub(super) bristle_reset: u32,
+    pub(super) bristle_orientation: [f32; 2],
+    pub(super) ferrule_press_share: f32,
+    pub(super) slump_rate: f32,
+    pub(super) slump_yield_um2_per_px: f32,
+    pub(super) hair_load_limit: f32,
 }
 
 pub(super) const DAB_RECORD_SIZE: u64 = std::mem::size_of::<DabRecord>() as u64;
-const _: () = assert!(DAB_RECORD_SIZE == 192 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
+const _: () = assert!(DAB_RECORD_SIZE == 256 && DAB_RECORD_SIZE <= DAB_RECORD_STRIDE);
 
 pub(super) fn upload_dab_records(gpu: &GpuContext, placements: &[Placement]) -> wgpu::Buffer {
-    let mut records = vec![0u8; placements.len() * DAB_RECORD_STRIDE as usize];
-    for (slot, placement) in records
+    let records: Vec<DabRecord> = placements
+        .iter()
+        .map(|placement| placement.record)
+        .collect();
+    upload_records(gpu, &records)
+}
+
+pub(super) fn upload_records(gpu: &GpuContext, records: &[DabRecord]) -> wgpu::Buffer {
+    let mut bytes = vec![0u8; records.len() * DAB_RECORD_STRIDE as usize];
+    for (slot, record) in bytes
         .as_chunks_mut::<{ DAB_RECORD_STRIDE as usize }>()
         .0
         .iter_mut()
-        .zip(placements)
+        .zip(records)
     {
-        slot[..DAB_RECORD_SIZE as usize].copy_from_slice(bytemuck::bytes_of(&placement.record));
+        slot[..DAB_RECORD_SIZE as usize].copy_from_slice(bytemuck::bytes_of(record));
     }
     gpu.device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("dab_records"),
-            contents: &records,
+            contents: &bytes,
             usage: wgpu::BufferUsages::UNIFORM,
         })
 }
@@ -96,18 +115,6 @@ pub(super) fn blade_capacity_um(altitude: f32) -> f32 {
         + (KNIFE_UPRIGHT_CAPACITY_UM - KNIFE_LAID_CAPACITY_UM) * upright_share(altitude)
 }
 
-pub(super) fn bristle_spread(shape: BrushShape, params: &SimParams) -> (f32, f32) {
-    let contrast = params.get("bristle_contrast");
-    let count = params.get("bristle_count");
-    match shape {
-        BrushShape::Fan => (
-            contrast.max(FAN_BRISTLE_CONTRAST),
-            count * FAN_BRISTLE_COUNT_SHARE,
-        ),
-        _ => (contrast, count),
-    }
-}
-
 pub(super) fn rate_over_step(reference_rate: f32, step_ratio: f32) -> f32 {
     1.0 - (1.0 - reference_rate.clamp(0.0, 1.0)).powf(step_ratio)
 }
@@ -117,3 +124,6 @@ pub(super) fn capillary_scale(tip_size: [u32; 2]) -> f32 {
     let fitting = CAPILLARY_POOL_BUDGET / (texels * MAX_TIP_THICKNESS_UM);
     fitting.min(DELTA_SCALE).log2().floor().exp2()
 }
+
+#[cfg(test)]
+mod tests;

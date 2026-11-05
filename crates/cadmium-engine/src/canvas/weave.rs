@@ -40,6 +40,10 @@ fn on_weave_height_grid(height: f32) -> f32 {
     (height / WEAVE_HEIGHT_STEP_UM).round() * WEAVE_HEIGHT_STEP_UM
 }
 
+pub(super) fn tooth_height_um(weave: Weave) -> f32 {
+    weave_profile(weave).0
+}
+
 pub fn weave_heights(weave: Weave, width: u32, height: u32) -> Vec<f32> {
     let (amplitude, period) = weave_profile(weave);
     let thread = |index: u32| {

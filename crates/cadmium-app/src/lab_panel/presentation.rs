@@ -15,11 +15,12 @@ pub(super) const VIEW_TOGGLES: [(&str, &str); 4] = [
     (VIEW_PIGMENT, "Pigment"),
 ];
 
-pub(super) const PARAM_GROUPS: [(ParamGroup, &str); 5] = [
+pub(super) const PARAM_GROUPS: [(ParamGroup, &str); 6] = [
     (ParamGroup::Transfer, "Transfer"),
     (ParamGroup::Dynamics, "Dynamics"),
     (ParamGroup::Tools, "Tools"),
     (ParamGroup::Footprint, "Footprint"),
+    (ParamGroup::Bristles, "Bristles"),
     (ParamGroup::Render, "Render"),
 ];
 

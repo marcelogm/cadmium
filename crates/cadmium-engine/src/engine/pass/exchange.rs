@@ -1,9 +1,10 @@
+use super::bristle_contact::ContactPass;
 use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_buffer, storage_entry, texture_binding, texture_entry,
 };
-use crate::engine::shader::{DAB_SNIPPETS, shader_source};
+use crate::engine::shader::{EXCHANGE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
 const CONTACT_REFERENCE_BYTES: u64 = std::mem::size_of::<f32>() as u64;
@@ -24,7 +25,7 @@ impl ExchangePass {
             gpu,
             "dab_exchange",
             &shader_source(
-                &DAB_SNIPPETS,
+                &EXCHANGE_SNIPPETS,
                 include_str!("../../shaders/dab_exchange.wgsl"),
             ),
             &[
@@ -36,6 +37,10 @@ impl ExchangePass {
                 storage_entry(5, true),
                 storage_entry(6, false),
                 storage_entry(7, false),
+                storage_entry(8, true),
+                storage_entry(9, true),
+                storage_entry(10, true),
+                storage_entry(11, true),
             ],
         );
         ExchangePass {
@@ -50,7 +55,11 @@ impl ExchangePass {
         }
     }
 
-    pub(super) fn bind_group(&self, resources: &DabResources<'_>) -> wgpu::BindGroup {
+    pub(super) fn bind_group(
+        &self,
+        resources: &DabResources<'_>,
+        contact: &ContactPass,
+    ) -> wgpu::BindGroup {
         let canvas = resources.canvas;
         self.compute.bind_group(
             resources.gpu,
@@ -63,8 +72,16 @@ impl ExchangePass {
                 buffer_binding(5, &resources.buffers.tip),
                 buffer_binding(6, &resources.buffers.tip_delta),
                 buffer_binding(7, &self.contact_reference),
+                buffer_binding(8, &contact.mask),
+                buffer_binding(9, &contact.loads),
+                buffer_binding(10, &resources.buffers.bristles.cell_grids),
+                buffer_binding(11, &resources.buffers.bristles.hair_loads),
             ],
         )
+    }
+
+    pub(super) fn contact_reference(&self) -> &wgpu::Buffer {
+        &self.contact_reference
     }
 
     pub(super) fn encode(

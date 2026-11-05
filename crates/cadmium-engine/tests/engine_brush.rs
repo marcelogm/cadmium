@@ -182,7 +182,7 @@ fn a_dab_marks_its_tiles_wet_and_dirty_including_the_apron() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(&gpu, &mut e);
+    s.encode_frame(&gpu, support::FROZEN_FRAME_CLOCK_MS, &mut e);
     gpu.queue.submit([e.finish()]);
     s.begin_stroke(
         &gpu,
@@ -198,7 +198,7 @@ fn a_dab_marks_its_tiles_wet_and_dirty_including_the_apron() {
     s.end_stroke();
     assert!(s.has_pending_work());
     let mut e = gpu.device.create_command_encoder(&Default::default());
-    s.encode_frame(&gpu, &mut e);
+    s.encode_frame(&gpu, support::FROZEN_FRAME_CLOCK_MS, &mut e);
     gpu.queue.submit([e.finish()]);
     let wet = s.canvas.wet_tiles.tiles();
     assert!(wet.contains(&TileCoord { x: 0, y: 1 }));
