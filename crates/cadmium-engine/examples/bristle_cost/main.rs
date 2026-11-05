@@ -7,6 +7,10 @@
 //! 120 samples/s and framed at 60 frames/s. It prints the mean and 95th percentile of each
 //! frame's GPU time, from timestamp queries around the frame when the adapter has them,
 //! and of its wall-clock time from encoding until the GPU is done.
+//!
+//! The long-stroke scenarios paint the S-curve four times back and forth in one stroke and
+//! also report each quarter of it, so a cost that grows along a stroke shows up.
+//! `CADMIUM_SCENARIO=<text>` measures only the scenarios whose name contains the text.
 
 mod bench;
 mod scenarios;
@@ -16,12 +20,13 @@ use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 
-use bench::{Bench, STROKE_PRESSURE, s_curve};
+use bench::{Bench, STROKE_PRESSURE, long_stroke, s_curve};
 use scenarios::{Ground, Motion, SCENARIOS, Scenario};
-use timing::{FrameCost, Timestamps, report, timestamps};
+use timing::{FrameCost, Timestamps, report, report_quarters, timestamps};
 
 const CANVAS_WIDTH_PX: u32 = 2048;
 const CANVAS_HEIGHT_PX: u32 = 1536;
+const SCENARIO_FILTER_VARIABLE: &str = "CADMIUM_SCENARIO";
 const PIGMENTS: [&str; 3] = ["cadmium_red", "ultramarine_blue", "titanium_white"];
 
 fn measure(
@@ -49,9 +54,17 @@ fn measure(
     bench.take_up(scenario);
     match scenario.motion {
         Motion::Stroke => bench.stroke(&s_curve(STROKE_PRESSURE)),
+        Motion::LongStroke => bench.stroke(&long_stroke(STROKE_PRESSURE)),
         Motion::Settle => bench.settle(),
         Motion::Shade => bench.shade(),
         Motion::Present => bench.present(),
+    }
+}
+
+fn selected(scenario: &Scenario) -> bool {
+    match std::env::var(SCENARIO_FILTER_VARIABLE) {
+        Ok(filter) => scenario.name.contains(filter.as_str()),
+        Err(_) => true,
     }
 }
 
@@ -76,7 +89,13 @@ fn main() {
         "scenario (ms per frame)", "frames", "gpu mean", "gpu p95", "wall mean", "wall p95"
     );
     for scenario in &SCENARIOS {
+        if !selected(scenario) {
+            continue;
+        }
         let costs = measure(&gpu, timestamps.as_ref(), scenario);
         report(scenario.name, &costs);
+        if scenario.motion == Motion::LongStroke {
+            report_quarters(&costs);
+        }
     }
 }
