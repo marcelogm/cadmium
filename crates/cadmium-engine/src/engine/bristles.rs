@@ -7,7 +7,6 @@ mod rig;
 mod roots;
 mod state;
 mod tuning;
-mod view;
 
 pub(crate) use cells::CELL_GRID_SIDE;
 pub(crate) use clusters::{CLUSTER_SPAN_WORDS, MAX_CLUSTERS};
@@ -27,7 +26,6 @@ pub(crate) use state::{
 };
 pub use state::{BristleCell, BristleSnapshot, RELIEF_UM_PER_PX};
 pub(crate) use tuning::BristleTuning;
-pub use view::BristleView;
 
 #[cfg(test)]
 mod tests;

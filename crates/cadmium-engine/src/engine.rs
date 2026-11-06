@@ -17,8 +17,7 @@ mod reservoir;
 pub(crate) mod shader;
 
 pub use bristles::{
-    BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, BristleView, RELIEF_UM_PER_PX,
-    bristle_reach_px,
+    BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX, bristle_reach_px,
 };
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
