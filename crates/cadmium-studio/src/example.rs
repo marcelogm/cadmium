@@ -1,4 +1,4 @@
-//! The editor's example strokes (D3): an S-curve above a pressure ramp on one sheet,
+//! The editor's example strokes: an S-curve above a pressure ramp on one sheet,
 //! painted by the real engine with a brush at its suggested size and the painting's paint.
 //!
 //! Every sheet starts on a fresh canvas with a freshly loaded brush and the clock at 0, so
@@ -122,9 +122,7 @@ impl ExampleSheet {
         request: ExampleRequest<'_>,
     ) -> Result<Thumbnail, StudioError> {
         self.begin(gpu, request)?;
-        std::iter::repeat_with(|| self.step(gpu))
-            .find_map(Result::transpose)
-            .expect("a begun sheet ends in a picture")
+        finish(self, gpu)
     }
 
     /// Whether a sheet is under way.
@@ -141,7 +139,8 @@ impl ExampleSheet {
         let reusable = self.built_for.as_ref() == Some(&spec);
         self.built_for = None;
         if reusable && let Some(session) = self.session.as_mut() {
-            replace_canvas(session, gpu, spec.clone())?;
+            // A failed swap may leave the old canvas or a 1×1 one: drop the whole session.
+            replace_canvas(session, gpu, spec.clone()).inspect_err(|_| self.session = None)?;
         } else {
             self.session = None;
             self.session = Some(PaintSession::headless(gpu, spec.clone())?);
@@ -151,6 +150,15 @@ impl ExampleSheet {
             .session
             .as_mut()
             .expect("a session was just made ready"))
+    }
+}
+
+/// Steps the sheet under way until it is presented.
+fn finish(sheet: &mut ExampleSheet, gpu: &GpuContext) -> Result<Thumbnail, StudioError> {
+    loop {
+        if let Some(shown) = sheet.step(gpu)? {
+            return Ok(shown);
+        }
     }
 }
 

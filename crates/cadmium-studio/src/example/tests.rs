@@ -1,4 +1,4 @@
-use cadmium_engine::brush::{BrushSpec, HeadSpec, factory_brushes};
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
 use cadmium_engine::canvas::{Primer, Weave};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::params::SimParams;
@@ -68,9 +68,9 @@ fn band(area: StrokeBox, fit: &ExampleFit) -> Region {
     }
 }
 
-/// The `which`-th third of `region`, left to right.
-fn third(region: &Region, which: u32) -> Region {
-    let step = (region.x[1] - region.x[0]) / 3.0;
+/// The `which`-th quarter of `region`, left to right.
+fn quarter(region: &Region, which: u32) -> Region {
+    let step = (region.x[1] - region.x[0]) / 4.0;
     let left = region.x[0] + step * f64::from(which);
     Region {
         x: [left, left + step],
@@ -152,6 +152,28 @@ fn the_same_draft_paints_the_same_sheet_whatever_came_before() {
 }
 
 #[test]
+fn a_reused_session_paints_the_same_sheet_again() {
+    let gpu = GpuContext::new().unwrap();
+    let mut sheet = ExampleSheet::new();
+    let round = brush_with(HeadSpec::ROUND);
+    assert_ne!(round.hair, HairSpec::SABLE);
+    let sable = BrushSpec {
+        hair: HairSpec::SABLE,
+        ..round.clone()
+    };
+    let first = paint(&gpu, &mut sheet, &round);
+    let built_for = sheet.built_for.clone();
+    let between = paint(&gpu, &mut sheet, &sable);
+    assert_eq!(
+        sheet.built_for, built_for,
+        "the hair alone keeps the canvas spec"
+    );
+    let again = paint(&gpu, &mut sheet, &round);
+    assert_ne!(first, between);
+    assert_eq!(first, again);
+}
+
+#[test]
 fn changing_the_head_changes_the_pixels() {
     let gpu = GpuContext::new().unwrap();
     let mut sheet = ExampleSheet::new();
@@ -177,11 +199,14 @@ fn the_ramp_inks_more_toward_its_heavy_end() {
         let fit = ExampleFit::of(&brush);
         let shown = paint(&gpu, &mut sheet, &brush);
         let ramp = band(fit.ramp_box(), &fit);
-        let light = inked(&shown, &fit, &third(&ramp, 0));
-        let heavy = inked(&shown, &fit, &third(&ramp, 2));
+        let ink: Vec<usize> = (0..4)
+            .map(|which| inked(&shown, &fit, &quarter(&ramp, which)))
+            .collect();
+        let (light, heavy) = (ink[0], ink[3]);
+        assert!(heavy > light + light / 4, "{head:?} {ink:?}");
         assert!(
-            heavy > light + light / 4,
-            "{head:?} light {light} heavy {heavy}"
+            ink[1..].iter().all(|&more| more > light),
+            "{head:?} {ink:?}"
         );
     }
 }
