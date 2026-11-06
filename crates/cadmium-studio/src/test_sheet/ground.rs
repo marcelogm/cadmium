@@ -9,10 +9,10 @@ use cadmium_engine::spectral::BandValues;
 
 /// Fine lines every this many canvas px, coarse ones every `COARSE_STEP_PX`: at the editor's
 /// usual cover scale (≈ 0.81) they fall about 16 and 80 px apart on screen, like its paper.
-const FINE_STEP_PX: u32 = 20;
-const COARSE_STEP_PX: u32 = 5 * FINE_STEP_PX;
+pub const FINE_STEP_PX: u32 = 20;
+pub const COARSE_STEP_PX: u32 = 5 * FINE_STEP_PX;
 /// Two canvas px, so a line shown below 1:1 never falls between two samples and fades.
-const LINE_PX: u32 = 2;
+pub const LINE_PX: u32 = 2;
 /// How much of the paper's reflectance a line keeps: at ≈ 0.81 on screen, about as dark
 /// overall as the paper grid's one-pixel light and darker grey lines.
 const FINE_SHARE: f32 = 0.9;

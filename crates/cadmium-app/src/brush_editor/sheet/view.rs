@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cadmium_engine::gpu::GpuContext;
+use cadmium_engine::present::ViewTransform;
 use cadmium_engine::stroke::StrokeSample;
 use cadmium_studio::TestSheet;
 use gtk::prelude::*;
@@ -105,12 +106,16 @@ impl TestSheetView {
         self.imp().link.get()?.sheet.upgrade()
     }
 
+    /// How the sheet's canvas covers the widget, in device px: as the presenter shows it.
+    fn cover(&self) -> ViewTransform {
+        let size = self.imp().link.get().map_or((1, 1), |link| link.size);
+        cover_view(size, viewport_px(self))
+    }
+
     /// Where a widget point lands on the sheet's canvas: through the cover it is shown with.
     fn canvas_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64) {
-        let size = self.imp().link.get().map_or((1, 1), |link| link.size);
         let scale = device_scale(self);
-        let view = cover_view(size, viewport_px(self));
-        viewport_to_canvas(view, widget_x * scale, widget_y * scale)
+        viewport_to_canvas(self.cover(), widget_x * scale, widget_y * scale)
     }
 
     /// Starts a stroke at `sample`, painted by `device`; the sheet dips the brush afresh first.
