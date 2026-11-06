@@ -164,7 +164,7 @@ fn finish(sheet: &mut ExampleSheet, gpu: &GpuContext) -> Result<Thumbnail, Studi
 
 /// Swaps the session's canvas for a fresh one of `spec`, through a 1×1 one, so two
 /// full-size canvases never coexist.
-fn replace_canvas(
+pub(crate) fn replace_canvas(
     session: &mut PaintSession,
     gpu: &GpuContext,
     spec: CanvasSpec,
