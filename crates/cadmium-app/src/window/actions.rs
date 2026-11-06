@@ -26,6 +26,9 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("save", CadmiumWindow::save),
     ("save-as", CadmiumWindow::save_as),
     ("export", CadmiumWindow::export),
+    ("import-brush", CadmiumWindow::import_brush),
+    ("export-brush", CadmiumWindow::export_brush),
+    ("delete-brush", CadmiumWindow::delete_brush),
 ];
 
 impl CadmiumWindow {

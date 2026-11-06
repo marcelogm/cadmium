@@ -35,7 +35,7 @@ fn with_extension(path: PathBuf, extension: &str) -> PathBuf {
     PathBuf::from(named)
 }
 
-fn file_filter(name: &str, extension: &str, mime_type: &str) -> gtk::FileFilter {
+pub(crate) fn file_filter(name: &str, extension: &str, mime_type: &str) -> gtk::FileFilter {
     let filter = gtk::FileFilter::new();
     filter.set_name(Some(name));
     filter.add_suffix(extension);
@@ -51,7 +51,11 @@ fn image_filter() -> gtk::FileFilter {
     file_filter(IMAGE_FILTER_NAME, IMAGE_EXTENSION, IMAGE_MIME_TYPE)
 }
 
-fn file_dialog(title: &str, filter: &gtk::FileFilter, current: Option<&Path>) -> gtk::FileDialog {
+pub(crate) fn file_dialog(
+    title: &str,
+    filter: &gtk::FileFilter,
+    current: Option<&Path>,
+) -> gtk::FileDialog {
     let filters = gio::ListStore::new::<gtk::FileFilter>();
     filters.append(filter);
     let dialog = gtk::FileDialog::builder()
@@ -103,7 +107,7 @@ impl CadmiumWindow {
         glib::spawn_future_local(export_chosen_image(self.downgrade(), dialog));
     }
 
-    fn chosen_path(&self, chosen: Result<gio::File, glib::Error>) -> Option<PathBuf> {
+    pub(crate) fn chosen_path(&self, chosen: Result<gio::File, glib::Error>) -> Option<PathBuf> {
         match chosen {
             Ok(file) => self.local_path(&file),
             Err(error) if was_dismissed(&error) => None,
@@ -165,7 +169,7 @@ async fn export_chosen_image(window: glib::WeakRef<CadmiumWindow>, dialog: gtk::
     }
 }
 
-async fn chosen_write_target(
+pub(crate) async fn chosen_write_target(
     window: &glib::WeakRef<CadmiumWindow>,
     dialog: gtk::FileDialog,
     extension: &str,

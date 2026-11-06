@@ -162,6 +162,20 @@ pub async fn overwrite_confirmed(parent: &impl IsA<gtk::Widget>, file_name: &str
     alert.choose_future(Some(parent)).await == REPLACE_RESPONSE
 }
 
+const DELETE_RESPONSE: &str = "delete";
+
+pub async fn delete_brush_confirmed(parent: &impl IsA<gtk::Widget>, name: &str) -> bool {
+    let alert = adw::AlertDialog::builder()
+        .heading(format!("Delete {name}?"))
+        .body("The brush file is removed from your brush library. This can't be undone.")
+        .default_response(CANCEL_RESPONSE)
+        .close_response(CANCEL_RESPONSE)
+        .build();
+    alert.add_responses(&[(CANCEL_RESPONSE, "Cancel"), (DELETE_RESPONSE, "Delete")]);
+    alert.set_response_appearance(DELETE_RESPONSE, adw::ResponseAppearance::Destructive);
+    alert.choose_future(Some(parent)).await == DELETE_RESPONSE
+}
+
 const CLOSE_RESPONSE: &str = "close";
 const GPU_LOST_HEADING: &str = "Painting Lost After a GPU Reset";
 

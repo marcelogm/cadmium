@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use cadmium_engine::brush::{BrushSpec, HeadSpec, brush_to_json, factory_brushes};
+use cadmium_engine::brush::{BrushSettings, BrushSpec, HeadSpec, brush_to_json, factory_brushes};
 
-use super::{BrushLibrary, LibraryError, file_name_for};
+use super::{BrushLibrary, LibraryError, export_name, file_name_for};
 
 static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
@@ -146,4 +146,39 @@ fn file_names_are_safe_slugs() {
     );
     assert_eq!(file_name_for("../../etc"), "etc.cadbrush");
     assert_eq!(file_name_for("···"), "brush.cadbrush");
+}
+
+#[test]
+fn the_default_settings_export_under_the_first_factory_name() {
+    let (library, _) = BrushLibrary::load(temp_dir());
+    let settings = BrushSettings::default();
+    assert_eq!(
+        export_name(&library, &settings),
+        ("Round · Synthetic".to_string(), Some(0))
+    );
+}
+
+#[test]
+fn tuned_settings_export_as_a_custom_brush() {
+    let (library, _) = BrushLibrary::load(temp_dir());
+    let mut settings = BrushSettings::default();
+    settings.hair.clumping = 0.123;
+    assert_eq!(
+        export_name(&library, &settings),
+        ("Custom Brush".to_string(), None)
+    );
+}
+
+#[test]
+fn an_imported_brush_exports_under_its_own_name() {
+    let (mut library, _) = BrushLibrary::load(temp_dir());
+    let imported = library
+        .import(&brush_to_json(&custom("Soft Dome")))
+        .unwrap();
+    let mut settings = BrushSettings::default();
+    settings.wear(library.get(imported.index).unwrap());
+    assert_eq!(
+        export_name(&library, &settings),
+        ("Soft Dome".to_string(), Some(imported.index))
+    );
 }
