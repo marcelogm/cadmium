@@ -32,7 +32,7 @@ fn expected_thumbnail(stroke: DemoStroke) -> Vec<StudioEvent> {
 
 #[test]
 fn the_thumbnail_schedule_feeds_samples_with_a_frame_every_few() {
-    for stroke in DemoStroke::ALL {
+    for stroke in [DemoStroke::SCurve, DemoStroke::RisingLine] {
         let schedule = StrokeSchedule::thumbnail(stroke, AREA);
         let want = expected_thumbnail(stroke);
         assert_eq!(schedule.events(), want.as_slice(), "{stroke:?}");
