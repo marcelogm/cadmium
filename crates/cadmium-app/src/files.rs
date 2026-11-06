@@ -5,6 +5,7 @@ use gtk::glib;
 
 use crate::LOG_DOMAIN;
 use crate::window::CadmiumWindow;
+use crate::writes::WriteKind;
 
 pub const PAINTING_EXTENSION: &str = "cadmium";
 pub const IMAGE_EXTENSION: &str = "png";
@@ -25,6 +26,30 @@ pub(crate) mod dialogs;
 mod read;
 mod title;
 mod write;
+
+struct WriteWording {
+    busy: &'static str,
+    done: &'static str,
+    action: &'static str,
+    failed: &'static str,
+}
+
+fn write_wording(kind: WriteKind) -> WriteWording {
+    match kind {
+        WriteKind::Painting => WriteWording {
+            busy: "Saving…",
+            done: "Saved",
+            action: "saving",
+            failed: "Could not save",
+        },
+        WriteKind::Image => WriteWording {
+            busy: "Exporting…",
+            done: "Exported",
+            action: "exporting",
+            failed: "Could not export",
+        },
+    }
+}
 
 struct Failure {
     shown: String,
@@ -69,7 +94,7 @@ fn finished<T>(outcome: std::thread::Result<Result<T, DocumentError>>) -> Result
 }
 
 impl CadmiumWindow {
-    fn report_failure(&self, action: &str, path: &Path, cannot: &str, failure: &Failure) {
+    fn report_failure(&self, action: &str, path: &Path, failed: &str, failure: &Failure) {
         glib::g_warning!(
             LOG_DOMAIN,
             "{} {} failed: {}",
@@ -77,7 +102,7 @@ impl CadmiumWindow {
             path.display(),
             failure.detail
         );
-        self.show_toast(&format!("{cannot}: {}", failure.shown));
+        self.show_toast(&format!("{failed}: {}", failure.shown));
     }
 }
 

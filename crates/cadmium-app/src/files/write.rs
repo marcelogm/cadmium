@@ -6,17 +6,10 @@ use cadmium_engine::document::{DocumentError, DocumentSnapshot, ExportedImage};
 use cadmium_engine::gpu::GpuLost;
 use gtk::{gio, glib};
 
-use super::finished;
+use super::{finished, write_wording};
 use crate::LOG_DOMAIN;
 use crate::window::CadmiumWindow;
 use crate::writes::{AfterWrite, EditMark, WriteKind};
-
-const SAVED_TOAST: &str = "Saved";
-const SAVING_TOAST: &str = "Saving…";
-const EXPORTING_TOAST: &str = "Exporting…";
-const EXPORTED_TOAST: &str = "Exported";
-const CANNOT_SAVE: &str = "Could not save";
-const CANNOT_EXPORT: &str = "Could not export";
 
 impl CadmiumWindow {
     pub fn save_to(&self, path: PathBuf) -> impl Future<Output = bool> + use<> {
@@ -48,7 +41,7 @@ impl CadmiumWindow {
             self.state().borrow_mut().saved_to(path.to_path_buf(), mark);
             self.show_document_title();
         }
-        self.show_toast(SAVED_TOAST);
+        self.show_toast(write_wording(WriteKind::Painting).done);
     }
 
     fn begin_write(&self, path: &Path, kind: WriteKind) -> bool {
@@ -56,10 +49,7 @@ impl CadmiumWindow {
             return true;
         }
         glib::g_debug!(LOG_DOMAIN, "already writing {}", path.display());
-        self.show_toast(match kind {
-            WriteKind::Painting => SAVING_TOAST,
-            WriteKind::Image => EXPORTING_TOAST,
-        });
+        self.show_toast(write_wording(kind).busy);
         false
     }
 
@@ -119,7 +109,8 @@ async fn write_image(
         return false;
     };
     let write = move |target: &Path| image.write_png(target);
-    let exported = |window: &CadmiumWindow, _: &Path| window.show_toast(EXPORTED_TOAST);
+    let exported =
+        |window: &CadmiumWindow, _: &Path| window.show_toast(write_wording(WriteKind::Image).done);
     write_in_background(window, path, WriteKind::Image, write, exported).await
 }
 
@@ -141,18 +132,11 @@ async fn write_in_background(
             true
         }
         Err(failure) => {
-            let (action, cannot) = failure_wording(kind);
-            window.report_failure(action, &path, cannot, &failure);
+            let wording = write_wording(kind);
+            window.report_failure(wording.action, &path, wording.failed, &failure);
             false
         }
     };
     window.finish_write(&path);
     succeeded
-}
-
-fn failure_wording(kind: WriteKind) -> (&'static str, &'static str) {
-    match kind {
-        WriteKind::Painting => ("saving", CANNOT_SAVE),
-        WriteKind::Image => ("exporting", CANNOT_EXPORT),
-    }
 }
