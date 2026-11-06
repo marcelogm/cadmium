@@ -45,10 +45,10 @@ fn stroke_loaded(gpu: &GpuContext, s: &mut PaintSession, load: f32, y: f64, pres
 /// Paints `first` on one canvas, swaps in a blank canvas and paints `second`:
 /// the result must match a fresh session that only ever painted `second`, so
 /// nothing a stroke leaves in the engine (contact height, blade rest, bristle
-/// or load state) leaks into the next one, not even in rounding. The rounding
-/// leak of a rest height only shows on drivers that lower `mix` as
-/// `a + t * (b - a)`, such as radv; CI's lavapipe gives `mix(a, b, 1.0) == b`
-/// exactly, so there these pass with or without the first-rest replace.
+/// or load state) leaks into the next one, not even in rounding. A missing or
+/// ignored first-rest flag fails on every driver; the subtler regression,
+/// `mix(previous, found, 1.0)` in place of an outright replace, only fails on
+/// drivers that lower `mix` as `a + t * (b - a)`, such as radv.
 fn assert_second_stroke_matches_a_fresh_session(
     first: impl Fn(&GpuContext, &mut PaintSession),
     second: impl Fn(&GpuContext, &mut PaintSession),
@@ -81,11 +81,10 @@ fn knife_stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, pressure: f32) {
     without_wgpu_errors(gpu, || drag(gpu, s, &line(y, 40.0, 300.0, pressure, 60.0)));
 }
 
-/// The blade rest takes the same first-rest replace as the brush's contact
-/// height. Without it radv does leak a rounding of the last stroke's rest into
-/// the blade, but the knife's quantized transfers absorb it, so this catches
-/// only a first rest that follows the last stroke's rest outright; the
-/// placement unit tests pin the first-rest flag itself.
+/// Catches a blade's first rest that is not replaced: it fails on every driver
+/// if the flag is ignored. The 1-ulp radv leak of `mix(previous, found, 1.0)`
+/// itself is absorbed by the knife's quantized transfers; the placement unit
+/// tests pin the first-rest flag.
 #[test]
 fn a_knife_stroke_remembers_nothing_of_the_strokes_before_it() {
     assert_second_stroke_matches_a_fresh_session(

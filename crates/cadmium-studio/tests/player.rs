@@ -270,9 +270,10 @@ fn linen(load: f32) -> StudioPaint {
 }
 
 /// Plays `from` for `frames` 50 ms frames, restarts on the same canvas with `to`,
-/// and checks every later frame against a fresh player shown `to`. A leak of
-/// the last stroke's contact height only shows on drivers that lower `mix` as
-/// `a + t * (b - a)`, such as radv; on CI's lavapipe these pass regardless.
+/// and checks every later frame against a fresh player shown `to`. A missing
+/// or ignored first-rest flag fails on every driver; `mix(previous, found, 1.0)`
+/// in place of an outright replace only on drivers that lower `mix` as
+/// `a + t * (b - a)`, such as radv.
 fn assert_restart_mid_stroke_matches(frames: usize, from: &StudioPaint, to: &StudioPaint) {
     let gpu = GpuContext::new().unwrap();
     let brush = BrushSpec {
