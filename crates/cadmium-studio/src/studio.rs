@@ -9,6 +9,7 @@ use cadmium_engine::present::{PresentRequest, ViewTransform, readback_rgba8};
 use cadmium_engine::session::PaintSession;
 
 use crate::demo::{DemoStroke, StrokeBox};
+use crate::loading::{Loading, wear};
 use crate::schedule::{StrokeSchedule, replay};
 
 pub const THUMBNAIL_SIZE: (u32, u32) = (192, 64);
@@ -58,28 +59,6 @@ impl fmt::Display for StudioError {
 }
 
 impl std::error::Error for StudioError {}
-
-/// The paint a studio brush is loaded with.
-pub(crate) struct Loading<'a> {
-    pub recipe: &'a [(usize, f32)],
-    pub load: f32,
-    pub medium: f32,
-}
-
-/// Holds `brush` as it is, freshly loaded with `loading`.
-pub(crate) fn wear(
-    session: &mut PaintSession,
-    gpu: &GpuContext,
-    brush: &BrushSpec,
-    loading: Loading<'_>,
-) {
-    let settings = &mut session.brush;
-    settings.wear(brush);
-    settings.recipe = loading.recipe.to_vec();
-    settings.load = loading.load;
-    settings.medium = loading.medium;
-    session.reload_brush(gpu);
-}
 
 /// A private paint session that shows what a brush does.
 ///

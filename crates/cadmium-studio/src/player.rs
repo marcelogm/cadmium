@@ -8,17 +8,19 @@ use cadmium_engine::params::SimParams;
 use cadmium_engine::present::{PresentRequest, ViewTransform, readback_rgba8};
 use cadmium_engine::session::PaintSession;
 
+use crate::clock::{Phase, quanta_due};
 use crate::demo::{DemoStroke, StrokeBox};
 use crate::fit::StudioFit;
+use crate::loading::{Loading, wear};
 use crate::schedule::{QUANTUM_MS, StrokeSchedule, StudioEvent, replay};
-use crate::studio::{Loading, StudioError, wear};
+use crate::studio::StudioError;
 
 /// How long the finished stroke stays on show before the next loop.
 pub const LOOP_PAUSE_MS: f64 = 700.0;
 /// The slow-motion replay speed.
 pub const SLOW_MOTION: f64 = 0.25;
 /// The most quanta one `advance` replays; a longer stall drops the rest.
-const MAX_QUANTA_PER_ADVANCE: u32 = 32;
+pub(crate) const MAX_QUANTA_PER_ADVANCE: u32 = 32;
 
 /// What the studio canvas is made of and what the brush is loaded with.
 #[derive(Clone, Debug, PartialEq)]
@@ -32,40 +34,12 @@ pub struct StudioPaint {
     pub params: SimParams,
 }
 
-/// Where a loop is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Phase {
-    /// The pen is down, or about to be.
-    Stroke,
-    /// The pen is up and the bristles are settling.
-    Settle,
-    /// The finished stroke is on show; nothing is simulated.
-    Pause,
-}
-
 /// What a player shows.
 #[derive(Clone, Copy, Debug)]
 pub struct PlayerRequest<'a> {
     pub brush: &'a BrushSpec,
     pub paint: &'a StudioPaint,
     pub stroke: DemoStroke,
-}
-
-/// How many quanta are due after `real_dt_ms` more at `speed`, and the time left
-/// over. Past `cap` quanta the excess is dropped, keeping less than a quantum.
-pub(crate) fn quanta_due(
-    accumulated_ms: f64,
-    real_dt_ms: f64,
-    speed: f64,
-    quantum_ms: f64,
-    cap: u32,
-) -> (u32, f64) {
-    let total_ms = accumulated_ms + real_dt_ms.max(0.0) * speed;
-    let due = (total_ms / quantum_ms).floor();
-    if due > f64::from(cap) {
-        return (cap, total_ms.rem_euclid(quantum_ms));
-    }
-    (due as u32, total_ms - due * quantum_ms)
 }
 
 /// Everything a request decides.
@@ -326,6 +300,3 @@ impl StudioPlayer {
         self.quanta = (self.loop_ms() / QUANTUM_MS).ceil() as u32;
     }
 }
-
-#[cfg(test)]
-mod tests;

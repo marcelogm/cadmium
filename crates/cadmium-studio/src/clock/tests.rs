@@ -1,4 +1,5 @@
-use super::{MAX_QUANTA_PER_ADVANCE, quanta_due};
+use super::quanta_due;
+use crate::player::MAX_QUANTA_PER_ADVANCE;
 
 const QUANTUM: f64 = 6.0;
 const CAP: u32 = MAX_QUANTA_PER_ADVANCE;
