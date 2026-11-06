@@ -5,9 +5,17 @@ use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
 
-use super::draft::Closing;
 use super::{Editor, with_editor};
 use crate::dialogs::confirm_discard_brush_changes;
+
+/// How the editor ends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Closing {
+    /// Cancel or Esc: asks before dropping changes.
+    Cancel,
+    /// Saved, saved as a copy, deleted, or given up after an error: never asks.
+    Done,
+}
 
 impl Editor {
     pub(super) fn connect_closing(self: &Rc<Self>, cancel: &gtk::Button) {
@@ -24,12 +32,18 @@ impl Editor {
     /// Closes the dialog; a cancel with changes asks "Discard Changes?" first.
     pub(super) fn finish(self: &Rc<Self>, closing: Closing) {
         if !self.draft.borrow().asks_before(closing) {
-            self.dialog.force_close();
+            self.close_now();
             return;
         }
-        let dialog = self.dialog.clone();
-        let alert = confirm_discard_brush_changes(&self.dialog, move || dialog.force_close());
+        let editor = Rc::downgrade(self);
+        let alert = confirm_discard_brush_changes(&self.dialog, move || close(&editor));
         self.keep_alert(&alert);
+    }
+
+    /// Closes the dialog without asking; from here on its widgets no longer reach the editor.
+    fn close_now(&self) {
+        self.listening.stop();
+        self.dialog.force_close();
     }
 
     /// Remembers the alert asking about this editor until it closes, so that closing the
@@ -37,7 +51,7 @@ impl Editor {
     pub(super) fn keep_alert(self: &Rc<Self>, alert: &adw::AlertDialog) {
         self.alert.replace(Some(alert.clone()));
         let editor = Rc::downgrade(self);
-        alert.connect_closed(move |_| forget_alert(&editor));
+        alert.connect_closed(move |closed| forget_alert(&editor, closed));
     }
 
     /// Closes the alert still asking about this editor, if any.
@@ -49,9 +63,20 @@ impl Editor {
     }
 }
 
-/// The alert closed: the editor, if still open, no longer has one asking about it.
-fn forget_alert(editor: &Weak<Editor>) {
+/// The changes were discarded: the editor, if still open, closes.
+fn close(editor: &Weak<Editor>) {
     if let Some(editor) = editor.upgrade() {
+        editor.close_now();
+    }
+}
+
+/// `closed` closed: the editor, if still open and still keeping that very alert, forgets it.
+fn forget_alert(editor: &Weak<Editor>, closed: &adw::AlertDialog) {
+    let Some(editor) = editor.upgrade() else {
+        return;
+    };
+    let kept = editor.alert.borrow().as_ref() == Some(closed);
+    if kept {
         editor.alert.take();
     }
 }

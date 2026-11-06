@@ -4,6 +4,9 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 use cadmium_engine::brush::{BRUSH_EXTENSION, BrushSpec, brush_to_json};
+use gtk::glib;
+
+use crate::LOG_DOMAIN;
 
 const FALLBACK_SLUG: &str = "brush";
 pub(crate) const MAX_SLUG_CHARS: usize = 64;
@@ -27,14 +30,46 @@ pub(super) fn write(dir: Option<&Path>, brush: &BrushSpec) -> std::io::Result<Pa
 
 /// Rewrites the brush file at `path` with `brush`, never leaving it half-written: the text goes
 /// to a hidden file beside it (`.<file name>.tmp`, which the library never reads), is synced,
-/// then renamed over the file. A temporary file left by a crash is replaced.
+/// takes the file's permissions, then is renamed over the file, and the folder is synced so the
+/// rename lasts (a failed folder sync is only logged: the file is already replaced). A temporary
+/// file left by a crash is replaced; nothing else can be writing it, since Cadmium runs as a
+/// single instance.
 pub(super) fn replace(path: &Path, brush: &BrushSpec) -> std::io::Result<()> {
     let temp = temp_path(path);
     let _ = std::fs::remove_file(&temp);
     write_new(&temp, &brush_to_json(brush))?;
-    std::fs::rename(&temp, path).inspect_err(|_| {
-        let _ = std::fs::remove_file(&temp);
-    })
+    keep_permissions(path, &temp)
+        .and_then(|()| std::fs::rename(&temp, path))
+        .inspect_err(|_| {
+            let _ = std::fs::remove_file(&temp);
+        })?;
+    if let Err(error) = sync_folder(path) {
+        glib::g_warning!(LOG_DOMAIN, "couldn't sync the brush folder: {error}");
+    }
+    Ok(())
+}
+
+/// Gives `temp` the permissions of the file at `path`, if there is one.
+fn keep_permissions(path: &Path, temp: &Path) -> std::io::Result<()> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => std::fs::set_permissions(temp, metadata.permissions()),
+        Err(_) => Ok(()),
+    }
+}
+
+/// Syncs the folder holding `path`, so a rename into it survives a crash.
+#[cfg(unix)]
+fn sync_folder(path: &Path) -> std::io::Result<()> {
+    match path.parent() {
+        Some(dir) => std::fs::File::open(dir)?.sync_all(),
+        None => Ok(()),
+    }
+}
+
+/// Elsewhere a folder can't be opened for syncing; the rename stands as it is.
+#[cfg(not(unix))]
+fn sync_folder(_path: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// `.<file name>.tmp` beside `path`: hidden, and never ending in `.cadbrush`.

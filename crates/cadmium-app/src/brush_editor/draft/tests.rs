@@ -1,6 +1,7 @@
 use cadmium_engine::brush::{BrushSpec, factory_brushes};
 
-use super::{Closing, Draft, Origin, SavePlan};
+use super::{Draft, Origin, SavePlan};
+use crate::brush_editor::closing::Closing;
 
 fn factory() -> Draft {
     Draft::open(factory_brushes().swap_remove(0), Origin::Factory)
@@ -126,4 +127,17 @@ fn a_copy_of_a_copy_is_not_called_copy_twice() {
         Origin::User(17),
     );
     assert_eq!(draft.copy().name, "Mine (copy)");
+}
+
+#[test]
+fn a_brush_out_of_range_opens_in_range_and_unchanged() {
+    let draft = Draft::open(
+        BrushSpec {
+            size_px: 1.0,
+            ..mine()
+        },
+        Origin::Factory,
+    );
+    assert_eq!(draft.original().size_px, BrushSpec::SIZE_RANGE_PX[0]);
+    assert!(!draft.is_dirty());
 }

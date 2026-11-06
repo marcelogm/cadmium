@@ -3,7 +3,7 @@
 //! Three columns (D2): the tip's drawing with the example strokes under it, the test sheet,
 //! and the controls. Until stages 7b and 7c, the examples and the test sheet are blank paper.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
@@ -17,12 +17,14 @@ mod closing;
 mod draft;
 mod header;
 mod layout;
+mod listening;
 mod paper;
 mod saving;
 mod wiring;
 
 use brush_group::BrushGroup;
 use draft::{Draft, Origin};
+use listening::Listening;
 
 /// The open editor. Signal handlers hold it weakly; the dialog's `closed` handler holds the
 /// one strong reference, and lets go of it there.
@@ -30,8 +32,8 @@ struct Editor {
     window: glib::WeakRef<CadmiumWindow>,
     dialog: adw::Dialog,
     draft: RefCell<Draft>,
-    /// Set while the widgets are filled from the draft, so their signals don't feed back.
-    syncing: Cell<bool>,
+    /// Whether the widgets' signals reach the editor: not while it fills them, nor once closing.
+    listening: Listening,
     /// The alert asking about the editor ("Discard Changes?", "Delete …?"), while it is open.
     alert: RefCell<Option<adw::AlertDialog>>,
     brush: BrushGroup,
@@ -73,7 +75,7 @@ impl Editor {
             window: window.downgrade(),
             dialog,
             draft: RefCell::new(draft),
-            syncing: Cell::new(false),
+            listening: Listening::default(),
             alert: RefCell::new(None),
             brush,
         });
@@ -85,9 +87,9 @@ impl Editor {
 
     /// Fills every widget from the draft.
     fn sync(&self) {
-        self.syncing.set(true);
+        self.listening.set_syncing(true);
         self.brush.show(self.draft.borrow().current());
-        self.syncing.set(false);
+        self.listening.set_syncing(false);
     }
 
     /// Keeps the editor alive while its dialog is open; once closed, closes an alert still
@@ -111,10 +113,10 @@ fn after_closed(keeper: &RefCell<Option<Rc<Editor>>>, window: &glib::WeakRef<Cad
     }
 }
 
-/// Runs `action` on the editor while it is open and not filling its widgets.
+/// Runs `action` on the editor while it is open, not closing and not filling its widgets.
 fn with_editor(editor: &Weak<Editor>, action: impl FnOnce(&Rc<Editor>)) {
     if let Some(editor) = editor.upgrade()
-        && !editor.syncing.get()
+        && editor.listening.heeds()
     {
         action(&editor);
     }

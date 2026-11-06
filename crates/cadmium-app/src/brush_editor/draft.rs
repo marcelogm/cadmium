@@ -2,6 +2,8 @@
 
 use cadmium_engine::brush::BrushSpec;
 
+use super::closing::Closing;
+
 const COPY_SUFFIX: &str = " (copy)";
 
 /// Where the edited brush came from: it decides how Save stores it and whether it can be deleted.
@@ -12,15 +14,6 @@ pub(super) enum Origin {
     /// A factory brush, or a worn brush in no library ("Current Brush", C3): saving makes a new
     /// user brush.
     Factory,
-}
-
-/// How the editor ends.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Closing {
-    /// Cancel or Esc: asks before dropping changes.
-    Cancel,
-    /// Saved, saved as a copy, deleted, or given up after an error: never asks.
-    Done,
 }
 
 /// What Save does with the draft.
@@ -40,7 +33,11 @@ pub(super) struct Draft {
 }
 
 impl Draft {
+    /// A draft of `original` with every value in range. Library brushes already are (files and
+    /// imports are clamped as they are read); a worn brush in no library may be at a size the
+    /// size row can't show, and would otherwise turn dirty when the row snaps it into range.
     pub(super) fn open(original: BrushSpec, origin: Origin) -> Draft {
+        let original = original.clamped();
         Draft {
             current: original.clone(),
             original,

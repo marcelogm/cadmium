@@ -38,7 +38,8 @@ impl BrushGroup {
 
 /// Whether the size row showing `shown` asks for a size other than `size_px`. The row shows
 /// `size_px` rounded to its digits, and re-reads that rounded text when it is activated or
-/// loses focus: that echo is no change, or a fractional size would turn the draft dirty.
+/// loses focus: that echo is no change, or a fractional size would turn the draft dirty. By
+/// design, typing the very value the row already shows is no change either.
 pub(super) fn changes_size(shown: f64, size_px: f32) -> bool {
     let scale = 10_f64.powi(SIZE_DIGITS as i32);
     let rounded = (f64::from(size_px) * scale).round() / scale;

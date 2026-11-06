@@ -12,3 +12,9 @@ fn another_whole_size_is_a_change() {
     assert!(changes_size(41.0, 40.4));
     assert!(changes_size(39.0, 40.0));
 }
+
+#[test]
+fn typing_the_value_already_shown_is_no_change_by_design() {
+    let shown = 40.0;
+    assert!(!changes_size(shown, 40.3));
+}

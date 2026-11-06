@@ -155,3 +155,36 @@ fn a_new_brush_gets_its_own_file_and_a_free_name() {
     assert!(library.is_user(saved.index));
     assert_eq!(dir.files().len(), 1);
 }
+
+#[test]
+fn a_rename_that_clashes_keeps_the_brushs_own_file() {
+    let dir = TempDir::new();
+    let (mut library, index) = holding(&dir, "Soft Flat");
+    library
+        .import(&brush_to_json(&custom("Wide Flat")))
+        .unwrap();
+    library
+        .save(index, &custom("Soft Flat"), &custom("Wide Flat"))
+        .unwrap();
+    assert_eq!(dir.files(), ["soft-flat.cadbrush", "wide-flat.cadbrush"]);
+    let (reloaded, _) = BrushLibrary::load(dir.path());
+    let names: Vec<&str> = reloaded.all().map(|brush| brush.name.as_str()).collect();
+    assert!(
+        names.ends_with(&["Wide Flat (2)", "Wide Flat"]),
+        "{names:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rewritten_file_keeps_its_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TempDir::new();
+    let (mut library, index) = holding(&dir, "Soft Flat");
+    let file = dir.0.join("soft-flat.cadbrush");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o640)).unwrap();
+    let edited = resized(custom("Soft Flat"), 72.0);
+    library.save(index, &custom("Soft Flat"), &edited).unwrap();
+    let mode = std::fs::metadata(&file).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o640);
+}

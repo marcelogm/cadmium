@@ -5,7 +5,8 @@ use std::rc::{Rc, Weak};
 use gtk::glib;
 
 use super::Editor;
-use super::draft::{Closing, Draft, SavePlan};
+use super::closing::Closing;
+use super::draft::{Draft, SavePlan};
 use crate::LOG_DOMAIN;
 use crate::brush_library::{LibraryError, Saved};
 use crate::dialogs::{delete_brush_alert, deletion_confirmed};
