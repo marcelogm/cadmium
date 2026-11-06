@@ -22,8 +22,9 @@ mod thumbnail_job;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
-    PanelTool, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text, size_to_slider,
-    slider_needs_sync, tool_group_description, tool_hint, tool_wording, visible_controls,
+    PanelTool, RackEntry, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text,
+    size_to_slider, slider_needs_sync, tool_group_description, tool_hint, tool_wording,
+    visible_controls,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -46,8 +47,8 @@ pub struct BrushPanel {
     thumbnail_job: Cell<ThumbnailJob>,
 }
 
-/// The names and thumbnail keys the rack shows, in rack order.
-type ShownBrushes = (Vec<String>, Vec<ThumbnailKey>);
+/// The entries and thumbnail keys the rack shows, in rack order.
+type ShownBrushes = (Vec<RackEntry>, Vec<ThumbnailKey>);
 
 impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
@@ -171,16 +172,16 @@ impl BrushPanel {
             .shown_brushes
             .borrow()
             .as_ref()
-            .is_some_and(|(names, keys)| {
-                *names == snapshot.brush_names && *keys == snapshot.brush_keys
+            .is_some_and(|(entries, keys)| {
+                *entries == snapshot.brush_entries && *keys == snapshot.brush_keys
             });
         if !unchanged {
             let thumbnails = self.cached_thumbnails(&snapshot.brush_keys);
-            rack::fill(&self.rack.flow, &snapshot.brush_names, &thumbnails);
-            let shown = (snapshot.brush_names.clone(), snapshot.brush_keys.clone());
+            self.rack.fill(&snapshot.brush_entries, &thumbnails);
+            let shown = (snapshot.brush_entries.clone(), snapshot.brush_keys.clone());
             self.shown_brushes.replace(Some(shown));
         }
-        rack::select(&self.rack.flow, snapshot.brush_index);
+        self.rack.select(snapshot.brush_index);
         if let Some(window) = self.window.upgrade() {
             window.set_brush_deletable(snapshot.brush_is_user);
         }

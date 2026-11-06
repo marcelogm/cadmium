@@ -1,5 +1,7 @@
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
 use cadmium_engine::stroke::Tool;
+use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
 use crate::sliders::format_param;
@@ -16,6 +18,8 @@ pub(super) const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_UNIT: &str = "µm";
 pub(super) const EYEDROPPER_HINT: &str = "Click the canvas to pick up the paint on it. \
 The right mouse button and the lower pen button pick a colour with any tool.";
+/// What a rack row calls a head or hair that matches no factory one.
+const CUSTOM_PART: &str = "Custom";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PanelTool {
@@ -146,6 +150,37 @@ pub(super) fn slider_to_size(value: f64) -> f32 {
 
 pub(super) fn percent_text(value: f64) -> String {
     format!("{:.0}%", value * PERCENT)
+}
+
+/// What a rack row says about its brush.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct RackEntry {
+    pub(super) title: String,
+    pub(super) subtitle: String,
+    /// The brush's full name, for the row's tooltip.
+    pub(super) name: String,
+    /// What the row's tip icon draws.
+    pub(super) head: HeadSpec,
+    pub(super) hair: HairSpec,
+}
+
+/// A factory brush reads as its head, then its hair; a user brush as its name, then
+/// "head · hair", where a head or hair that is no factory one reads "Custom".
+pub(super) fn rack_entry(brush: &BrushSpec, is_user: bool) -> RackEntry {
+    let head = head_name(&brush.head).unwrap_or(CUSTOM_PART);
+    let hair = hair_name(&brush.hair).unwrap_or(CUSTOM_PART);
+    let (title, subtitle) = if is_user {
+        (brush.name.clone(), format!("{head} · {hair}"))
+    } else {
+        (head.to_string(), hair.to_string())
+    };
+    RackEntry {
+        title,
+        subtitle,
+        name: brush.name.clone(),
+        head: brush.head,
+        hair: brush.hair,
+    }
 }
 
 #[cfg(test)]

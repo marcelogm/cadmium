@@ -4,6 +4,7 @@ use std::rc::Rc;
 use cadmium_engine::brush::factory_brushes;
 use cadmium_engine::canvas::StateTexture;
 use cadmium_engine::stroke::Tool;
+use cadmium_studio::THUMBNAIL_SIZE;
 
 use super::{ThumbnailCache, ThumbnailKey, next_missing, open_studio, rack_indices, render};
 use crate::state::test_support::{
@@ -99,4 +100,15 @@ fn painting_thumbnails_leaves_the_painting_and_the_worn_brush_alone() {
         .read_bytes(&state.gpu, StateTexture::WetVol)
         .unwrap();
     assert_eq!(wet_after, wet_before);
+}
+
+#[test]
+fn the_rack_gets_thumbnails_at_twice_the_thumbnail_size_for_hidpi_screens() {
+    let state = Rc::new(RefCell::new(painting_state()));
+    let mut studio = open_studio(&state).unwrap();
+    let brush = factory_brushes()[0].clone();
+    let (_, thumbnail) = render(&state, &mut studio, &brush).unwrap();
+    let size = (thumbnail.width, thumbnail.height);
+    assert_eq!(size, (THUMBNAIL_SIZE.0 * 2, THUMBNAIL_SIZE.1 * 2));
+    assert_eq!(thumbnail.rgba.len(), (size.0 * size.1 * 4) as usize);
 }

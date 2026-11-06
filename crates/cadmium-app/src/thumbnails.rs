@@ -135,14 +135,15 @@ pub fn next_missing<T>(state: &SharedState, cache: &ThumbnailCache<T>) -> Option
     state.brushes.get(index).cloned()
 }
 
-/// Paints `brush`'s thumbnail; the state is borrowed only to reach the GPU, not while painting.
+/// Paints `brush`'s thumbnail at the studio's full resolution, so a HiDPI rack row stays
+/// sharp; the state is borrowed only to reach the GPU, not while painting.
 pub fn render(
     state: &SharedState,
     studio: &mut BrushStudio,
     brush: &BrushSpec,
 ) -> Result<(ThumbnailKey, Thumbnail), StudioError> {
     let gpu = state.borrow().gpu.clone();
-    let thumbnail = studio.thumbnail(&gpu, brush)?;
+    let thumbnail = studio.thumbnail_full(&gpu, brush)?;
     Ok((ThumbnailKey::of(brush), thumbnail))
 }
 

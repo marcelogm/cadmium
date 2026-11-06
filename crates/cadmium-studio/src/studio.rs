@@ -12,16 +12,19 @@ use crate::demo::{DemoStroke, StrokeBox};
 use crate::loading::{Loading, wear};
 use crate::schedule::{StrokeSchedule, replay};
 
-pub const THUMBNAIL_SIZE: (u32, u32) = (192, 64);
+/// A rack row's stroke (10:3), shown 153x46 px. The rack takes `thumbnail_full`, at
+/// `STUDIO_SCALE` times this, so a row stays sharp at a screen scale of 2.
+pub const THUMBNAIL_SIZE: (u32, u32) = (240, 72);
 const STUDIO_SCALE: u32 = 2;
 /// Small enough that a fan's splayed hairs stay inside the thumbnail.
 const STUDIO_MAX_SIZE_PX: f32 = 44.0;
-const STUDIO_PIGMENT: &str = "burnt_umber";
+const STUDIO_PIGMENT: &str = "ultramarine_blue";
 const STUDIO_MEDIUM: f32 = 0.1;
 const STUDIO_LOAD: f32 = 1.0;
-const MARGIN_X_SHARE: f64 = 0.18;
+/// 15% of the canvas width (72 px at 480): room for a fan's splay at the 44 px cap.
+const MARGIN_X_SHARE: f64 = 0.15;
 /// Wider than the side margin: the stroke's width spreads up and down.
-const MARGIN_Y_SHARE: f64 = 0.33;
+const MARGIN_Y_SHARE: f64 = 0.30;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Thumbnail {
@@ -106,30 +109,48 @@ impl BrushStudio {
         brush: &BrushSpec,
     ) -> Result<Thumbnail, StudioError> {
         self.run(gpu, brush, DemoStroke::SCurve)?;
-        let rgba = self.rgba(gpu)?;
-        Ok(Thumbnail {
-            width: THUMBNAIL_SIZE.0,
-            height: THUMBNAIL_SIZE.1,
-            rgba,
-        })
+        Ok(self.capture(gpu, 1)?)
+    }
+
+    /// The brush's S-curve at the studio canvas's own resolution, twice `THUMBNAIL_SIZE`:
+    /// sharp where a thumbnail pixel spans more than one screen pixel.
+    pub fn thumbnail_full(
+        &mut self,
+        gpu: &GpuContext,
+        brush: &BrushSpec,
+    ) -> Result<Thumbnail, StudioError> {
+        self.run(gpu, brush, DemoStroke::SCurve)?;
+        Ok(self.capture(gpu, STUDIO_SCALE)?)
     }
 
     /// The canvas as shown, at thumbnail size, as straight sRGB RGBA8.
     pub fn rgba(&self, gpu: &GpuContext) -> Result<Vec<u8>, GpuLost> {
+        Ok(self.capture(gpu, 1)?.rgba)
+    }
+
+    /// The canvas as shown at `scale` times `THUMBNAIL_SIZE`, `scale` at most `STUDIO_SCALE`.
+    fn capture(&self, gpu: &GpuContext, scale: u32) -> Result<Thumbnail, GpuLost> {
+        debug_assert!((1..=STUDIO_SCALE).contains(&scale));
+        let (width, height) = (THUMBNAIL_SIZE.0 * scale, THUMBNAIL_SIZE.1 * scale);
         let presenter = &self.session.presenter;
-        let target = presenter.create_target(gpu, THUMBNAIL_SIZE.0, THUMBNAIL_SIZE.1);
+        let target = presenter.create_target(gpu, width, height);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         let request = PresentRequest::of_canvas(
             &self.session.canvas,
             ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
-                zoom: 1.0 / STUDIO_SCALE as f32,
+                zoom: scale as f32 / STUDIO_SCALE as f32,
             },
         );
         presenter.encode_present(gpu, request, &target, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        readback_rgba8(gpu, &target)
+        let rgba = readback_rgba8(gpu, &target)?;
+        Ok(Thumbnail {
+            width,
+            height,
+            rgba,
+        })
     }
 
     /// Holds `brush` at a size that fits, freshly loaded with the studio paint.

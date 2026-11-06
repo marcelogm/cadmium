@@ -1,5 +1,6 @@
 use super::*;
 use crate::tools::knife::KNIFE_HANDLING;
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
 
 #[test]
 fn recipe_description_names_a_single_pigment() {
@@ -167,4 +168,53 @@ fn size_slider_is_logarithmic_and_clamped() {
 fn plate_gap_control_drives_the_knife_gap_parameter() {
     assert_eq!(plate_gap_spec().key, PLATE_GAP_KEY);
     assert_eq!(plate_gap_text(80.0), "80 µm");
+}
+
+fn user_brush(head: HeadSpec, hair: HairSpec) -> BrushSpec {
+    BrushSpec {
+        name: "My Brush".to_string(),
+        size_px: 40.0,
+        head,
+        hair,
+    }
+}
+
+#[test]
+fn a_factory_row_shows_its_head_then_its_hair() {
+    let brush = &factory_brushes()[1];
+    let entry = rack_entry(brush, false);
+    assert_eq!(entry.title, "Round");
+    assert_eq!(entry.subtitle, "Kolinsky Sable");
+    assert_eq!(entry.name, "Round · Kolinsky Sable");
+}
+
+#[test]
+fn a_user_row_shows_its_name_then_head_and_hair() {
+    let entry = rack_entry(&user_brush(HeadSpec::FLAT, HairSpec::HOG), true);
+    assert_eq!(entry.title, "My Brush");
+    assert_eq!(entry.subtitle, "Flat · Hog Bristle");
+    assert_eq!(entry.name, "My Brush");
+}
+
+#[test]
+fn a_user_row_calls_a_changed_head_or_hair_custom() {
+    let head = HeadSpec {
+        dome: 0.5,
+        ..HeadSpec::FLAT
+    };
+    let hair = HairSpec {
+        stiffness: 0.51,
+        ..HairSpec::HOG
+    };
+    let subtitle = |head, hair| rack_entry(&user_brush(head, hair), true).subtitle;
+    assert_eq!(subtitle(head, HairSpec::HOG), "Custom · Hog Bristle");
+    assert_eq!(subtitle(HeadSpec::FLAT, hair), "Flat · Custom");
+    assert_eq!(subtitle(head, hair), "Custom · Custom");
+}
+
+#[test]
+fn a_row_carries_the_brush_shape_for_its_tip_icon() {
+    let entry = rack_entry(&user_brush(HeadSpec::FAN, HairSpec::SQUIRREL), true);
+    assert_eq!(entry.head, HeadSpec::FAN);
+    assert_eq!(entry.hair, HairSpec::SQUIRREL);
 }

@@ -1,9 +1,11 @@
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
+use gtk::glib;
 
+use super::BrushPanel;
 use super::presentation::{PLATE_GAP_KEY, slider_to_size};
-use super::{BrushPanel, rack};
+use crate::LOG_DOMAIN;
 
 impl BrushPanel {
     pub(super) fn connect_controls(self: &Rc<Self>) {
@@ -24,12 +26,7 @@ impl BrushPanel {
         group.medium.scale.connect_value_changed(move |scale| {
             with_panel(&panel, |panel| panel.change_medium(scale))
         });
-        let panel = Rc::downgrade(self);
-        self.rack
-            .flow
-            .connect_selected_children_changed(move |flow| {
-                with_panel(&panel, |panel| panel.pick_brush(flow))
-            });
+        self.connect_rack();
         let panel = Rc::downgrade(self);
         group.reload_row.connect_active_notify(move |row| {
             with_panel(&panel, |panel| panel.change_reload_each_stroke(row))
@@ -65,13 +62,34 @@ impl BrushPanel {
         self.change_brush(|state| state.set_medium(medium));
     }
 
-    fn pick_brush(self: &Rc<Self>, flow: &gtk::FlowBox) {
-        let Some(index) = rack::picked(flow) else {
+    fn connect_rack(self: &Rc<Self>) {
+        let panel = Rc::downgrade(self);
+        self.rack
+            .list
+            .connect_row_selected(move |_, _| with_panel(&panel, |panel| panel.pick_brush()));
+        let panel = Rc::downgrade(self);
+        self.rack
+            .list
+            .connect_row_activated(move |_, row| with_panel(&panel, |panel| panel.edit_brush(row)));
+    }
+
+    fn pick_brush(self: &Rc<Self>) {
+        let Some(index) = self.rack.picked() else {
             return;
         };
         self.change_brush(|state| {
             state.wear_library_brush(index);
         });
+    }
+
+    /// Double-click or Enter on a row: its brush is worn, if it wasn't yet, then edited.
+    fn edit_brush(self: &Rc<Self>, row: &gtk::ListBoxRow) {
+        if !row.is_selected() {
+            self.rack.list.select_row(Some(row));
+        }
+        if let Err(error) = self.rack.list.activate_action("win.edit-brush", None) {
+            glib::g_warning!(LOG_DOMAIN, "could not open the brush editor: {error}");
+        }
     }
 
     fn change_reload_each_stroke(self: &Rc<Self>, row: &adw::SwitchRow) {

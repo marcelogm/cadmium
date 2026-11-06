@@ -108,23 +108,19 @@ impl BrushStep {
 /// Selects the rack entry named `name`, so the rack's own selection handler wears it.
 fn pick_from_rack(window: &CadmiumWindow, name: &str) {
     match rack_entry(window.upcast_ref(), name) {
-        Some((flow, child)) => flow.select_child(&child),
+        Some((list, row)) => list.select_row(Some(&row)),
         None => glib::g_warning!(LOG_DOMAIN, "smoke found no brush named {name:?}"),
     }
 }
 
-/// The name on a rack entry: the label below its thumbnail.
-fn entry_name(child: &gtk::FlowBoxChild) -> Option<glib::GString> {
-    let label = child.child()?.last_child().and_downcast::<gtk::Label>()?;
-    Some(label.label())
-}
-
-fn rack_entry(widget: &gtk::Widget, name: &str) -> Option<(gtk::FlowBox, gtk::FlowBoxChild)> {
-    if let Some(child) = widget.downcast_ref::<gtk::FlowBoxChild>()
-        && entry_name(child).is_some_and(|shown| shown == name)
+/// A rack row named `name`: its tooltip carries the brush's full name, as does its
+/// accessible label, which GTK gives no getter for.
+fn rack_entry(widget: &gtk::Widget, name: &str) -> Option<(gtk::ListBox, gtk::ListBoxRow)> {
+    if let Some(row) = widget.downcast_ref::<gtk::ListBoxRow>()
+        && row.tooltip_text().is_some_and(|shown| shown == name)
     {
-        let flow = child.parent().and_downcast::<gtk::FlowBox>()?;
-        return Some((flow, child.clone()));
+        let list = row.parent().and_downcast::<gtk::ListBox>()?;
+        return Some((list, row.clone()));
     }
     let mut next = widget.first_child();
     while let Some(child) = next {

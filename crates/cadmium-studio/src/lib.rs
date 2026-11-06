@@ -6,8 +6,10 @@ mod look;
 mod paint;
 mod schedule;
 mod studio;
+mod tip;
 
 pub use demo::{DemoStroke, StrokeBox, samples};
 pub use look::{hair_name, head_name};
 pub use paint::StudioPaint;
 pub use studio::{BrushStudio, StudioError, THUMBNAIL_SIZE, Thumbnail};
+pub use tip::{Dimensions, Ferrule, TipGeometry, TipView};
