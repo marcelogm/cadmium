@@ -152,9 +152,6 @@ pub(super) fn is_eraser(event: &gdk::Event) -> bool {
         .is_some_and(|tool| tool.tool_type() == gdk::DeviceToolType::Eraser)
 }
 
-#[cfg(test)]
-mod tests;
-
 /// How `widget`'s display numbers the pen's barrel buttons.
 pub(super) fn pen_buttons_of(widget: &impl IsA<gtk::Widget>) -> PenButtons {
     // gdk's `backend()` panics on a display type it doesn't know, so match the name.
@@ -164,3 +161,6 @@ pub(super) fn pen_buttons_of(widget: &impl IsA<gtk::Widget>) -> PenButtons {
         PenButtons::Other
     }
 }
+
+#[cfg(test)]
+mod tests;
