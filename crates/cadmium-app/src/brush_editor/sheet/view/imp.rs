@@ -25,6 +25,7 @@ pub struct TestSheetView {
     pub(super) gpu_lost_announced: Cell<bool>,
     pub(super) gpu_lost_handlers: RefCell<Vec<Handler<super::TestSheetView>>>,
     pub(super) fallback_handlers: RefCell<Vec<Handler<super::TestSheetView>>>,
+    pub(super) stroke_began_handlers: RefCell<Vec<Handler<super::TestSheetView>>>,
 }
 
 #[glib::object_subclass]

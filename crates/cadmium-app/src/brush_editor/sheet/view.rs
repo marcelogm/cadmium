@@ -12,6 +12,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
+use crate::handlers::run_handlers;
 use crate::input::event_belongs_to_stroke;
 use crate::presenter::{FramePresenter, PresentSource, SheetLink};
 use crate::state::SharedState;
@@ -88,6 +89,17 @@ impl TestSheetView {
             .push(Box::new(handler));
     }
 
+    /// Runs as each stroke begins on the sheet.
+    pub(in crate::brush_editor) fn connect_stroke_began(
+        &self,
+        handler: impl Fn(&TestSheetView) + 'static,
+    ) {
+        self.imp()
+            .stroke_began_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     /// The sheet, while the editor still has it.
     fn sheet(&self) -> Option<Rc<RefCell<TestSheet>>> {
         self.imp().link.get()?.sheet.upgrade()
@@ -111,6 +123,7 @@ impl TestSheetView {
         imp.stroking.set(true);
         imp.stroking_device.replace(device);
         self.request_frame();
+        run_handlers(&imp.stroke_began_handlers, self);
     }
 
     fn extend_stroke(&self, samples: &[StrokeSample]) {
