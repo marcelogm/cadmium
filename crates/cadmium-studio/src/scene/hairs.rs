@@ -28,8 +28,7 @@ struct HairParams {
 /// Draws the hairs.
 pub(super) struct HairPass {
     layout: wgpu::BindGroupLayout,
-    pipeline_layout: wgpu::PipelineLayout,
-    pipeline: Option<wgpu::RenderPipeline>,
+    pipeline: wgpu::RenderPipeline,
 }
 
 impl HairPass {
@@ -44,33 +43,28 @@ impl HairPass {
                     storage_entry(2),
                 ],
             });
+        let shader = BrushShader {
+            label: "scene_hairs",
+            body: include_str!("../shaders/hair.wgsl"),
+            layout: &super::pipeline_layout(gpu, view, &layout),
+            buffers: &[],
+        };
         HairPass {
-            pipeline_layout: super::pipeline_layout(gpu, view, &layout),
+            pipeline: brush_pipeline(gpu, shader),
             layout,
-            pipeline: None,
         }
     }
 
     /// Draws every live bristle's chain in linear `tint`.
     pub(super) fn draw(
-        &mut self,
+        &self,
         gpu: &GpuContext,
         pass: &mut wgpu::RenderPass<'_>,
         bristles: &BristleView<'_>,
         tint: [f32; 3],
     ) {
         let bind_group = self.bind_group(gpu, bristles, tint);
-        let layout = &self.pipeline_layout;
-        let pipeline = self.pipeline.get_or_insert_with(|| {
-            let shader = BrushShader {
-                label: "scene_hairs",
-                body: include_str!("../shaders/hair.wgsl"),
-                layout,
-                buffers: &[],
-            };
-            brush_pipeline(gpu, bristles, shader)
-        });
-        pass.set_pipeline(pipeline);
+        pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(1, &bind_group, &[]);
         let instances = bristles.count() * bristles.segments();
         pass.draw(0..RIBBON_VERTICES, 0..instances);

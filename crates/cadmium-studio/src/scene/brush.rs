@@ -1,8 +1,9 @@
 //! The brush in the scene: its simulated hairs, ferrule and handle, drawn
 //! from the engine's live bristle buffers in the scene's pass.
 //!
-//! The shaders build on the engine's bristle view module, so the pipelines
-//! wait for the first draw, when an engine is at hand to supply it.
+//! The shaders build on the engine's bristle view module. It holds only
+//! compile-time constants and functions, no runtime parameters, so the
+//! pipelines are built once, up front, and serve every engine.
 
 use cadmium_engine::engine::BristleView;
 use cadmium_engine::gpu::GpuContext;
@@ -74,12 +75,8 @@ pub(super) struct BrushShader<'a> {
     pub(super) buffers: &'a [Option<wgpu::VertexBufferLayout<'a>>],
 }
 
-pub(super) fn brush_pipeline(
-    gpu: &GpuContext,
-    bristles: &BristleView<'_>,
-    shader: BrushShader<'_>,
-) -> wgpu::RenderPipeline {
-    let source = format!("{}\n{}", bristles.wgsl(), shader.body);
+pub(super) fn brush_pipeline(gpu: &GpuContext, shader: BrushShader<'_>) -> wgpu::RenderPipeline {
+    let source = format!("{}\n{}", BristleView::wgsl_source(), shader.body);
     let module = gpu
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {

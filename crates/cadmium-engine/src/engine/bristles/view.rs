@@ -81,6 +81,13 @@ impl<'a> BristleView<'a> {
     /// `var<storage, read>` of `HandleState` (the buffer has no uniform usage) and
     /// calls `pose_of(handle)`.
     pub fn wgsl(&self) -> String {
+        Self::wgsl_source()
+    }
+
+    /// [`BristleView::wgsl`] without a view: the module depends on no
+    /// engine state, so a renderer can build its pipelines before the first
+    /// dab.
+    pub fn wgsl_source() -> String {
         bristle_view_source()
     }
 }

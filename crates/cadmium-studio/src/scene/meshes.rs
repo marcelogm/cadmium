@@ -88,8 +88,8 @@ impl Shapes {
 /// Draws the ferrule and the handle.
 pub(super) struct MeshPass {
     layout: wgpu::BindGroupLayout,
-    pipeline_layout: wgpu::PipelineLayout,
-    pipeline: Option<wgpu::RenderPipeline>,
+    pipeline: wgpu::RenderPipeline,
+    /// The last layout's meshes: they depend only on its sizes.
     shapes: Option<Shapes>,
 }
 
@@ -105,10 +105,15 @@ impl MeshPass {
                     storage_entry(2),
                 ],
             });
+        let shader = BrushShader {
+            label: "scene_meshes",
+            body: include_str!("../shaders/mesh.wgsl"),
+            layout: &super::pipeline_layout(gpu, view, &layout),
+            buffers: &[Some(vertex_layout())],
+        };
         MeshPass {
-            pipeline_layout: super::pipeline_layout(gpu, view, &layout),
+            pipeline: brush_pipeline(gpu, shader),
             layout,
-            pipeline: None,
             shapes: None,
         }
     }
@@ -124,17 +129,7 @@ impl MeshPass {
         if self.shapes.as_ref().is_none_or(|s| s.sizes != sizes) {
             self.shapes = Some(Shapes::new(gpu, sizes));
         }
-        let layout = &self.pipeline_layout;
-        let pipeline = self.pipeline.get_or_insert_with(|| {
-            let shader = BrushShader {
-                label: "scene_meshes",
-                body: include_str!("../shaders/mesh.wgsl"),
-                layout,
-                buffers: &[Some(vertex_layout())],
-            };
-            brush_pipeline(gpu, bristles, shader)
-        });
-        pass.set_pipeline(pipeline);
+        pass.set_pipeline(&self.pipeline);
         let shapes = self.shapes.as_ref().expect("the shapes were just built");
         for mesh in [&shapes.ferrule, &shapes.handle] {
             let bind_group = bind_group(gpu, &self.layout, mesh, bristles);
