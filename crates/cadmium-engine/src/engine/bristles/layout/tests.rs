@@ -102,20 +102,37 @@ fn a_domed_head_has_shorter_hairs_at_its_edges() {
     assert!(edge < 0.8 * centre, "edge {edge} centre {centre}");
 }
 
+fn mean_ratio(pairs: &[(f32, f32)], keep: impl Fn(f32) -> bool) -> f32 {
+    let kept: Vec<f32> = pairs
+        .iter()
+        .filter(|&&(x, _)| keep(x))
+        .map(|&(_, ratio)| ratio)
+        .collect();
+    assert!(!kept.is_empty());
+    kept.iter().sum::<f32>() / kept.len() as f32
+}
+
 #[test]
 fn a_slanted_head_grows_its_hairs_across_its_width() {
-    let laid = head_layout(HeadSpec {
+    let plain = head_layout(HeadSpec::FLAT);
+    let slanted = head_layout(HeadSpec {
         slant: 1.0,
         ..HeadSpec::FLAT
     });
-    let quarters: Vec<f32> = [-1.0f32, -0.5, 0.0, 0.5]
+    assert_eq!(plain.bristles.len(), slanted.bristles.len());
+    let pairs: Vec<(f32, f32)> = plain
+        .bristles
         .iter()
-        .map(|&from| mean_length_px(&laid, |x| x >= from && x < from + 0.5))
+        .zip(&slanted.bristles)
+        .map(|(p, s)| {
+            assert_eq!(p.root_px, s.root_px);
+            (p.root_px[0] / PROFILE_RADIUS_PX, s.length_px / p.length_px)
+        })
         .collect();
-    assert!(
-        quarters.windows(2).all(|pair| pair[1] > pair[0]),
-        "{quarters:?}"
-    );
+    let left = mean_ratio(&pairs, |x| x < -0.5);
+    let right = mean_ratio(&pairs, |x| x >= 0.5);
+    assert!(left < 0.5 * right, "left {left} right {right}");
+    assert!(right > 0.75, "right {right}");
 }
 
 #[test]
@@ -156,6 +173,7 @@ fn a_bellied_round_head_splays_its_hairs_outward() {
         .iter()
         .filter(|b| b.root_px[0].hypot(b.root_px[1]) > 0.5 * PROFILE_RADIUS_PX)
         .collect();
+    assert!(!rim.is_empty());
     assert!(rim.iter().all(|b| outward(b) > 0.0));
 }
 
@@ -166,6 +184,18 @@ fn a_bellied_fan_still_splays_sideways_only() {
         ..HeadSpec::FAN
     });
     assert!(laid.bristles.iter().all(|b| b.splay[1] == 0.0));
+    let plain = head_layout(HeadSpec::FAN);
+    assert_eq!(plain.bristles.len(), laid.bristles.len());
+    let mut rim = 0;
+    for (p, b) in plain.bristles.iter().zip(&laid.bristles) {
+        assert_eq!(p.root_px, b.root_px);
+        assert!(outward(b) >= outward(p), "{b:?} vs {p:?}");
+        if b.root_px[0].abs() > 0.5 * PROFILE_RADIUS_PX {
+            rim += 1;
+            assert!(outward(b) > outward(p), "{b:?} vs {p:?}");
+        }
+    }
+    assert!(rim > 0);
 }
 
 #[test]
