@@ -2,7 +2,7 @@ use cadmium_engine::canvas::primer_srgb8;
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 
-use super::presentation::{PLATE_GAP_KEY, PanelTool, panel_tool};
+use super::presentation::{PLATE_GAP_KEY, PanelTool, RackEntry, panel_tool, rack_entry};
 use crate::state::AppState;
 use crate::thumbnails::ThumbnailKey;
 
@@ -30,7 +30,7 @@ pub(super) struct Snapshot {
     pub(super) load: f32,
     pub(super) plate_gap: f32,
     pub(super) medium: f32,
-    pub(super) brush_names: Vec<String>,
+    pub(super) brush_entries: Vec<RackEntry>,
     pub(super) brush_keys: Vec<ThumbnailKey>,
     pub(super) brush_index: Option<usize>,
     pub(super) brush_is_user: bool,
@@ -67,11 +67,7 @@ impl Snapshot {
             load: session.brush.load,
             plate_gap: session.engine.params().get(PLATE_GAP_KEY),
             medium: session.brush.medium,
-            brush_names: state
-                .brushes
-                .all()
-                .map(|brush| brush.name.clone())
-                .collect(),
+            brush_entries: rack_entries(state),
             brush_keys: state.brushes.all().map(ThumbnailKey::of).collect(),
             brush_index: worn,
             brush_is_user: worn.is_some_and(|index| state.brushes.is_user(index)),
@@ -79,6 +75,15 @@ impl Snapshot {
             clean_each_stroke: state.clean_each_stroke,
         }
     }
+}
+
+fn rack_entries(state: &AppState) -> Vec<RackEntry> {
+    state
+        .brushes
+        .all()
+        .enumerate()
+        .map(|(index, brush)| rack_entry(brush, state.brushes.is_user(index)))
+        .collect()
 }
 
 fn mixture_colour(db: &PigmentDb, slots: &[String], primer: [u8; 3], mixture: &Mixture) -> [u8; 3] {

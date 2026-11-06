@@ -5,7 +5,7 @@ use std::rc::{Rc, Weak};
 use cadmium_studio::{BrushStudio, StudioError};
 use gtk::{gdk, glib};
 
-use super::{BrushPanel, rack};
+use super::BrushPanel;
 use crate::LOG_DOMAIN;
 use crate::thumbnails::{self, ThumbnailKey, rack_indices};
 
@@ -121,8 +121,7 @@ impl BrushPanel {
 
     fn show_thumbnail(&self, key: ThumbnailKey, texture: gdk::Texture) {
         if let Some((_, keys)) = self.shown_brushes.borrow().as_ref() {
-            rack_indices(keys, key)
-                .for_each(|index| rack::show_thumbnail(&self.rack.flow, index, &texture));
+            rack_indices(keys, key).for_each(|index| self.rack.show_thumbnail(index, &texture));
         }
         self.thumbnails.borrow_mut().insert(key, texture);
     }
