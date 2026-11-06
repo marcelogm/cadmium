@@ -34,7 +34,7 @@ impl Editor {
         self.connect_parts();
     }
 
-    /// The ⋯ menu's actions; Delete only for a user brush (C2).
+    /// The ⋯ menu's actions; Delete only for a user brush.
     fn install_menu(self: &Rc<Self>) {
         let deletable = self.draft.borrow().deletable().is_some();
         let group = gio::SimpleActionGroup::new();

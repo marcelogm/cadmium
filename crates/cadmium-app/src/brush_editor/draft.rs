@@ -13,7 +13,7 @@ const COPY_SUFFIX: &str = " (copy)";
 pub(super) enum Origin {
     /// A user brush, at this library index: saved over itself, deletable.
     User(usize),
-    /// A factory brush, or a worn brush in no library ("Current Brush", C3): saving makes a new
+    /// A factory brush, or a worn brush in no library ("Current Brush"): saving makes a new
     /// user brush.
     Factory,
 }
@@ -32,7 +32,7 @@ pub(super) struct Draft {
     original: BrushSpec,
     current: BrushSpec,
     origin: Origin,
-    /// The preset each part follows; `None` is Custom (D5).
+    /// The preset each part follows; `None` is Custom, even when the values equal a preset's.
     head_preset: Option<HeadPreset>,
     hair_preset: Option<HairPreset>,
 }
@@ -131,8 +131,8 @@ impl Draft {
         }
     }
 
-    /// C8: a user brush is saved over itself; anything else becomes a new brush, called
-    /// "<name> (copy)" when its name was left as it was.
+    /// Where Save puts the draft: a user brush is saved over itself; anything else becomes a
+    /// new brush, called "<name> (copy)" when its name was left as it was.
     pub(super) fn save_plan(&self) -> SavePlan {
         let name = self.chosen_name();
         match self.origin {

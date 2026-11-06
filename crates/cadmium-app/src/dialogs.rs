@@ -122,7 +122,7 @@ pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + '
     ask_to_discard(DISCARD_PAINTING_HEADING, parent, on_discard);
 }
 
-/// Asks before the brush editor drops its changes (C6); runs `on_discard` if the painter agrees.
+/// Asks before the brush editor drops its changes; runs `on_discard` if the painter agrees.
 /// Returns the alert, so the editor can close it if it is closed meanwhile.
 pub fn confirm_discard_brush_changes(
     parent: &impl IsA<gtk::Widget>,

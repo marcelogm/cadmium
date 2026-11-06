@@ -1,4 +1,4 @@
-//! The schematic's pen (D1, "ink"): colours, lines, arrows, dimension lines and lettering.
+//! The schematic's pen, in ink: colours, lines, arrows, dimension lines and lettering.
 //! Straight lines across or down are snapped to device pixels, so thin ones stay crisp.
 
 use std::f64::consts::{FRAC_PI_2, PI};

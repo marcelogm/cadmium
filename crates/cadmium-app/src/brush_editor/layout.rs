@@ -1,4 +1,4 @@
-//! The editor dialog's frame (D2): under the header, three columns — the tip's drawing with
+//! The editor dialog's frame: under the header, three columns — the tip's drawing with
 //! the example strokes under it, the test sheet, and the controls.
 
 use adw::prelude::*;

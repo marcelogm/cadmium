@@ -1,6 +1,6 @@
 //! The brush editor: edits the worn brush as a draft, then saves it to the library.
 //!
-//! Three columns (D2): the tip's drawing with the example strokes under it, the test sheet,
+//! Three columns: the tip's drawing with the example strokes under it, the test sheet,
 //! and the controls. The examples and the test sheet are blank paper for now.
 
 use std::cell::RefCell;
@@ -59,8 +59,9 @@ pub fn open(window: &CadmiumWindow) {
     editor.dialog.present(Some(window));
 }
 
-/// C3: the worn library brush as the library holds it (at its suggested size, whatever size
-/// the painting uses now); a worn brush in no library is edited like a factory one.
+/// What the editor edits: the worn library brush as the library holds it (at its suggested
+/// size, whatever size the painting uses now); a worn brush in no library is edited like a
+/// factory one.
 fn draft_for(state: &AppState) -> Draft {
     let worn = state
         .worn_library_brush()

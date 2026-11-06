@@ -1,4 +1,4 @@
-//! Save, Save as Copy, Export… and Delete: each ends the editor without asking (C1, C2).
+//! Save, Save as Copy, Export… and Delete: each ends the editor without asking.
 
 use std::rc::{Rc, Weak};
 
@@ -35,7 +35,7 @@ impl Editor {
         }
     }
 
-    /// Asks, then deletes the user brush; the default brush is worn if it was worn (C2).
+    /// Asks, then deletes the user brush; the default brush is worn if it was worn.
     pub(super) fn delete(self: &Rc<Self>) {
         let Some(index) = self.draft.borrow().deletable() else {
             return;
@@ -56,7 +56,7 @@ impl Editor {
         Some(store(&mut state, &draft))
     }
 
-    /// Closes the editor, then reports how the store went; the rack refreshes on close (C1).
+    /// Closes the editor, then reports how the store went; the rack refreshes on close.
     fn after_storing(self: &Rc<Self>, stored: Option<Result<Saved, LibraryError>>) {
         self.finish(Closing::Done);
         let (Some(window), Some(stored)) = (self.window.upgrade(), stored) else {
@@ -77,7 +77,7 @@ fn report_saved(window: &CadmiumWindow, saved: &Saved) {
     window.after_library_change(&saved_toast(saved));
 }
 
-/// Save (C3, C8): over a user brush, else as a new brush; either way it is worn after (C1).
+/// Save: over a user brush, else as a new brush; either way it is worn after.
 fn store(state: &mut AppState, draft: &Draft) -> Result<Saved, LibraryError> {
     match draft.save_plan() {
         SavePlan::Replace(index) => {
@@ -87,12 +87,12 @@ fn store(state: &mut AppState, draft: &Draft) -> Result<Saved, LibraryError> {
     }
 }
 
-/// Save as Copy: the draft as a new brush, "<name> (copy)" numbered when taken; worn after (C1).
+/// Save as Copy: the draft as a new brush, "<name> (copy)" numbered when taken; worn after.
 fn store_copy(state: &mut AppState, draft: &Draft) -> Result<Saved, LibraryError> {
     Ok(state.add_library_brush(draft.copy()))
 }
 
-/// "Saved Name", or "Saved as Name (2)" when the name had to change (C8); and when the file
+/// "Saved Name", or "Saved as Name (2)" when the name had to change; and when the file
 /// couldn't be written, that the brush only lasts for the session.
 fn saved_toast(saved: &Saved) -> String {
     let mut toast = if saved.renamed {

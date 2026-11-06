@@ -1,5 +1,5 @@
 //! The Head and Hair groups: a preset dropdown in each group's header, then a slider per
-//! control; Hair keeps six of its twelve under "Advanced" (D6).
+//! control; Hair keeps six of its twelve under "Advanced".
 
 use adw::prelude::*;
 use cadmium_studio::{HairPreset, HeadPreset};

@@ -1,4 +1,4 @@
-//! The tip's technical drawing (D1, "ink"): front and side views with their ferrules, blue
+//! The tip's technical drawing in ink: front and side views with their ferrules, blue
 //! dimensions, the footprint and a title block, on light gridded paper — the owner-approved
 //! mockup, drawn from `TipGeometry` in sheet units, then fitted into the widget.
 
@@ -37,7 +37,7 @@ const GRID_STEP: f64 = 10.0;
 const GRID_PEN: Pen = Pen::new(GRID, 0.4);
 
 /// What the schematic draws: the brush, and what its head and hair are called (`None`:
-/// Custom, D5 — even when the values happen to equal a preset's).
+/// Custom — even when the values happen to equal a preset's).
 pub(super) struct Subject<'a> {
     pub(super) brush: &'a BrushSpec,
     pub(super) head: Option<&'static str>,

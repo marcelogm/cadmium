@@ -54,7 +54,7 @@ impl AppState {
         Ok(imported)
     }
 
-    /// Saves an edited user brush over itself, then wears it at its suggested size (C1).
+    /// Saves an edited user brush over itself, then wears it at its suggested size.
     pub fn save_library_brush(
         &mut self,
         index: usize,
@@ -66,7 +66,7 @@ impl AppState {
         Ok(saved)
     }
 
-    /// Adds an edited brush as a new user brush, then wears it at its suggested size (C1).
+    /// Adds an edited brush as a new user brush, then wears it at its suggested size.
     pub fn add_library_brush(&mut self, brush: BrushSpec) -> Saved {
         let saved = self.brushes.add_new(brush);
         self.wear_library_brush(saved.index);

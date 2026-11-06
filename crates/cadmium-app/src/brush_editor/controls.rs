@@ -1,4 +1,4 @@
-//! The head and hair controls (D6): each slider's label, range and step, and the value it moves.
+//! The head and hair controls: each slider's label, range and step, and the value it moves.
 
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 
