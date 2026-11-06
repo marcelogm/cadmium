@@ -3,6 +3,12 @@ use std::cell::{Cell, OnceCell, RefCell};
 use super::*;
 use crate::writes::WritesInFlight;
 
+/// The open brush editor's dialog, and what stops the editor before the window closes it.
+pub struct KeptEditor {
+    pub dialog: adw::Dialog,
+    pub stop: Box<dyn Fn()>,
+}
+
 #[derive(Default, gtk::CompositeTemplate)]
 #[template(resource = "/io/github/marcelogm/Cadmium/window.ui")]
 pub struct CadmiumWindow {
@@ -49,9 +55,7 @@ pub struct CadmiumWindow {
     pub copy_presentation_announced: Cell<bool>,
     pub gpu_lost_announced: Cell<bool>,
     /// The open brush editor, so a lost GPU can close it.
-    pub editor: RefCell<Option<adw::Dialog>>,
-    /// Stops the open editor, before the window closes it itself.
-    pub stop_editor: RefCell<Option<Box<dyn Fn()>>>,
+    pub editor: RefCell<Option<KeptEditor>>,
     /// The rack is still painting thumbnails; exists so smoke screenshots wait for them.
     pub thumbnails_pending: Cell<bool>,
     /// The brush editor is still painting its example strokes; smoke screenshots wait for them.

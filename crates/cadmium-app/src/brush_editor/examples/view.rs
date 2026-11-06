@@ -71,7 +71,7 @@ fn label(text: &str, top: i32) -> gtk::Label {
 }
 
 /// Uppercase mono, 9.5 px (7 pt), weight 500, letter-spaced, grey; the arrow in sans.
-fn markup(text: &str) -> String {
+pub(super) fn markup(text: &str) -> String {
     let text = glib::markup_escape_text(text).replace(ARROW, SANS_ARROW);
     format!(
         "<span font_family=\"monospace\" size=\"7pt\" weight=\"500\" letter_spacing=\"1024\" \
