@@ -18,6 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 cadmium-engine = { path = "../cadmium-engine" }
+cadmium-studio = { path = "../cadmium-studio" }
 gtk = { workspace = true }
 adw = { workspace = true }
 wgpu = { workspace = true }

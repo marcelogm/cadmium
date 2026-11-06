@@ -62,6 +62,15 @@ impl CadmiumWindow {
         }
     }
 
+    /// Whether the brush rack is still painting thumbnails.
+    pub fn thumbnails_pending(&self) -> bool {
+        self.imp().thumbnails_pending.get()
+    }
+
+    pub fn set_thumbnails_pending(&self, pending: bool) {
+        self.imp().thumbnails_pending.set(pending);
+    }
+
     pub fn show_sidebar_page(&self, name: &str) {
         let imp = self.imp();
         imp.split_view.set_show_sidebar(true);

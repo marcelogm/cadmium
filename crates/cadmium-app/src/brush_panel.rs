@@ -1,4 +1,6 @@
 use std::cell::{Cell, RefCell};
+
+use cadmium_studio::BrushStudio;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -8,6 +10,7 @@ use crate::LOG_DOMAIN;
 use crate::side_panel::panel_root;
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::Swatch;
+use crate::thumbnails::{ThumbnailCache, ThumbnailKey};
 use crate::window::CadmiumWindow;
 
 mod build;
@@ -16,6 +19,7 @@ mod presentation;
 mod rack;
 mod signals;
 mod snapshot;
+mod thumbnail_job;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
@@ -35,8 +39,22 @@ pub struct BrushPanel {
     hint: gtk::Label,
     pigment_swatches: RefCell<Vec<Swatch>>,
     shown_slots: RefCell<Option<Vec<String>>>,
-    shown_brushes: RefCell<Option<Vec<String>>>,
+    shown_brushes: RefCell<Option<ShownBrushes>>,
     syncing: Cell<bool>,
+    thumbnails: RefCell<ThumbnailCache>,
+    studio: RefCell<Option<BrushStudio>>,
+    thumbnail_job: Cell<ThumbnailJob>,
+}
+
+/// The names and thumbnail keys the rack shows, in rack order.
+type ShownBrushes = (Vec<String>, Vec<ThumbnailKey>);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ThumbnailJob {
+    Idle,
+    Pending,
+    /// The studio failed once; the rack keeps its names only.
+    Failed,
 }
 
 impl BrushPanel {
@@ -65,6 +83,9 @@ impl BrushPanel {
             shown_slots: RefCell::new(None),
             shown_brushes: RefCell::new(None),
             syncing: Cell::new(false),
+            thumbnails: RefCell::new(ThumbnailCache::default()),
+            studio: RefCell::new(None),
+            thumbnail_job: Cell::new(ThumbnailJob::Idle),
         });
         panel.connect_controls();
         panel.connect_refresh_on_map();
@@ -153,16 +174,18 @@ impl BrushPanel {
             .set_label(&percent_text(f64::from(snapshot.medium)));
     }
 
-    fn show_rack(&self, snapshot: &Snapshot) {
-        if self.shown_brushes.borrow().as_ref() != Some(&snapshot.brush_names) {
-            rack::fill(&self.rack.flow, &snapshot.brush_names);
-            self.shown_brushes
-                .replace(Some(snapshot.brush_names.clone()));
+    fn show_rack(self: &Rc<Self>, snapshot: &Snapshot) {
+        let shown = (snapshot.brush_names.clone(), snapshot.brush_keys.clone());
+        if self.shown_brushes.borrow().as_ref() != Some(&shown) {
+            let thumbnails = self.cached_thumbnails(&snapshot.brush_keys);
+            rack::fill(&self.rack.flow, &snapshot.brush_names, &thumbnails);
+            self.shown_brushes.replace(Some(shown));
         }
         rack::select(&self.rack.flow, snapshot.brush_index);
         if let Some(window) = self.window.upgrade() {
             window.set_brush_deletable(snapshot.brush_is_user);
         }
+        self.schedule_thumbnails(&snapshot.brush_keys);
     }
 
     fn show_stroke_options(&self, snapshot: &Snapshot) {

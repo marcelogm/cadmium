@@ -47,6 +47,7 @@ pub struct CadmiumWindow {
     pub asking_to_close: Cell<bool>,
     pub history_disabled_announced: Cell<bool>,
     pub copy_presentation_announced: Cell<bool>,
+    pub thumbnails_pending: Cell<bool>,
 }
 
 #[glib::object_subclass]

@@ -125,6 +125,7 @@ dependencies = [
  "ash",
  "async-channel",
  "cadmium-engine",
+ "cadmium-studio",
  "drm-fourcc",
  "embed-resource",
  "glib-build-tools",

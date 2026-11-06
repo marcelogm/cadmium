@@ -92,12 +92,15 @@ fn pick_from_rack(window: &CadmiumWindow, name: &str) {
     }
 }
 
+/// The name on a rack entry: the label below its thumbnail.
+fn entry_name(child: &gtk::FlowBoxChild) -> Option<glib::GString> {
+    let label = child.child()?.last_child().and_downcast::<gtk::Label>()?;
+    Some(label.label())
+}
+
 fn rack_entry(widget: &gtk::Widget, name: &str) -> Option<(gtk::FlowBox, gtk::FlowBoxChild)> {
     if let Some(child) = widget.downcast_ref::<gtk::FlowBoxChild>()
-        && child
-            .child()
-            .and_downcast::<gtk::Label>()
-            .is_some_and(|label| label.label() == name)
+        && entry_name(child).is_some_and(|shown| shown == name)
     {
         let flow = child.parent().and_downcast::<gtk::FlowBox>()?;
         return Some((flow, child.clone()));
