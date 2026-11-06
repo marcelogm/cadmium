@@ -25,8 +25,9 @@ pub(super) struct Root {
     pub(super) splay: [f32; 2],
     pub(super) lane_direction: [f32; 2],
     /// Where the dome and slant read this root from (`HeadSpec::length_share`), in ferrule
-    /// radii across and through the head. Always `position_px / radius` (a blend's up to
-    /// rounding), kept apart so a section can be given a frame of its own.
+    /// radii (on the arc, x is the share across the spread in −1..1) across and through the
+    /// head: `position_px / radius` on the spiral and the bar, the root's place across the
+    /// spread and through the band on the arc.
     pub(super) shape: [f32; 2],
     pub(super) length_share: f32,
 }
@@ -271,6 +272,9 @@ fn flat_root(
     }
 }
 
+/// A root on the fan's arc. Its `shape` is its place across the spread and through the band
+/// — what the bar's position is before its rim pull — so the dome shortens the fan's outer
+/// hairs and the slant grows them from one side of the spread to the other.
 fn fan_root(
     index: usize,
     count: usize,
@@ -292,7 +296,7 @@ fn fan_root(
         position_px,
         splay: [outward[0], 0.0],
         lane_direction: outward,
-        shape: unit_of(position_px, radius_px),
+        shape: [2.0 * across - 1.0, (2.0 * thick - 1.0) * head.thickness],
         length_share: 1.0,
     }
 }

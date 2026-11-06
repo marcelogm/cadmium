@@ -88,10 +88,16 @@ fn thickness_moves_the_roots_a_little_at_a_time() {
         fan_deg: 30.0,
         ..HeadSpec::FLAT
     };
+    let shaped_fan = HeadSpec {
+        dome: 0.8,
+        slant: 0.5,
+        ..HeadSpec::FAN
+    };
     for base in [
         HeadSpec::FLAT,
         HeadSpec::FILBERT,
         fanned_flat,
+        shaped_fan,
         HeadSpec::MOP,
     ] {
         assert_continuous(base, HeadSpec::THICKNESS_RANGE, thicken);
@@ -109,6 +115,7 @@ fn the_fan_moves_the_roots_a_little_at_a_time() {
         HeadSpec::FLAT,
         HeadSpec::FILBERT,
         thick_flat,
+        HeadSpec::DAGGER,
         HeadSpec::ROUND,
     ] {
         assert_continuous(base, HeadSpec::FAN_RANGE_DEG, open);

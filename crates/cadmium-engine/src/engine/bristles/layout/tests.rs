@@ -248,3 +248,70 @@ fn a_head_without_belly_or_round_fan_keeps_todays_splay() {
         );
     }
 }
+
+#[test]
+fn a_domed_fan_shortens_the_hairs_at_its_edges() {
+    let laid = head_layout(HeadSpec {
+        dome: 1.0,
+        ..HeadSpec::FAN
+    });
+    let centre = mean_length_px(&laid, |x| x.abs() < 0.1);
+    let edge = mean_length_px(&laid, |x| x.abs() > 0.35);
+    assert!(edge < 0.6 * centre, "edge {edge} centre {centre}");
+}
+
+#[test]
+fn a_slanted_fan_grows_its_hairs_across_its_spread() {
+    let plain = head_layout(HeadSpec::FAN);
+    let slanted = head_layout(HeadSpec {
+        slant: 1.0,
+        ..HeadSpec::FAN
+    });
+    assert_eq!(plain.bristles.len(), slanted.bristles.len());
+    let pairs: Vec<(f32, f32)> = plain
+        .bristles
+        .iter()
+        .zip(&slanted.bristles)
+        .map(|(p, s)| {
+            assert_eq!(p.root_px, s.root_px);
+            (p.root_px[0] / PROFILE_RADIUS_PX, s.length_px / p.length_px)
+        })
+        .collect();
+    let left = mean_ratio(&pairs, |x| x < -0.3);
+    let right = mean_ratio(&pairs, |x| x >= 0.3);
+    assert!(left < 0.3 * right, "left {left} right {right}");
+    assert!(right > 0.85, "right {right}");
+}
+
+#[test]
+fn a_thick_domed_fan_shortens_the_hairs_at_both_edges_of_its_band() {
+    // The fan's arc: radius 0.6 R about a centre shifted back by the arc's centroid. Only
+    // hairs near the middle of the spread count, so the band alone sets their dome.
+    let arc_radius = 0.6;
+    let spread = HeadSpec::FAN.fan_deg.to_radians();
+    let centre_y = -arc_radius * spread.sin() / spread;
+    let laid = head_layout(HeadSpec {
+        thickness: 0.6,
+        dome: 1.0,
+        ..HeadSpec::FAN
+    });
+    let mean = |keep: &dyn Fn(f32) -> bool| {
+        let kept: Vec<f32> = laid
+            .bristles
+            .iter()
+            .filter(|b| {
+                let [x, y] = b.root_px.map(|v| v / PROFILE_RADIUS_PX);
+                let across = x.atan2(y - centre_y) / spread;
+                across.abs() < 0.3 && keep(x.hypot(y - centre_y) - arc_radius)
+            })
+            .map(|b| b.length_px)
+            .collect();
+        assert!(!kept.is_empty());
+        kept.iter().sum::<f32>() / kept.len() as f32
+    };
+    let middle = mean(&|band: f32| band.abs() < 0.15);
+    let inner = mean(&|band: f32| band < -0.45);
+    let outer = mean(&|band: f32| band > 0.45);
+    assert!(inner < 0.95 * middle, "inner {inner} middle {middle}");
+    assert!(outer < 0.95 * middle, "outer {outer} middle {middle}");
+}
