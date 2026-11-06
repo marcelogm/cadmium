@@ -258,3 +258,59 @@ fn a_restart_on_the_same_canvas_paints_what_a_new_player_paints() {
     }
     assert_same(&gpu, &player, &fresh);
 }
+
+/// A textured canvas and a lighter load: where a stroke's first contact is
+/// most sensitive to what the engine remembers from earlier strokes.
+fn linen(load: f32) -> StudioPaint {
+    StudioPaint {
+        weave: Weave::Linen,
+        load,
+        ..paint()
+    }
+}
+
+/// Plays `from` for `frames` 50 ms frames, restarts on the same canvas with `to`,
+/// and checks every later frame against a fresh player shown `to`.
+fn assert_restart_mid_stroke_matches(frames: usize, from: &StudioPaint, to: &StudioPaint) {
+    let gpu = GpuContext::new().unwrap();
+    let brush = BrushSpec {
+        size_px: 16.0,
+        ..factory_brushes()[0].clone()
+    };
+    let request = |paint| PlayerRequest {
+        brush: &brush,
+        paint,
+        stroke: DemoStroke::SCurve,
+    };
+    let mut player = StudioPlayer::new(&gpu, request(from)).unwrap();
+    for _ in 0..frames {
+        player.advance(&gpu, 50.0).unwrap();
+    }
+    player.restart(&gpu, request(to)).unwrap();
+    let mut fresh = StudioPlayer::new(&gpu, request(to)).unwrap();
+    for frame in 0..40 {
+        player.advance(&gpu, 50.0).unwrap();
+        fresh.advance(&gpu, 50.0).unwrap();
+        assert_eq!(
+            snapshot(&gpu, &player),
+            snapshot(&gpu, &fresh),
+            "frame {frame}"
+        );
+        let same = player.rgba(&gpu).unwrap() == fresh.rgba(&gpu).unwrap();
+        assert!(same, "frame {frame}: canvases differ");
+    }
+}
+
+#[test]
+fn a_restart_mid_stroke_with_less_load_paints_what_a_new_player_paints() {
+    for frames in [1, 3, 10] {
+        assert_restart_mid_stroke_matches(frames, &linen(1.0), &linen(0.4));
+    }
+}
+
+#[test]
+fn a_restart_mid_stroke_with_the_same_paint_paints_what_a_new_player_paints() {
+    for frames in [1, 3, 10] {
+        assert_restart_mid_stroke_matches(frames, &linen(0.4), &linen(0.4));
+    }
+}
