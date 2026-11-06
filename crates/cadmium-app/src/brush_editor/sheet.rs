@@ -31,8 +31,8 @@ const HINT_COLOUR: &str = "#a3a39c";
 /// (for the hint and Clear).
 pub(super) struct Sheet {
     /// The sheet's canvas; the widget holds it weakly.
-    pub(super) shared: Rc<RefCell<TestSheet>>,
-    pub(super) view: TestSheetView,
+    shared: Rc<RefCell<TestSheet>>,
+    view: TestSheetView,
     clear: gtk::Button,
     /// Shown on a blank sheet.
     hint: gtk::Label,
