@@ -21,6 +21,10 @@ struct Pose {
     orientation: vec2<f32>,
 };
 
+fn pose_of(state: HandleState) -> Pose {
+    return Pose(state.ferrule, state.axis, state.orientation);
+}
+
 fn state_slot(bristle: u32) -> u32 {
     return bristle * BRISTLE_STATE_VECTORS;
 }

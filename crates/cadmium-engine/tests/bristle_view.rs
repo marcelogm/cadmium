@@ -1,7 +1,7 @@
 pub mod support;
 
 use cadmium_engine::brush::HeadSpec;
-use cadmium_engine::engine::{BristleView, ferrule_radius_for};
+use cadmium_engine::engine::{BristleSnapshot, BristleView, ferrule_radius_for};
 use cadmium_engine::gpu::{GpuContext, read_mapped, staging_buffer};
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
@@ -10,16 +10,35 @@ use support::{session, stroke, without_wgpu_errors};
 const VERTEX_FLOATS: usize = 4;
 const VERTEX_BYTES: u64 = 16;
 const WORKGROUP_SIZE: u32 = 64;
+const EXTRA_SLOTS: usize = 3;
 const PROBE: &str = r#"
+const EXTRA_SLOTS: u32 = 3u;
 @group(0) @binding(0) var<storage, read> states: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read> handle: HandleState;
 @group(0) @binding(2) var<storage, read_write> out: array<vec4<f32>>;
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    if (id.x >= arrayLength(&out)) { return; }
-    out[id.x] = bristle_vertex(id.x / BRISTLE_VERTICES, id.x % BRISTLE_VERTICES);
+    if (id.x == 0u) {
+        let pose = pose_of(handle);
+        out[0] = vec4<f32>(pose.ferrule, 0.0);
+        out[1] = vec4<f32>(pose.axis, 0.0);
+        out[2] = vec4<f32>(f32(BRISTLE_VERTICES), 0.0, 0.0, 0.0);
+    }
+    if (id.x >= arrayLength(&out) - EXTRA_SLOTS) { return; }
+    out[EXTRA_SLOTS + id.x] = bristle_vertex(id.x / BRISTLE_VERTICES, id.x % BRISTLE_VERTICES);
 }
 "#;
+const AXIS_TOLERANCE: f32 = 1e-5;
+const ROOT_TOLERANCE_PX: f32 = 1e-3;
+const LARGE_DIAMETER_PX: f32 = 120.0;
+const SMALL_DIAMETER_PX: f32 = 12.0;
+
+struct Probe {
+    ferrule_px: [f32; 3],
+    axis: [f32; 3],
+    vertices_per_bristle: usize,
+    vertices: Vec<[f32; 4]>,
+}
 
 fn painted(gpu: &GpuContext, head: HeadSpec) -> PaintSession {
     let mut s = session(gpu);
@@ -78,11 +97,11 @@ fn probe_pipeline(
         })
 }
 
-fn probe_vertices(gpu: &GpuContext, view: &BristleView<'_>, per_bristle: usize) -> Vec<f32> {
+fn probe_floats(gpu: &GpuContext, view: &BristleView<'_>, per_bristle: usize) -> Vec<f32> {
     let bind_layout = probe_layout(gpu);
     let pipeline = probe_pipeline(gpu, view, &bind_layout);
     let vertices = view.count() * per_bristle as u32;
-    let bytes = u64::from(vertices) * VERTEX_BYTES;
+    let bytes = (u64::from(vertices) + EXTRA_SLOTS as u64) * VERTEX_BYTES;
     let out = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("bristle_view_out"),
         size: bytes,
@@ -117,26 +136,85 @@ fn entry(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
     }
 }
 
-#[test]
-fn the_view_module_reads_the_same_vertices_as_the_snapshot() {
-    let gpu = GpuContext::new().unwrap();
-    let s = painted(&gpu, HeadSpec::ROUND);
-    let snapshot = s.engine.bristle_snapshot(&gpu).unwrap();
+fn probe(gpu: &GpuContext, view: &BristleView<'_>, per_bristle: usize) -> Probe {
+    let floats = without_wgpu_errors(gpu, || probe_floats(gpu, view, per_bristle));
+    let (slots, _) = floats.as_chunks::<VERTEX_FLOATS>();
+    let xyz = |slot: [f32; 4]| [slot[0], slot[1], slot[2]];
+    Probe {
+        ferrule_px: xyz(slots[0]),
+        axis: xyz(slots[1]),
+        vertices_per_bristle: slots[2][0] as usize,
+        vertices: slots[EXTRA_SLOTS..].to_vec(),
+    }
+}
+
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn assert_vertices_match(probe: &Probe, snapshot: &BristleSnapshot) {
+    let per_bristle = probe.vertices_per_bristle;
+    for (b, chain) in snapshot.chains_px.iter().enumerate() {
+        assert_eq!(chain.len(), per_bristle);
+        for (v, expected) in chain.iter().enumerate() {
+            let [x, y, z, _] = probe.vertices[b * per_bristle + v];
+            assert_eq!(&[x, y, z], expected, "bristle {b} vertex {v}");
+        }
+    }
+    let lowest_clearance_px = probe
+        .vertices
+        .iter()
+        .map(|[_, _, height, floor]| height - floor)
+        .fold(f32::INFINITY, f32::min);
+    assert_eq!(lowest_clearance_px, snapshot.lowest_clearance_px);
+}
+
+fn assert_roots_hang_from_the_pose(probe: &Probe, snapshot: &BristleSnapshot, radius_px: f32) {
+    let axis = probe.axis;
+    assert!(
+        (dot(axis, axis).sqrt() - 1.0).abs() < AXIS_TOLERANCE,
+        "{axis:?}"
+    );
+    assert!(axis[2] > 0.0, "{axis:?}");
+    for chain in &snapshot.chains_px {
+        let offset = [0, 1, 2].map(|i| chain[0][i] - probe.ferrule_px[i]);
+        assert!(dot(offset, axis).abs() < ROOT_TOLERANCE_PX, "{offset:?}");
+        assert!(dot(offset, offset).sqrt() <= radius_px + ROOT_TOLERANCE_PX);
+    }
+}
+
+fn assert_view_matches_snapshot(gpu: &GpuContext, s: &PaintSession) {
+    let snapshot = s.engine.bristle_snapshot(gpu).unwrap();
     let view = s.engine.bristle_view();
     assert!(view.count() > 0);
     assert_eq!(view.count() as usize, snapshot.radii_px.len());
-    let per_bristle = snapshot.chains_px[0].len();
-    let floats = without_wgpu_errors(&gpu, || probe_vertices(&gpu, &view, per_bristle));
-    for (b, chain) in snapshot.chains_px.iter().enumerate() {
-        for (v, expected) in chain.iter().enumerate() {
-            let start = (b * per_bristle + v) * VERTEX_FLOATS;
-            assert_eq!(
-                &floats[start..start + 3],
-                expected,
-                "bristle {b} vertex {v}"
-            );
-        }
-    }
+    let probe = probe(gpu, &view, snapshot.chains_px[0].len());
+    assert_vertices_match(&probe, &snapshot);
+    assert_roots_hang_from_the_pose(&probe, &snapshot, view.ferrule_radius_px());
+}
+
+fn painted_at(gpu: &GpuContext, s: &mut PaintSession, diameter_px: f32) {
+    s.brush.geometry.max_diameter_px = diameter_px;
+    s.reload_brush(gpu);
+    stroke(gpu, s, 128.0, 100.0, 400.0);
+}
+
+#[test]
+fn the_view_module_reads_the_same_bristles_as_the_snapshot() {
+    let gpu = GpuContext::new().unwrap();
+    let s = painted(&gpu, HeadSpec::ROUND);
+    assert_view_matches_snapshot(&gpu, &s);
+}
+
+#[test]
+fn the_view_follows_a_refit_to_fewer_bristles() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    painted_at(&gpu, &mut s, LARGE_DIAMETER_PX);
+    let large = s.engine.bristle_view().count();
+    painted_at(&gpu, &mut s, SMALL_DIAMETER_PX);
+    assert!(s.engine.bristle_view().count() < large);
+    assert_view_matches_snapshot(&gpu, &s);
 }
 
 #[test]

@@ -47,7 +47,7 @@ fn starting_pose(base_px: f32) -> Pose {
     if dab.bristle_reset != 0u {
         return lifted_pose(base_px);
     }
-    return Pose(handle.ferrule, handle.axis, handle.orientation);
+    return pose_of(handle);
 }
 
 fn hung_vertex(rest: BristleRest, pose: Pose, wetness: f32, vertex: u32) -> vec3<f32> {

@@ -60,12 +60,19 @@ impl<'a> BristleView<'a> {
         self.root_half_extent_px
     }
 
-    /// WGSL module: engine constants, `BristleRest`, `HandleState`, `Pose`, `Frame`,
-    /// `frame_of`/`tilted`/`spun`, `bristle_vertex(b, v) -> vec4` (xyz canvas px, z height,
-    /// w floor) and `handle_pose()`. Every shader that includes it must declare
-    /// `states: array<vec4<f32>>` and `handle: HandleState` globals, even if unused;
-    /// in vertex stages both must be `var<storage, read>` (the handle buffer has no
-    /// uniform usage).
+    /// WGSL module with the engine's constants (`TIP_SIZE`, `BRISTLE_VERTICES`,
+    /// `BRISTLE_STATE_VECTORS` and the rest of the engine's shader prefix), the
+    /// structs `BristleRest`, `HandleState`, `Frame`, `Pose` and the functions
+    /// `texel_slot`, `state_slot`, `position_slot`, `previous_slot`, `anchor_slot`,
+    /// `bend_slot`, `pose_of`, `frame_of`, `tilted`, `untilted`, `spun`, `unspun` and
+    /// `bristle_vertex(b, v) -> vec4` (xyz canvas px, z height, w floor). All these
+    /// names are reserved in a shader that includes it.
+    ///
+    /// The including shader must declare a `states: array<vec4<f32>>` global bound
+    /// to [`BristleView::states`] (`var<storage, read>` in vertex stages). For the
+    /// handle pose, it binds [`BristleView::handle`] as its own
+    /// `var<storage, read>` of `HandleState` (the buffer has no uniform usage) and
+    /// calls `pose_of(handle)`.
     pub fn wgsl(&self) -> String {
         bristle_view_source()
     }
