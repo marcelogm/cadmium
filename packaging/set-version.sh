@@ -12,11 +12,19 @@ esac
 
 metainfo=crates/cadmium-app/data/io.github.marcelogm.Cadmium.metainfo.xml
 
-# The workspace version, which both crates inherit.
+# The workspace version, which every workspace crate inherits.
 sed -i "/^\[workspace.package\]/,/^\[/s/^version = \".*\"/version = \"$version\"/" Cargo.toml
 
-# Keep Cargo.lock in step so --locked builds still pass.
-sed -i "/^name = \"cadmium-\(app\|engine\)\"\$/{n;s/^version = \".*\"/version = \"$version\"/}" Cargo.lock
+# Keep Cargo.lock in step so --locked builds still pass: stamp each workspace
+# member, named in its own manifest, and nothing else.
+members=$(sed -n 's/^members = \[\(.*\)\]$/\1/p' Cargo.toml | tr -d '" ' | tr ',' ' ')
+[ -n "$members" ] || { echo "set-version: no workspace members in Cargo.toml" >&2; exit 1; }
+for member in $members; do
+    name=$(sed -n 's/^name = "\(.*\)"$/\1/p' "$member/Cargo.toml" | head -n 1)
+    sed -i "/^name = \"$name\"\$/{n;s/^version = \".*\"/version = \"$version\"/}" Cargo.lock
+    grep -A1 "^name = \"$name\"\$" Cargo.lock | grep -q "^version = \"$version\"\$" ||
+        { echo "set-version: $name is not in Cargo.lock" >&2; exit 1; }
+done
 
 # Add the release to the metainfo unless it is already listed.
 if ! grep -q "<release version=\"$version\"" "$metainfo"; then
