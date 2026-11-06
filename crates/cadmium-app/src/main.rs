@@ -1,7 +1,6 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod application;
-#[allow(dead_code)] // wired into the window in the next commit
 mod brush_library;
 mod brush_panel;
 mod canvas_widget;

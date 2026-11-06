@@ -2,7 +2,6 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
-use cadmium_engine::brush::BrushSpec;
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
@@ -30,11 +29,11 @@ pub struct BrushPanel {
     window: glib::WeakRef<CadmiumWindow>,
     pigments: PigmentsGroup,
     tool_group: ToolGroup,
-    brushes: Vec<BrushSpec>,
     clean_button: gtk::Button,
     hint: gtk::Label,
     pigment_swatches: RefCell<Vec<Swatch>>,
     shown_slots: RefCell<Option<Vec<String>>>,
+    shown_brushes: RefCell<Option<Vec<String>>>,
     syncing: Cell<bool>,
 }
 
@@ -42,8 +41,7 @@ impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
         let root = panel_root();
         let pigments = build::pigments_group();
-        let brushes = cadmium_engine::brush::factory_brushes();
-        let tool_group = build::tool_group(&brushes);
+        let tool_group = build::tool_group();
         let clean_button = build::clean_button();
         let hint = build::hint_label();
         root.append(&pigments.group);
@@ -56,11 +54,11 @@ impl BrushPanel {
             window: window.downgrade(),
             pigments,
             tool_group,
-            brushes,
             clean_button,
             hint,
             pigment_swatches: RefCell::new(Vec::new()),
             shown_slots: RefCell::new(None),
+            shown_brushes: RefCell::new(None),
             syncing: Cell::new(false),
         });
         panel.connect_controls();
@@ -74,7 +72,7 @@ impl BrushPanel {
     }
 
     pub fn refresh(self: &Rc<Self>) {
-        let snapshot = Snapshot::of(&self.state.borrow(), &self.brushes);
+        let snapshot = Snapshot::of(&self.state.borrow());
         self.syncing.set(true);
         if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {
             self.rebuild_pigments(&snapshot);
@@ -151,6 +149,14 @@ impl BrushPanel {
 
     fn show_stroke_options(&self, snapshot: &Snapshot) {
         let group = &self.tool_group;
+        if self.shown_brushes.borrow().as_ref() != Some(&snapshot.brush_names) {
+            let names: Vec<&str> = snapshot.brush_names.iter().map(String::as_str).collect();
+            group
+                .brush_row
+                .set_model(Some(&gtk::StringList::new(&names)));
+            self.shown_brushes
+                .replace(Some(snapshot.brush_names.clone()));
+        }
         let selected = snapshot
             .brush_index
             .map_or(gtk::INVALID_LIST_POSITION, |index| index as u32);

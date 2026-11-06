@@ -1,5 +1,4 @@
 use adw::prelude::*;
-use cadmium_engine::brush::BrushSpec;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
@@ -66,13 +65,13 @@ pub(super) fn pigments_group() -> PigmentsGroup {
     PigmentsGroup { group, flow }
 }
 
-pub(super) fn tool_group(brushes: &[BrushSpec]) -> ToolGroup {
+pub(super) fn tool_group() -> ToolGroup {
     let (loaded_row, loaded_swatch, reserve_bar) = loaded_row();
     let size = size_row();
     let load = slider_row("Load", 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
     let plate_gap = plate_gap_row();
     let medium = slider_row("Medium", 0.0, MEDIUM_SLIDER_MAX, UNIT_STEP, UNIT_PAGE);
-    let brush_row = brush_row(brushes);
+    let brush_row = brush_row();
     let reload_row = adw::SwitchRow::builder().title(RELOAD_EACH_STROKE).build();
     let clean_each_row = adw::SwitchRow::builder().title(CLEAN_EACH_STROKE).build();
     let group = adw::PreferencesGroup::builder().title("Brush").build();
@@ -159,10 +158,9 @@ fn plate_gap_row() -> SliderRow {
     plate_gap
 }
 
-fn brush_row(brushes: &[BrushSpec]) -> adw::ComboRow {
-    let names: Vec<&str> = brushes.iter().map(|brush| brush.name.as_str()).collect();
+fn brush_row() -> adw::ComboRow {
     adw::ComboRow::builder()
         .title(BRUSH_ROW_TITLE)
-        .model(&gtk::StringList::new(&names))
+        .model(&gtk::StringList::new(&[]))
         .build()
 }

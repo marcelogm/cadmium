@@ -1,4 +1,3 @@
-use cadmium_engine::brush::BrushSpec;
 use cadmium_engine::canvas::primer_srgb8;
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
@@ -30,13 +29,14 @@ pub(super) struct Snapshot {
     pub(super) load: f32,
     pub(super) plate_gap: f32,
     pub(super) medium: f32,
+    pub(super) brush_names: Vec<String>,
     pub(super) brush_index: Option<usize>,
     pub(super) reload_each_stroke: bool,
     pub(super) clean_each_stroke: bool,
 }
 
 impl Snapshot {
-    pub(super) fn of(state: &AppState, brushes: &[BrushSpec]) -> Snapshot {
+    pub(super) fn of(state: &AppState) -> Snapshot {
         let session = &state.session;
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
@@ -46,6 +46,7 @@ impl Snapshot {
         let colour_of = |mixture: &Mixture| mixture_colour(db, &slots, primer, mixture);
         let palette_colour = colour_of(&state.palette_mixture());
         let (held_colour, held_level, held_is_clean) = held_paint(state, tool, colour_of);
+        let worn = worn_brush(state.brushes.all(), &session.brush);
         Snapshot {
             tool,
             tube_slot: state.tube_slot,
@@ -63,7 +64,12 @@ impl Snapshot {
             load: session.brush.load,
             plate_gap: session.engine.params().get(PLATE_GAP_KEY),
             medium: session.brush.medium,
-            brush_index: worn_brush(brushes, &session.brush),
+            brush_names: state
+                .brushes
+                .all()
+                .map(|brush| brush.name.clone())
+                .collect(),
+            brush_index: worn,
             reload_each_stroke: state.reload_each_stroke,
             clean_each_stroke: state.clean_each_stroke,
         }

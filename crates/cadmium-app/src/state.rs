@@ -10,6 +10,7 @@ use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
 
+use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
 use crate::writes::EditCounter;
@@ -43,6 +44,7 @@ pub type Waker = Rc<dyn Fn()>;
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
     pub session: PaintSession,
+    pub brushes: BrushLibrary,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
     pub tube_slot: usize,
@@ -76,6 +78,7 @@ impl AppState {
         let mut state = AppState {
             gpu,
             session,
+            brushes: BrushLibrary::load(PathBuf::new()).0,
             view: ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,

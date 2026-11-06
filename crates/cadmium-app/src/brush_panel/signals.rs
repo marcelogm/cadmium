@@ -64,7 +64,13 @@ impl BrushPanel {
     }
 
     fn pick_brush(self: &Rc<Self>, row: &adw::ComboRow) {
-        let Some(brush) = self.brushes.get(row.selected() as usize).cloned() else {
+        let picked = self
+            .state
+            .borrow()
+            .brushes
+            .get(row.selected() as usize)
+            .cloned();
+        let Some(brush) = picked else {
             return;
         };
         self.change_brush(|state| state.wear_brush(&brush));

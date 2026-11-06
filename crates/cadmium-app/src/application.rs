@@ -6,6 +6,7 @@ use cadmium_engine::gpu::GpuContext;
 use gtk::{gdk, gio, glib};
 
 use crate::LOG_DOMAIN;
+use crate::brush_library::BrushLibrary;
 use crate::dialogs;
 use crate::presets::starting_canvas_spec;
 use crate::smoke::SmokeConfig;
@@ -80,6 +81,9 @@ fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
     let Some(state) = start_state(app) else {
         return;
     };
+    if smoke.borrow().is_none() {
+        load_brush_library(&state);
+    }
     let window = CadmiumWindow::new(app, state);
     if let Some(smoke) = smoke.borrow_mut().take() {
         smoke.run(app, &window);
@@ -106,6 +110,15 @@ fn start_state(app: &adw::Application) -> Option<SharedState> {
             None
         }
     }
+}
+
+/// Smoke runs skip this, so they never read the painter's own brush folder.
+fn load_brush_library(state: &SharedState) {
+    let (library, warnings) = BrushLibrary::load(BrushLibrary::default_dir());
+    for warning in &warnings {
+        glib::g_warning!(LOG_DOMAIN, "skipped brush {warning}");
+    }
+    state.borrow_mut().brushes = library;
 }
 
 fn report_startup_failure(app: &adw::Application, heading: &str, body: &str) {
