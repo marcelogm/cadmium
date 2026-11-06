@@ -32,6 +32,7 @@ pub fn tray_view(viewport_px: (u32, u32)) -> ViewTransform {
         origin_x: 0.0,
         origin_y: 0.0,
         zoom,
+        rotation: 0.0,
     }
 }
 

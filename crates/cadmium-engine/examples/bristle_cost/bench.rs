@@ -152,6 +152,7 @@ fn encode_full_present(
             origin_x: 0.0,
             origin_y: 0.0,
             zoom: 1.0,
+            rotation: 0.0,
         },
     );
     session

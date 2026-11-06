@@ -33,6 +33,7 @@ fn a_canvas_of_the_sheets_size_is_shown_one_to_one() {
         origin_x: 0.0,
         origin_y: 0.0,
         zoom: 1.0,
+        rotation: 0.0,
     };
     assert_eq!(view, want);
 }

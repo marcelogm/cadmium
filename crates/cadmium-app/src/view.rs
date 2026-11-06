@@ -21,6 +21,7 @@ pub fn fit_view(canvas_size: (u32, u32), viewport_px: (f64, f64), margin_px: f64
         origin_x: (canvas_width / 2.0 - viewport_px.0 / 2.0 / zoom_f64) as f32,
         origin_y: (canvas_height / 2.0 - viewport_px.1 / 2.0 / zoom_f64) as f32,
         zoom,
+        rotation: 0.0,
     }
 }
 
@@ -35,6 +36,7 @@ pub fn cover_view(canvas_size: (u32, u32), viewport_px: (u32, u32)) -> ViewTrans
         origin_x: (canvas_width / 2.0 - width / 2.0 / zoom_f64) as f32,
         origin_y: (canvas_height / 2.0 - height / 2.0 / zoom_f64) as f32,
         zoom,
+        rotation: 0.0,
     }
 }
 
@@ -54,6 +56,7 @@ pub fn zoom_around(view: ViewTransform, x_px: f64, y_px: f64, zoom: f32) -> View
         origin_x: (anchor_x - x_px / zoom_f64) as f32,
         origin_y: (anchor_y - y_px / zoom_f64) as f32,
         zoom,
+        rotation: view.rotation,
     }
 }
 
@@ -63,6 +66,7 @@ pub fn pan(view: ViewTransform, dx_px: f64, dy_px: f64) -> ViewTransform {
         origin_x: (f64::from(view.origin_x) - dx_px / zoom) as f32,
         origin_y: (f64::from(view.origin_y) - dy_px / zoom) as f32,
         zoom: view.zoom,
+        rotation: view.rotation,
     }
 }
 
