@@ -13,7 +13,7 @@ use glam::camera::rh::{proj::directx, view::look_at_mat4};
 use glam::{Mat4, Vec3};
 
 use crate::StrokeBox;
-use crate::mesh::{FERRULE_LENGTH, HANDLE_CLEARANCE};
+use crate::proportions::{FERRULE_LENGTH, HANDLE_CLEARANCE};
 
 /// Yaw of the reset view, around the canvas normal.
 const RESET_YAW: f32 = -35.0 * DEG;

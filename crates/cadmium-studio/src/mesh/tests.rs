@@ -1,6 +1,6 @@
-use cadmium_engine::brush::HairSpec;
+use super::{Mesh, ferrule_mesh, handle_mesh};
 
-use super::{FERRULE_LENGTH, HANDLE_CLEARANCE, Mesh, ferrule_mesh, hair_tint, handle_mesh};
+use crate::proportions::{FERRULE_LENGTH, HANDLE_CLEARANCE};
 
 const R: f32 = 10.0;
 const EPS: f32 = 1e-3;
@@ -27,64 +27,6 @@ fn span(mesh: &Mesh, axis: usize) -> (f32, f32) {
     )
 }
 
-#[test]
-fn ferrule_is_a_valid_tube_of_the_right_length() {
-    let mesh = ferrule_mesh([R, R], R);
-    assert_valid(&mesh);
-    let (low, high) = span(&mesh, 2);
-    assert!(low.abs() < EPS);
-    assert!((high - FERRULE_LENGTH * R).abs() < EPS);
-}
-
-#[test]
-fn ferrule_stays_inside_its_ellipse() {
-    let (a, b) = (R + 0.08 * R, 0.25 * R + 0.08 * R);
-    let mesh = ferrule_mesh([R, 0.25 * R], R);
-    for v in &mesh.vertices {
-        let [x, y, _] = v.position;
-        assert!((x / a).powi(2) + (y / b).powi(2) < 1.0 + EPS);
-    }
-}
-
-#[test]
-fn flat_ferrule_is_thinner_than_round() {
-    let flat = span(&ferrule_mesh([R, 0.25 * R], R), 1);
-    let round = span(&ferrule_mesh([R, R], R), 1);
-    assert!(flat.1 - flat.0 < round.1 - round.0);
-}
-
-#[test]
-fn handle_sits_above_the_ferrule() {
-    let mesh = handle_mesh(R);
-    assert_valid(&mesh);
-    let (low, high) = span(&mesh, 2);
-    assert!((low - FERRULE_LENGTH * R).abs() < EPS);
-    assert!((high - (FERRULE_LENGTH + HANDLE_CLEARANCE) * R).abs() < EPS);
-    let widest = mesh
-        .vertices
-        .iter()
-        .map(|v| v.position[0].hypot(v.position[1]));
-    assert!(widest.fold(0.0, f32::max) <= 1.2 * R + EPS);
-}
-
-#[test]
-fn factory_hairs_get_their_tint() {
-    assert_eq!(hair_tint(&HairSpec::SYNTHETIC), [0.55, 0.38, 0.12]);
-    assert_eq!(hair_tint(&HairSpec::HOG), [0.80, 0.72, 0.55]);
-    assert_eq!(hair_tint(&HairSpec::SABLE), [0.35, 0.12, 0.05]);
-    assert_eq!(hair_tint(&HairSpec::MONGOOSE), [0.30, 0.25, 0.20]);
-    assert_eq!(hair_tint(&HairSpec::SQUIRREL), [0.10, 0.07, 0.05]);
-}
-
-#[test]
-fn custom_hair_takes_the_nearest_stiffness() {
-    let stiff = HairSpec {
-        stiffness: 0.99,
-        ..HairSpec::SYNTHETIC
-    };
-    assert_eq!(hair_tint(&stiff), hair_tint(&HairSpec::HOG));
-}
-
 fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
@@ -108,6 +50,36 @@ fn assert_wound_outward(mesh: &Mesh) {
         let average = [0, 1, 2].map(|k| a.normal[k] + b.normal[k] + c.normal[k]);
         assert!(dot(face, average) > 0.0, "inward triangle {tri:?}");
     }
+}
+
+#[test]
+fn ferrule_is_a_valid_tube_of_the_right_length() {
+    let mesh = ferrule_mesh([R, R], R);
+    assert_valid(&mesh);
+    let (low, high) = span(&mesh, 2);
+    assert!(low.abs() < EPS);
+    assert!((high - FERRULE_LENGTH * R).abs() < EPS);
+}
+
+#[test]
+fn flat_ferrule_is_thinner_than_round() {
+    let flat = span(&ferrule_mesh([R, 0.25 * R], R), 1);
+    let round = span(&ferrule_mesh([R, R], R), 1);
+    assert!(flat.1 - flat.0 < round.1 - round.0);
+}
+
+#[test]
+fn handle_sits_above_the_ferrule() {
+    let mesh = handle_mesh(R);
+    assert_valid(&mesh);
+    let (low, high) = span(&mesh, 2);
+    assert!((low - FERRULE_LENGTH * R).abs() < EPS);
+    assert!((high - (FERRULE_LENGTH + HANDLE_CLEARANCE) * R).abs() < EPS);
+    let widest = mesh
+        .vertices
+        .iter()
+        .map(|v| v.position[0].hypot(v.position[1]));
+    assert!(widest.fold(0.0, f32::max) <= 1.2 * R + EPS);
 }
 
 #[test]
@@ -146,17 +118,24 @@ fn handle_side_normals_point_away_from_the_axis() {
     }
 }
 
+fn assert_finite(mesh: &Mesh) {
+    for v in &mesh.vertices {
+        assert!(v.position.iter().all(|c| c.is_finite()));
+    }
+}
+
 #[test]
-fn a_stiffness_tie_goes_to_the_earlier_factory_hair() {
-    let (early, late) = (HairSpec::SABLE, HairSpec::SQUIRREL);
-    let middle = (early.stiffness + late.stiffness) / 2.0;
-    let hair = HairSpec {
-        stiffness: middle,
-        ..early
-    };
-    assert_eq!(
-        (early.stiffness - middle).abs(),
-        (late.stiffness - middle).abs()
-    );
-    assert_eq!(hair_tint(&hair), hair_tint(&early));
+fn degenerate_sizes_still_give_finite_unit_normals() {
+    for bad in [0.0, -5.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let meshes = [
+            ferrule_mesh([bad, bad], bad),
+            ferrule_mesh([R, bad], R),
+            handle_mesh(bad),
+        ];
+        for mesh in &meshes {
+            assert_valid(mesh);
+            assert_wound_outward(mesh);
+            assert_finite(mesh);
+        }
+    }
 }

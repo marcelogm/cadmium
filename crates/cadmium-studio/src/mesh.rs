@@ -1,41 +1,20 @@
-//! Ferrule and handle meshes, plus the hair tint, for the 3D brush view.
+//! Ferrule and handle meshes for the 3D brush view.
 //!
-//! Ferrule-local space: x across the head, y along its thickness, z up the
-//! brush axis. A vertex shader poses them with the engine's tilt and spin.
 //! Neither mesh has a bottom cap (hidden by the hairs); the ferrule has no top
 //! cap either (hidden by the handle); the handle has a top cap.
 
 use std::f32::consts::TAU;
 
 use bytemuck::{Pod, Zeroable};
-use cadmium_engine::brush::HairSpec;
 
-/// The ferrule's length above the reach, in ferrule radii.
-pub(crate) const FERRULE_LENGTH: f32 = 1.5;
-/// Clearance above the ferrule for the handle, in ferrule radii.
-pub(crate) const HANDLE_CLEARANCE: f32 = 4.0;
+use crate::proportions::{FERRULE_LENGTH, FERRULE_MARGIN, HANDLE_CLEARANCE, HANDLE_PROFILE};
 
 const SEGMENTS: u32 = 32;
-/// Ferrule wall margin around the roots, in ferrule radii.
-const FERRULE_MARGIN: f32 = 0.08;
-/// Handle profile as (height share of the clearance, radius in ferrule radii).
-const HANDLE_PROFILE: [(f32, f32); 6] = [
-    (0.0, 0.9),
-    (0.15, 1.05),
-    (0.4, 1.2),
-    (0.7, 1.1),
-    (0.9, 0.85),
-    (1.0, 0.7),
-];
+/// Smallest radius or extent a mesh is built with, in px.
+const MIN_SIZE: f32 = 1e-3;
 
-const TINTS: [(HairSpec, [f32; 3]); 5] = [
-    (HairSpec::SYNTHETIC, [0.55, 0.38, 0.12]),
-    (HairSpec::HOG, [0.80, 0.72, 0.55]),
-    (HairSpec::SABLE, [0.35, 0.12, 0.05]),
-    (HairSpec::MONGOOSE, [0.30, 0.25, 0.20]),
-    (HairSpec::SQUIRREL, [0.10, 0.07, 0.05]),
-];
-
+/// A mesh vertex in ferrule-local space (x across the head, y along its
+/// thickness, z up the brush axis), in px; `normal` has unit length.
 #[repr(C)]
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
 pub struct MeshVertex {
@@ -43,10 +22,32 @@ pub struct MeshVertex {
     pub normal: [f32; 3],
 }
 
+/// An indexed triangle list in ferrule-local space (x across the head, y along
+/// its thickness, z up the brush axis), in px, wound counter-clockwise seen
+/// from outside.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Mesh {
     pub vertices: Vec<MeshVertex>,
     pub indices: Vec<u32>,
+}
+
+/// A finite size of at least `MIN_SIZE`; anything else becomes `MIN_SIZE`.
+fn sanitised(size: f32) -> f32 {
+    if size.is_finite() {
+        size.max(MIN_SIZE)
+    } else {
+        MIN_SIZE
+    }
+}
+
+/// `v` scaled to unit length, or `fallback` when it has none.
+fn unit(v: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
+    let len = v[0].hypot(v[1]);
+    if len.is_finite() && len > 0.0 {
+        [v[0] / len, v[1] / len]
+    } else {
+        fallback
+    }
 }
 
 fn ring_angles() -> impl Iterator<Item = (f32, f32)> {
@@ -62,19 +63,23 @@ fn stitch(indices: &mut Vec<u32>, a: u32, b: u32) {
     }
 }
 
-/// An elliptic tube around the bristle roots, open at both ends.
+/// An elliptic tube around the bristle roots, open at both ends, in
+/// ferrule-local space (x across, y along, z up the axis), all in px.
+///
+/// Its half-axes are the roots' half extents plus a wall margin; it spans
+/// z = 0 to 1.5 ferrule radii. Non-finite or non-positive sizes are raised to
+/// a tiny minimum.
 pub fn ferrule_mesh(root_half_extent_px: [f32; 2], ferrule_radius_px: f32) -> Mesh {
-    let r = ferrule_radius_px;
-    let a = root_half_extent_px[0] + FERRULE_MARGIN * r;
-    let b = root_half_extent_px[1] + FERRULE_MARGIN * r;
+    let r = sanitised(ferrule_radius_px);
+    let a = sanitised(root_half_extent_px[0]) + FERRULE_MARGIN * r;
+    let b = sanitised(root_half_extent_px[1]) + FERRULE_MARGIN * r;
     let mut mesh = Mesh::default();
     for z in [0.0, FERRULE_LENGTH * r] {
         for (sin, cos) in ring_angles() {
-            let normal = [cos / a, sin / b, 0.0];
-            let len = normal[0].hypot(normal[1]);
+            let [nx, ny] = unit([cos / a, sin / b], [cos, sin]);
             mesh.vertices.push(MeshVertex {
                 position: [a * cos, b * sin, z],
-                normal: [normal[0] / len, normal[1] / len, 0.0],
+                normal: [nx, ny, 0.0],
             });
         }
     }
@@ -82,9 +87,13 @@ pub fn ferrule_mesh(root_half_extent_px: [f32; 2], ferrule_radius_px: f32) -> Me
     mesh
 }
 
-/// A lathe stub above the ferrule, swelling then tapering, with a top cap.
+/// A lathe stub above the ferrule, swelling then tapering, with a top cap, in
+/// ferrule-local space (z up the brush axis), all in px.
+///
+/// It spans z = 1.5 to 5.5 ferrule radii. Non-finite or non-positive radii
+/// are raised to a tiny minimum.
 pub fn handle_mesh(ferrule_radius_px: f32) -> Mesh {
-    let r = ferrule_radius_px;
+    let r = sanitised(ferrule_radius_px);
     let z0 = FERRULE_LENGTH * r;
     let rise = HANDLE_CLEARANCE * r;
     let points: Vec<(f32, f32)> = HANDLE_PROFILE
@@ -95,9 +104,7 @@ pub fn handle_mesh(ferrule_radius_px: f32) -> Mesh {
     for (k, &(z, radius)) in points.iter().enumerate() {
         let before = points[k.saturating_sub(1)];
         let after = points[(k + 1).min(points.len() - 1)];
-        let (dz, dr) = (after.0 - before.0, after.1 - before.1);
-        let len = dz.hypot(dr);
-        let (nr, nz) = (dz / len, -dr / len);
+        let [nr, nz] = unit([after.0 - before.0, before.1 - after.1], [1.0, 0.0]);
         for (sin, cos) in ring_angles() {
             mesh.vertices.push(MeshVertex {
                 position: [radius * cos, radius * sin, z],
@@ -133,17 +140,6 @@ fn add_top_cap(mesh: &mut Mesh, (z, radius): (f32, f32)) {
     for i in 0..SEGMENTS {
         mesh.indices.extend([centre, ring + i, ring + i + 1]);
     }
-}
-
-/// Linear-light bristle colour for the factory hair nearest in stiffness; a
-/// tie goes to the earlier factory hair (synthetic, hog, sable, mongoose,
-/// squirrel).
-pub fn hair_tint(hair: &HairSpec) -> [f32; 3] {
-    let distance = |h: &HairSpec| (h.stiffness - hair.stiffness).abs();
-    TINTS
-        .iter()
-        .min_by(|a, b| distance(&a.0).total_cmp(&distance(&b.0)))
-        .map_or(TINTS[0].1, |t| t.1)
 }
 
 #[cfg(test)]
