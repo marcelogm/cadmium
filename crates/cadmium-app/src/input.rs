@@ -11,6 +11,7 @@ use self::navigation::{nav_gesture, pinch_gesture, scroll_controller};
 use self::stylus::{eyedropper_click, hover_controller, stylus_gesture};
 use crate::canvas_widget::CadmiumCanvas;
 use crate::state::SharedState;
+use crate::tools::Press;
 
 pub(crate) mod nav_drag;
 mod navigation;
@@ -115,6 +116,27 @@ fn side_button_may_act(stroking: bool) -> bool {
 
 fn stroke_may_begin(panning: bool) -> bool {
     !panning
+}
+
+/// What a pen touching down does under a tool that presses as `press`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DownOutcome {
+    Ignore,
+    PickColour,
+    /// Hand the touch to the painting, as a stroke or a wipe.
+    Press,
+}
+
+/// The Move tool leaves the pen to navigation; the eyedropper picks with the tip, while the
+/// eraser end still wipes; every other press goes to the painting.
+fn down_outcome(press: Press, eraser: bool) -> DownOutcome {
+    match press {
+        Press::Pan => DownOutcome::Ignore,
+        Press::PickColour if !eraser => DownOutcome::PickColour,
+        Press::PickColour | Press::Stroke(_) | Press::LoadFromPile(_) | Press::Squeeze => {
+            DownOutcome::Press
+        }
+    }
 }
 
 fn release<W: PaintSurfaceWidget>(widget: &W, contact: &Contact) {
