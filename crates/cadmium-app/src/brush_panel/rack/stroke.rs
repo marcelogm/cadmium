@@ -17,7 +17,7 @@ use crate::LOG_DOMAIN;
 const STROKE_HEIGHT: u32 = 46;
 /// The thumbnail at `STROKE_HEIGHT`, keeping its aspect: 153 × 46 for 240 × 72, the width
 /// truncated from 153.33; `contain` letterboxes the fraction.
-pub(super) const STROKE_SIZE: (i32, i32) = (
+const STROKE_SIZE: (i32, i32) = (
     (STROKE_HEIGHT * THUMBNAIL_SIZE.0 / THUMBNAIL_SIZE.1) as i32,
     STROKE_HEIGHT as i32,
 );
