@@ -81,12 +81,12 @@ pub(super) enum BrushStep {
     Pick(String),
     Export(PathBuf),
     Delete,
-    /// Opens the brush editor paused mid-stroke, on show for this many frames.
+    /// Opens the brush editor, on show for this many frames.
     Editor(u32),
 }
 
 impl BrushStep {
-    /// The editor waits for the rack's thumbnails: opening the studio pauses them.
+    /// The editor waits for the rack's thumbnails: opening it pauses them.
     pub(super) fn is_ready(&self, window: &CadmiumWindow) -> bool {
         match self {
             BrushStep::Editor(_) => !window.thumbnails_pending(),
@@ -100,7 +100,7 @@ impl BrushStep {
             BrushStep::Pick(name) => pick_from_rack(window, name),
             BrushStep::Export(path) => window.export_brush_to(path),
             BrushStep::Delete => window.delete_worn_brush_now(),
-            BrushStep::Editor(_) => editor::open_mid_stroke(window),
+            BrushStep::Editor(_) => editor::open(window),
         }
     }
 }
