@@ -1,12 +1,14 @@
 //! The brush being edited: what it was, what it is now, and how it is saved.
 
-use cadmium_engine::brush::BrushSpec;
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, default_brush, factory_brushes};
 use cadmium_studio::{HairPreset, HeadPreset};
 
 use super::closing::Closing;
 use super::controls::{Control, Part};
 
 const COPY_SUFFIX: &str = " (copy)";
+/// What a brush made from scratch is called until it is named; Save numbers it if taken.
+const NEW_BRUSH_NAME: &str = "New Brush";
 
 /// Where the edited brush came from: it decides how Save stores it and whether it can be deleted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +18,9 @@ pub(super) enum Origin {
     /// A factory brush, or a worn brush in no library ("Current Brush"): saving makes a new
     /// user brush.
     Factory,
+    /// A brush made from scratch: saving adds it as a new user brush; until then there is
+    /// nothing to copy or delete.
+    New,
 }
 
 /// What Save does with the draft.
@@ -50,6 +55,27 @@ impl Draft {
             current: original.clone(),
             original,
             origin,
+        }
+    }
+
+    /// A brush made from scratch: a Round head with Synthetic hair at the Round brush's
+    /// suggested size, called "New Brush", with both parts on Custom so every slider moves at
+    /// once. Untouched, it is not dirty.
+    pub(super) fn new_brush() -> Draft {
+        let round = factory_brushes()
+            .into_iter()
+            .find(|brush| brush.head == HeadSpec::ROUND && brush.hair == HairSpec::SYNTHETIC)
+            .unwrap_or_else(default_brush);
+        let original = BrushSpec {
+            name: NEW_BRUSH_NAME.to_owned(),
+            ..round
+        };
+        Draft {
+            current: original.clone(),
+            original,
+            origin: Origin::New,
+            head_preset: None,
+            hair_preset: None,
         }
     }
 
@@ -132,7 +158,7 @@ impl Draft {
     }
 
     /// Where Save puts the draft: a user brush is saved over itself; anything else becomes a
-    /// new brush, called "<name> (copy)" when its name was left as it was.
+    /// new brush, a factory one called "<name> (copy)" when its name was left as it was.
     pub(super) fn save_plan(&self) -> SavePlan {
         let name = self.chosen_name();
         match self.origin {
@@ -140,7 +166,7 @@ impl Draft {
             Origin::Factory if name == self.original.name => {
                 SavePlan::AddNew(self.named(copy_name(&name)))
             }
-            Origin::Factory => SavePlan::AddNew(self.named(name)),
+            Origin::Factory | Origin::New => SavePlan::AddNew(self.named(name)),
         }
     }
 
@@ -158,8 +184,13 @@ impl Draft {
     pub(super) fn deletable(&self) -> Option<usize> {
         match self.origin {
             Origin::User(index) => Some(index),
-            Origin::Factory => None,
+            Origin::Factory | Origin::New => None,
         }
+    }
+
+    /// Whether Save as Copy has a brush to copy: not until a new brush is first saved.
+    pub(super) fn copyable(&self) -> bool {
+        self.origin != Origin::New
     }
 
     fn named(&self, name: String) -> BrushSpec {

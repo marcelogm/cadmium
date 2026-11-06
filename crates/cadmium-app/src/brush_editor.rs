@@ -60,16 +60,26 @@ struct Editor {
     sheet: Sheet,
 }
 
-/// Shows the editor on the worn brush; while one is open, does nothing. A test sheet that
-/// can't be made keeps the editor shut, and says why.
+/// Shows the editor on the worn brush; while one is open, does nothing.
 pub fn open(window: &CadmiumWindow) {
+    open_with(window, draft_for);
+}
+
+/// Shows the editor on a brush made from scratch; while one is open, does nothing.
+pub fn open_new(window: &CadmiumWindow) {
+    open_with(window, |_: &AppState| Draft::new_brush());
+}
+
+/// Shows the editor on the draft `draft_of` makes. A test sheet that can't be made keeps the
+/// editor shut, and says why.
+fn open_with(window: &CadmiumWindow, draft_of: impl FnOnce(&AppState) -> Draft) {
     if window.has_editor() {
         return;
     }
     let state = window.state();
     let (draft, job, sheet) = {
         let state = state.borrow();
-        let draft = draft_for(&state);
+        let draft = draft_of(&state);
         let sheet = sheet::new_sheet(&state, draft.current());
         (draft, ExampleJob::new(&state), sheet)
     };
