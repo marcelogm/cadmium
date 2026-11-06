@@ -7,6 +7,7 @@ const PARAM_STEPS: f64 = 100.0;
 const PARAM_PAGES: f64 = 10.0;
 const STEP_DECIMALS_SLACK: f64 = 1e-6;
 
+#[derive(Clone)]
 pub(crate) struct SliderRow {
     pub(crate) row: adw::ActionRow,
     pub(crate) scale: gtk::Scale,

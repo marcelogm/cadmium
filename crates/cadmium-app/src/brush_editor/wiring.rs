@@ -7,7 +7,7 @@ use cadmium_studio::{HairPreset, HeadPreset};
 use gtk::gio;
 
 use super::brush_group::changes_size;
-use super::controls::{Control, preset_at};
+use super::controls::preset_at;
 use super::header::{ACTION_GROUP, Header};
 use super::parts::ControlRow;
 use super::{Editor, with_editor};
@@ -93,11 +93,10 @@ impl Editor {
 
     fn connect_control(self: &Rc<Self>, row: &ControlRow) {
         let editor = Rc::downgrade(self);
-        let control = row.control;
-        let label = row.slider.value_label.clone();
+        let shown = row.clone();
         row.slider.scale.connect_value_changed(move |scale| {
             let value = scale.value();
-            with_editor(&editor, |editor| editor.slide(control, value, &label));
+            with_editor(&editor, |editor| editor.slide(&shown, value));
         });
     }
 
@@ -113,13 +112,15 @@ impl Editor {
         self.sync();
     }
 
-    /// Moves `control` while its part is Custom, and shows the value it took.
-    fn slide(&self, control: Control, value: f64, label: &gtk::Label) {
-        if !self.draft.borrow_mut().set(control, value as f32) {
+    /// Moves the row's control while its part is Custom, and puts the thumb on the value it
+    /// took (on the step grid). `value-changed` doesn't recurse: moving the thumb here
+    /// re-emits it once this handler returns, with the snapped value, which then changes
+    /// nothing; a thumb already on the grid isn't moved, so it isn't re-emitted at all.
+    fn slide(&self, row: &ControlRow, value: f64) {
+        if !self.draft.borrow_mut().set(row.control, value as f32) {
             return;
         }
-        let shown = control.get(self.draft.borrow().current());
-        label.set_label(&control.format(shown));
+        row.show(row.control.get(self.draft.borrow().current()));
     }
 }
 

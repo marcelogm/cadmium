@@ -16,3 +16,7 @@ button.pigment-swatch {
   min-width: 0;
   min-height: 0;
 }
+
+row.locked-control {
+  opacity: 0.6;
+}

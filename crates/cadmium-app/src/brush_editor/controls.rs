@@ -185,10 +185,22 @@ impl Control {
         *self.slot(&mut head, &mut hair)
     }
 
-    /// Sets the control on `brush`, kept within its range.
+    /// Sets the control on `brush`, on its step and kept within its range.
     pub(super) fn set(self, brush: &mut BrushSpec, value: f32) {
         let [low, high] = self.range();
-        *self.slot(&mut brush.head, &mut brush.hair) = value.clamp(low, high);
+        *self.slot(&mut brush.head, &mut brush.hair) = self.snap(value).clamp(low, high);
+    }
+
+    /// `value` on the slider's step grid. Every step is a whole fraction of one (1/100, 1/20,
+    /// 1), so the grid is counted in whole steps per unit, in f64: an f32 step like 0.01 is a
+    /// hair under it, and multiplying by it would give 0.29999998 where a preset writes 0.3.
+    fn snap(self, value: f32) -> f32 {
+        let per_unit = self.steps_per_unit();
+        ((f64::from(value) * per_unit).round() / per_unit) as f32
+    }
+
+    fn steps_per_unit(self) -> f64 {
+        (1.0 / f64::from(self.step())).round()
     }
 
     /// `value` as the slider's label shows it: the step's decimals, the fan in degrees.

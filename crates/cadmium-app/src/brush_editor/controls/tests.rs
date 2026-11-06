@@ -1,5 +1,5 @@
 use cadmium_engine::brush::{HeadSpec, default_brush};
-use cadmium_studio::HeadPreset;
+use cadmium_studio::{HairPreset, HeadPreset};
 
 use super::{Control, Part, position_of, preset_at};
 
@@ -8,6 +8,14 @@ fn every_control() -> Vec<Control> {
         .chain(Control::hair())
         .chain(Control::hair_advanced())
         .collect()
+}
+
+/// A value a few steps above the control's low end, as the slider would land on it.
+fn on_the_grid(control: Control) -> f32 {
+    let [low, _] = control.range();
+    let per_unit = control.steps_per_unit();
+    let steps = (f64::from(low) * per_unit).round() + 7.0;
+    (steps / per_unit) as f32
 }
 
 fn labels(controls: impl Iterator<Item = Control>) -> Vec<&'static str> {
@@ -57,10 +65,9 @@ fn the_editor_lists_eight_head_six_hair_and_six_advanced_controls() {
 fn every_control_reads_back_what_it_sets_and_moves_nothing_else() {
     for control in every_control() {
         let mut brush = default_brush();
-        let [low, high] = control.range();
-        let middle = (low + high) / 2.0;
-        control.set(&mut brush, middle);
-        assert_eq!(control.get(&brush), middle, "{control:?}");
+        let on_grid = on_the_grid(control);
+        control.set(&mut brush, on_grid);
+        assert_eq!(control.get(&brush), on_grid, "{control:?}");
         for other in every_control()
             .into_iter()
             .filter(|&other| other != control)
@@ -107,4 +114,49 @@ fn custom_comes_after_the_presets() {
     assert_eq!(position_of(&HeadPreset::ALL, Some(HeadPreset::Flat)), 1);
     assert_eq!(preset_at(&HeadPreset::ALL, 1), Some(HeadPreset::Flat));
     assert_eq!(preset_at(&HeadPreset::ALL, 9), None);
+}
+
+#[test]
+fn a_value_lands_on_its_slider_step() {
+    let mut brush = default_brush();
+    Control::Thickness.set(&mut brush, 0.4372);
+    assert_eq!(brush.head.thickness, 0.44);
+    Control::Length.set(&mut brush, 2.53);
+    assert_eq!(brush.head.length, 2.55);
+    Control::Fan.set(&mut brush, 49.6);
+    assert_eq!(brush.head.fan_deg, 50.0);
+}
+
+#[test]
+fn every_preset_value_is_already_on_its_step() {
+    for preset in HeadPreset::ALL {
+        let mut brush = default_brush();
+        brush.head = preset.spec();
+        for control in Control::head() {
+            let value = control.get(&brush);
+            control.set(&mut brush, value);
+            assert_eq!(control.get(&brush), value, "{preset:?} {control:?}");
+        }
+    }
+    for preset in HairPreset::ALL {
+        let mut brush = default_brush();
+        brush.hair = preset.spec();
+        for control in Control::hair().chain(Control::hair_advanced()) {
+            let value = control.get(&brush);
+            control.set(&mut brush, value);
+            assert_eq!(control.get(&brush), value, "{preset:?} {control:?}");
+        }
+    }
+}
+
+#[test]
+fn every_step_is_a_whole_fraction_of_one() {
+    for control in every_control() {
+        let per_unit = control.steps_per_unit();
+        assert!(per_unit >= 1.0, "{control:?}");
+        assert!(
+            (per_unit * f64::from(control.step()) - 1.0).abs() < 1e-6,
+            "{control:?}"
+        );
+    }
 }

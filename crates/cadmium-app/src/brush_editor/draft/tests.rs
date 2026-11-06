@@ -233,3 +233,21 @@ fn unlocking_one_part_leaves_the_other_locked() {
     assert!(draft.set(Control::Stiffness, 0.3));
     assert!(!draft.set(Control::Length, 3.0));
 }
+
+#[test]
+fn a_drag_that_ends_near_the_original_value_leaves_the_draft_unchanged() {
+    let mut draft = factory();
+    draft.pick_head(None);
+    draft.set(Control::Thickness, 0.9987);
+    assert!(!draft.is_dirty());
+}
+
+#[test]
+fn a_brush_dragged_onto_a_presets_values_opens_on_that_preset() {
+    let mut draft = factory();
+    draft.pick_head(None);
+    draft.set(Control::Thickness, 0.4372);
+    draft.set(Control::Thickness, 0.9987);
+    let reopened = Draft::open(draft.saved_brush(), Origin::Factory);
+    assert_eq!(reopened.head_preset(), Some(HeadPreset::Round));
+}

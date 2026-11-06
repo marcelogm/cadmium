@@ -11,6 +11,12 @@ use crate::sliders::{SliderRow, slider_row};
 /// A page step is this many slider steps.
 const STEPS_PER_PAGE: f64 = 10.0;
 
+/// The style class dimming a locked row like the approved mockup (`style.css`).
+const LOCKED: &str = "locked-control";
+/// The editor's sliders are narrower than the lab's, so two-word titles fit on one line.
+const SCALE_WIDTH: i32 = 112;
+
+#[derive(Clone)]
 pub(super) struct ControlRow {
     pub(super) control: Control,
     pub(super) slider: SliderRow,
@@ -59,12 +65,35 @@ impl PartGroups {
         self.hair_preset
             .set_selected(position_of(&HairPreset::ALL, draft.hair_preset()));
         for row in &self.rows {
-            let value = row.control.get(draft.current());
-            row.slider.scale.set_value(f64::from(value));
-            row.slider.value_label.set_label(&row.control.format(value));
-            row.slider
-                .row
-                .set_sensitive(draft.is_custom(row.control.part()));
+            row.show(row.control.get(draft.current()));
+            row.lock(!draft.is_custom(row.control.part()));
+        }
+    }
+}
+
+impl ControlRow {
+    /// Puts the thumb on `value` (unless it is there already) and reads it out, on screen
+    /// and to assistive technologies.
+    pub(super) fn show(&self, value: f32) {
+        let text = self.control.format(value);
+        let scale = &self.slider.scale;
+        if scale.value() != f64::from(value) {
+            scale.set_value(f64::from(value));
+        }
+        self.slider.value_label.set_label(&text);
+        self.slider
+            .scale
+            .update_property(&[gtk::accessible::Property::ValueText(&text)]);
+    }
+
+    /// A locked row is insensitive and dimmed.
+    fn lock(&self, locked: bool) {
+        let row = &self.slider.row;
+        row.set_sensitive(!locked);
+        if locked {
+            row.add_css_class(LOCKED);
+        } else {
+            row.remove_css_class(LOCKED);
         }
     }
 }
@@ -91,8 +120,7 @@ fn group(title: &str, preset: &gtk::DropDown) -> adw::PreferencesGroup {
 fn control_row(control: Control) -> ControlRow {
     let [low, high] = control.range().map(f64::from);
     let step = f64::from(control.step());
-    ControlRow {
-        control,
-        slider: slider_row(control.label(), low, high, step, step * STEPS_PER_PAGE),
-    }
+    let slider = slider_row(control.label(), low, high, step, step * STEPS_PER_PAGE);
+    slider.scale.set_width_request(SCALE_WIDTH);
+    ControlRow { control, slider }
 }
