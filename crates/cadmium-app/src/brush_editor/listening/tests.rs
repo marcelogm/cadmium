@@ -23,3 +23,12 @@ fn a_closing_editor_heeds_nothing_more() {
     listening.set_syncing(false);
     assert!(!listening.heeds());
 }
+
+#[test]
+fn only_a_stopped_editor_is_closing() {
+    let listening = Listening::default();
+    listening.set_syncing(true);
+    assert!(!listening.is_closing());
+    listening.stop();
+    assert!(listening.is_closing());
+}

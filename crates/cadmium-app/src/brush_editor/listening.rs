@@ -21,6 +21,11 @@ impl Listening {
         self.closing.set(true);
     }
 
+    /// Whether the editor started closing.
+    pub(super) fn is_closing(&self) -> bool {
+        self.closing.get()
+    }
+
     pub(super) fn heeds(&self) -> bool {
         !self.syncing.get() && !self.closing.get()
     }

@@ -50,6 +50,8 @@ pub struct CadmiumWindow {
     pub gpu_lost_announced: Cell<bool>,
     /// The open brush editor, so a lost GPU can close it.
     pub editor: RefCell<Option<adw::Dialog>>,
+    /// Stops the open editor, before the window closes it itself.
+    pub stop_editor: RefCell<Option<Box<dyn Fn()>>>,
     /// The rack is still painting thumbnails; exists so smoke screenshots wait for them.
     pub thumbnails_pending: Cell<bool>,
     /// The brush editor is still painting its example strokes; smoke screenshots wait for them.

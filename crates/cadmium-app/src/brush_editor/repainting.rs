@@ -85,20 +85,24 @@ impl Editor {
     }
 
     /// Closes the editor and says why; a lost GPU goes to the window's GPU-lost dialog,
-    /// which closes the editor first.
+    /// which closes the editor first (once: a later failure closes it here).
     fn examples_failed(self: &Rc<Self>, order: Order, error: &StudioError) {
         self.examples.queue.borrow_mut().failed(order);
-        let Some(window) = self.window.upgrade() else {
-            return;
-        };
-        let gpu_lost = window.state().borrow().gpu_is_lost();
-        match failure_toast(error, gpu_lost) {
-            Some(toast) => {
-                glib::g_warning!(LOG_DOMAIN, "{toast}");
-                self.finish(Closing::Done);
-                window.show_toast(&toast);
-            }
-            None => window.announce_gpu_lost(),
+        self.set_examples_pending(false);
+        let window = self.window.upgrade();
+        let gpu_lost = window
+            .as_ref()
+            .is_some_and(|window| window.state().borrow().gpu_is_lost());
+        let toast = failure_toast(error, gpu_lost);
+        if toast.is_none()
+            && let Some(window) = &window
+        {
+            window.announce_gpu_lost();
+        }
+        self.finish(Closing::Done);
+        if let (Some(window), Some(toast)) = (window, toast) {
+            glib::g_warning!(LOG_DOMAIN, "{toast}");
+            window.show_toast(&toast);
         }
     }
 

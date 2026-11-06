@@ -40,10 +40,19 @@ impl Editor {
         self.keep_alert(&alert);
     }
 
-    /// Closes the dialog without asking; from here on its widgets no longer reach the editor.
+    /// Closes the dialog without asking, once: a closing editor is left to close.
     fn close_now(&self) {
-        self.listening.stop();
+        if self.listening.is_closing() {
+            return;
+        }
+        self.stop();
         self.dialog.force_close();
+    }
+
+    /// From here on neither its widgets nor its example painting reach the editor. The
+    /// window calls it too, as it closes the editor itself.
+    pub(super) fn stop(&self) {
+        self.listening.stop();
     }
 
     /// Remembers the alert asking about this editor until it closes, so that closing the

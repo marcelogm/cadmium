@@ -64,7 +64,8 @@ pub fn open(window: &CadmiumWindow) {
         (draft_for(&state), ExampleJob::new(&state))
     };
     let editor = Editor::new(window, draft, job);
-    window.keep_editor(&editor.dialog);
+    let stopping = Rc::downgrade(&editor);
+    window.keep_editor(&editor.dialog, move || stop(&stopping));
     // The panels see the editor open: the brush panel lets go of its thumbnail studio.
     window.refresh_panels();
     editor.dialog.present(Some(window));
@@ -175,6 +176,13 @@ fn draw_schematic(
         hair: draft.hair_preset().map(HairPreset::name),
     };
     schematic::draw(context, &subject, size, device_scale(area));
+}
+
+/// The window closes the editor: from here on nothing reaches it.
+fn stop(editor: &Weak<Editor>) {
+    if let Some(editor) = editor.upgrade() {
+        editor.stop();
+    }
 }
 
 /// Runs `action` on the editor while it is open, not closing and not filling its widgets.
