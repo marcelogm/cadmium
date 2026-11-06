@@ -105,11 +105,16 @@ fn primitive() -> wgpu::PrimitiveState {
     }
 }
 
+/// Reverse-Z (see the camera): nearer is larger, so `Greater` wins and the
+/// depth clears to 0, infinity.
+///
+/// The canvas top face lies at z = 0 and everything drawn on it (the hairs)
+/// stays at z ≥ 0, so a hair touching the canvas is never hidden by it.
 fn depth_state() -> wgpu::DepthStencilState {
     wgpu::DepthStencilState {
         format: DEPTH_FORMAT,
         depth_write_enabled: Some(true),
-        depth_compare: Some(wgpu::CompareFunction::Less),
+        depth_compare: Some(wgpu::CompareFunction::Greater),
         stencil: wgpu::StencilState::default(),
         bias: wgpu::DepthBiasState::default(),
     }
@@ -172,7 +177,7 @@ impl SceneRenderer {
         let depth = wgpu::RenderPassDepthStencilAttachment {
             view: &self.targets.depth,
             depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1.0),
+                load: wgpu::LoadOp::Clear(0.0),
                 store: wgpu::StoreOp::Discard,
             }),
             stencil_ops: None,

@@ -5,6 +5,10 @@
 //! before a right-handed `look_at`; without it the image comes out mirrored.
 //! The mirror flips triangle winding, so renderers must not rely on back-face
 //! culling.
+//!
+//! Depth is reversed: the near plane maps to 1 and infinity to 0, so nearer
+//! means larger depth and renderers test with `Greater` against a 0 clear.
+//! Floats are densest near 0, which keeps depth precise far from the eye.
 
 #[cfg(test)]
 mod tests;
@@ -142,10 +146,11 @@ impl OrbitCamera {
         self.axes()[0]
     }
 
-    /// Canvas space to clip space, with wgpu's 0..1 depth range.
+    /// Canvas space to clip space, with wgpu's 0..1 depth range, reversed:
+    /// 1 at the near plane, approaching 0 at infinity.
     pub fn view_proj(&self) -> Mat4 {
         // wgpu shares Direct3D's clip space: y up, depth 0..1.
-        let proj = directx::perspective_infinite(FOV_Y, self.aspect, self.near());
+        let proj = directx::perspective_infinite_reverse(FOV_Y, self.aspect, self.near());
         proj * self.view()
     }
 

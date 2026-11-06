@@ -99,6 +99,28 @@ fn the_reset_view_is_neither_mirrored_nor_flipped() {
 }
 
 #[test]
+fn nearer_points_get_larger_depths() {
+    // Reverse-Z: the near plane is at depth 1 and infinity at depth 0.
+    let camera = camera(1.5);
+    let (cx, cy) = centre();
+    let h0 = (BOX.height / 2.0) as f32;
+    let near = ndc(&camera, Vec3::new(cx, cy + h0, 0.0));
+    let far = ndc(&camera, Vec3::new(cx, cy - h0, 0.0));
+    assert!(near.z > far.z, "near side behind: {near} vs {far}");
+    let base = ndc(&camera, Vec3::new(cx, cy, 0.0));
+    let tip = ndc(&camera, Vec3::new(cx, cy, REACH));
+    assert!(
+        tip.z > base.z,
+        "brush tip behind the canvas: {tip} vs {base}"
+    );
+    let (eye, dir) = camera.ray(0.0, 0.0);
+    let on_near_plane = ndc(&camera, eye + dir * camera.near());
+    assert!(close(on_near_plane.z, 1.0), "near plane: {on_near_plane}");
+    let very_far = ndc(&camera, eye + dir * 1.0e6 * camera.distance());
+    assert!((0.0..1.0e-5).contains(&very_far.z), "far away: {very_far}");
+}
+
+#[test]
 fn every_box_corner_is_on_screen_in_the_reset_view() {
     for aspect in [0.5, 1.5, 3.0] {
         let camera = camera(aspect);
@@ -258,9 +280,11 @@ fn a_low_close_view_never_clips_the_far_side_of_a_large_canvas() {
     for yaw_px in [0.0, 90.0, 180.0, 270.0] {
         camera.orbit(yaw_px, 0.0);
         let depths = corners.map(|(x, y)| clip_depth(&camera, Vec3::new(x, y, 0.0)));
+        // Reverse-Z: in front of the near plane is ≤ 1, and a finite point
+        // never reaches infinity's 0.
         for depth in depths.into_iter().flatten() {
             assert!(
-                (0.0..=1.0).contains(&depth),
+                depth > 0.0 && depth <= 1.0,
                 "yaw {}: depth {depth}",
                 camera.yaw
             );
