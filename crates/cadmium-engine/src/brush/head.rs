@@ -69,16 +69,16 @@ impl HeadSpec {
         density_per_px: 2.5,
         ..head(1.0, 6.0, 0.3, 0.0)
     };
-    pub const ANGULAR: HeadSpec = head(0.25, 2.0, 0.0, 0.8);
+    pub const ANGULAR: HeadSpec = head(0.25, 2.0, 0.0, 0.4);
     pub const DAGGER: HeadSpec = HeadSpec {
         belly: 0.2,
-        ..head(0.3, 2.5, 0.5, 0.9)
+        ..head(0.3, 2.5, 0.3, 0.5)
     };
     pub const MOP: HeadSpec = HeadSpec {
-        point: 0.6,
-        belly: 0.8,
-        density_per_px: 3.0,
-        ..head(1.0, 1.8, 1.0, 0.0)
+        point: 0.3,
+        belly: 0.3,
+        density_per_px: 2.5,
+        ..head(1.0, 1.8, 0.4, 0.0)
     };
 
     pub fn clamped(self) -> HeadSpec {
