@@ -124,12 +124,13 @@ impl OrbitCamera {
     }
 
     /// The orbit centre, in canvas space.
-    pub fn target(&self) -> Vec3 {
+    #[cfg(test)]
+    pub(crate) fn target(&self) -> Vec3 {
         self.target
     }
 
     /// The eye distance from the target.
-    pub fn distance(&self) -> f32 {
+    pub(crate) fn distance(&self) -> f32 {
         self.reset_distance() * self.zoom
     }
 
@@ -142,7 +143,8 @@ impl OrbitCamera {
     }
 
     /// The camera's right vector, in canvas space.
-    pub fn right(&self) -> Vec3 {
+    #[cfg(test)]
+    pub(crate) fn right(&self) -> Vec3 {
         self.axes()[0]
     }
 
@@ -159,6 +161,9 @@ impl OrbitCamera {
     ///
     /// Built from the view basis rather than by inverting `view_proj`, which
     /// loses too much precision in f32 far from the eye.
+    ///
+    /// Groundwork for stage 6: painting in the viewport picks the canvas
+    /// point under the cursor with it.
     pub fn ray(&self, ndc_x: f32, ndc_y: f32) -> (Vec3, Vec3) {
         let [right, up, back] = self.axes();
         let half_height = (FOV_Y / 2.0).tan();
