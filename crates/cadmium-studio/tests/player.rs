@@ -4,7 +4,7 @@ use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::params::SimParams;
 use cadmium_studio::{
-    DemoStroke, Phase, PlayerRequest, SLOW_MOTION, StudioPaint, StudioPlayer, samples,
+    DemoStroke, Phase, PlayerRequest, QUANTUM_MS, SLOW_MOTION, StudioPaint, StudioPlayer, samples,
 };
 
 fn paint() -> StudioPaint {
@@ -210,7 +210,10 @@ fn half_the_stroke_is_still_stroke_and_past_it_the_pen_has_lifted() {
     let mut player = player(&gpu, DemoStroke::SCurve);
     player.run_until(&gpu, player.stroke_ms() / 2.0).unwrap();
     assert_eq!(player.phase(), Phase::Stroke);
-    player.run_until(&gpu, player.stroke_ms() + 60.0).unwrap();
+    // The frame shown trails the clock by one quantum.
+    player
+        .run_until(&gpu, player.stroke_ms() + 2.0 * QUANTUM_MS)
+        .unwrap();
     assert_eq!(player.phase(), Phase::Settle);
 }
 

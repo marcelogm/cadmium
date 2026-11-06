@@ -258,17 +258,7 @@ impl StudioPlayer {
     /// How long the pen travels: the clock of the stroke's last sample, before
     /// the lift, the settle and the pause.
     pub fn stroke_ms(&self) -> f64 {
-        let events = self.show.schedule.events();
-        events
-            .iter()
-            .rev()
-            .find_map(|event| match event {
-                StudioEvent::Begin(sample) | StudioEvent::Add(sample) => {
-                    Some(f64::from(sample.time_ms))
-                }
-                _ => None,
-            })
-            .unwrap_or(0.0)
+        self.show.schedule.pen_travel_ms()
     }
 
     /// The brush as painted: the requested one, scaled down if it did not fit.

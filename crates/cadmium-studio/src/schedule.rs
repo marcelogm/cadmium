@@ -120,6 +120,21 @@ impl StrokeSchedule {
             .map_or(0, |at| at + 1)
     }
 
+    /// How long the pen travels: the clock of the last sample fed, before the
+    /// lift and the settle; 0 for a schedule with no samples.
+    pub fn pen_travel_ms(&self) -> f64 {
+        self.events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                StudioEvent::Begin(sample) | StudioEvent::Add(sample) => {
+                    Some(f64::from(sample.time_ms))
+                }
+                _ => None,
+            })
+            .unwrap_or(0.0)
+    }
+
     /// The clock of the last frame.
     pub fn duration_ms(&self) -> f64 {
         self.events

@@ -173,12 +173,13 @@ impl SmokeConfig {
 }
 
 impl SmokeStep {
-    /// How many frames the run's end waits after this step: file work settles,
-    /// and the brush editor stays on show.
+    /// Whether this step opens the brush editor, which the screenshot must then show.
     pub(super) fn opens_editor(&self) -> bool {
         matches!(self, SmokeStep::Brush(BrushStep::Editor(_)))
     }
 
+    /// How many frames the run's end waits after this step: file work settles,
+    /// and the brush editor stays on show.
     pub(super) fn settle_frames(&self) -> Option<u32> {
         match self {
             SmokeStep::Brush(BrushStep::Editor(frames)) => Some(*frames),
