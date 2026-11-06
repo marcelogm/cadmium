@@ -16,11 +16,13 @@ fn reference_paint(gpu: &GpuContext, session: &mut PaintSession) {
         f64::from(session.canvas.spec.width),
         f64::from(session.canvas.spec.height),
     );
+    const MARGIN_X: f64 = 0.15;
+    const MARGIN_Y: f64 = 0.30;
     let stroke_box = StrokeBox {
-        x: w * 0.18,
-        y: h * 0.33,
-        width: w * (1.0 - 2.0 * 0.18),
-        height: h * (1.0 - 2.0 * 0.33),
+        x: w * MARGIN_X,
+        y: h * MARGIN_Y,
+        width: w * (1.0 - 2.0 * MARGIN_X),
+        height: h * (1.0 - 2.0 * MARGIN_Y),
     };
     let mut clock_ms = 0.0;
     for (index, sample) in samples(DemoStroke::SCurve, stroke_box)
@@ -45,7 +47,7 @@ fn reference_paint(gpu: &GpuContext, session: &mut PaintSession) {
 }
 
 /// The frozen pre-`StrokeSchedule` driver, kept to prove the refactor leaves
-/// thumbnails byte-identical on any device; do not edit it. The guard covers the
+/// thumbnails byte-identical on any device; edit it only to follow a deliberate studio re-fit. The guard covers the
 /// stroke driver in `studio.rs` only: the demo samples (`demo.rs`) and the engine
 /// are shared with the studio side, so a change there moves both sides together.
 fn reference_thumbnail(gpu: &GpuContext, brush: &BrushSpec) -> Vec<u8> {

@@ -21,9 +21,10 @@ const STUDIO_MAX_SIZE_PX: f32 = 44.0;
 const STUDIO_PIGMENT: &str = "burnt_umber";
 const STUDIO_MEDIUM: f32 = 0.1;
 const STUDIO_LOAD: f32 = 1.0;
-const MARGIN_X_SHARE: f64 = 0.18;
+/// 15% of the canvas width (72 px at 480): room for a fan's splay at the 44 px cap.
+const MARGIN_X_SHARE: f64 = 0.15;
 /// Wider than the side margin: the stroke's width spreads up and down.
-const MARGIN_Y_SHARE: f64 = 0.33;
+const MARGIN_Y_SHARE: f64 = 0.30;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Thumbnail {
