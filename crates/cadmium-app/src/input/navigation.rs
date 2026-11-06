@@ -5,7 +5,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use super::nav_drag::{NavButton, NavDrag, NavPress, nav_mode};
-use super::samples::comes_from_a_pen;
+use super::samples::{comes_from_a_pen, pen_buttons_of};
 use super::{Contact, PaintSurfaceWidget};
 use crate::canvas_widget::CadmiumCanvas;
 use crate::tools::Press;
@@ -14,6 +14,7 @@ const ZOOM_PER_SCROLL_STEP: f32 = 1.1;
 const SURFACE_SCROLL_PER_STEP: f64 = 15.0;
 const WHEEL_PAN_STEP: f64 = 48.0;
 
+/// The drag that navigates the view from `button`, when the press calls for it.
 pub(super) fn nav_gesture(
     canvas: &CadmiumCanvas,
     contact: &Rc<Contact>,
@@ -43,6 +44,7 @@ pub(super) fn nav_gesture(
     drag
 }
 
+/// Starts `button`'s navigation drag, or denies the drag when the press doesn't navigate.
 fn begin_nav(
     canvas: &CadmiumCanvas,
     contact: &Contact,
@@ -61,6 +63,7 @@ fn begin_nav(
             space: canvas.space_mode(),
             tool_pans: state.ui_tool.profile().press_on(canvas.surface()) == Press::Pan,
             stroking: state.is_stroking(),
+            pen_buttons: pen_buttons_of(canvas),
         };
         (press, state.settings.get())
     };
@@ -71,6 +74,7 @@ fn begin_nav(
     }
 }
 
+/// Steps the view along `button`'s drag, now `offset` from where it started.
 fn continue_nav(canvas: &CadmiumCanvas, contact: &Contact, button: NavButton, offset: (f64, f64)) {
     let Some(mut drag) = contact.drags.get(button) else {
         return;

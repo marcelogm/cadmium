@@ -48,17 +48,17 @@ impl PenButtonAction {
 /// field its own fallback, so this does not derive `Deserialize`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Settings {
-    /// The barrel button nearer the tip (GDK's middle button).
+    /// The barrel button nearer the tip.
     pub lower_pen_button: PenButtonAction,
-    /// The barrel button further from the tip (GDK's secondary button).
+    /// The barrel button further from the tip.
     pub upper_pen_button: PenButtonAction,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            lower_pen_button: PenButtonAction::Pan,
-            upper_pen_button: PenButtonAction::PickColour,
+            lower_pen_button: PenButtonAction::PickColour,
+            upper_pen_button: PenButtonAction::Pan,
         }
     }
 }

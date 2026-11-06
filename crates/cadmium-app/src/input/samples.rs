@@ -1,6 +1,9 @@
 use cadmium_engine::stroke::StrokeSample;
 use gtk::gdk;
 use gtk::glib::translate::IntoGlib;
+use gtk::prelude::*;
+
+use super::nav_drag::PenButtons;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
 const MOUSE_PRESSURE: f32 = 1.0;
@@ -151,3 +154,13 @@ pub(super) fn is_eraser(event: &gdk::Event) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// How `widget`'s display numbers the pen's barrel buttons.
+pub(super) fn pen_buttons_of(widget: &impl IsA<gtk::Widget>) -> PenButtons {
+    // gdk's `backend()` panics on a display type it doesn't know, so match the name.
+    if widget.display().type_().name() == "GdkWaylandDisplay" {
+        PenButtons::Wayland
+    } else {
+        PenButtons::Other
+    }
+}

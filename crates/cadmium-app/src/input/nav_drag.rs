@@ -69,16 +69,39 @@ impl NavButton {
     }
 }
 
+/// How the display backend numbers the pen's barrel buttons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PenButtons {
+    /// Wayland: the lower button is GDK's secondary button, the upper one its middle button.
+    Wayland,
+    /// X11 and the rest: the lower button is GDK's middle button, the upper one its secondary.
+    Other,
+}
+
+impl PenButtons {
+    /// The action bound to the barrel button that arrives as `button`, if it is one.
+    pub(super) fn action(self, button: NavButton, settings: Settings) -> Option<PenButtonAction> {
+        match (self, button) {
+            (_, NavButton::Primary) => None,
+            (PenButtons::Wayland, NavButton::Secondary)
+            | (PenButtons::Other, NavButton::Middle) => Some(settings.lower_pen_button),
+            (PenButtons::Wayland, NavButton::Middle)
+            | (PenButtons::Other, NavButton::Secondary) => Some(settings.upper_pen_button),
+        }
+    }
+}
+
 /// What is known when a button goes down on the canvas.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct NavPress {
     pub(super) button: NavButton,
     pub(super) from_pen: bool,
-    /// The mode Space holds ready, while it is held.
+    /// The mode Space holds ready, while it is held. It steers only the primary contact.
     pub(super) space: Option<NavMode>,
     /// Whether the current tool pans with the primary contact (the Move tool).
     pub(super) tool_pans: bool,
     pub(super) stroking: bool,
+    pub(super) pen_buttons: PenButtons,
 }
 
 /// The mode a press starts, or `None` when it doesn't navigate.
@@ -88,8 +111,10 @@ pub(super) fn nav_mode(press: NavPress, settings: Settings) -> Option<NavMode> {
     }
     match (press.button, press.from_pen) {
         (NavButton::Primary, _) => press.space.or(press.tool_pans.then_some(NavMode::Pan)),
-        (NavButton::Middle, true) => bound_mode(settings.lower_pen_button),
-        (NavButton::Secondary, true) => bound_mode(settings.upper_pen_button),
+        (button, true) => press
+            .pen_buttons
+            .action(button, settings)
+            .and_then(bound_mode),
         (NavButton::Middle, false) => Some(NavMode::Pan),
         (NavButton::Secondary, false) => None,
     }
@@ -117,14 +142,18 @@ pub(crate) fn space_mode(modifiers: gdk::ModifierType) -> NavMode {
 
 /// Whether a click of `button` picks a colour. It doesn't check for a stroke in
 /// progress; callers do (`side_button_may_act`).
-pub(super) fn picks_colour(button: NavButton, from_pen: bool, settings: Settings) -> bool {
-    let action = match (button, from_pen) {
-        (NavButton::Middle, true) => settings.lower_pen_button,
-        (NavButton::Secondary, true) => settings.upper_pen_button,
-        (NavButton::Secondary, false) => PenButtonAction::PickColour,
-        (NavButton::Primary, _) | (NavButton::Middle, false) => PenButtonAction::Nothing,
+pub(super) fn picks_colour(
+    button: NavButton,
+    from_pen: bool,
+    pen_buttons: PenButtons,
+    settings: Settings,
+) -> bool {
+    let action = if from_pen {
+        pen_buttons.action(button, settings)
+    } else {
+        (button == NavButton::Secondary).then_some(PenButtonAction::PickColour)
     };
-    action == PenButtonAction::PickColour
+    action == Some(PenButtonAction::PickColour)
 }
 
 /// One change a navigation drag makes to the view, in widget px.

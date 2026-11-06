@@ -1,11 +1,12 @@
 use super::*;
 use crate::test_dir::TempDir;
 
+/// On Wayland the lower button always picked colour and the upper one panned.
 #[test]
-fn defaults_keep_the_pen_buttons_as_they_always_were() {
+fn defaults_pick_with_the_lower_button_and_pan_with_the_upper() {
     let settings = Settings::default();
-    assert_eq!(settings.lower_pen_button, PenButtonAction::Pan);
-    assert_eq!(settings.upper_pen_button, PenButtonAction::PickColour);
+    assert_eq!(settings.lower_pen_button, PenButtonAction::PickColour);
+    assert_eq!(settings.upper_pen_button, PenButtonAction::Pan);
 }
 
 #[test]
@@ -20,7 +21,7 @@ fn settings_round_trip_through_json() {
 #[test]
 fn a_bad_field_falls_back_alone() {
     let read = Settings::from_json(r#"{"lower_pen_button":"teleport","upper_pen_button":"zoom"}"#);
-    assert_eq!(read.lower_pen_button, PenButtonAction::Pan);
+    assert_eq!(read.lower_pen_button, Settings::default().lower_pen_button);
     assert_eq!(read.upper_pen_button, PenButtonAction::Zoom);
 }
 

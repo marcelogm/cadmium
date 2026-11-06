@@ -6,7 +6,8 @@ use gtk::{gdk, glib};
 
 use super::nav_drag::{NavButton, picks_colour};
 use super::samples::{
-    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples, tilt_onto_canvas,
+    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples, pen_buttons_of,
+    tilt_onto_canvas,
 };
 use super::{Contact, PaintSurfaceWidget, release, side_button_may_act, stroke_may_begin};
 use crate::tools::Press;
@@ -185,6 +186,8 @@ pub(super) fn eyedropper_click<W: PaintSurfaceWidget>(widget: &W) -> gtk::Gestur
     click
 }
 
+/// Picks the colour at (`x`, `y`) when the clicked button is bound to picking: a pen's
+/// barrel button by its setting, a mouse's right button always.
 fn pick_with_side_button<W: PaintSurfaceWidget>(
     widget: &W,
     click: &gtk::GestureClick,
@@ -200,7 +203,7 @@ fn pick_with_side_button<W: PaintSurfaceWidget>(
         (state.is_stroking(), state.settings.get())
     };
     let picks = NavButton::from_button(click.current_button())
-        .is_some_and(|button| picks_colour(button, from_pen, settings));
+        .is_some_and(|button| picks_colour(button, from_pen, pen_buttons_of(widget), settings));
     if picks && side_button_may_act(stroking) && widget.accepts_point(x, y) {
         widget.pick_colour_at(x, y);
     }

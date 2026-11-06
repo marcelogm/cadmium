@@ -10,6 +10,7 @@ fn press(button: NavButton) -> NavPress {
         space: None,
         tool_pans: false,
         stroking: false,
+        pen_buttons: PenButtons::Other,
     }
 }
 
@@ -61,6 +62,52 @@ fn pen_buttons_follow_their_bindings() {
 }
 
 #[test]
+fn on_wayland_the_lower_binding_drives_the_secondary_button() {
+    let settings = Settings {
+        lower_pen_button: PenButtonAction::Rotate,
+        upper_pen_button: PenButtonAction::Zoom,
+    };
+    let wayland = |button| NavPress {
+        pen_buttons: PenButtons::Wayland,
+        ..press(button)
+    };
+    assert_eq!(
+        nav_mode(wayland(NavButton::Secondary), settings),
+        Some(NavMode::Rotate)
+    );
+    assert_eq!(
+        nav_mode(wayland(NavButton::Middle), settings),
+        Some(NavMode::Zoom)
+    );
+}
+
+#[test]
+fn each_backend_numbers_the_barrel_buttons_its_own_way() {
+    let settings = Settings {
+        lower_pen_button: PenButtonAction::Rotate,
+        upper_pen_button: PenButtonAction::Zoom,
+    };
+    let lower = Some(PenButtonAction::Rotate);
+    let upper = Some(PenButtonAction::Zoom);
+    assert_eq!(
+        PenButtons::Wayland.action(NavButton::Secondary, settings),
+        lower
+    );
+    assert_eq!(
+        PenButtons::Wayland.action(NavButton::Middle, settings),
+        upper
+    );
+    assert_eq!(PenButtons::Other.action(NavButton::Middle, settings), lower);
+    assert_eq!(
+        PenButtons::Other.action(NavButton::Secondary, settings),
+        upper
+    );
+    for backend in [PenButtons::Wayland, PenButtons::Other] {
+        assert_eq!(backend.action(NavButton::Primary, settings), None);
+    }
+}
+
+#[test]
 fn mouse_buttons_ignore_the_pen_bindings() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::Nothing,
@@ -103,12 +150,26 @@ fn colour_picking_follows_the_bindings_for_a_pen_and_the_right_button_for_a_mous
         lower_pen_button: PenButtonAction::PickColour,
         upper_pen_button: PenButtonAction::Pan,
     };
-    assert!(picks_colour(NavButton::Middle, true, settings));
-    assert!(!picks_colour(NavButton::Secondary, true, settings));
-    assert!(picks_colour(NavButton::Secondary, false, settings));
-    assert!(!picks_colour(NavButton::Middle, false, settings));
-    assert!(!picks_colour(NavButton::Primary, true, settings));
-    assert!(!picks_colour(NavButton::Primary, false, settings));
+    let other = PenButtons::Other;
+    assert!(picks_colour(NavButton::Middle, true, other, settings));
+    assert!(!picks_colour(NavButton::Secondary, true, other, settings));
+    assert!(picks_colour(NavButton::Secondary, false, other, settings));
+    assert!(!picks_colour(NavButton::Middle, false, other, settings));
+    assert!(!picks_colour(NavButton::Primary, true, other, settings));
+    assert!(!picks_colour(NavButton::Primary, false, other, settings));
+}
+
+#[test]
+fn on_wayland_the_lower_button_picks_through_the_secondary_button() {
+    let settings = Settings {
+        lower_pen_button: PenButtonAction::PickColour,
+        upper_pen_button: PenButtonAction::Pan,
+    };
+    let wayland = PenButtons::Wayland;
+    assert!(picks_colour(NavButton::Secondary, true, wayland, settings));
+    assert!(!picks_colour(NavButton::Middle, true, wayland, settings));
+    assert!(picks_colour(NavButton::Secondary, false, wayland, settings));
+    assert!(!picks_colour(NavButton::Middle, false, wayland, settings));
 }
 
 #[test]
