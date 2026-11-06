@@ -2,50 +2,90 @@
 
 use std::collections::HashMap;
 
-use cadmium_engine::brush::BrushSpec;
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_studio::{BrushStudio, StudioError, Thumbnail};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use crate::state::SharedState;
 
-const HEAD_FIELDS: usize = 8;
-const HAIR_FIELDS: usize = 12;
-const KEY_FIELDS: usize = HEAD_FIELDS + HAIR_FIELDS + 1;
-
 /// What a thumbnail depends on: the brush's head, hair and size, not its name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ThumbnailKey([u32; KEY_FIELDS]);
+pub struct ThumbnailKey {
+    head: [u32; 8],
+    hair: [u32; 12],
+    size: u32,
+}
 
 impl ThumbnailKey {
+    /// Destructures every field, so a new one must be keyed or ignored on purpose.
     pub fn of(brush: &BrushSpec) -> ThumbnailKey {
-        let head = &brush.head;
-        let hair = &brush.hair;
-        let fields = [
-            head.thickness,
-            head.length,
-            head.dome,
-            head.slant,
-            head.point,
-            head.belly,
-            head.fan_deg,
-            head.density_per_px,
-            hair.stiffness,
-            hair.damping,
-            hair.static_friction,
-            hair.kinetic_friction,
-            hair.drag_anisotropy,
-            hair.bend_memory,
-            hair.clumping,
-            hair.wet_point,
-            hair.point_release,
-            hair.point_film,
-            hair.load_limit,
-            hair.wicking,
-            brush.size_px,
-        ];
-        ThumbnailKey(fields.map(f32::to_bits))
+        let BrushSpec {
+            name: _,
+            size_px,
+            head,
+            hair,
+        } = brush;
+        ThumbnailKey {
+            head: head_fields(head).map(f32::to_bits),
+            hair: hair_fields(hair).map(f32::to_bits),
+            size: size_px.to_bits(),
+        }
     }
+}
+
+fn head_fields(head: &HeadSpec) -> [f32; 8] {
+    let HeadSpec {
+        thickness,
+        length,
+        dome,
+        slant,
+        point,
+        belly,
+        fan_deg,
+        density_per_px,
+    } = *head;
+    [
+        thickness,
+        length,
+        dome,
+        slant,
+        point,
+        belly,
+        fan_deg,
+        density_per_px,
+    ]
+}
+
+fn hair_fields(hair: &HairSpec) -> [f32; 12] {
+    let HairSpec {
+        stiffness,
+        damping,
+        static_friction,
+        kinetic_friction,
+        drag_anisotropy,
+        bend_memory,
+        clumping,
+        wet_point,
+        point_release,
+        point_film,
+        load_limit,
+        wicking,
+    } = *hair;
+    [
+        stiffness,
+        damping,
+        static_friction,
+        kinetic_friction,
+        drag_anisotropy,
+        bend_memory,
+        clumping,
+        wet_point,
+        point_release,
+        point_film,
+        load_limit,
+        wicking,
+    ]
 }
 
 /// Thumbnails rendered so far; `T` is a texture in the app and plain bytes in tests.
