@@ -3,7 +3,7 @@
 use adw::prelude::*;
 use cadmium_engine::brush::BrushSpec;
 
-use super::{Runner, ToolbarAction, stroke_labels, summary_rows};
+use super::{PLAY_BUTTON_NAME, Runner, ToolbarAction, stroke_labels, summary_rows};
 use crate::studio_view::StudioView;
 
 const CONTENT_WIDTH: i32 = 960;
@@ -90,7 +90,10 @@ fn stroke_dropdown(stroke: usize, run: Runner) -> gtk::DropDown {
 
 /// Starts pressed: a new studio plays.
 fn play_button(run: Runner) -> gtk::ToggleButton {
-    let button = gtk::ToggleButton::builder().active(true).build();
+    let button = gtk::ToggleButton::builder()
+        .active(true)
+        .name(PLAY_BUTTON_NAME)
+        .build();
     show_playing(&button);
     button.connect_toggled(move |button| {
         show_playing(button);

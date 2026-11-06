@@ -7,7 +7,6 @@ use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
     PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
 };
-use super::editor::mid_stroke_ms;
 use super::steps::{
     STROKE_PRESSURE_END, STROKE_PRESSURE_START, STROKE_SAMPLES, SmokeDialog, SmokeStep,
     smoke_stroke,
@@ -343,13 +342,6 @@ fn the_brush_editor_holds_the_end_back_by_its_frames() {
     assert_eq!(editor.settle_frames(), Some(60));
     assert_eq!(save.settle_frames(), Some(SETTLE_FRAMES_AFTER_FILE_WORK));
     assert_eq!(screenshot.settle_frames(), None);
-}
-
-#[test]
-fn the_brush_editor_pauses_half_way_through_the_pen_travel() {
-    use cadmium_studio::{LOOP_PAUSE_MS, QUANTUM_MS, SETTLE_MS};
-    let stroke_ms = 534.0;
-    let loop_ms = stroke_ms + SETTLE_MS + QUANTUM_MS + LOOP_PAUSE_MS;
-    assert!((mid_stroke_ms(loop_ms) - stroke_ms / 2.0).abs() < 1e-9);
-    assert_eq!(mid_stroke_ms(LOOP_PAUSE_MS), 0.0);
+    assert!(editor.opens_editor());
+    assert!(!save.opens_editor() && !screenshot.opens_editor());
 }

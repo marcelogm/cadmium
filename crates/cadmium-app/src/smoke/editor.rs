@@ -1,16 +1,12 @@
 //! The brush editor smoke step: the editor held still with the brush mid-stroke.
 
 use adw::prelude::*;
-use cadmium_studio::{LOOP_PAUSE_MS, QUANTUM_MS, SETTLE_MS};
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
-use crate::brush_editor;
+use crate::brush_editor::{self, PLAY_BUTTON_NAME};
 use crate::studio_view::StudioView;
 use crate::window::CadmiumWindow;
-
-/// The play toggle's icon while the studio plays.
-const PAUSE_ICON: &str = "media-playback-pause-symbolic";
 
 /// Opens the editor, pauses it through its play toggle as a user would, and
 /// replays its loop to half the stroke. An editor that cannot open or replay
@@ -23,11 +19,15 @@ pub(super) fn open_mid_stroke(window: &CadmiumWindow) {
     let (Some(view), Some(play)) = (
         find_widget::<StudioView>(editor.upcast_ref(), |_| true),
         find_widget::<gtk::ToggleButton>(editor.upcast_ref(), |button| {
-            button.icon_name().is_some_and(|icon| icon == PAUSE_ICON)
+            button.widget_name() == PLAY_BUTTON_NAME
         }),
     ) else {
         fail("the brush editor has no studio view or play toggle");
     };
+    if !play.is_active() {
+        fail("the brush editor opened paused");
+    }
+    // Before the state borrow below: the toggle's handler borrows the state itself.
     play.set_active(false);
     let state = window.state();
     let replayed = {
@@ -35,8 +35,9 @@ pub(super) fn open_mid_stroke(window: &CadmiumWindow) {
         let gpu = state.gpu.clone();
         match state.studio_mut() {
             Some(studio) if studio.player.is_playing() => fail("the play toggle did not pause"),
+            Some(studio) if !studio.player.is_ready() => fail("the studio is not ready"),
             Some(studio) => {
-                let mid_stroke = mid_stroke_ms(studio.player.loop_ms());
+                let mid_stroke = studio.player.stroke_ms() / 2.0;
                 studio.player.run_until(&gpu, mid_stroke)
             }
             None => fail("the brush editor has no studio"),
@@ -50,15 +51,17 @@ pub(super) fn open_mid_stroke(window: &CadmiumWindow) {
     view.queue_present();
 }
 
-/// Half-way through the pen's travel: a loop is the stroke, the bristles'
-/// settle, one closing quantum and the pause.
-pub(super) fn mid_stroke_ms(loop_ms: f64) -> f64 {
-    ((loop_ms - LOOP_PAUSE_MS - SETTLE_MS - QUANTUM_MS) / 2.0).max(0.0)
-}
-
-/// Whether the open editor's studio has shown a frame; true with no editor.
-pub(super) fn presented_or_closed(window: &CadmiumWindow) -> bool {
-    studio_view(window).is_none_or(|view| view.presented_frames() > 0)
+/// Whether the screenshot can be taken: with an editor expected, once its
+/// studio has shown a frame. An editor that closed ends the run: the
+/// screenshot would lie.
+pub(super) fn ready_for_screenshot(window: &CadmiumWindow, expects_editor: bool) -> bool {
+    if !expects_editor {
+        return true;
+    }
+    match studio_view(window) {
+        Some(view) => view.presented_frames() > 0,
+        None => fail("the brush editor closed before the screenshot"),
+    }
 }
 
 fn studio_view(window: &CadmiumWindow) -> Option<StudioView> {

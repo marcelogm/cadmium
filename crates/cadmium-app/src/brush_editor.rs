@@ -18,6 +18,8 @@ mod build;
 const CUSTOM: &str = "Custom";
 const NORMAL_SPEED: f64 = 1.0;
 const FAILURE_TOAST: &str = "Can't show the brush studio";
+/// The play toggle's widget name, so smoke runs can press it.
+pub(crate) const PLAY_BUTTON_NAME: &str = "play";
 
 /// One press on the editor's toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

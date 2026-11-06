@@ -84,6 +84,7 @@ impl SmokeStep {
         &self,
         frame: u32,
         earliest_end_frame: u32,
+        expects_editor: bool,
         window: &CadmiumWindow,
     ) -> bool {
         match self {
@@ -97,7 +98,7 @@ impl SmokeStep {
             SmokeStep::Screenshot(_) => {
                 frame >= earliest_end_frame
                     && !window.thumbnails_pending()
-                    && editor::presented_or_closed(window)
+                    && editor::ready_for_screenshot(window, expects_editor)
             }
             SmokeStep::Quit => frame >= earliest_end_frame,
         }
@@ -145,8 +146,9 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, tray, screenshot, quit. The brush folder
-    /// (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from it at start-up.
+    /// open, export, brush export, brush delete, page, tray, brush editor, screenshot, quit.
+    /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
+    /// it at start-up.
     pub(super) fn steps(&self) -> Vec<SmokeStep> {
         let mut steps = Vec::new();
         steps.extend(self.tool.map(SmokeStep::ChooseTool));
@@ -173,6 +175,10 @@ impl SmokeConfig {
 impl SmokeStep {
     /// How many frames the run's end waits after this step: file work settles,
     /// and the brush editor stays on show.
+    pub(super) fn opens_editor(&self) -> bool {
+        matches!(self, SmokeStep::Brush(BrushStep::Editor(_)))
+    }
+
     pub(super) fn settle_frames(&self) -> Option<u32> {
         match self {
             SmokeStep::Brush(BrushStep::Editor(frames)) => Some(*frames),
