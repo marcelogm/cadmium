@@ -42,6 +42,7 @@ pub(super) fn rack() -> Rack {
 
 fn menu_button() -> gtk::MenuButton {
     let menu = gio::Menu::new();
+    menu.append(Some("Edit…"), Some("win.edit-brush"));
     menu.append(Some("Import…"), Some("win.import-brush"));
     menu.append(Some("Export…"), Some("win.export-brush"));
     menu.append(Some("Delete"), Some("win.delete-brush"));

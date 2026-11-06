@@ -18,9 +18,10 @@ pub(super) enum ThumbnailJob {
 }
 
 impl ThumbnailJob {
-    /// Whether a refresh that finds a thumbnail missing starts the idle job.
-    fn starts(self, anything_missing: bool) -> bool {
-        self == ThumbnailJob::Idle && anything_missing
+    /// Whether a refresh that finds a thumbnail missing starts the idle job;
+    /// never while the studio is open, which pauses the job.
+    fn starts(self, anything_missing: bool, studio_open: bool) -> bool {
+        self == ThumbnailJob::Idle && anything_missing && !studio_open
     }
 
     fn keeps_running(self) -> bool {
@@ -34,6 +35,8 @@ enum TickOutcome {
     NothingMissing,
     Painted,
     Failed,
+    /// The studio is open; the job waits for it to close.
+    Paused,
 }
 
 impl TickOutcome {
@@ -42,6 +45,7 @@ impl TickOutcome {
             TickOutcome::NothingMissing => ThumbnailJob::Idle,
             TickOutcome::Painted => ThumbnailJob::Pending,
             TickOutcome::Failed => ThumbnailJob::Failed,
+            TickOutcome::Paused => ThumbnailJob::Idle,
         }
     }
 }
@@ -58,12 +62,26 @@ impl BrushPanel {
             let cache = self.thumbnails.borrow();
             keys.iter().any(|key| cache.get(key).is_none())
         };
-        if !self.thumbnail_job.get().starts(anything_missing) {
+        let studio_open = self.state.borrow().studio_open();
+        if !self
+            .thumbnail_job
+            .get()
+            .starts(anything_missing, studio_open)
+        {
             return;
         }
         self.set_thumbnail_job(ThumbnailJob::Pending);
         let panel = Rc::downgrade(self);
         glib::idle_add_local(move || thumbnail_tick(&panel));
+    }
+
+    /// Pauses while the studio is open; closing it refreshes the panels, which
+    /// starts the job again.
+    fn tick(&self) -> TickOutcome {
+        if self.state.borrow().studio_open() {
+            return TickOutcome::Paused;
+        }
+        self.paint_next_thumbnail()
     }
 
     /// Paints one missing thumbnail; holds no borrow of the state or the cache meanwhile.
@@ -115,7 +133,7 @@ fn thumbnail_tick(panel: &Weak<BrushPanel>) -> glib::ControlFlow {
     let Some(panel) = panel.upgrade() else {
         return glib::ControlFlow::Break;
     };
-    let job = panel.paint_next_thumbnail().job_after();
+    let job = panel.tick().job_after();
     panel.set_thumbnail_job(job);
     if job.keeps_running() {
         glib::ControlFlow::Continue

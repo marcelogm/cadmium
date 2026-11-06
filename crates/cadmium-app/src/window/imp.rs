@@ -47,6 +47,9 @@ pub struct CadmiumWindow {
     pub asking_to_close: Cell<bool>,
     pub history_disabled_announced: Cell<bool>,
     pub copy_presentation_announced: Cell<bool>,
+    pub gpu_lost_announced: Cell<bool>,
+    /// The open brush editor, so a lost GPU can close it.
+    pub editor: RefCell<Option<adw::Dialog>>,
     /// The rack is still painting thumbnails; exists so smoke screenshots wait for them.
     pub thumbnails_pending: Cell<bool>,
 }

@@ -72,6 +72,38 @@ impl CadmiumWindow {
         self.imp().thumbnails_pending.set(pending);
     }
 
+    pub fn has_editor(&self) -> bool {
+        self.imp().editor.borrow().is_some()
+    }
+
+    pub fn keep_editor(&self, editor: &adw::Dialog) {
+        self.imp().editor.replace(Some(editor.clone()));
+    }
+
+    fn close_editor(&self) {
+        let editor = self.imp().editor.take();
+        if let Some(editor) = editor {
+            editor.force_close();
+        }
+    }
+
+    /// Closes the studio `editor` showed and refreshes the panels, which restarts
+    /// the thumbnails it paused; an editor opened since keeps its studio.
+    pub fn after_editor_closed(&self, editor: &adw::Dialog) {
+        let imp = self.imp();
+        let newer = imp
+            .editor
+            .borrow()
+            .as_ref()
+            .is_some_and(|kept| kept != editor);
+        if newer {
+            return;
+        }
+        imp.editor.take();
+        self.state().borrow_mut().close_studio();
+        self.refresh_panels();
+    }
+
     pub fn show_sidebar_page(&self, name: &str) {
         let imp = self.imp();
         imp.split_view.set_show_sidebar(true);

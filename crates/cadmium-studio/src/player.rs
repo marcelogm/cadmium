@@ -221,6 +221,10 @@ impl StudioPlayer {
         };
     }
 
+    pub fn speed(&self) -> f64 {
+        self.speed
+    }
+
     pub fn pause(&mut self) {
         self.playing = false;
     }
