@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -81,8 +82,12 @@ fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
     let Some(state) = start_state(app) else {
         return;
     };
-    if smoke.borrow().is_none() {
-        load_brush_library(&state);
+    let brush_dir = match smoke.borrow().as_ref() {
+        None => Some(BrushLibrary::default_dir()),
+        Some(smoke) => smoke.brush_dir(),
+    };
+    if let Some(dir) = brush_dir {
+        load_brush_library(&state, dir);
     }
     let window = CadmiumWindow::new(app, state);
     if let Some(smoke) = smoke.borrow_mut().take() {
@@ -112,9 +117,9 @@ fn start_state(app: &adw::Application) -> Option<SharedState> {
     }
 }
 
-/// Smoke runs skip this, so they never read the painter's own brush folder.
-fn load_brush_library(state: &SharedState) {
-    let (library, warnings) = BrushLibrary::load(BrushLibrary::default_dir());
+/// Smoke runs only load the folder they are given, never the painter's own brush folder.
+fn load_brush_library(state: &SharedState, dir: PathBuf) {
+    let (library, warnings) = BrushLibrary::load(dir);
     for warning in &warnings {
         glib::g_warning!(LOG_DOMAIN, "skipped brush {warning}");
     }

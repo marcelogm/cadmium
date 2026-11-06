@@ -1,5 +1,6 @@
 use std::ffi::OsString;
 
+use super::brushes::{BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep};
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
     PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
@@ -238,4 +239,56 @@ fn nodcc_present_mode_keeps_the_dmabuf_selftest_off_compressed_modifiers() {
 fn unknown_dialog_is_ignored() {
     let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "preferences")])).unwrap();
     assert_eq!(config.dialog, None);
+}
+
+#[test]
+fn a_brush_folder_alone_starts_a_smoke_run_that_loads_it() {
+    let config = SmokeConfig::from_lookup(lookup(&[(BRUSH_DIR, "/tmp/brushes")])).unwrap();
+    assert_eq!(config.brush_dir(), Some(PathBuf::from("/tmp/brushes")));
+    assert_eq!(config.steps(), [SmokeStep::Quit]);
+}
+
+#[test]
+fn without_a_brush_folder_the_smoke_library_stays_factory_only() {
+    let config = SmokeConfig::from_lookup(lookup(&[(STROKE, "1")])).unwrap();
+    assert_eq!(config.brush_dir(), None);
+}
+
+#[test]
+fn brush_steps_wrap_the_stroke_and_file_steps() {
+    let config = SmokeConfig::from_lookup(lookup(&[
+        (BRUSH_DELETE, "1"),
+        (BRUSH_EXPORT, "/tmp/out.cadbrush"),
+        (SCREENSHOT, "/tmp/shot.png"),
+        (EXPORT, "/tmp/a.png"),
+        (STROKE, "1"),
+        (BRUSH, "Soft Flat"),
+        (BRUSH_IMPORT, "/tmp/in.cadbrush"),
+        (PAGE, "lab"),
+    ]))
+    .unwrap();
+    assert_eq!(
+        config.steps(),
+        [
+            SmokeStep::Brush(BrushStep::Import(PathBuf::from("/tmp/in.cadbrush"))),
+            SmokeStep::Brush(BrushStep::Pick("Soft Flat".to_string())),
+            SmokeStep::PaintStroke,
+            SmokeStep::Export(PathBuf::from("/tmp/a.png")),
+            SmokeStep::Brush(BrushStep::Export(PathBuf::from("/tmp/out.cadbrush"))),
+            SmokeStep::Brush(BrushStep::Delete),
+            SmokeStep::ShowPage("lab".to_string()),
+            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+            SmokeStep::Quit,
+        ]
+    );
+}
+
+#[test]
+fn brush_delete_zero_and_empty_brush_values_do_nothing() {
+    let config = SmokeConfig::from_lookup(lookup(&[
+        (BRUSH_DELETE, "0"),
+        (BRUSH, ""),
+        (BRUSH_IMPORT, ""),
+    ]));
+    assert_eq!(config, None);
 }

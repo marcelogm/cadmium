@@ -68,6 +68,21 @@ impl CadmiumWindow {
         }
     }
 
+    /// Writes the worn brush to `target`, as the Export dialog does once a file is chosen.
+    #[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
+    pub(crate) fn export_brush_to(&self, target: &Path) {
+        let (spec, _) = worn_brush_spec(self);
+        self.write_brush_file(target, &spec);
+    }
+
+    /// Deletes the worn brush, as the Delete action does once confirmed.
+    #[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
+    pub(crate) fn delete_worn_brush_now(&self) {
+        if let Some((name, index)) = self.deletable_worn_brush() {
+            self.delete_library_brush(&name, index);
+        }
+    }
+
     fn deletable_worn_brush(&self) -> Option<(String, usize)> {
         let (spec, index) = worn_brush_spec(self);
         let index = index.filter(|&index| self.state().borrow().brushes.is_user(index))?;
