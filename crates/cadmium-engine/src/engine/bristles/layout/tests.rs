@@ -69,3 +69,73 @@ fn todays_round_flat_and_fan_layouts_stay_bit_identical() {
     let prints = reference_fingerprints();
     assert_eq!(prints, REFERENCE_FINGERPRINTS, "{prints:#x?}");
 }
+
+const PROFILE_RADIUS_PX: f32 = 40.0;
+
+fn head_layout(head: HeadSpec) -> BristleLayout {
+    layout(&LayoutRequest {
+        head,
+        ferrule_radius_px: PROFILE_RADIUS_PX,
+        seed: 7,
+    })
+}
+
+fn mean_length_px(laid: &BristleLayout, keep: impl Fn(f32) -> bool) -> f32 {
+    let kept: Vec<f32> = laid
+        .bristles
+        .iter()
+        .filter(|b| keep(b.root_px[0] / PROFILE_RADIUS_PX))
+        .map(|b| b.length_px)
+        .collect();
+    assert!(!kept.is_empty());
+    kept.iter().sum::<f32>() / kept.len() as f32
+}
+
+#[test]
+fn a_domed_head_has_shorter_hairs_at_its_edges() {
+    let laid = head_layout(HeadSpec {
+        dome: 1.0,
+        ..HeadSpec::FLAT
+    });
+    let centre = mean_length_px(&laid, |x| x.abs() < 0.25);
+    let edge = mean_length_px(&laid, |x| x.abs() > 0.75);
+    assert!(edge < 0.8 * centre, "edge {edge} centre {centre}");
+}
+
+#[test]
+fn a_slanted_head_grows_its_hairs_across_its_width() {
+    let laid = head_layout(HeadSpec {
+        slant: 1.0,
+        ..HeadSpec::FLAT
+    });
+    let quarters: Vec<f32> = [-1.0f32, -0.5, 0.0, 0.5]
+        .iter()
+        .map(|&from| mean_length_px(&laid, |x| x >= from && x < from + 0.5))
+        .collect();
+    assert!(
+        quarters.windows(2).all(|pair| pair[1] > pair[0]),
+        "{quarters:?}"
+    );
+}
+
+#[test]
+fn reach_still_bounds_every_hair_of_a_shaped_head() {
+    for head in [
+        HeadSpec::FILBERT,
+        HeadSpec::ANGULAR,
+        HeadSpec::DAGGER,
+        HeadSpec::RIGGER,
+    ] {
+        let laid = head_layout(head);
+        let bound = super::reach_bound_px(&super::ReachRequest {
+            ferrule_radius_px: PROFILE_RADIUS_PX,
+            head,
+        });
+        let longest = laid
+            .bristles
+            .iter()
+            .map(|b| b.length_px)
+            .fold(0.0, f32::max);
+        assert!(longest + PROFILE_RADIUS_PX <= bound, "{head:?}");
+    }
+}

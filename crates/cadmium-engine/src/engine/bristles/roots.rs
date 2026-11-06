@@ -14,6 +14,7 @@ pub(super) struct Root {
     pub(super) position_px: [f32; 2],
     pub(super) splay: [f32; 2],
     pub(super) lane_direction: [f32; 2],
+    pub(super) length_share: f32,
 }
 
 pub(super) struct SplitMix(u64);
@@ -78,12 +79,26 @@ pub(super) fn place_roots(
     random: &mut SplitMix,
 ) -> Vec<Root> {
     (0..count)
-        .map(|index| match head.section() {
-            Section::Round => spiral_root(index, count, radius_px, random),
-            Section::Bar => flat_root(index, count, radius_px, head.thickness, random),
-            Section::Arc => fan_root(index, count, radius_px, head, random),
+        .map(|index| {
+            let mut root = section_root(head, index, count, radius_px, random);
+            root.length_share = head.length_share(root.position_px.map(|v| v / radius_px));
+            root
         })
         .collect()
+}
+
+fn section_root(
+    head: &HeadSpec,
+    index: usize,
+    count: usize,
+    radius_px: f32,
+    random: &mut SplitMix,
+) -> Root {
+    match head.section() {
+        Section::Round => spiral_root(index, count, radius_px, random),
+        Section::Bar => flat_root(index, count, radius_px, head.thickness, random),
+        Section::Arc => fan_root(index, count, radius_px, head, random),
+    }
 }
 
 fn spiral_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) -> Root {
@@ -97,6 +112,7 @@ fn spiral_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix
         position_px: [outward[0] * distance_px, outward[1] * distance_px],
         splay: [0.0, 0.0],
         lane_direction: outward,
+        length_share: 1.0,
     }
 }
 
@@ -131,6 +147,7 @@ fn flat_root(
         position_px,
         splay: [0.0, 0.0],
         lane_direction: [0.0, side],
+        length_share: 1.0,
     }
 }
 
@@ -155,6 +172,7 @@ fn fan_root(
         ],
         splay: [outward[0], 0.0],
         lane_direction: outward,
+        length_share: 1.0,
     }
 }
 

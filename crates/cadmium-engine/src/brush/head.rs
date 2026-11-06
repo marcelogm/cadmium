@@ -7,8 +7,6 @@ const FAN_POINT_FADE_DEG: f32 = 10.0;
 // used by the bristle layout in a later commit
 #[allow(dead_code)]
 const BELLY_SPLAY_SHARE: f32 = 0.35;
-// used by the bristle layout in a later commit
-#[allow(dead_code)]
 pub(crate) const MIN_LENGTH_SHARE: f32 = 0.2;
 
 /// Head controls. Length is in ferrule radii, density in hairs per pixel of width.
@@ -126,8 +124,6 @@ impl HeadSpec {
         [self.point * round_share * open, self.point * open]
     }
 
-    // used by the bristle layout in a later commit
-    #[allow(dead_code)]
     /// Share of the full hair length for a root at `[across, thick]` in ferrule radii.
     pub(crate) fn length_share(&self, root: [f32; 2]) -> f32 {
         if self.dome == 0.0 && self.slant == 0.0 {

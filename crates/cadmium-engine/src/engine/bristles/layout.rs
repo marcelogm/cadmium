@@ -70,7 +70,7 @@ pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
         .map(|(index, root)| BristleRest {
             root_px: root.position_px,
             splay: root.splay,
-            length_px: radius_px * head.length * (1.0 + random.jitter()),
+            length_px: radius_px * head.length * root.length_share * (1.0 + random.jitter()),
             stiffness: BASE_STIFFNESS * (1.0 + random.jitter()),
             radius_px: (coverage_radius_px * (1.0 + random.jitter())).max(MIN_BRISTLE_RADIUS_PX),
             cluster: clusters[index],
