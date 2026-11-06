@@ -5,7 +5,7 @@ use std::f64::consts::FRAC_PI_2;
 
 use cadmium_studio::TipGeometry;
 
-use super::canvas::{Canvas, Part, hull, union};
+use super::canvas::{Canvas, Part, hull};
 use super::pen::{self, DIMENSION, DIMENSION_LABEL, Dimension, Pen};
 use super::sheet::{FRONT_X, MIN_TIP_WIDTH, SIDE_X, Sheet};
 use crate::ink::Fit;
@@ -69,7 +69,7 @@ fn tip_width(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {
         origin: [FRONT_X, sheet.roots_y],
     };
     let [(x0, y0), (x1, y1)] = [left, right].map(|corner| fit.place(corner));
-    let label = format!("W {:.2}R", tip.dimensions.tip_width);
+    let label = tip_width_label(tip);
     let y = sheet.roots_y + sheet.front_depth * sheet.scale + BELOW_TIP;
     pen::horizontal_dimension(
         canvas,
@@ -82,6 +82,11 @@ fn tip_width(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {
     );
 }
 
+/// W's figure.
+pub(super) fn tip_width_label(tip: &TipGeometry) -> String {
+    format!("W {:.2}R", tip.dimensions.tip_width)
+}
+
 fn fan(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {
     let fan_deg = tip.dimensions.fan_deg;
     if fan_deg <= MIN_FAN_DEG {
@@ -91,23 +96,25 @@ fn fan(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {
     let radius = (f64::from(tip.dimensions.length) * sheet.scale * FAN_ARC_SHARE).min(MAX_FAN_ARC);
     let half = f64::from(fan_deg).to_radians() / 2.0;
     let ends = [FRAC_PI_2 + half, FRAC_PI_2 - half];
-    pen::ink(canvas, ARC_PEN);
-    canvas.new_sub_path();
-    canvas.arc_negative(x, y, radius, ends[0], ends[1]);
-    let arc = canvas
-        .stroke_extents()
-        .map_or([[x, y]; 2], |(x0, y0, x1, y1)| [[x0, y0], [x1, y1]]);
-    let _ = canvas.stroke();
-    let reach = radius + FAN_RAY_OVERSHOOT;
-    let rays = ends.map(|angle| [x + angle.cos() * reach, y + angle.sin() * reach]);
-    for end in rays {
-        pen::dashed(canvas, [x, y], end, &SHORT_DASH, RAY_PEN);
-    }
-    let label = format!("{fan_deg:.0}°");
-    let at = [x, y + radius + FAN_LABEL_BELOW];
-    let label = pen::write(canvas, at, &label, &DIMENSION_LABEL);
-    let drawn = canvas.on_widget(union(arc, hull(&[[x, y], rays[0], rays[1]])));
-    canvas.mark(Part::FanAngle, union(drawn, label));
+    canvas.part(Part::FanAngle, || {
+        pen::ink(canvas, ARC_PEN);
+        canvas.new_sub_path();
+        canvas.arc_negative(x, y, radius, ends[0], ends[1]);
+        canvas.covers(|| {
+            canvas
+                .stroke_extents()
+                .map_or([[x, y]; 2], |(x0, y0, x1, y1)| [[x0, y0], [x1, y1]])
+        });
+        let _ = canvas.stroke();
+        let reach = radius + FAN_RAY_OVERSHOOT;
+        let rays = ends.map(|angle| [x + angle.cos() * reach, y + angle.sin() * reach]);
+        for end in rays {
+            pen::dashed(canvas, [x, y], end, &SHORT_DASH, RAY_PEN);
+        }
+        canvas.covers(|| hull(&[[x, y], rays[0], rays[1]]));
+        let at = [x, y + radius + FAN_LABEL_BELOW];
+        pen::write(canvas, at, &format!("{fan_deg:.0}°"), &DIMENSION_LABEL);
+    });
 }
 
 fn thickness(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {

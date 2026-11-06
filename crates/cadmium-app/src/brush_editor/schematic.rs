@@ -2,12 +2,15 @@
 //! dimensions, the footprint and a title block, on light gridded paper — the owner-approved
 //! mockup, drawn from `TipGeometry` in sheet units, then fitted into the widget.
 
+use std::rc::Rc;
+
 use adw::prelude::*;
 use cadmium_engine::brush::BrushSpec;
 use cadmium_studio::TipGeometry;
 use gtk::cairo;
 
 use crate::ink::contain;
+use crate::surface_scale::SurfaceScaleWatch;
 
 mod canvas;
 mod dimensions;
@@ -18,8 +21,8 @@ mod title_block;
 mod views;
 
 use canvas::Canvas;
-use pen::{GRID, INK, PAPER, Pen};
-use sheet::{SHEET, Sheet};
+use pen::{CAPTION, DIMENSION_LABEL, GRID, INK, PAPER, Pen};
+use sheet::{Figures, SHEET, Sheet};
 use views::Placed;
 
 /// The left column's width, and the sheet's height at it.
@@ -45,7 +48,22 @@ pub(super) fn schematic_area() -> gtk::DrawingArea {
         .accessible_role(gtk::AccessibleRole::Img)
         .build();
     area.update_property(&[gtk::accessible::Property::Label("Drawing of the brush tip")]);
+    follow_scale(&area);
     area
+}
+
+/// Redraws `area` when it moves to a display of another scale: its lines are snapped to
+/// the display's pixels.
+fn follow_scale(area: &gtk::DrawingArea) {
+    let watch = Rc::new(SurfaceScaleWatch::default());
+    let started = Rc::clone(&watch);
+    area.connect_realize(move |area| started.start(area, redraw));
+    area.connect_unrealize(move |_| watch.stop());
+    area.connect_scale_factor_notify(redraw);
+}
+
+fn redraw(area: &gtk::DrawingArea) {
+    area.queue_draw();
 }
 
 /// Draws `subject` fitted into a widget of `size`, on a display of `pixel_scale` device
@@ -60,12 +78,21 @@ fn paint(canvas: &Canvas, subject: &Subject, size: [i32; 2]) {
     canvas.scale(fit.scale, fit.scale);
     paper(canvas);
     let tip = TipGeometry::new(&subject.brush.head, &subject.brush.hair);
-    let sheet = Sheet::of(&tip);
+    let sheet = Sheet::of(&tip, &figures(canvas, &tip));
     views::draw_view(canvas, &Placed::front(&tip, &sheet));
     views::draw_view(canvas, &Placed::side(&tip, &sheet));
     dimensions::draw(canvas, &tip, &sheet);
     footprint::draw(canvas, &tip, &sheet);
     title_block::draw(canvas, &title_block::cells(subject));
+}
+
+/// The figures' widths, as the pen sets them on `context`.
+fn figures(context: &cairo::Context, tip: &TipGeometry) -> Figures {
+    let tip_width = dimensions::tip_width_label(tip);
+    Figures {
+        footprint_caption: pen::width(context, footprint::CAPTION_TEXT, &CAPTION),
+        tip_width: pen::width(context, &tip_width, &DIMENSION_LABEL),
+    }
 }
 
 /// The paper, its grid, and the frame inside its edge.

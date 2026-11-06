@@ -1,4 +1,4 @@
-use cadmium_engine::brush::{BrushSpec, HeadSpec, factory_brushes};
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
 use gtk::cairo;
 
 use super::canvas::{Bounds, Canvas, Mark, Part};
@@ -91,14 +91,62 @@ fn extreme_head(corner: u32) -> HeadSpec {
     }
 }
 
-/// Every factory brush, then the first one with each extreme head.
+/// How many random heads the layout checks draw, and the seed they are drawn from.
+const RANDOM_HEADS: usize = 300;
+const SEED: u64 = 0x5eed_c0ff_ee15_7a11;
+
+/// A fixed sequence of numbers in [0, 1): xorshift64*, so every run draws the same heads.
+struct Draws(u64);
+
+impl Draws {
+    fn next(&mut self) -> f32 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        let mixed = self.0.wrapping_mul(0x2545_f491_4f6c_dd1d);
+        (mixed >> 40) as f32 / (1u64 << 24) as f32
+    }
+
+    fn within(&mut self, [low, high]: [f32; 2]) -> f32 {
+        low + (high - low) * self.next()
+    }
+}
+
+/// A head with every control somewhere in its range, and a hair with any wet point.
+fn random_brush(draws: &mut Draws, base: &BrushSpec) -> BrushSpec {
+    let head = HeadSpec {
+        thickness: draws.within(HeadSpec::THICKNESS_RANGE),
+        length: draws.within(HeadSpec::LENGTH_RANGE),
+        dome: draws.within(HeadSpec::DOME_RANGE),
+        slant: draws.within(HeadSpec::SLANT_RANGE),
+        point: draws.within(HeadSpec::POINT_RANGE),
+        belly: draws.within(HeadSpec::BELLY_RANGE),
+        fan_deg: draws.within(HeadSpec::FAN_RANGE_DEG),
+        density_per_px: draws.within(HeadSpec::DENSITY_RANGE_PER_PX),
+    };
+    let hair = HairSpec {
+        wet_point: draws.within(HairSpec::WET_POINT_RANGE),
+        ..base.hair
+    };
+    BrushSpec {
+        head,
+        hair,
+        ..base.clone()
+    }
+}
+
+/// Every factory brush, the first one with each extreme head, then a fixed sample of random
+/// heads and wet points.
 fn every_case() -> impl Iterator<Item = BrushSpec> {
     let base = factory_brushes().swap_remove(0);
+    let extreme_base = base.clone();
     let extremes = (0..256).map(move |corner| BrushSpec {
         head: extreme_head(corner),
-        ..base.clone()
+        ..extreme_base.clone()
     });
-    factory_brushes().into_iter().chain(extremes)
+    let mut draws = Draws(SEED);
+    let random = (0..RANDOM_HEADS).map(move |_| random_brush(&mut draws, &base));
+    factory_brushes().into_iter().chain(extremes).chain(random)
 }
 
 fn overlap(a: Bounds, b: Bounds) -> bool {
@@ -106,11 +154,11 @@ fn overlap(a: Bounds, b: Bounds) -> bool {
 }
 
 /// Whether two marks must stay apart: a figure or caption from anything else, but the fan's
-/// angle may sit on the views (it is drawn on the front view, as in the mockup).
+/// angle may sit on the front view (it is drawn on it, as in the mockup).
 fn kept_apart(a: &Mark, b: &Mark) -> bool {
     let lettered =
         |mark: &Mark| matches!(mark.part, Part::Caption | Part::Dimension | Part::FanAngle);
-    let on_view = |x: &Mark, y: &Mark| x.part == Part::FanAngle && y.part == Part::View;
+    let on_view = |x: &Mark, y: &Mark| x.part == Part::FanAngle && y.part == Part::FrontView;
     (lettered(a) || lettered(b)) && !on_view(a, b) && !on_view(b, a)
 }
 
@@ -146,7 +194,9 @@ fn the_drawing_marks_every_part_it_lays_out() {
     let (_, marks) = drawn(&fan, 1.0);
     let count = |part: Part| marks.iter().filter(|mark| mark.part == part).count();
     // Front, side and footprint; FRONT, SIDE and FOOTPRINT; L, W and t; the fan's angle.
-    assert_eq!(count(Part::View), 3);
+    assert_eq!(count(Part::FrontView), 1);
+    assert_eq!(count(Part::SideView), 1);
+    assert_eq!(count(Part::Footprint), 1);
     assert_eq!(count(Part::Caption), 3);
     assert_eq!(count(Part::Dimension), 3);
     assert_eq!(count(Part::FanAngle), 1);

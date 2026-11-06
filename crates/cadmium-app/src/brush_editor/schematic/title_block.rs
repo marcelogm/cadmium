@@ -55,7 +55,13 @@ pub(super) fn cells(subject: &Subject) -> [Cell; 7] {
 }
 
 pub(super) fn draw(canvas: &Canvas, cells: &[Cell; 7]) {
-    frame(canvas);
+    canvas.part(Part::TitleBlock, || {
+        frame(canvas);
+        fill(canvas, cells);
+    });
+}
+
+fn fill(canvas: &Canvas, cells: &[Cell; 7]) {
     let [name, rest @ ..] = cells;
     cell(canvas, [LEFT, TITLE_TOP], name);
     for (index, entry) in rest.iter().enumerate() {
@@ -75,8 +81,7 @@ fn frame(canvas: &Canvas) {
     }
     let below_name = TITLE_TOP + ROW_HEIGHT;
     pen::line(canvas, [MIDDLE, below_name], [MIDDLE, bottom], RULE_PEN);
-    let bounds = [[LEFT, TITLE_TOP], [right, bottom]];
-    canvas.mark(Part::TitleBlock, canvas.on_widget(bounds));
+    canvas.covers(|| [[LEFT, TITLE_TOP], [right, bottom]]);
 }
 
 fn cell(canvas: &Canvas, at: [f64; 2], entry: &Cell) {

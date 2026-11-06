@@ -1,16 +1,31 @@
 use cadmium_engine::brush::{HairSpec, HeadSpec, factory_brushes};
 use cadmium_studio::TipGeometry;
+use gtk::cairo;
 
+use super::super::dimensions::tip_width_label;
+use super::super::footprint::CAPTION_TEXT;
+use super::super::pen::{self, CAPTION, DIMENSION_LABEL};
 use super::{
-    CAPTION_HEIGHT, FIGURES_BELOW, FRONT_X, SHEET, SHEET_MARGIN, SIDE_X, Sheet, TITLE_TOP,
+    CAPTION_HEIGHT, FIGURES_BELOW, FRONT_X, Figures, SHEET, SHEET_MARGIN, SIDE_X, Sheet, TITLE_TOP,
 };
 
 const CLOSE: f64 = 1e-9;
 
 fn laid_out(head: HeadSpec) -> (TipGeometry, Sheet) {
     let tip = TipGeometry::new(&head, &HairSpec::SYNTHETIC);
-    let sheet = Sheet::of(&tip);
+    let sheet = Sheet::of(&tip, &figures(&tip));
     (tip, sheet)
+}
+
+/// The figures' widths as the pen sets them, measured on a scratch surface.
+fn figures(tip: &TipGeometry) -> Figures {
+    let surface =
+        cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).expect("an image surface");
+    let context = cairo::Context::new(&surface).expect("a cairo context");
+    Figures {
+        footprint_caption: pen::width(&context, CAPTION_TEXT, &CAPTION),
+        tip_width: pen::width(&context, &tip_width_label(tip), &DIMENSION_LABEL),
+    }
 }
 
 #[test]
@@ -112,4 +127,25 @@ fn a_narrow_tip_leaves_the_footprint_where_the_mockup_has_it() {
         (sheet.footprint_caption_y - (sheet.footprint_y - 68.0)).abs() < 1e-6,
         "{sheet:?}"
     );
+}
+
+#[test]
+fn a_long_wide_tip_shrinks_its_footprint_to_keep_the_caption_clear() {
+    let (tip, sheet) = laid_out(HeadSpec {
+        thickness: 1.0,
+        length: 6.0,
+        dome: 1.0,
+        slant: -1.0,
+        point: 0.0,
+        ..HeadSpec::ROUND
+    });
+    let deepest =
+        f64::from(tip.side.bounds()[1][1].max(tip.dimensions.length)).max(sheet.front_depth);
+    let lowest_figure = sheet.roots_y + deepest * sheet.scale + FIGURES_BELOW;
+    assert!(
+        sheet.footprint_caption_y - CAPTION_HEIGHT >= lowest_figure - 1e-6,
+        "{sheet:?}"
+    );
+    let half_height = f64::from(tip.dimensions.thickness) * 1.06 * sheet.footprint_scale + 1.0;
+    assert!(sheet.footprint_y + half_height < TITLE_TOP, "{sheet:?}");
 }

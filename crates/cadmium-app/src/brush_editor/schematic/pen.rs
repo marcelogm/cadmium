@@ -6,7 +6,7 @@ use std::f64::consts::{FRAC_PI_2, PI};
 use gtk::cairo;
 
 use super::super::paper::rgb;
-use super::canvas::{Bounds, Canvas, Part, union};
+use super::canvas::{Bounds, Canvas, Part};
 
 pub(super) const PAPER: [f64; 3] = rgb(0xf5f3ec);
 pub(super) const INK: [f64; 3] = rgb(0x1f2a36);
@@ -154,94 +154,105 @@ fn arrow(canvas: &Canvas, tip: [f64; 2], angle: f64) {
     let _ = canvas.stroke();
 }
 
-/// The box a dimension line from `from` to `to` and its arrowheads cover, in the widget.
-fn line_and_arrows(canvas: &Canvas, from: [f64; 2], to: [f64; 2]) -> Bounds {
+/// The box a dimension line from `from` to `to` and its arrowheads cover.
+fn line_and_arrows(from: [f64; 2], to: [f64; 2]) -> Bounds {
     let wing = ARROW_SIZE * (PI - ARROW_SPREAD).sin();
     let across = from[1] == to[1];
     let [reach_x, reach_y] = if across { [0.0, wing] } else { [wing, 0.0] };
     let min = [from[0].min(to[0]) - reach_x, from[1].min(to[1]) - reach_y];
     let max = [from[0].max(to[0]) + reach_x, from[1].max(to[1]) + reach_y];
-    canvas.on_widget([min, max])
+    [min, max]
+}
+
+/// A dimension's line, on whole device pixels, with an arrowhead pointing out at each end
+/// (`angles`); the arrowheads' tips are snapped with the line.
+fn dimension_line(canvas: &Canvas, dimension: &Dimension, angles: [f64; 2]) {
+    let ends = [dimension.from, dimension.to].map(|end| canvas.snapped(end, DIMENSION_PEN.width));
+    line(canvas, ends[0], ends[1], DIMENSION_PEN);
+    for (end, angle) in ends.into_iter().zip(angles) {
+        arrow(canvas, end, angle);
+    }
+    canvas.covers(|| line_and_arrows(ends[0], ends[1]));
 }
 
 /// A dimension across: arrows at both ends, extension lines down from their y to just past
 /// the line, the figure under it.
 pub(super) fn horizontal_dimension(canvas: &Canvas, dimension: &Dimension) {
-    let Dimension { from, to, .. } = *dimension;
-    let y = from[1];
-    line(canvas, from, to, DIMENSION_PEN);
-    arrow(canvas, from, PI);
-    arrow(canvas, to, 0.0);
-    for (end, start) in [from[0], to[0]].into_iter().zip(dimension.extension_from) {
-        line(
-            canvas,
-            [end, start],
-            [end, y + EXTENSION_OVERSHOOT],
-            EXTENSION_PEN,
-        );
-    }
-    let at = [(from[0] + to[0]) / 2.0, y + LABEL_BELOW];
-    let label = write(canvas, at, dimension.label, &DIMENSION_LABEL);
-    let bounds = union(line_and_arrows(canvas, from, to), label);
-    canvas.mark(Part::Dimension, bounds);
+    canvas.part(Part::Dimension, || {
+        let Dimension { from, to, .. } = *dimension;
+        let y = from[1];
+        dimension_line(canvas, dimension, [PI, 0.0]);
+        for (end, start) in [from[0], to[0]].into_iter().zip(dimension.extension_from) {
+            let overshoot = [end, y + EXTENSION_OVERSHOOT];
+            line(canvas, [end, start], overshoot, EXTENSION_PEN);
+        }
+        let at = [(from[0] + to[0]) / 2.0, y + LABEL_BELOW];
+        write(canvas, at, dimension.label, &DIMENSION_LABEL);
+    });
 }
 
 /// A dimension down: arrows at both ends, extension lines across from their x to just past
 /// the line, the figure beside it, reading upwards.
 pub(super) fn vertical_dimension(canvas: &Canvas, dimension: &Dimension) {
-    let Dimension { from, to, .. } = *dimension;
-    let x = from[0];
-    line(canvas, from, to, DIMENSION_PEN);
-    arrow(canvas, from, -FRAC_PI_2);
-    arrow(canvas, to, FRAC_PI_2);
-    for (end, start) in [from[1], to[1]].into_iter().zip(dimension.extension_from) {
-        line(
+    canvas.part(Part::Dimension, || {
+        let Dimension { from, to, .. } = *dimension;
+        let x = from[0];
+        dimension_line(canvas, dimension, [-FRAC_PI_2, FRAC_PI_2]);
+        for (end, start) in [from[1], to[1]].into_iter().zip(dimension.extension_from) {
+            let overshoot = [x + EXTENSION_OVERSHOOT, end];
+            line(canvas, [start, end], overshoot, EXTENSION_PEN);
+        }
+        let _ = canvas.save();
+        canvas.translate(x + LABEL_BESIDE, (from[1] + to[1]) / 2.0);
+        canvas.rotate(-FRAC_PI_2);
+        write(
             canvas,
-            [start, end],
-            [x + EXTENSION_OVERSHOOT, end],
-            EXTENSION_PEN,
+            [0.0, -LABEL_LIFT],
+            dimension.label,
+            &DIMENSION_LABEL,
         );
-    }
-    let _ = canvas.save();
-    canvas.translate(x + LABEL_BESIDE, (from[1] + to[1]) / 2.0);
-    canvas.rotate(-FRAC_PI_2);
-    let label = write(
-        canvas,
-        [0.0, -LABEL_LIFT],
-        dimension.label,
-        &DIMENSION_LABEL,
-    );
-    let _ = canvas.restore();
-    let bounds = union(line_and_arrows(canvas, from, to), label);
-    canvas.mark(Part::Dimension, bounds);
+        let _ = canvas.restore();
+    });
 }
 
-/// Writes `text` with its baseline at `at`, each letter spread by the lettering's spacing,
-/// and gives the box it covers in the widget.
-pub(super) fn write(canvas: &Canvas, at: [f64; 2], text: &str, lettering: &Lettering) -> Bounds {
-    canvas.select_font_face(FONT, cairo::FontSlant::Normal, cairo::FontWeight::Normal);
-    canvas.set_font_size(lettering.size);
+/// Writes `text` with its baseline at `at`, each letter spread by the lettering's spacing.
+///
+/// Cairo's toy text API, a letter at a time: no shaping and no font fallback, which is
+/// enough for the capitals, figures and Latin names drawn here. Names in other scripts
+/// want Pango (a follow-up).
+pub(super) fn write(canvas: &Canvas, at: [f64; 2], text: &str, lettering: &Lettering) {
+    let span = width(canvas, text, lettering);
     let gap = lettering.spacing_em * lettering.size;
-    let letters: Vec<String> = text.chars().map(String::from).collect();
-    let steps: Vec<f64> = letters
-        .iter()
-        .map(|letter| advance(canvas, letter) + gap)
-        .collect();
-    let width = steps.iter().sum::<f64>() - gap;
     let start = match lettering.anchor {
         Anchor::Start => at[0],
-        Anchor::Middle => at[0] - (width + gap) / 2.0,
+        Anchor::Middle => at[0] - span / 2.0,
     };
     let [red, green, blue] = lettering.colour;
     canvas.set_source_rgb(red, green, blue);
     let mut x = start;
-    for (letter, step) in letters.iter().zip(&steps) {
+    let mut buffer = [0; 4];
+    for letter in text.chars() {
+        let letter = letter.encode_utf8(&mut buffer);
         canvas.move_to(x, at[1]);
         let _ = canvas.show_text(letter);
-        x += step;
+        x += advance(canvas, letter) + gap;
     }
-    let [top, bottom] = vertical_reach(canvas, text);
-    canvas.on_widget([[start, at[1] + top], [start + width, at[1] + bottom]])
+    canvas.covers(|| {
+        let [top, bottom] = vertical_reach(canvas, text);
+        [[start, at[1] + top], [start + span - gap, at[1] + bottom]]
+    });
+}
+
+/// How far `text` set in `lettering` runs, each letter's spacing included (the last one's
+/// too, as a middle anchor counts it); it also sets `lettering`'s font on `context`.
+pub(super) fn width(context: &cairo::Context, text: &str, lettering: &Lettering) -> f64 {
+    context.select_font_face(FONT, cairo::FontSlant::Normal, cairo::FontWeight::Normal);
+    context.set_font_size(lettering.size);
+    let gap = lettering.spacing_em * lettering.size;
+    let mut buffer = [0; 4];
+    text.chars()
+        .map(|letter| advance(context, letter.encode_utf8(&mut buffer)) + gap)
+        .sum()
 }
 
 fn advance(context: &cairo::Context, letter: &str) -> f64 {

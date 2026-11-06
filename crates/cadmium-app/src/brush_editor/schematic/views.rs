@@ -3,7 +3,7 @@
 
 use cadmium_studio::{TipGeometry, TipView};
 
-use super::canvas::{Canvas, Part};
+use super::canvas::{Bounds, Canvas, Part};
 use super::pen::{self, CAPTION, CENTRE_DASH, INK, PAPER, Pen, THIN};
 use super::sheet::{FRONT_X, SIDE_X, Sheet};
 use crate::ink::{Fit, polyline, trace};
@@ -30,6 +30,8 @@ pub(super) struct Placed<'a> {
     view: &'a TipView,
     fit: Fit,
     caption: &'static str,
+    /// What the view is, for the tests' record of where it landed.
+    part: Part,
     /// The centre hair's length, in root half-widths.
     length: f64,
     /// Sheet units added to a thin ferrule's mouth.
@@ -38,11 +40,11 @@ pub(super) struct Placed<'a> {
 
 impl<'a> Placed<'a> {
     pub(super) fn front(tip: &'a TipGeometry, sheet: &Sheet) -> Placed<'a> {
-        Placed::new(&tip.front, tip, sheet, FRONT_X, "FRONT")
+        Placed::new(&tip.front, tip, sheet, FRONT_X, ("FRONT", Part::FrontView))
     }
 
     pub(super) fn side(tip: &'a TipGeometry, sheet: &Sheet) -> Placed<'a> {
-        Placed::new(&tip.side, tip, sheet, SIDE_X, "SIDE")
+        Placed::new(&tip.side, tip, sheet, SIDE_X, ("SIDE", Part::SideView))
     }
 
     fn new(
@@ -50,7 +52,7 @@ impl<'a> Placed<'a> {
         tip: &TipGeometry,
         sheet: &Sheet,
         x: f64,
-        caption: &'static str,
+        (caption, part): (&'static str, Part),
     ) -> Placed<'a> {
         let thin = view.ferrule.mouth < THIN_MOUTH;
         Placed {
@@ -60,6 +62,7 @@ impl<'a> Placed<'a> {
                 origin: [x, sheet.roots_y],
             },
             caption,
+            part,
             length: f64::from(tip.dimensions.length),
             mouth_extra: if thin { THIN_MOUTH_EXTRA } else { 0.0 },
         }
@@ -67,11 +70,13 @@ impl<'a> Placed<'a> {
 }
 
 pub(super) fn draw_view(canvas: &Canvas, placed: &Placed) {
-    ferrule(canvas, placed);
-    handle(canvas, placed);
-    bundle(canvas, placed);
-    centre_line(canvas, placed);
-    mark(canvas, placed);
+    canvas.part(placed.part, || {
+        ferrule(canvas, placed);
+        handle(canvas, placed);
+        bundle(canvas, placed);
+        centre_line(canvas, placed);
+        canvas.covers(|| covered(placed));
+    });
 }
 
 fn ferrule(canvas: &Canvas, placed: &Placed) {
@@ -153,13 +158,15 @@ fn centre_line(canvas: &Canvas, placed: &Placed) {
         &CENTRE_DASH,
         CENTRE_PEN,
     );
-    let caption = pen::write(canvas, [x, top - CAPTION_ABOVE], placed.caption, &CAPTION);
-    canvas.mark(Part::Caption, caption);
+    let at = [x, top - CAPTION_ABOVE];
+    canvas.part(Part::Caption, || {
+        pen::write(canvas, at, placed.caption, &CAPTION)
+    });
 }
 
-/// Notes the box the view covers: the bundle, the ferrule widened at a thin mouth, the
-/// handle and its cut mark.
-fn mark(canvas: &Canvas, placed: &Placed) {
+/// The box the view covers: the bundle, the ferrule widened at a thin mouth, the handle and
+/// its cut mark.
+fn covered(placed: &Placed) -> Bounds {
     let [min, max] = placed.view.extent();
     let (left, top) = placed.fit.place(min);
     let (right, bottom) = placed.fit.place(max);
@@ -167,6 +174,5 @@ fn mark(canvas: &Canvas, placed: &Placed) {
     let (cut_x, _) = placed.fit.place(placed.view.ferrule.handle[1]);
     let reach = (cut_x - x + CUT_OVERHANG).max(x - left + placed.mouth_extra);
     let reach = reach.max(right - x + placed.mouth_extra);
-    let bounds = [[x - reach, top - CUT_WAVE / 2.0], [x + reach, bottom]];
-    canvas.mark(Part::View, canvas.on_widget(bounds));
+    [[x - reach, top - CUT_WAVE / 2.0], [x + reach, bottom]]
 }

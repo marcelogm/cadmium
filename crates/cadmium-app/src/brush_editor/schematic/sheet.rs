@@ -44,9 +44,17 @@ pub(super) const MIN_TIP_WIDTH: f32 = 0.12;
 pub(super) const FIGURES_BELOW: f64 = 30.0;
 /// The footprint's caption's height above its baseline, with a little room.
 pub(super) const CAPTION_HEIGHT: f64 = 8.0;
-/// Half the footprint's caption's width, and half W's figure's, with a little room.
-const CAPTION_HALF_WIDTH: f64 = 32.0;
-const W_LABEL_HALF_WIDTH: f64 = 22.0;
+/// Room kept round the footprint's caption and W's figure, across.
+const FIGURE_ROOM: f64 = 4.0;
+
+/// How wide the figures the layout steers round are, as the pen sets them.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Figures {
+    /// The footprint's caption.
+    pub(super) footprint_caption: f64,
+    /// W's figure.
+    pub(super) tip_width: f64,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Sheet {
@@ -65,7 +73,7 @@ pub(super) struct Sheet {
 }
 
 impl Sheet {
-    pub(super) fn of(tip: &TipGeometry) -> Sheet {
+    pub(super) fn of(tip: &TipGeometry, figures: &Figures) -> Sheet {
         let front_half = reach_x(tip.front.extent());
         let side_half = reach_x(tip.side.extent());
         let front_depth = f64::from(tip.front.bounds()[1][1]);
@@ -78,16 +86,11 @@ impl Sheet {
             .min(RIGHT_ROOM / side_half)
             .min((SIDE_X - FRONT_X - BETWEEN_VIEWS) / (front_half + side_half));
         let roots_y = HANDLE_TOP + FERRULE_AND_HANDLE * scale;
-        let reach = reach_x(tip.footprint_bounds()).max(MIN_FOOTPRINT_REACH);
-        let footprint_scale = FOOTPRINT_MAX_SCALE.min(FOOTPRINT_ROOM / reach);
-        let thickness = f64::from(tip.dimensions.thickness);
-        let rise = MIN_CAPTION_RISE.max(thickness * footprint_scale + CAPTION_GAP);
         let bottom = roots_y + deepest * scale;
-        let mut footprint_y = bottom + FOOTPRINT_GAP;
-        if width_figure_under_caption(tip, scale) {
-            footprint_y = footprint_y.max(bottom + FIGURES_BELOW + CAPTION_HEIGHT + rise);
-        }
-        let footprint_y = footprint_y.min(FOOTPRINT_LOWEST);
+        let clear = width_figure_under_caption(tip, scale, figures)
+            .then_some(bottom + FIGURES_BELOW + CAPTION_HEIGHT);
+        let [footprint_y, footprint_scale, footprint_caption_y] =
+            footprint_layout(tip, bottom, clear);
         Sheet {
             scale,
             roots_y,
@@ -95,14 +98,40 @@ impl Sheet {
             front_depth,
             footprint_y,
             footprint_scale,
-            footprint_caption_y: footprint_y - rise,
+            footprint_caption_y,
         }
     }
 }
 
+/// The footprint's centre line, scale and caption's baseline, under views ending at `bottom`;
+/// `clear`, when W's figure is in the caption's way, is the highest the caption's baseline
+/// may sit. Lowered for it, the footprint stops above the title block; past that, it shrinks
+/// (not in the mockup).
+fn footprint_layout(tip: &TipGeometry, bottom: f64, clear: Option<f64>) -> [f64; 3] {
+    let reach = reach_x(tip.footprint_bounds()).max(MIN_FOOTPRINT_REACH);
+    let scale = FOOTPRINT_MAX_SCALE.min(FOOTPRINT_ROOM / reach);
+    let thickness = f64::from(tip.dimensions.thickness);
+    let rise = MIN_CAPTION_RISE.max(thickness * scale + CAPTION_GAP);
+    let Some(clear) = clear else {
+        let y = (bottom + FOOTPRINT_GAP).min(FOOTPRINT_LOWEST);
+        return [y, scale, y - rise];
+    };
+    let y = (bottom + FOOTPRINT_GAP)
+        .max(clear + rise)
+        .min(FOOTPRINT_LOWEST);
+    if y - rise >= clear {
+        return [y, scale, y - rise];
+    }
+    // The views end high enough that the caption always has room over its gap.
+    debug_assert!(y - clear > CAPTION_GAP, "{y} {clear}");
+    let shrunk = scale.min((y - clear - CAPTION_GAP).max(0.0) / thickness);
+    let shrunk_rise = MIN_CAPTION_RISE.max(thickness * shrunk + CAPTION_GAP);
+    [y, shrunk, y - shrunk_rise]
+}
+
 /// Whether W's dimension, at `scale`, reaches under the footprint's caption (not in the
 /// mockup: a wide tip's figure ran into it).
-fn width_figure_under_caption(tip: &TipGeometry, scale: f64) -> bool {
+fn width_figure_under_caption(tip: &TipGeometry, scale: f64, figures: &Figures) -> bool {
     let edge = tip.front.tip_edge();
     let (Some(left), Some(right)) = (edge.first(), edge.last()) else {
         return false;
@@ -111,8 +140,9 @@ fn width_figure_under_caption(tip: &TipGeometry, scale: f64) -> bool {
         return false;
     }
     let [left, right] = [left[0], right[0]].map(f64::from);
-    let reach = (right * scale).max((left + right) / 2.0 * scale + W_LABEL_HALF_WIDTH);
-    FRONT_X + reach > FOOTPRINT_X - CAPTION_HALF_WIDTH
+    let label_reach = (left + right) / 2.0 * scale + figures.tip_width / 2.0;
+    let reach = (right * scale).max(label_reach) + FIGURE_ROOM;
+    FRONT_X + reach > FOOTPRINT_X - figures.footprint_caption / 2.0 - FIGURE_ROOM
 }
 
 /// The widest reach either side of x = 0 of a box `[min, max]`.
