@@ -160,6 +160,8 @@ dependencies = [
  "bytemuck",
  "cadmium-engine",
  "glam",
+ "png",
+ "wgpu",
 ]
 
 [[package]]
