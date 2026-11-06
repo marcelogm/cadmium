@@ -4,18 +4,17 @@
 //! for the engine's presenter to downsample and encode for display.
 
 mod plane;
+mod targets;
 
 use cadmium_engine::gpu::GpuContext;
+use cadmium_engine::present::{PresentRequest, ViewTransform};
 
 use crate::{OrbitCamera, StudioPlayer};
 use plane::PlanePass;
+use targets::Targets;
 
 const COLOUR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-/// The most the scene supersamples, per axis.
-const MAX_SUPERSAMPLE: f32 = 2.0;
-/// The largest target side the supersampling may reach.
-const MAX_TARGET_SIDE: f32 = 4096.0;
 /// The backdrop, in linear sRGB.
 const CLEAR_COLOUR: wgpu::Color = wgpu::Color {
     r: 0.02,
@@ -27,10 +26,13 @@ const CLEAR_COLOUR: wgpu::Color = wgpu::Color {
 /// What the scene draws besides the canvas.
 #[derive(Clone, Copy, Debug)]
 pub struct SceneLayers {
+    /// The brush's hairs, ferrule and handle: drawn from Task 8b; ignored by
+    /// the plane.
     pub brush: bool,
 }
 
 /// One frame of the scene.
+#[derive(Clone, Copy)]
 pub struct SceneRequest<'a> {
     pub player: &'a StudioPlayer,
     pub camera: &'a OrbitCamera,
@@ -39,62 +41,25 @@ pub struct SceneRequest<'a> {
     pub layers: SceneLayers,
 }
 
-/// The render targets, at one size.
-struct Targets {
-    size: (u32, u32),
-    supersample: f32,
-    colour: wgpu::TextureView,
-    depth: wgpu::TextureView,
+/// A rendered frame: the linear colour target, supersampled.
+pub struct SceneFrame<'a> {
+    pub colour: &'a wgpu::TextureView,
+    /// Target texels per displayed pixel, per axis.
+    pub supersample: f32,
 }
 
-impl Targets {
-    fn new(gpu: &GpuContext, size: (u32, u32)) -> Targets {
-        let supersample = supersample_for(size);
-        let scaled = |side: u32| ((side as f32 * supersample).round() as u32).max(1);
-        let extent = (scaled(size.0), scaled(size.1));
-        let colour_usage =
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        Targets {
-            size,
-            supersample,
-            colour: target(gpu, extent, COLOUR_FORMAT, colour_usage),
-            depth: target(
-                gpu,
-                extent,
-                DEPTH_FORMAT,
-                wgpu::TextureUsages::RENDER_ATTACHMENT,
-            ),
+impl<'a> SceneFrame<'a> {
+    /// Presents the frame at its displayed size, from the target's origin.
+    pub fn present_request(&self) -> PresentRequest<'a> {
+        PresentRequest {
+            source: self.colour,
+            view: ViewTransform {
+                origin_x: 0.0,
+                origin_y: 0.0,
+                zoom: 1.0 / self.supersample,
+            },
         }
     }
-}
-
-/// `min(2, 4096 / max(w, h))`, so the target never grows past 4096 px.
-fn supersample_for(size: (u32, u32)) -> f32 {
-    let longest = size.0.max(size.1).max(1) as f32;
-    MAX_SUPERSAMPLE.min(MAX_TARGET_SIDE / longest)
-}
-
-fn target(
-    gpu: &GpuContext,
-    (width, height): (u32, u32),
-    format: wgpu::TextureFormat,
-    usage: wgpu::TextureUsages,
-) -> wgpu::TextureView {
-    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("scene_target"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage,
-        view_formats: &[],
-    });
-    texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 /// Triangle lists, both faces drawn: the camera's mirror flips the winding.
@@ -134,12 +99,7 @@ impl SceneRenderer {
         }
     }
 
-    /// The supersampling of the last rendered size, per axis.
-    pub fn supersample(&self) -> f32 {
-        self.targets.supersample
-    }
-
-    /// Encodes one frame into `encoder` and returns the linear colour target.
+    /// Encodes one frame into `encoder` and returns it, for the presenter.
     ///
     /// The player's compute frames were already submitted, so queue order
     /// has the canvas ready. A player that is not ready shows only the
@@ -149,7 +109,7 @@ impl SceneRenderer {
         gpu: &GpuContext,
         request: SceneRequest<'_>,
         encoder: &mut wgpu::CommandEncoder,
-    ) -> &wgpu::TextureView {
+    ) -> SceneFrame<'_> {
         let size = (request.size.0.max(1), request.size.1.max(1));
         if self.targets.size != size {
             self.targets = Targets::new(gpu, size);
@@ -161,7 +121,10 @@ impl SceneRenderer {
             self.plane.draw(gpu, &mut pass, canvas, view_proj);
         }
         drop(pass);
-        &self.targets.colour
+        SceneFrame {
+            colour: &self.targets.colour,
+            supersample: self.targets.supersample,
+        }
     }
 
     fn begin_pass<'e>(&self, encoder: &'e mut wgpu::CommandEncoder) -> wgpu::RenderPass<'e> {

@@ -2,7 +2,7 @@ use cadmium_engine::brush::{BrushSpec, factory_brushes};
 use cadmium_engine::canvas::{Primer, Weave};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::params::SimParams;
-use cadmium_engine::present::{PresentRequest, ViewTransform, readback_rgba8};
+use cadmium_engine::present::readback_rgba8;
 use cadmium_studio::{
     DemoStroke, OrbitCamera, Phase, PlayerRequest, SceneLayers, SceneRenderer, SceneRequest,
     StudioPaint, StudioPlayer,
@@ -54,35 +54,26 @@ fn camera(player: &StudioPlayer, (w, h): (u32, u32)) -> OrbitCamera {
     OrbitCamera::framing(player.stroke_box(), player.reach_px(), w as f32 / h as f32)
 }
 
-/// The scene as straight sRGB RGBA8 at `size`.
-fn render_rgba(
-    gpu: &GpuContext,
-    scene: &mut SceneRenderer,
-    player: &StudioPlayer,
-    camera: &OrbitCamera,
+fn request<'a>(
+    player: &'a StudioPlayer,
+    camera: &'a OrbitCamera,
     size: (u32, u32),
-) -> Vec<u8> {
-    let presenter = &player.session().presenter;
-    let target = presenter.create_target(gpu, size.0, size.1);
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    let request = SceneRequest {
+) -> SceneRequest<'a> {
+    SceneRequest {
         player,
         camera,
         size,
         layers: LAYERS,
-    };
-    // A view is a handle: the clone frees `scene` for `supersample`.
-    let view = scene.render(gpu, request, &mut encoder).clone();
-    let transform = ViewTransform {
-        origin_x: 0.0,
-        origin_y: 0.0,
-        zoom: 1.0 / scene.supersample(),
-    };
-    let present = PresentRequest {
-        source: &view,
-        view: transform,
-    };
-    presenter.encode_present(gpu, present, &target, &mut encoder);
+    }
+}
+
+/// The scene as straight sRGB RGBA8 at the request's size.
+fn render_rgba(gpu: &GpuContext, scene: &mut SceneRenderer, request: SceneRequest<'_>) -> Vec<u8> {
+    let presenter = &request.player.session().presenter;
+    let target = presenter.create_target(gpu, request.size.0, request.size.1);
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    let frame = scene.render(gpu, request, &mut encoder);
+    presenter.encode_present(gpu, frame.present_request(), &target, &mut encoder);
     gpu.queue.submit([encoder.finish()]);
     readback_rgba8(gpu, &target).unwrap()
 }
@@ -106,9 +97,10 @@ fn the_same_state_renders_the_same_bytes() {
     let player = painted(&gpu);
     let camera = camera(&player, size);
     let mut scene = SceneRenderer::new(&gpu);
-    let first = render_rgba(&gpu, &mut scene, &player, &camera, size);
-    let second = render_rgba(&gpu, &mut scene, &player, &camera, size);
-    let fresh = render_rgba(&gpu, &mut SceneRenderer::new(&gpu), &player, &camera, size);
+    let request = request(&player, &camera, size);
+    let first = render_rgba(&gpu, &mut scene, request);
+    let second = render_rgba(&gpu, &mut scene, request);
+    let fresh = render_rgba(&gpu, &mut SceneRenderer::new(&gpu), request);
     assert_eq!(first.len(), (size.0 * size.1 * 4) as usize);
     assert!(first == second, "a re-render differs");
     assert!(first == fresh, "another renderer differs");
@@ -122,8 +114,8 @@ fn the_plane_shows_the_canvas() {
     let painted = painted(&gpu);
     let camera = camera(&painted, size);
     let mut scene = SceneRenderer::new(&gpu);
-    let before = render_rgba(&gpu, &mut scene, &blank, &camera, size);
-    let after = render_rgba(&gpu, &mut scene, &painted, &camera, size);
+    let before = render_rgba(&gpu, &mut scene, request(&blank, &camera, size));
+    let after = render_rgba(&gpu, &mut scene, request(&painted, &camera, size));
     assert!(before != after, "the stroke does not show");
 }
 
@@ -133,7 +125,8 @@ fn the_scene_is_written_for_eyeballing() {
     let size = (640, 400);
     let player = painted(&gpu);
     let camera = camera(&player, size);
-    let rgba = render_rgba(&gpu, &mut SceneRenderer::new(&gpu), &player, &camera, size);
+    let request = request(&player, &camera, size);
+    let rgba = render_rgba(&gpu, &mut SceneRenderer::new(&gpu), request);
     write_png("scene-plane.png", size, &rgba);
     let canvas = &player.session().canvas.spec;
     let flat = player.rgba(&gpu).unwrap();
