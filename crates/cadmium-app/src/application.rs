@@ -19,7 +19,7 @@ const MISSING_GPU_HEADING: &str = "No Vulkan GPU Available";
 const MISSING_GPU_BODY: &str = "Cadmium needs a GPU with Vulkan to simulate the paint.";
 const OUT_OF_VIDEO_MEMORY_HEADING: &str = "Not Enough Video Memory";
 
-pub const ACCELERATORS: [(&str, &[&str]); 14] = [
+pub const ACCELERATORS: [(&str, &[&str]); 16] = [
     ("win.undo", &["<Control>z"]),
     ("win.redo", &["<Control><Shift>z"]),
     ("win.dry", &["<Control>d"]),
@@ -31,6 +31,8 @@ pub const ACCELERATORS: [(&str, &[&str]); 14] = [
     ("win.zoom-in", &["<Control>plus", "<Control>equal"]),
     ("win.zoom-out", &["<Control>minus"]),
     ("win.zoom-fit", &["<Control>0"]),
+    ("win.rotate-left", &["<Control>bracketleft"]),
+    ("win.rotate-right", &["<Control>bracketright"]),
     ("win.toggle-sidebar", &["F9"]),
     ("app.shortcuts", &["<Control>question"]),
     ("app.quit", &["<Control>q"]),

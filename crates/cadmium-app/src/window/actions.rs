@@ -23,6 +23,8 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("zoom-in", CadmiumWindow::zoom_in),
     ("zoom-out", CadmiumWindow::zoom_out),
     ("zoom-fit", CadmiumWindow::zoom_fit),
+    ("rotate-left", CadmiumWindow::rotate_left),
+    ("rotate-right", CadmiumWindow::rotate_right),
     ("open", CadmiumWindow::open),
     ("save", CadmiumWindow::save),
     ("save-as", CadmiumWindow::save_as),
@@ -110,6 +112,14 @@ impl CadmiumWindow {
 
     fn zoom_fit(&self) {
         self.canvas().zoom_fit();
+    }
+
+    fn rotate_left(&self) {
+        self.canvas().rotate_step(false);
+    }
+
+    fn rotate_right(&self) {
+        self.canvas().rotate_step(true);
     }
 
     fn after_history_change(&self) {

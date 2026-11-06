@@ -5,7 +5,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 
 use super::samples::{
-    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples,
+    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples, tilt_onto_canvas,
 };
 use super::{Contact, PaintSurfaceWidget, release, side_button_may_act, stroke_may_begin};
 use crate::tools::Press;
@@ -71,7 +71,8 @@ fn widget_sample<W: PaintSurfaceWidget>(
     x: f64,
     y: f64,
 ) -> StrokeSample {
-    event_sample(event, x, y, |x, y| widget.surface_point(x, y))
+    let sample = event_sample(event, x, y, |x, y| widget.surface_point(x, y));
+    tilt_onto_canvas(sample, widget.view_rotation())
 }
 
 fn stylus_down<W: PaintSurfaceWidget>(
@@ -135,6 +136,11 @@ fn stylus_motion<W: PaintSurfaceWidget>(
         return;
     }
     let samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
+    let rotation = widget.view_rotation();
+    let samples: Vec<_> = samples
+        .into_iter()
+        .map(|sample| tilt_onto_canvas(sample, rotation))
+        .collect();
     state.borrow_mut().motion(&samples);
 }
 

@@ -117,6 +117,18 @@ pub(crate) fn motion_samples(
     samples
 }
 
+/// `sample` with its screen-space tilt turned into the canvas's frame, for a view whose
+/// picture is turned clockwise by `rotation` radians.
+pub(crate) fn tilt_onto_canvas(sample: StrokeSample, rotation: f32) -> StrokeSample {
+    let (s, c) = rotation.sin_cos();
+    let (x, y) = (sample.tilt_x_deg, sample.tilt_y_deg);
+    StrokeSample {
+        tilt_x_deg: c * x + s * y,
+        tilt_y_deg: -s * x + c * y,
+        ..sample
+    }
+}
+
 pub(crate) fn is_primary_contact(event: &gdk::Event) -> bool {
     match event.downcast_ref::<gdk::ButtonEvent>() {
         Some(button) => button.button() == gdk::BUTTON_PRIMARY,

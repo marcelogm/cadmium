@@ -64,6 +64,10 @@ pub trait PaintSurfaceWidget:
     fn state(&self) -> SharedState;
     fn surface(&self) -> Surface;
     fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64);
+    /// Clockwise turn of the surface's picture on screen, in radians.
+    fn view_rotation(&self) -> f32 {
+        0.0
+    }
     fn set_hover(&self, position: Option<(f64, f64)>);
     fn pick_colour_at(&self, widget_x: f64, widget_y: f64);
     fn observe_hover_pen(&self, sample: &StrokeSample);

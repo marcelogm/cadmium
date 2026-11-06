@@ -10,6 +10,7 @@ use crate::view;
 
 const FIT_MARGIN: f64 = 24.0;
 const ZOOM_STEP: f32 = 1.25;
+const ROTATE_STEP: f32 = std::f32::consts::PI / 12.0;
 
 impl CadmiumCanvas {
     pub fn device_scale(&self) -> f64 {
@@ -74,17 +75,41 @@ impl CadmiumCanvas {
         self.set_view(view::pan(current, dx * scale, dy * scale));
     }
 
-    fn zoom_around_center(&self, zoom: f32) {
-        self.set_zoom_around(
+    pub fn rotate_around(&self, widget_x: f64, widget_y: f64, delta: f32) {
+        let scale = self.device_scale();
+        let current = self.state().borrow().view;
+        self.imp().user_moved_view.set(true);
+        self.set_view(view::rotate_around(
+            current,
+            widget_x * scale,
+            widget_y * scale,
+            delta,
+        ));
+    }
+
+    /// Turns the picture 15° clockwise (`clockwise`) or anticlockwise about the viewport centre.
+    pub fn rotate_step(&self, clockwise: bool) {
+        let delta = if clockwise { ROTATE_STEP } else { -ROTATE_STEP };
+        let (x, y) = self.widget_centre();
+        self.rotate_around(x, y, delta);
+    }
+
+    pub fn widget_centre(&self) -> (f64, f64) {
+        (
             f64::from(self.width()) / 2.0,
             f64::from(self.height()) / 2.0,
-            zoom,
-        );
+        )
+    }
+
+    fn zoom_around_center(&self, zoom: f32) {
+        let (x, y) = self.widget_centre();
+        self.set_zoom_around(x, y, zoom);
     }
 
     fn set_view(&self, new_view: ViewTransform) {
         let new_view = ViewTransform {
             zoom: view::clamp_zoom(new_view.zoom),
+            rotation: view::normalise_rotation(new_view.rotation),
             ..new_view
         };
         self.state().borrow_mut().view = new_view;
@@ -96,7 +121,7 @@ impl CadmiumCanvas {
     pub(super) fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        Some(CursorOutline::of_brush(&state, to_widget))
+        Some(CursorOutline::of_brush(&state, to_widget).turned(state.view.rotation))
     }
 
     pub(super) fn note_device_scale(&self) {

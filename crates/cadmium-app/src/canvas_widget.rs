@@ -109,6 +109,10 @@ impl CadmiumCanvas {
 }
 
 impl PaintSurfaceWidget for CadmiumCanvas {
+    fn view_rotation(&self) -> f32 {
+        self.state().borrow().view.rotation
+    }
+
     fn state(&self) -> SharedState {
         CadmiumCanvas::state(self)
     }

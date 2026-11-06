@@ -34,6 +34,8 @@ pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
             ("Zoom In", "win.zoom-in"),
             ("Zoom Out", "win.zoom-out"),
             ("Fit to Window", "win.zoom-fit"),
+            ("Rotate Left", "win.rotate-left"),
+            ("Rotate Right", "win.rotate-right"),
             ("Show or Hide Sidebar", "win.toggle-sidebar"),
             ("Keyboard Shortcuts", "app.shortcuts"),
         ],

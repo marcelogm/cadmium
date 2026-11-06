@@ -16,6 +16,14 @@ pub(crate) struct CursorOutline {
 }
 
 impl CursorOutline {
+    /// The outline as the screen shows it when the picture is turned clockwise by `rotation`.
+    pub(crate) fn turned(self, rotation: f32) -> CursorOutline {
+        CursorOutline {
+            rotation_deg: self.rotation_deg + rotation.to_degrees(),
+            ..self
+        }
+    }
+
     pub(crate) fn of_brush(state: &AppState, to_widget: f32) -> CursorOutline {
         let mut brush = state.session.brush.clone();
         if let UiTool::Paint(tool) = state.ui_tool {
