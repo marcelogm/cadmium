@@ -1,8 +1,10 @@
 //! The brush being edited: what it was, what it is now, and how it is saved.
 
 use cadmium_engine::brush::BrushSpec;
+use cadmium_studio::{HairPreset, HeadPreset};
 
 use super::closing::Closing;
+use super::controls::{Control, Part};
 
 const COPY_SUFFIX: &str = " (copy)";
 
@@ -30,15 +32,21 @@ pub(super) struct Draft {
     original: BrushSpec,
     current: BrushSpec,
     origin: Origin,
+    /// The preset each part follows; `None` is Custom (D5).
+    head_preset: Option<HeadPreset>,
+    hair_preset: Option<HairPreset>,
 }
 
 impl Draft {
     /// A draft of `original` with every value in range. Library brushes already are (files and
     /// imports are clamped as they are read); a worn brush in no library may be at a size the
     /// size row can't show, and would otherwise turn dirty when the row snaps it into range.
+    /// Each part opens on the preset it is exactly, else on Custom.
     pub(super) fn open(original: BrushSpec, origin: Origin) -> Draft {
         let original = original.clamped();
         Draft {
+            head_preset: HeadPreset::of(&original.head),
+            hair_preset: HairPreset::of(&original.hair),
             current: original.clone(),
             original,
             origin,
@@ -71,6 +79,47 @@ impl Draft {
     pub(super) fn set_size(&mut self, size_px: f32) {
         let [low, high] = BrushSpec::SIZE_RANGE_PX;
         self.current.size_px = size_px.clamp(low, high);
+    }
+
+    pub(super) fn head_preset(&self) -> Option<HeadPreset> {
+        self.head_preset
+    }
+
+    pub(super) fn hair_preset(&self) -> Option<HairPreset> {
+        self.hair_preset
+    }
+
+    /// Whether `part` follows no preset, so its sliders move.
+    pub(super) fn is_custom(&self, part: Part) -> bool {
+        match part {
+            Part::Head => self.head_preset.is_none(),
+            Part::Hair => self.hair_preset.is_none(),
+        }
+    }
+
+    /// A preset takes its values; Custom (`None`) keeps the current ones and unlocks them.
+    pub(super) fn pick_head(&mut self, preset: Option<HeadPreset>) {
+        self.head_preset = preset;
+        if let Some(preset) = preset {
+            self.current.head = preset.spec();
+        }
+    }
+
+    /// A preset takes its values; Custom (`None`) keeps the current ones and unlocks them.
+    pub(super) fn pick_hair(&mut self, preset: Option<HairPreset>) {
+        self.hair_preset = preset;
+        if let Some(preset) = preset {
+            self.current.hair = preset.spec();
+        }
+    }
+
+    /// Moves one control; refused (false) while its part follows a preset.
+    pub(super) fn set(&mut self, control: Control, value: f32) -> bool {
+        if !self.is_custom(control.part()) {
+            return false;
+        }
+        control.set(&mut self.current, value);
+        true
     }
 
     /// The name the brush is saved under: the typed name trimmed, or the original name when

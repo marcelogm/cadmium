@@ -1,7 +1,9 @@
-use cadmium_engine::brush::{BrushSpec, factory_brushes};
+use cadmium_engine::brush::{BrushSpec, HeadSpec, factory_brushes};
+use cadmium_studio::{HairPreset, HeadPreset};
 
 use super::{Draft, Origin, SavePlan};
 use crate::brush_editor::closing::Closing;
+use crate::brush_editor::controls::{Control, Part};
 
 fn factory() -> Draft {
     Draft::open(factory_brushes().swap_remove(0), Origin::Factory)
@@ -140,4 +142,94 @@ fn a_brush_out_of_range_opens_in_range_and_unchanged() {
     );
     assert_eq!(draft.original().size_px, BrushSpec::SIZE_RANGE_PX[0]);
     assert!(!draft.is_dirty());
+}
+
+#[test]
+fn a_factory_brush_opens_on_its_presets() {
+    let draft = factory();
+    assert_eq!(draft.head_preset(), Some(HeadPreset::Round));
+    assert_eq!(draft.hair_preset(), Some(HairPreset::Synthetic));
+    assert!(!draft.is_custom(Part::Head) && !draft.is_custom(Part::Hair));
+}
+
+#[test]
+fn a_changed_head_opens_as_custom() {
+    let brush = BrushSpec {
+        head: HeadSpec {
+            thickness: 0.7,
+            ..HeadSpec::ROUND
+        },
+        ..factory_brushes().swap_remove(0)
+    };
+    let draft = Draft::open(brush, Origin::Factory);
+    assert_eq!(draft.head_preset(), None);
+    assert!(draft.is_custom(Part::Head) && !draft.is_custom(Part::Hair));
+}
+
+#[test]
+fn a_head_out_of_range_opens_on_the_preset_it_clamps_to() {
+    let brush = BrushSpec {
+        head: HeadSpec {
+            thickness: 5.0,
+            ..HeadSpec::ROUND
+        },
+        ..factory_brushes().swap_remove(0)
+    };
+    let draft = Draft::open(brush, Origin::Factory);
+    assert_eq!(draft.head_preset(), Some(HeadPreset::Round));
+}
+
+#[test]
+fn a_preset_locks_its_sliders() {
+    let mut draft = factory();
+    assert!(!draft.set(Control::Thickness, 0.5));
+    assert!(!draft.is_dirty());
+}
+
+#[test]
+fn custom_keeps_the_values_and_unlocks_them() {
+    let mut draft = factory();
+    draft.pick_head(None);
+    assert_eq!(draft.current().head, HeadSpec::ROUND);
+    assert!(!draft.is_dirty());
+    assert!(draft.set(Control::Thickness, 0.5));
+    assert_eq!(draft.current().head.thickness, 0.5);
+    assert!(draft.is_dirty());
+}
+
+#[test]
+fn picking_a_preset_takes_its_values() {
+    let mut draft = factory();
+    draft.pick_head(Some(HeadPreset::Fan));
+    assert_eq!(draft.current().head, HeadSpec::FAN);
+    assert!(draft.is_dirty());
+    draft.pick_head(Some(HeadPreset::Round));
+    assert!(!draft.is_dirty());
+}
+
+#[test]
+fn picking_a_hair_preset_takes_its_values() {
+    let mut draft = factory();
+    draft.pick_hair(Some(HairPreset::Hog));
+    assert_eq!(draft.current().hair, HairPreset::Hog.spec());
+    assert_eq!(draft.hair_preset(), Some(HairPreset::Hog));
+    assert!(draft.is_dirty());
+}
+
+#[test]
+fn custom_values_that_match_a_preset_stay_custom() {
+    let mut draft = factory();
+    draft.pick_head(None);
+    draft.set(Control::Thickness, 0.5);
+    draft.set(Control::Thickness, 1.0);
+    assert_eq!(draft.current().head, HeadSpec::ROUND);
+    assert_eq!(draft.head_preset(), None);
+}
+
+#[test]
+fn unlocking_one_part_leaves_the_other_locked() {
+    let mut draft = factory();
+    draft.pick_hair(None);
+    assert!(draft.set(Control::Stiffness, 0.3));
+    assert!(!draft.set(Control::Length, 3.0));
 }

@@ -52,9 +52,14 @@ fn decimals_for_step(step: f64) -> usize {
     (-(step.log10() + STEP_DECIMALS_SLACK).floor()).max(0.0) as usize
 }
 
-pub(crate) fn format_param(spec: &ParamSpec, value: f32) -> String {
-    let decimals = decimals_for_step(param_step(spec));
+/// `value` with as many decimals as a slider stepping by `step` shows.
+pub(crate) fn format_stepped(value: f32, step: f64) -> String {
+    let decimals = decimals_for_step(step);
     format!("{value:.decimals$}")
+}
+
+pub(crate) fn format_param(spec: &ParamSpec, value: f32) -> String {
+    format_stepped(value, param_step(spec))
 }
 
 pub(crate) fn param_row(spec: &ParamSpec) -> SliderRow {

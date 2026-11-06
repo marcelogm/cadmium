@@ -14,17 +14,20 @@ use crate::window::CadmiumWindow;
 
 mod brush_group;
 mod closing;
+mod controls;
 mod draft;
 mod header;
 mod layout;
 mod listening;
 mod paper;
+mod parts;
 mod saving;
 mod wiring;
 
 use brush_group::BrushGroup;
 use draft::{Draft, Origin};
 use listening::Listening;
+use parts::PartGroups;
 
 /// The open editor. Signal handlers hold it weakly; the dialog's `closed` handler holds the
 /// one strong reference, and lets go of it there.
@@ -37,6 +40,7 @@ struct Editor {
     /// The alert asking about the editor ("Discard Changes?", "Delete …?"), while it is open.
     alert: RefCell<Option<adw::AlertDialog>>,
     brush: BrushGroup,
+    parts: PartGroups,
 }
 
 /// Shows the editor on the worn brush; while one is open, does nothing.
@@ -71,6 +75,9 @@ impl Editor {
         let (dialog, columns) = layout::dialog(&draft.chosen_name(), &header.bar);
         let brush = brush_group::brush_group();
         columns.controls.append(&brush.group);
+        let parts = parts::part_groups();
+        columns.controls.append(&parts.head);
+        columns.controls.append(&parts.hair);
         let editor = Rc::new(Editor {
             window: window.downgrade(),
             dialog,
@@ -78,6 +85,7 @@ impl Editor {
             listening: Listening::default(),
             alert: RefCell::new(None),
             brush,
+            parts,
         });
         editor.connect(&header);
         editor.sync();
@@ -88,7 +96,10 @@ impl Editor {
     /// Fills every widget from the draft.
     fn sync(&self) {
         self.listening.set_syncing(true);
-        self.brush.show(self.draft.borrow().current());
+        let draft = self.draft.borrow();
+        self.brush.show(draft.current());
+        self.parts.show(&draft);
+        drop(draft);
         self.listening.set_syncing(false);
     }
 
