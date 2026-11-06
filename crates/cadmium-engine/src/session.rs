@@ -70,8 +70,8 @@ impl PaintSession {
     }
 
     /// A session for previews: the same simulation, but no undo history and a
-    /// one-tile tray, so it costs little more than its canvas. Replacing its
-    /// document gives a normal session, with a full tray and undo history.
+    /// one-tile tray, so it costs little more than its canvas. It stays without
+    /// undo even if its document is replaced.
     pub fn headless(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
         let tray = CanvasSpec {
             width: TILE_SIZE,
