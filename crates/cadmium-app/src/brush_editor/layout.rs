@@ -6,6 +6,7 @@ use adw::prelude::*;
 use super::paper;
 
 const DIALOG_SIZE: [i32; 2] = [1240, 840];
+/// The drawing column's width, its margins included: 312 for the schematic and examples.
 const DRAWING_WIDTH: i32 = 340;
 const CONTROLS_WIDTH: i32 = 360;
 const COLUMN_MARGIN: i32 = 14;
@@ -49,7 +50,8 @@ pub(super) fn dialog(title: &str, header: &adw::HeaderBar) -> (adw::Dialog, Colu
 
 fn drawing_column() -> gtk::Box {
     let column = margined(gtk::Box::new(gtk::Orientation::Vertical, COLUMN_SPACING));
-    column.set_width_request(DRAWING_WIDTH);
+    // A size request leaves the margins out.
+    column.set_width_request(DRAWING_WIDTH - 2 * COLUMN_MARGIN);
     column.append(&paper::examples_placeholder());
     column
 }

@@ -7,9 +7,11 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
+use cadmium_studio::{HairPreset, HeadPreset};
 use gtk::glib;
 
 use crate::state::AppState;
+use crate::surface_scale::device_scale;
 use crate::window::CadmiumWindow;
 
 mod brush_group;
@@ -22,12 +24,14 @@ mod listening;
 mod paper;
 mod parts;
 mod saving;
+mod schematic;
 mod wiring;
 
 use brush_group::BrushGroup;
 use draft::{Draft, Origin};
 use listening::Listening;
 use parts::PartGroups;
+use schematic::Subject;
 
 /// The open editor. Signal handlers hold it weakly; the dialog's `closed` handler holds the
 /// one strong reference, and lets go of it there.
@@ -41,6 +45,7 @@ struct Editor {
     alert: RefCell<Option<adw::AlertDialog>>,
     brush: BrushGroup,
     parts: PartGroups,
+    schematic: gtk::DrawingArea,
 }
 
 /// Shows the editor on the worn brush; while one is open, does nothing.
@@ -78,6 +83,8 @@ impl Editor {
         let parts = parts::part_groups();
         columns.controls.append(&parts.head);
         columns.controls.append(&parts.hair);
+        let schematic = schematic::schematic_area();
+        columns.drawing.prepend(&schematic);
         let editor = Rc::new(Editor {
             window: window.downgrade(),
             dialog,
@@ -86,8 +93,10 @@ impl Editor {
             alert: RefCell::new(None),
             brush,
             parts,
+            schematic,
         });
         editor.connect(&header);
+        editor.connect_schematic();
         editor.sync();
         editor.keep_until_closed();
         editor
@@ -100,7 +109,17 @@ impl Editor {
         self.brush.show(draft.current());
         self.parts.show(&draft);
         drop(draft);
+        self.schematic.queue_draw();
         self.listening.set_syncing(false);
+    }
+
+    /// Draws the draft's schematic, whenever the widget asks.
+    fn connect_schematic(self: &Rc<Self>) {
+        let editor = Rc::downgrade(self);
+        self.schematic
+            .set_draw_func(move |area, context, width, height| {
+                draw_schematic(&editor, area, context, [width, height]);
+            });
     }
 
     /// Keeps the editor alive while its dialog is open; once closed, closes an alert still
@@ -122,6 +141,24 @@ fn after_closed(keeper: &RefCell<Option<Rc<Editor>>>, window: &glib::WeakRef<Cad
     if let Some(window) = window.upgrade() {
         window.after_editor_closed();
     }
+}
+
+fn draw_schematic(
+    editor: &Weak<Editor>,
+    area: &gtk::DrawingArea,
+    context: &gtk::cairo::Context,
+    size: [i32; 2],
+) {
+    let Some(editor) = editor.upgrade() else {
+        return;
+    };
+    let draft = editor.draft.borrow();
+    let subject = Subject {
+        brush: draft.current(),
+        head: draft.head_preset().map(HeadPreset::name),
+        hair: draft.hair_preset().map(HairPreset::name),
+    };
+    schematic::draw(context, &subject, size, device_scale(area));
 }
 
 /// Runs `action` on the editor while it is open, not closing and not filling its widgets.

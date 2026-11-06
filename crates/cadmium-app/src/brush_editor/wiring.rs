@@ -62,12 +62,14 @@ impl Editor {
     fn rename(&self, name: &str) {
         self.draft.borrow_mut().set_name(name);
         self.dialog.set_title(&self.draft.borrow().chosen_name());
+        self.schematic.queue_draw();
     }
 
     fn resize(&self, size_px: f64) {
         let current = self.draft.borrow().current().size_px;
         if changes_size(size_px, current) {
             self.draft.borrow_mut().set_size(size_px as f32);
+            self.schematic.queue_draw();
         }
     }
 
@@ -121,6 +123,7 @@ impl Editor {
             return;
         }
         row.show(row.control.get(self.draft.borrow().current()));
+        self.schematic.queue_draw();
     }
 }
 

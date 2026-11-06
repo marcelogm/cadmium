@@ -15,3 +15,12 @@ pub(crate) fn trace(context: &cairo::Context, fit: &Fit, points: &[[f32; 2]]) {
     }
     context.close_path();
 }
+
+/// Adds `points` to the path as one open line, to be stroked with others.
+pub(crate) fn polyline(context: &cairo::Context, fit: &Fit, points: &[[f32; 2]]) {
+    context.new_sub_path();
+    for &point in points {
+        let (x, y) = fit.place(point);
+        context.line_to(x, y);
+    }
+}
