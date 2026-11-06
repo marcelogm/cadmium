@@ -30,9 +30,15 @@ const ZOOM_STEP: f32 = 0.9;
 /// Zoom limits, as factors of the reset distance.
 const ZOOM_MIN: f32 = 0.3;
 const ZOOM_MAX: f32 = 4.0;
-/// Near and far planes, as factors of the distance.
-const NEAR_FACTOR: f32 = 0.01;
-const FAR_FACTOR: f32 = 10.0;
+/// Near plane, as a factor of the distance; the far plane is at infinity, so
+/// a low pitch looking across a large canvas never clips it.
+const NEAR_FACTOR: f32 = 0.1;
+/// Ferrule radius, as a share of the reach: a rough size for the framing.
+const FERRULE_SHARE: f32 = 1.0 / 6.0;
+/// The ferrule's length above the reach, in ferrule radii.
+const FERRULE_LENGTH: f32 = 1.5;
+/// Clearance above the ferrule for the handle, in ferrule radii.
+const HANDLE_CLEARANCE: f32 = 4.0;
 
 const DEG: f32 = std::f32::consts::PI / 180.0;
 
@@ -56,7 +62,9 @@ impl OrbitCamera {
     ///
     /// The framing sphere is centred on the box centre at half the reach and
     /// holds both the box corners and the brush (reach, plus a ferrule of
-    /// radius reach/6 and its clearance).
+    /// radius reach/6 and its clearance). The sphere is only measured upward
+    /// from the centre: a brush leaning out over a box corner may poke past
+    /// it, which the margin of the field of view hides.
     pub fn framing(stroke_box: StrokeBox, reach_px: f32, aspect: f32) -> OrbitCamera {
         let reach = finite_or(reach_px, 0.0).max(0.0);
         let centre_x = (stroke_box.x + stroke_box.width / 2.0) as f32;
@@ -65,8 +73,8 @@ impl OrbitCamera {
         let half_w = (stroke_box.width / 2.0) as f32;
         let half_h = (stroke_box.height / 2.0) as f32;
         let corner = Vec3::new(half_w, half_h, reach / 2.0).length();
-        let ferrule = reach / 6.0;
-        let brush = reach + 1.5 * ferrule + 4.0 * ferrule;
+        let ferrule = reach * FERRULE_SHARE;
+        let brush = reach + (FERRULE_LENGTH + HANDLE_CLEARANCE) * ferrule;
         OrbitCamera {
             target,
             radius: finite_or(corner.max(brush), 1.0).max(1.0),
@@ -89,12 +97,14 @@ impl OrbitCamera {
         self.aspect = valid_aspect(aspect, self.aspect);
     }
 
-    /// Orbits by a pointer drag of `dx_px`, `dy_px` pixels.
+    /// Orbits by a pointer drag of `dx_px`, `dy_px` pixels. The scene follows
+    /// the cursor: dragging right turns its near side right, dragging down
+    /// tilts the view toward top-down.
     pub fn orbit(&mut self, dx_px: f32, dy_px: f32) {
         if !(dx_px.is_finite() && dy_px.is_finite()) {
             return;
         }
-        self.yaw = (self.yaw + dx_px * ORBIT_RAD_PER_PX) % std::f32::consts::TAU;
+        self.yaw = (self.yaw - dx_px * ORBIT_RAD_PER_PX) % std::f32::consts::TAU;
         self.pitch = (self.pitch + dy_px * ORBIT_RAD_PER_PX).clamp(PITCH_MIN, PITCH_MAX);
     }
 
@@ -125,19 +135,13 @@ impl OrbitCamera {
 
     /// The camera's right vector, in canvas space.
     pub fn right(&self) -> Vec3 {
-        self.view().row(0).truncate().normalize()
+        self.axes()[0]
     }
 
     /// Canvas space to clip space, with wgpu's 0..1 depth range.
     pub fn view_proj(&self) -> Mat4 {
-        let distance = self.distance();
         // wgpu shares Direct3D's clip space: y up, depth 0..1.
-        let proj = directx::perspective(
-            FOV_Y,
-            self.aspect,
-            distance * NEAR_FACTOR,
-            distance * FAR_FACTOR,
-        );
+        let proj = directx::perspective_infinite(FOV_Y, self.aspect, self.near());
         proj * self.view()
     }
 
@@ -145,17 +149,26 @@ impl OrbitCamera {
     /// starts at the eye and its direction is a unit vector.
     ///
     /// Built from the view basis rather than by inverting `view_proj`, which
-    /// loses too much precision in f32 at the far plane.
+    /// loses too much precision in f32 far from the eye.
     pub fn ray(&self, ndc_x: f32, ndc_y: f32) -> (Vec3, Vec3) {
-        let view = self.view();
-        // The view's rows are the camera axes in canvas space.
-        let right = view.row(0).truncate();
-        let up = view.row(1).truncate();
-        let back = view.row(2).truncate();
+        let [right, up, back] = self.axes();
         let half_height = (FOV_Y / 2.0).tan();
         let half_width = half_height * self.aspect;
         let dir = right * (ndc_x * half_width) + up * (ndc_y * half_height) - back;
         (self.eye(), dir.normalize())
+    }
+
+    /// The camera's right, up and back unit vectors, in canvas space: the
+    /// rows of the view rotation. A look-at's rows are orthonormal and the
+    /// mirror keeps their length, so they need no normalising.
+    fn axes(&self) -> [Vec3; 3] {
+        let view = self.view();
+        [0, 1, 2].map(|row| view.row(row).truncate())
+    }
+
+    /// The near plane's distance from the eye.
+    fn near(&self) -> f32 {
+        self.distance() * NEAR_FACTOR
     }
 
     /// Canvas space to view space: a right-handed look-at in the y-mirrored

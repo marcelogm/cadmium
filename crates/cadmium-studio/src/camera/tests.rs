@@ -1,6 +1,6 @@
 use glam::{Vec3, Vec4Swizzles};
 
-use super::OrbitCamera;
+use super::{FERRULE_LENGTH, FERRULE_SHARE, HANDLE_CLEARANCE, OrbitCamera, PITCH_MIN, ZOOM_MIN};
 use crate::StrokeBox;
 
 const BOX: StrokeBox = StrokeBox {
@@ -55,8 +55,8 @@ fn the_reset_view_looks_from_the_near_edge_at_the_reset_angles() {
 fn the_distance_fits_the_framing_sphere_in_both_fields_of_view() {
     for aspect in [0.5, 1.0, 1.5, 3.0] {
         let camera = camera(aspect);
-        let ferrule = REACH / 6.0;
-        let brush = REACH + 1.5 * ferrule + 4.0 * ferrule;
+        let ferrule = REACH * FERRULE_SHARE;
+        let brush = REACH + (FERRULE_LENGTH + HANDLE_CLEARANCE) * ferrule;
         let corner = Vec3::new(100.0, 60.0, REACH / 2.0).length();
         let radius = corner.max(brush);
         let half_y = deg(22.5);
@@ -123,7 +123,7 @@ fn orbit_turns_both_angles_by_a_hundredth_of_a_radian_per_pixel() {
     let after = camera.eye() - camera.target();
     let yaw = |v: Vec3| v.x.atan2(v.y);
     let pitch = |v: Vec3| (v.z / v.length()).asin();
-    assert!(close(yaw(after) - yaw(before), 0.1));
+    assert!(close(yaw(after) - yaw(before), -0.1));
     assert!(close(pitch(after) - pitch(before), 0.05));
 }
 
@@ -210,5 +210,95 @@ fn a_ray_projects_back_onto_its_ndc_point() {
             (point.x - x).abs() < 1e-4 && (point.y - y).abs() < 1e-4,
             "{x},{y}: {point}"
         );
+    }
+}
+
+#[test]
+fn dragging_right_turns_the_near_side_of_the_scene_right() {
+    let mut camera = camera(1.5);
+    let (cx, cy) = centre();
+    let near_side = Vec3::new(cx, cy + 40.0, 0.0);
+    let before = ndc(&camera, near_side);
+    camera.orbit(20.0, 0.0);
+    let after = ndc(&camera, near_side);
+    assert!(after.x > before.x, "{before} -> {after}");
+}
+
+#[test]
+fn dragging_down_tilts_the_view_toward_top_down() {
+    let mut camera = camera(1.5);
+    let height = |c: &OrbitCamera| (c.eye().z - c.target().z) / c.distance();
+    let before = height(&camera);
+    camera.orbit(0.0, 20.0);
+    assert!(height(&camera) > before);
+}
+
+/// Clip depth of `point`, or `None` behind the eye.
+fn clip_depth(camera: &OrbitCamera, point: Vec3) -> Option<f32> {
+    let clip = camera.view_proj() * point.extend(1.0);
+    (clip.w > 0.0).then(|| clip.z / clip.w)
+}
+
+#[test]
+fn a_low_close_view_never_clips_the_far_side_of_a_large_canvas() {
+    let small = StrokeBox {
+        x: 1000.0,
+        y: 500.0,
+        width: 48.0,
+        height: 32.0,
+    };
+    let mut camera = OrbitCamera::framing(small, 24.0, 1.5);
+    camera.orbit(0.0, -10_000.0);
+    camera.zoom(1000.0);
+    assert!(close(camera.pitch, PITCH_MIN) && close(camera.zoom, ZOOM_MIN));
+    let corners = [(0.0, 0.0), (2048.0, 0.0), (0.0, 1024.0), (2048.0, 1024.0)];
+    for yaw_px in [0.0, 90.0, 180.0, 270.0] {
+        camera.orbit(yaw_px, 0.0);
+        let depths = corners.map(|(x, y)| clip_depth(&camera, Vec3::new(x, y, 0.0)));
+        for depth in depths.into_iter().flatten() {
+            assert!(
+                (0.0..=1.0).contains(&depth),
+                "yaw {}: depth {depth}",
+                camera.yaw
+            );
+        }
+    }
+}
+
+/// Points over the stroke box, on the canvas and at the brush's reach.
+fn box_and_brush_samples() -> Vec<Vec3> {
+    let steps = 8;
+    let at =
+        |start: f64, length: f64, i: u32| (start + length * f64::from(i) / f64::from(steps)) as f32;
+    let grid = (0..=steps).flat_map(|i| (0..=steps).map(move |j| (i, j)));
+    grid.flat_map(|(i, j)| {
+        let (x, y) = (at(BOX.x, BOX.width, i), at(BOX.y, BOX.height, j));
+        [0.0, REACH / 2.0, REACH].map(|z| Vec3::new(x, y, z))
+    })
+    .collect()
+}
+
+/// Whether the near plane cuts `point` out of the view: on screen, in front
+/// of the eye, but nearer than the near plane.
+fn clipped_by_near(camera: &OrbitCamera, point: Vec3) -> bool {
+    let clip = camera.view_proj() * point.extend(1.0);
+    let ndc = clip.xyz() / clip.w;
+    clip.w > 0.0 && ndc.x.abs() <= 1.0 && ndc.y.abs() <= 1.0 && ndc.z < 0.0
+}
+
+#[test]
+fn the_near_plane_never_cuts_the_box_or_the_brush_when_zoomed_in() {
+    let views = [-10_000.0, 0.0, 10_000.0]
+        .into_iter()
+        .flat_map(|pitch| [0.0, 100.0, 200.0, 300.0, 400.0, 500.0].map(|yaw| (yaw, pitch)));
+    for (yaw_px, pitch_px) in views {
+        let mut camera = camera(1.5);
+        camera.orbit(yaw_px, pitch_px);
+        camera.zoom(1000.0);
+        assert!(close(camera.zoom, ZOOM_MIN));
+        let cut = box_and_brush_samples()
+            .into_iter()
+            .find(|point| clipped_by_near(&camera, *point));
+        assert_eq!(cut, None, "pitch {}", camera.pitch);
     }
 }
