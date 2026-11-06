@@ -4,6 +4,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use super::CadmiumCanvas;
+use super::auto_fit::AutoFit;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
 use crate::input::nav_drag::{NavMode, held_mode};
@@ -47,7 +48,7 @@ impl CadmiumCanvas {
             f64::from(self.height()) * scale,
         );
         self.set_view(view::fit_view(spec_size, viewport, FIT_MARGIN * scale));
-        self.imp().user_moved_view.set(false);
+        self.with_auto_fit(AutoFit::fitted);
     }
 
     pub fn zoom_in(&self) {
@@ -63,7 +64,7 @@ impl CadmiumCanvas {
         let (x, y) = self.widget_centre();
         let scale = self.device_scale();
         let current = self.state().borrow().view;
-        self.imp().user_moved_view.set(true);
+        self.with_auto_fit(AutoFit::moved_by_user);
         self.set_view(view::zoom_around(
             current,
             x * scale,
@@ -121,7 +122,7 @@ impl CadmiumCanvas {
     /// Applies one step of a navigation gesture or key to the view.
     pub(crate) fn apply_view_step(&self, step: ViewStep) {
         let current = self.state().borrow().view;
-        self.imp().user_moved_view.set(true);
+        self.with_auto_fit(AutoFit::moved_by_user);
         self.show_view(view::step(current, step, self.device_scale()));
     }
 
@@ -156,31 +157,25 @@ impl CadmiumCanvas {
 
     pub(super) fn follow_scale_change(&self) {
         self.note_device_scale();
-        if !self.imp().user_moved_view.get() && self.width() > 0 && self.height() > 0 {
-            self.fit_unless_stroking();
-        }
+        self.fit_if_due(self.width() > 0 && self.height() > 0);
         self.queue_present();
     }
 
-    pub(super) fn fit_unless_stroking(&self) {
-        let stroking = self
-            .imp()
-            .state
-            .get()
-            .and_then(|state| state.try_borrow().ok().map(|state| state.is_stroking()))
-            .unwrap_or(true);
-        if stroking {
-            self.imp().fit_after_stroke.set(true);
-        } else {
-            self.imp().fit_after_stroke.set(false);
+    /// The widget's size or scale changed; `sized` when it has a size. Fits the view if the
+    /// auto-fit rule says so.
+    pub(super) fn fit_if_due(&self, sized: bool) {
+        if self.with_auto_fit(|fit| fit.on_size_change(sized, || self.stroking())) {
             self.zoom_fit();
         }
     }
 
-    pub(super) fn fit_if_a_stroke_held_it_back(&self) {
-        let imp = self.imp();
-        if imp.fit_after_stroke.get() && !imp.user_moved_view.get() {
-            self.fit_unless_stroking();
-        }
+    /// Runs `f` on a copy of the auto-fit rule and stores the result back. `f` must not call
+    /// `with_auto_fit`.
+    pub(super) fn with_auto_fit<R>(&self, f: impl FnOnce(&mut AutoFit) -> R) -> R {
+        let cell = &self.imp().auto_fit;
+        let mut fit = cell.get();
+        let result = f(&mut fit);
+        cell.set(fit);
+        result
     }
 }

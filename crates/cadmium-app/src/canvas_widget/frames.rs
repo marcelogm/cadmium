@@ -67,7 +67,9 @@ impl CadmiumCanvas {
     }
 
     fn present_if_needed(&self) {
-        self.fit_if_a_stroke_held_it_back();
+        if self.with_auto_fit(|fit| fit.on_frame(|| self.stroking())) {
+            self.zoom_fit();
+        }
         let presented = self.present_texture();
         self.announce_if_gpu_lost();
         if presented {

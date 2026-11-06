@@ -1,3 +1,4 @@
+use super::auto_fit::AutoFit;
 use super::*;
 use crate::input::nav_drag::NavMode;
 
@@ -10,8 +11,7 @@ pub struct CadmiumCanvas {
     pub tick: RefCell<Option<gtk::TickCallbackId>>,
     pub scale_watch: SurfaceScaleWatch,
     pub hover: Cell<Option<(f64, f64)>>,
-    pub user_moved_view: Cell<bool>,
-    pub fit_after_stroke: Cell<bool>,
+    pub auto_fit: Cell<AutoFit>,
     pub allocated: Cell<(i32, i32)>,
     pub presented_frames: Cell<u64>,
     pub view_changed_handlers: RefCell<Vec<CanvasHandler>>,
@@ -73,8 +73,8 @@ impl WidgetImpl for CadmiumCanvas {
         self.parent_size_allocate(width, height, baseline);
         let canvas = self.obj();
         let resized = self.allocated.replace((width, height)) != (width, height);
-        if resized && !self.user_moved_view.get() && width > 0 && height > 0 {
-            canvas.fit_unless_stroking();
+        if resized {
+            canvas.fit_if_due(width > 0 && height > 0);
         }
         canvas.queue_present();
     }
