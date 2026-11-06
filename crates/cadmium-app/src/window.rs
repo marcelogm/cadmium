@@ -12,6 +12,7 @@ use crate::tools::UiTool;
 mod actions;
 mod document;
 mod imp;
+mod navigation_keys;
 mod surface_events;
 mod tool_toggles;
 

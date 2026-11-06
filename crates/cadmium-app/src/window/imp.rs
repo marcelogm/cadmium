@@ -84,6 +84,7 @@ impl ObjectImpl for CadmiumWindow {
         window.fill_tool_group();
         window.setup_actions();
         window.setup_tool_shortcuts();
+        window.setup_navigation_keys();
         window.follow_tool_group();
         window.keep_window_buttons_reachable();
         self.tool_group
