@@ -61,11 +61,12 @@ impl StudioView {
             .push(Box::new(handler));
     }
 
-    /// Runs when the studio closes on an error while presenting a frame;
-    /// `AppState::take_studio_error` says why.
-    pub fn connect_studio_closed(&self, handler: impl Fn(&StudioView) + 'static) {
+    /// Runs only when the studio fails while presenting a frame, which closes
+    /// it; `AppState::take_studio_error` says why. A normal `close_studio`
+    /// does not run it.
+    pub fn connect_studio_failed(&self, handler: impl Fn(&StudioView) + 'static) {
         self.imp()
-            .studio_closed_handlers
+            .studio_failed_handlers
             .borrow_mut()
             .push(Box::new(handler));
     }

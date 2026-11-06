@@ -73,7 +73,7 @@ impl StudioView {
     fn present_if_needed(&self) {
         match self.present_texture() {
             Presented::Frame => self.announce_presented(),
-            Presented::StudioClosed => run_handlers(&self.imp().studio_closed_handlers, self),
+            Presented::StudioFailed => run_handlers(&self.imp().studio_failed_handlers, self),
             Presented::Nothing => {}
         }
         self.drop_frame_if_closed();
@@ -121,7 +121,7 @@ impl StudioView {
         let texture = presenter.present(&mut state, &native, width_px, height_px);
         if !state.studio_open() {
             // The studio failed mid-frame: nothing was drawn into the texture.
-            return Presented::StudioClosed;
+            return Presented::StudioFailed;
         }
         let Some(texture) = texture else {
             return Presented::Nothing;
@@ -138,6 +138,6 @@ impl StudioView {
 enum Presented {
     Nothing,
     Frame,
-    /// The studio closed on an error while presenting; nothing was shown.
-    StudioClosed,
+    /// The studio failed while presenting, which closed it; nothing was shown.
+    StudioFailed,
 }
