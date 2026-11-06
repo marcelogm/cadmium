@@ -37,6 +37,7 @@ impl CadmiumWindow {
             .iter()
             .map(|&(name, activate)| simple_action(name, activate));
         self.add_action_entries(std::iter::once(tool_action()).chain(simple));
+        self.set_brush_deletable(false);
     }
 
     pub(super) fn sync_history_actions(&self) {

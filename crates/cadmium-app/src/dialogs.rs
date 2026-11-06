@@ -167,7 +167,7 @@ const DELETE_RESPONSE: &str = "delete";
 pub async fn delete_brush_confirmed(parent: &impl IsA<gtk::Widget>, name: &str) -> bool {
     let alert = adw::AlertDialog::builder()
         .heading(format!("Delete {name}?"))
-        .body("The brush file is removed from your brush library. This can't be undone.")
+        .body("The brush is removed from your brush library. This can't be undone.")
         .default_response(CANCEL_RESPONSE)
         .close_response(CANCEL_RESPONSE)
         .build();
