@@ -218,3 +218,46 @@ fn a_row_carries_the_brush_shape_for_its_tip_icon() {
     assert_eq!(entry.head, HeadSpec::FAN);
     assert_eq!(entry.hair, HairSpec::SQUIRREL);
 }
+
+#[test]
+fn a_clean_brush_reads_as_clean() {
+    let wording = tool_wording(PanelTool::Paint(Tool::Brush));
+    assert_eq!(
+        loaded_text(&wording, true, &["Titanium White"], &[(0, 1.0)]),
+        wording.clean
+    );
+}
+
+#[test]
+fn a_loaded_brush_reads_its_recipe() {
+    let wording = tool_wording(PanelTool::Paint(Tool::Brush));
+    assert_eq!(
+        loaded_text(&wording, false, &["Titanium White"], &[(0, 1.0)]),
+        "Titanium White"
+    );
+}
+
+#[test]
+fn the_size_reads_in_whole_pixels() {
+    assert_eq!(size_text(12.4), "12 px");
+    assert_eq!(size_text(12.6), "13 px");
+}
+
+#[test]
+fn the_add_button_shows_while_there_is_room_and_something_to_add() {
+    assert!(offers_more_pigments(1, 3));
+    assert!(!offers_more_pigments(MAX_SLOTS, 3));
+    assert!(!offers_more_pigments(1, 0));
+}
+
+#[test]
+fn the_rack_refills_only_when_its_brushes_change() {
+    let brush = &factory_brushes()[1];
+    let entries = vec![rack_entry(brush, false)];
+    let keys = vec![ThumbnailKey::of(brush)];
+    assert!(rack_needs_refill(None, &entries, &keys));
+    let shown = (entries.clone(), keys.clone());
+    assert!(!rack_needs_refill(Some(&shown), &entries, &keys));
+    assert!(rack_needs_refill(Some(&shown), &[], &[]));
+    assert!(rack_needs_refill(Some(&shown), &entries, &[]));
+}

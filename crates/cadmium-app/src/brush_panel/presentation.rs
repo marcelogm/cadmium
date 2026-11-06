@@ -1,11 +1,13 @@
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
+use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
 use crate::sliders::format_param;
 use crate::state::PigmentClick;
+use crate::thumbnails::ThumbnailKey;
 use crate::tools::UiTool;
 use crate::tools::panel::{CLEAN_LABEL, ToolWording, VisibleControls};
 
@@ -110,6 +112,41 @@ pub(super) fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String
         .map(|(name, share)| format!("{name} {:.0}%", f64::from(share) * PERCENT))
         .collect::<Vec<_>>()
         .join(" · ")
+}
+
+/// What the loaded-paint row says: clean, or the recipe of the paint held.
+pub(super) fn loaded_text(
+    wording: &ToolWording,
+    held_is_clean: bool,
+    names: &[&str],
+    recipe: &[(usize, f32)],
+) -> String {
+    if held_is_clean {
+        wording.clean.to_string()
+    } else {
+        describe_recipe(names, recipe)
+    }
+}
+
+pub(super) fn size_text(diameter_px: f32) -> String {
+    format!("{diameter_px:.0} px")
+}
+
+/// The "+" button shows while the canvas has room for another pigment and one is left.
+pub(super) fn offers_more_pigments(slot_count: usize, addable_count: usize) -> bool {
+    slot_count < MAX_SLOTS && addable_count > 0
+}
+
+/// The entries and thumbnail keys the rack shows, in rack order.
+pub(super) type ShownBrushes = (Vec<RackEntry>, Vec<ThumbnailKey>);
+
+/// `None` means nothing is shown yet.
+pub(super) fn rack_needs_refill(
+    shown: Option<&ShownBrushes>,
+    entries: &[RackEntry],
+    keys: &[ThumbnailKey],
+) -> bool {
+    !shown.is_some_and(|(shown_entries, shown_keys)| shown_entries == entries && shown_keys == keys)
 }
 
 pub(super) fn plate_gap_spec() -> &'static ParamSpec {
