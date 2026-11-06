@@ -21,7 +21,7 @@ const CENTRE_ABOVE: f64 = 6.0;
 const CENTRE_BELOW: f64 = 10.0;
 const CAPTION_ABOVE: f64 = 12.0;
 /// A ferrule mouth narrower than this (a head thinner than 0.2) is drawn wider by
-/// `THIN_MOUTH_EXTRA` sheet units, fading out up its neck, so it still reads (the mockup's).
+/// `THIN_MOUTH_EXTRA` sheet units, fading out up its neck, so it still reads.
 const THIN_MOUTH: f32 = 0.2 * 1.035;
 const THIN_MOUTH_EXTRA: f64 = 1.5;
 

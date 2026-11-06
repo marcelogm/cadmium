@@ -4,7 +4,7 @@
 use adw::prelude::*;
 use gtk::cairo;
 
-/// The test sheet's paper and its two grids (the approved mockup's `.test`).
+/// The editor's paper colour and its two grids, minor every 16 px and major every 80.
 const PAPER: [f64; 3] = rgb(0xfbfaf6);
 const MINOR_LINE: [f64; 3] = rgb(0xe3e6ea);
 const MAJOR_LINE: [f64; 3] = rgb(0xcfd5dc);

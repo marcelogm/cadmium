@@ -11,7 +11,7 @@ use crate::sliders::{SliderRow, slider_row};
 /// A page step is this many slider steps.
 const STEPS_PER_PAGE: f64 = 10.0;
 
-/// The style class dimming a locked row like the approved mockup (`style.css`).
+/// The style class dimming a locked row (`style.css`).
 const LOCKED: &str = "locked-control";
 /// The editor's sliders are narrower than the lab's, so two-word titles fit on one line.
 const SCALE_WIDTH: i32 = 112;
