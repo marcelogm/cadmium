@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
 use gtk::prelude::*;
@@ -10,29 +10,6 @@ use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
 use crate::state::AppState;
 
-const RESIZE_SETTLE: Duration = Duration::from_millis(150);
-
-#[derive(Debug, Default)]
-pub(super) struct ResizeDebounce {
-    pending: Option<((u32, u32), Instant)>,
-}
-
-impl ResizeDebounce {
-    fn has_settled(&mut self, size: (u32, u32), now: Instant) -> bool {
-        match self.pending {
-            Some((pending, since)) if pending == size => now.duration_since(since) >= RESIZE_SETTLE,
-            _ => {
-                self.pending = Some((size, now));
-                false
-            }
-        }
-    }
-
-    pub(super) fn clear(&mut self) {
-        self.pending = None;
-    }
-}
-
 impl FramePresenter {
     pub(super) fn present_by_dmabuf(
         &mut self,
@@ -43,7 +20,8 @@ impl FramePresenter {
     ) -> Result<Option<gdk::Texture>, DmabufError> {
         let gpu = state.gpu.clone();
         let display = native.display();
-        if self.pool_needs_replacing(size) {
+        let pool_size = self.pool.as_ref().map(DmabufPool::size);
+        if self.resize.needs_new_pool(pool_size, size, Instant::now()) {
             self.replace_pool(&gpu, &display, policy, size)?;
         }
         let Some(pool) = self.pool.as_mut() else {
@@ -53,17 +31,6 @@ impl FramePresenter {
         pool.present_with(&gpu, &display, |encoder, target| {
             source.encode(state, &gpu, target, encoder);
         })
-    }
-
-    fn pool_needs_replacing(&mut self, size: (u32, u32)) -> bool {
-        match self.pool.as_ref().map(DmabufPool::size) {
-            None => true,
-            Some(pool_size) if pool_size == size => {
-                self.resize.clear();
-                false
-            }
-            Some(_) => self.resize.has_settled(size, Instant::now()),
-        }
     }
 
     fn replace_pool(
@@ -95,6 +62,3 @@ impl FramePresenter {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
