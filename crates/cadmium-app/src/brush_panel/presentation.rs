@@ -1,4 +1,4 @@
-use cadmium_engine::brush::BrushSpec;
+use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
 use cadmium_engine::stroke::Tool;
 use cadmium_studio::{hair_name, head_name};
@@ -159,6 +159,9 @@ pub(super) struct RackEntry {
     pub(super) subtitle: String,
     /// The brush's full name, for the row's tooltip.
     pub(super) name: String,
+    /// What the row's tip icon draws.
+    pub(super) head: HeadSpec,
+    pub(super) hair: HairSpec,
 }
 
 /// A factory brush reads as its head, then its hair; a user brush as its name, then
@@ -175,6 +178,8 @@ pub(super) fn rack_entry(brush: &BrushSpec, is_user: bool) -> RackEntry {
         title,
         subtitle,
         name: brush.name.clone(),
+        head: brush.head,
+        hair: brush.hair,
     }
 }
 

@@ -211,3 +211,10 @@ fn a_user_row_calls_a_changed_head_or_hair_custom() {
     assert_eq!(subtitle(HeadSpec::FLAT, hair), "Flat · Custom");
     assert_eq!(subtitle(head, hair), "Custom · Custom");
 }
+
+#[test]
+fn a_row_carries_the_brush_shape_for_its_tip_icon() {
+    let entry = rack_entry(&user_brush(HeadSpec::FAN, HairSpec::SQUIRREL), true);
+    assert_eq!(entry.head, HeadSpec::FAN);
+    assert_eq!(entry.hair, HairSpec::SQUIRREL);
+}

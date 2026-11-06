@@ -1,4 +1,4 @@
-//! The Brushes group: one row per brush (its names and its stroke) and a library menu.
+//! The Brushes group: one row per brush (its tip, its names, its stroke) and a library menu.
 
 use std::cell::RefCell;
 
@@ -10,6 +10,7 @@ use super::presentation::RackEntry;
 mod fit;
 mod row;
 mod stroke;
+mod tip_icon;
 
 use stroke::StrokeView;
 

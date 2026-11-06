@@ -1,9 +1,11 @@
-//! One rack row: the brush's names on two lines, then its stroke.
+//! One rack row: the brush's tip, its names on two lines, then its stroke.
 
 use adw::prelude::*;
+use cadmium_studio::TipGeometry;
 use gtk::gdk;
 
 use super::stroke::StrokeView;
+use super::tip_icon::tip_icon;
 use crate::brush_panel::presentation::RackEntry;
 
 const ROW_SPACING: i32 = 8;
@@ -21,6 +23,8 @@ pub(super) fn row(
         .margin_top(ROW_MARGIN)
         .margin_bottom(ROW_MARGIN)
         .build();
+    let tip = TipGeometry::new(&entry.head, &entry.hair);
+    content.append(&tip_icon(tip.front));
     content.append(&names(entry));
     content.append(stroke.widget());
     let row = gtk::ListBoxRow::builder()

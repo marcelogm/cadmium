@@ -75,7 +75,7 @@ fn draw(shown: &RefCell<Option<cairo::ImageSurface>>, context: &cairo::Context, 
 fn paint(context: &cairo::Context, surface: &cairo::ImageSurface, size: [f64; 2]) {
     let picture = [f64::from(surface.width()), f64::from(surface.height())];
     let fit = contain([0.0; 2], picture, size, 0.0);
-    let (x, y) = fit.place([0.0, 0.0]);
+    let [x, y] = fit.origin;
     rounded_rect(context, [x, y], picture.map(|side| side * fit.scale));
     context.clip();
     context.translate(x, y);
