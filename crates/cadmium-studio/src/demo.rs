@@ -8,6 +8,7 @@ const SAMPLE_INTERVAL_MS: u32 = 6;
 const DEMO_TILT_DEG: f32 = 25.0;
 const ZIGZAG_TEETH: f64 = 3.0;
 
+/// A scripted stroke that shows one side of how a brush behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DemoStroke {
     SCurve,
@@ -17,6 +18,7 @@ pub enum DemoStroke {
 }
 
 impl DemoStroke {
+    /// Every demo stroke, in the order a picker should list them.
     pub const ALL: [DemoStroke; 4] = [
         DemoStroke::SCurve,
         DemoStroke::RisingLine,
@@ -24,12 +26,20 @@ impl DemoStroke {
         DemoStroke::TapAndLift,
     ];
 
+    /// The name shown to the user.
     pub fn label(self) -> &'static str {
         match self {
             DemoStroke::SCurve => "S-Curve",
             DemoStroke::RisingLine => "Rising Pressure",
             DemoStroke::Zigzag => "Zigzag",
             DemoStroke::TapAndLift => "Tap and Lift",
+        }
+    }
+
+    fn sample_count(self) -> u32 {
+        match self {
+            DemoStroke::SCurve | DemoStroke::RisingLine | DemoStroke::Zigzag => SAMPLES,
+            DemoStroke::TapAndLift => TAP_SAMPLES,
         }
     }
 }
@@ -43,12 +53,13 @@ pub struct StrokeBox {
     pub height: f64,
 }
 
+/// The pen samples of `stroke`, drawn inside `area`.
+///
+/// Progress `t` runs from 0 to 1 over the stroke's sample count (90, or 24 for the
+/// shorter tap), one sample every 6 ms from time 0. Every position lies inside
+/// `area` and pressure is clamped to 0..=1.
 pub fn samples(stroke: DemoStroke, area: StrokeBox) -> Vec<StrokeSample> {
-    let count = if stroke == DemoStroke::TapAndLift {
-        TAP_SAMPLES
-    } else {
-        SAMPLES
-    };
+    let count = stroke.sample_count();
     (0..count)
         .map(|index| {
             let t = f64::from(index) / f64::from(count - 1);
