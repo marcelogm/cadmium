@@ -15,6 +15,7 @@ use crate::state::SharedState;
 pub(crate) mod nav_drag;
 mod navigation;
 pub(crate) mod samples;
+mod scroll;
 mod stylus;
 
 /// The navigation drag each button has in progress.
