@@ -8,6 +8,10 @@ const ROUND_POINT_ONSET: f32 = 0.5;
 const FAN_POINT_FADE_DEG: f32 = 10.0;
 const BELLY_SPLAY_SHARE: f32 = 0.35;
 pub(crate) const MIN_LENGTH_SHARE: f32 = 0.2;
+/// Thickness from which a bar's roots start drawing into the round spiral (round at 1).
+const ROUND_BLEND_ONSET: f32 = 0.8;
+/// Fan angle by which a bar's roots have bent fully into the fan's arc (a bar at 0°).
+const ARC_BLEND_DEG: f32 = 10.0;
 
 /// Head controls. Length is in ferrule radii, density in hairs per pixel of width.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -29,6 +33,29 @@ pub(crate) enum Section {
     Round,
     Bar,
     Arc,
+}
+
+/// How much each section lays a head's roots: shares summing to 1. A factory head is one
+/// section alone; a head near full thickness or with a small fan blends two or three, so
+/// its layout slides from one section into the next instead of jumping.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SectionMix {
+    pub(crate) round: f32,
+    pub(crate) bar: f32,
+    pub(crate) arc: f32,
+}
+
+impl SectionMix {
+    /// The sections with a share, in a fixed order.
+    pub(crate) fn parts(self) -> impl Iterator<Item = (Section, f32)> {
+        [
+            (Section::Round, self.round),
+            (Section::Bar, self.bar),
+            (Section::Arc, self.arc),
+        ]
+        .into_iter()
+        .filter(|&(_, share)| share > 0.0)
+    }
 }
 
 const fn head(thickness: f32, length: f32, dome: f32, slant: f32) -> HeadSpec {
@@ -112,13 +139,17 @@ impl HeadSpec {
         self.thickness >= Self::THICKNESS_RANGE[1]
     }
 
-    pub(crate) fn section(&self) -> Section {
-        if self.is_round() {
-            Section::Round
-        } else if self.fan_deg > 0.0 {
-            Section::Arc
-        } else {
-            Section::Bar
+    /// The sections the roots are laid in. Exactly one section, at a share of exactly 1,
+    /// outside the blend bands (thickness below 0.8 or at 1; no fan, or 10° and wider).
+    /// This smooths the root layout only: `is_round` still turns the root frame at
+    /// thickness 1, which does not show because a near-round head's roots are a disc.
+    pub(crate) fn section_mix(&self) -> SectionMix {
+        let round = eased_share(self.thickness, ROUND_BLEND_ONSET, Self::THICKNESS_RANGE[1]);
+        let arc = eased_share(self.fan_deg, Self::FAN_RANGE_DEG[0], ARC_BLEND_DEG);
+        SectionMix {
+            round,
+            bar: (1.0 - round) * (1.0 - arc),
+            arc: (1.0 - round) * arc,
         }
     }
 
@@ -144,15 +175,28 @@ impl HeadSpec {
         (domed * slanted).max(MIN_LENGTH_SHARE)
     }
 
-    /// Outward splay of the rest pose, per ferrule radius from the axis.
-    pub(crate) fn bulge(&self) -> f32 {
-        let fan = if self.section() == Section::Round {
+    /// Outward splay of the rest pose, per ferrule radius from the axis, for roots laid in
+    /// `section`: a fan splays a round head; a bar or an arc only by its belly.
+    pub(crate) fn bulge(&self, section: Section) -> f32 {
+        let fan = if section == Section::Round {
             self.fan_deg.to_radians().sin()
         } else {
             0.0
         };
         fan + self.belly * BELLY_SPLAY_SHARE
     }
+}
+
+/// 0 up to `from`, 1 from `to` on, eased (smoothstep) in between; NaN counts as 0.
+fn eased_share(value: f32, from: f32, to: f32) -> f32 {
+    if value.is_nan() || value <= from {
+        return 0.0;
+    }
+    if value >= to {
+        return 1.0;
+    }
+    let t = (value - from) / (to - from);
+    t * t * (3.0 - 2.0 * t)
 }
 
 #[cfg(test)]
