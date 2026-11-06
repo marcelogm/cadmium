@@ -47,6 +47,7 @@ pub struct CadmiumWindow {
     pub asking_to_close: Cell<bool>,
     pub history_disabled_announced: Cell<bool>,
     pub copy_presentation_announced: Cell<bool>,
+    /// The rack is still painting thumbnails; exists so smoke screenshots wait for them.
     pub thumbnails_pending: Cell<bool>,
 }
 

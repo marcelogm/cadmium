@@ -62,11 +62,12 @@ impl CadmiumWindow {
         }
     }
 
-    /// Whether the brush rack is still painting thumbnails.
+    /// Whether the brush rack is still painting thumbnails; smoke screenshots wait for it.
     pub fn thumbnails_pending(&self) -> bool {
         self.imp().thumbnails_pending.get()
     }
 
+    /// Set by the brush panel's thumbnail job, only so smoke screenshots can wait for it.
     pub fn set_thumbnails_pending(&self, pending: bool) {
         self.imp().thumbnails_pending.set(pending);
     }
