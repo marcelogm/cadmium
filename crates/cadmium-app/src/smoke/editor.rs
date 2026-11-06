@@ -3,6 +3,7 @@
 use adw::prelude::*;
 use gtk::glib;
 
+use super::steps::smoke_stroke;
 use crate::LOG_DOMAIN;
 use crate::brush_editor;
 use crate::window::CadmiumWindow;
@@ -12,7 +13,7 @@ use crate::window::CadmiumWindow;
 enum EditorShown {
     Closed,
     Unmapped,
-    /// Mapped, its example strokes still being painted.
+    /// Mapped, its example strokes or its test sheet still being painted.
     Painting,
     Mapped,
 }
@@ -36,7 +37,7 @@ pub(super) fn open(window: &CadmiumWindow) {
 }
 
 /// Whether the screenshot can be taken: with an editor expected, once its
-/// dialog is mapped and its example strokes are shown. A smoke run turns
+/// dialog is mapped, its example strokes are shown and its test sheet is at rest. A smoke run turns
 /// animations off, so a mapped dialog is already at rest; the step's frame hold
 /// (`Editor(frames)` extends `earliest_end_frame`) only lets its contents draw.
 /// An editor that closed ends the run.
@@ -62,9 +63,40 @@ fn shown(window: &CadmiumWindow) -> EditorShown {
     match window.editor() {
         None => EditorShown::Closed,
         Some(editor) if !editor.is_mapped() => EditorShown::Unmapped,
-        Some(_) if window.examples_pending() => EditorShown::Painting,
+        Some(editor) if window.examples_pending() || sheet_busy(&editor) => EditorShown::Painting,
         Some(_) => EditorShown::Mapped,
     }
+}
+
+/// Whether the editor's test sheet still presents frames: its first, or a stroke's.
+fn sheet_busy(editor: &adw::Dialog) -> bool {
+    brush_editor::test_sheet_in(editor).is_some_and(|sheet| sheet.is_presenting())
+}
+
+/// Whether the editor's test sheet shows its first frame, ready for a stroke. An editor
+/// that closed ends the run.
+pub(super) fn sheet_shown(window: &CadmiumWindow) -> bool {
+    match window.editor() {
+        None => fail("the brush editor closed before its test stroke"),
+        Some(editor) => {
+            editor.is_mapped()
+                && brush_editor::test_sheet_in(&editor).is_some_and(|sheet| sheet.has_frame())
+        }
+    }
+}
+
+/// Paints the smoke stroke across the editor's test sheet as the card shows it (the canvas
+/// overflows the card; a stroke laid out on the canvas could fall outside it), as a hand's
+/// stroke is painted.
+pub(super) fn paint_on_sheet(window: &CadmiumWindow) {
+    let sheet = window
+        .editor()
+        .and_then(|editor| brush_editor::test_sheet_in(&editor));
+    let Some(sheet) = sheet else {
+        fail("the brush editor has no test sheet");
+    };
+    let (width, height) = (sheet.width().max(1) as u32, sheet.height().max(1) as u32);
+    sheet.paint_stroke(&smoke_stroke(width, height));
 }
 
 fn fail(reason: &str) -> ! {

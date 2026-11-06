@@ -158,6 +158,38 @@ impl TestSheetView {
     }
 }
 
+#[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
+impl TestSheetView {
+    /// Whether the sheet has shown a frame.
+    pub(crate) fn has_frame(&self) -> bool {
+        self.imp().texture.borrow().is_some()
+    }
+
+    /// Whether the sheet still presents frames: painting, settling, or catching up with its
+    /// size.
+    pub(crate) fn is_presenting(&self) -> bool {
+        self.imp().tick.borrow().is_some()
+    }
+
+    /// Paints `samples`, given at widget points, as one stroke, through the path a hand's
+    /// stroke takes (each point mapped onto the canvas as the gesture maps it).
+    pub(crate) fn paint_stroke(&self, samples: &[StrokeSample]) {
+        let samples: Vec<StrokeSample> = samples
+            .iter()
+            .map(|sample| {
+                let (x, y) = self.canvas_point(sample.x, sample.y);
+                StrokeSample { x, y, ..*sample }
+            })
+            .collect();
+        let Some((first, rest)) = samples.split_first() else {
+            return;
+        };
+        self.begin_stroke(*first, None);
+        self.extend_stroke(rest);
+        self.finish_stroke();
+    }
+}
+
 /// Whether the view must present another frame: only while the sheet is there (`painting`
 /// is `None` once the editor let it go), and then while it paints or settles, for a queued
 /// present, or when the widget's pixel size no longer matches the presented texture.

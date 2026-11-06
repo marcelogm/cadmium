@@ -154,5 +154,26 @@ fn hint_label() -> gtk::Label {
         .build()
 }
 
+/// The test sheet's widget in `dialog`'s widget tree: smoke runs paint on it.
+#[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
+pub(crate) fn test_sheet_in(dialog: &adw::Dialog) -> Option<TestSheetView> {
+    find_sheet(dialog.upcast_ref())
+}
+
+#[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
+fn find_sheet(widget: &gtk::Widget) -> Option<TestSheetView> {
+    if let Some(sheet) = widget.downcast_ref::<TestSheetView>() {
+        return Some(sheet.clone());
+    }
+    let mut next = widget.first_child();
+    while let Some(child) = next {
+        if let Some(found) = find_sheet(&child) {
+            return Some(found);
+        }
+        next = child.next_sibling();
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests;

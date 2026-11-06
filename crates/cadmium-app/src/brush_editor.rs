@@ -37,6 +37,8 @@ use examples::{ExampleJob, Examples};
 use listening::Listening;
 use parts::PartGroups;
 use schematic::Subject;
+#[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
+pub(crate) use sheet::test_sheet_in;
 use sheet::{SHEET_FAILED, Sheet};
 
 /// The open editor. Signal handlers hold it weakly; the dialog's `closed` handler holds the
