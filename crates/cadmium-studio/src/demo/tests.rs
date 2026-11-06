@@ -7,7 +7,7 @@ const BOX: StrokeBox = StrokeBox {
     height: 100.0,
 };
 
-const STROKES: [DemoStroke; 2] = [DemoStroke::SCurve, DemoStroke::RisingLine];
+const STROKES: [DemoStroke; 2] = [DemoStroke::SCurve, DemoStroke::PressureRamp];
 
 #[test]
 fn every_demo_stroke_stays_inside_its_box() {
@@ -59,9 +59,11 @@ fn the_s_curve_presses_hardest_in_the_middle() {
 }
 
 #[test]
-fn the_rising_line_only_presses_harder() {
-    let all = samples(DemoStroke::RisingLine, BOX);
-    assert!(all.windows(2).all(|w| w[1].pressure >= w[0].pressure));
+fn the_pressure_ramp_runs_from_a_touch_to_full_pressure() {
+    let all = samples(DemoStroke::PressureRamp, BOX);
+    assert!(all.windows(2).all(|w| w[1].pressure > w[0].pressure));
+    assert_eq!(all[0].pressure, 0.04);
+    assert_eq!(all[all.len() - 1].pressure, 1.0);
     assert!(all.iter().all(|s| s.y == all[0].y));
 }
 

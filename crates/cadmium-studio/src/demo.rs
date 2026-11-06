@@ -5,12 +5,15 @@ use cadmium_engine::stroke::StrokeSample;
 const SAMPLES: u32 = 90;
 const SAMPLE_INTERVAL_MS: u32 = 6;
 const DEMO_TILT_DEG: f32 = 25.0;
+/// The pressure ramp's first touch: the hairs barely reach the canvas.
+const RAMP_START_PRESSURE: f64 = 0.04;
 
 /// A scripted stroke that shows one side of how a brush behaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DemoStroke {
     SCurve,
-    RisingLine,
+    /// A straight line pressed from barely touching to full pressure.
+    PressureRamp,
 }
 
 /// The canvas area a demo stroke must stay inside, in pixels.
@@ -51,7 +54,10 @@ fn shape(stroke: DemoStroke, t: f64) -> ([f64; 2], f64) {
             [t, 0.5 + 0.4 * (t * TAU).sin()],
             0.25 + 0.7 * (t * PI).sin(),
         ),
-        DemoStroke::RisingLine => ([t, 0.5], 0.1 + 0.85 * t),
+        DemoStroke::PressureRamp => (
+            [t, 0.5],
+            RAMP_START_PRESSURE + (1.0 - RAMP_START_PRESSURE) * t,
+        ),
     }
 }
 
