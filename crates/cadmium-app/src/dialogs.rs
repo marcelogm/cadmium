@@ -77,7 +77,25 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     for (title, entries) in ACTION_SHORTCUTS {
         dialog.add(action_shortcuts(title, entries));
     }
+    dialog.add(navigation_shortcuts());
     dialog
+}
+
+/// The hold-and-drag gestures, with the keys held for each.
+const NAVIGATION_GESTURES: [(&str, &str); 3] = [
+    ("Move Canvas", "space"),
+    ("Zoom Canvas", "<Control>space"),
+    ("Rotate Canvas", "<Shift>space"),
+];
+
+fn navigation_shortcuts() -> adw::ShortcutsSection {
+    let section = adw::ShortcutsSection::new(Some("Canvas Navigation"));
+    for (label, keys) in NAVIGATION_GESTURES {
+        let item = adw::ShortcutsItem::new(label, keys);
+        item.set_subtitle("Hold and drag");
+        section.add(item);
+    }
+    section
 }
 
 fn tool_shortcuts() -> adw::ShortcutsSection {
