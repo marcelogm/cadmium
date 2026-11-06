@@ -34,6 +34,9 @@ const CELL_GRID_BYTES: u64 = (MAX_BRISTLES * CELL_GRID_BINS * std::mem::size_of:
 const RANK_BYTES: u64 = RANKS_PER_TEXEL as u64 * OWNER_BYTES;
 const CLUSTER_BYTES: u64 = (CLUSTER_INDEX_WORDS * std::mem::size_of::<u32>()) as u64;
 const HANDLE_STATE_BYTES: u64 = 64;
+/// Where `HandleState` keeps the ferrule and the axis, in `vec4` slots.
+const HANDLE_FERRULE_VECTOR: usize = 0;
+const HANDLE_AXIS_VECTOR: usize = 1;
 const HAIR_LOAD_BYTES: u64 = (MAX_BRISTLES * std::mem::size_of::<f32>()) as u64;
 const _: () = assert!(MAX_BRISTLES as u32 == BRISTLES_PER_THREAD * BRISTLE_WORKGROUP_SIZE);
 const _: () = assert!(std::mem::size_of::<BristleRest>() == 48);
@@ -142,10 +145,14 @@ pub struct BristleSnapshot {
     pub chains_px: Vec<Vec<[f32; 3]>>,
     pub radii_px: Vec<f32>,
     pub clusters: Vec<u32>,
+    /// The handle pose: the ferrule centre, in canvas px (z height).
+    pub ferrule_px: [f32; 3],
+    /// The handle pose: unit vector up the brush, from the ferrule to the handle.
+    pub axis: [f32; 3],
 }
 
 impl BristleSnapshot {
-    fn of(floats: &[f32], radii_px: &[f32], clusters: &[u32]) -> BristleSnapshot {
+    fn of(floats: &[f32], handle: &[f32], radii_px: &[f32], clusters: &[u32]) -> BristleSnapshot {
         let states: Vec<&[f32]> = floats
             .as_chunks::<STATE_FLOATS>()
             .0
@@ -165,6 +172,8 @@ impl BristleSnapshot {
             chains_px: states.iter().copied().map(chain).collect(),
             radii_px: radii_px.to_vec(),
             clusters: clusters.to_vec(),
+            ferrule_px: vertex(handle, HANDLE_FERRULE_VECTOR),
+            axis: vertex(handle, HANDLE_AXIS_VECTOR),
         }
     }
 }
@@ -208,8 +217,10 @@ fn touches(state: &[f32]) -> bool {
 impl WetOilEngine {
     pub fn bristle_snapshot(&self, gpu: &GpuContext) -> Result<BristleSnapshot, GpuLost> {
         let floats = read_buffer(gpu, &self.buffers.bristles.states)?;
+        let handle = read_buffer(gpu, &self.buffers.bristles.handle)?;
         Ok(BristleSnapshot::of(
             &floats,
+            &handle,
             self.bristles.radii_px(),
             self.bristles.clusters(),
         ))
