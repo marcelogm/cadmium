@@ -3,7 +3,6 @@
 
 use std::cell::RefCell;
 
-use cadmium_studio::StudioError;
 use gtk::glib;
 
 mod job;
@@ -14,7 +13,8 @@ pub(super) use job::{ExampleJob, Tick};
 pub(super) use queue::{ExampleQueue, Order};
 pub(super) use view::ExamplesView;
 
-const FAILURE_TOAST: &str = "Can't show the example strokes";
+/// What the toast says when the example strokes can't be painted.
+pub(super) const EXAMPLES_FAILED: &str = "Can't show the example strokes";
 
 /// The editor's examples: the picture, the job that paints it and which painting counts.
 pub(super) struct Examples {
@@ -33,16 +33,6 @@ impl Examples {
             queue: RefCell::new(ExampleQueue::default()),
             debounce: RefCell::new(None),
         }
-    }
-}
-
-/// The toast for examples that failed to paint; `None` for a lost GPU, which the window's
-/// GPU-lost dialog reports.
-pub(super) fn failure_toast(error: &StudioError, gpu_lost: bool) -> Option<String> {
-    match error {
-        StudioError::Gpu(_) => None,
-        _ if gpu_lost => None,
-        error => Some(format!("{FAILURE_TOAST}: {error}")),
     }
 }
 

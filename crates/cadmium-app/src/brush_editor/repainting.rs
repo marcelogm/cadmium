@@ -11,10 +11,8 @@ use cadmium_studio::{StudioError, Thumbnail};
 use gtk::glib;
 use gtk::prelude::*;
 
-use super::closing::Closing;
-use super::examples::{Order, Tick, failure_toast};
+use super::examples::{EXAMPLES_FAILED, Order, Tick};
 use super::{Editor, with_editor};
-use crate::LOG_DOMAIN;
 use crate::thumbnails::{ThumbnailKey, texture};
 
 /// How long the draft must stay still before a slider's change is painted.
@@ -121,26 +119,11 @@ impl Editor {
         }
     }
 
-    /// Closes the editor and says why; a lost GPU goes to the window's GPU-lost dialog,
-    /// which closes the editor first (once: a later failure closes it here).
+    /// The painting failed: the editor gives up on it.
     fn examples_failed(self: &Rc<Self>, order: Order, error: &StudioError) {
         self.examples.queue.borrow_mut().failed(order);
         self.set_examples_pending(false);
-        let window = self.window.upgrade();
-        let gpu_lost = window
-            .as_ref()
-            .is_some_and(|window| window.state().borrow().gpu_is_lost());
-        let toast = failure_toast(error, gpu_lost);
-        if toast.is_none()
-            && let Some(window) = &window
-        {
-            window.announce_gpu_lost();
-        }
-        self.finish(Closing::Done);
-        if let (Some(window), Some(toast)) = (window, toast) {
-            glib::g_warning!(LOG_DOMAIN, "{toast}");
-            window.show_toast(&toast);
-        }
+        self.give_up(EXAMPLES_FAILED, error);
     }
 
     fn set_examples_pending(&self, pending: bool) {

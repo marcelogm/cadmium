@@ -19,6 +19,7 @@ mod closing;
 mod controls;
 mod draft;
 mod examples;
+mod failing;
 mod header;
 mod layout;
 mod listening;
