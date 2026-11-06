@@ -25,6 +25,22 @@ fn brush() -> BrushSpec {
     }
 }
 
+/// Another brush size and other slots: another canvas and another tray.
+fn other_brush() -> BrushSpec {
+    BrushSpec {
+        size_px: 20.0,
+        ..factory_brushes()[1].clone()
+    }
+}
+
+fn other_paint() -> StudioPaint {
+    StudioPaint {
+        slots: vec!["cadmium_red".to_string(), "titanium_white".to_string()],
+        recipe: vec![(0, 0.7), (1, 0.3)],
+        ..paint()
+    }
+}
+
 fn player(gpu: &GpuContext, stroke: DemoStroke) -> StudioPlayer {
     let (brush, paint) = (brush(), paint());
     let request = PlayerRequest {
@@ -35,14 +51,29 @@ fn player(gpu: &GpuContext, stroke: DemoStroke) -> StudioPlayer {
     StudioPlayer::new(gpu, request).unwrap()
 }
 
-/// Advances by `steps`, round and round, until the loop reaches its pause.
-fn to_pause(gpu: &GpuContext, player: &mut StudioPlayer, steps: &[f64]) {
-    for dt in steps.iter().cycle() {
-        if player.phase() == Phase::Pause {
+/// More advances than any loop needs, even one real millisecond at a time.
+const MAX_ADVANCES: usize = 20_000;
+
+/// Advances by `steps`, round and round, until `done` holds; fails rather than
+/// hangs if it never does.
+fn advance_until(
+    gpu: &GpuContext,
+    player: &mut StudioPlayer,
+    steps: &[f64],
+    done: impl Fn(&StudioPlayer) -> bool,
+) {
+    for dt in steps.iter().cycle().take(MAX_ADVANCES) {
+        if done(player) {
             return;
         }
         player.advance(gpu, *dt).unwrap();
     }
+    panic!("the player never got there");
+}
+
+/// Advances by `steps` until the loop reaches its pause.
+fn to_pause(gpu: &GpuContext, player: &mut StudioPlayer, steps: &[f64]) {
+    advance_until(gpu, player, steps, |p| p.phase() == Phase::Pause);
 }
 
 fn snapshot(gpu: &GpuContext, player: &StudioPlayer) -> BristleSnapshot {
@@ -84,7 +115,7 @@ fn slow_motion_paints_what_full_speed_paints() {
     let mut slow = player(&gpu, DemoStroke::SCurve);
     slow.set_speed(SLOW_MOTION);
     to_pause(&gpu, &mut full, &[6.0]);
-    to_pause(&gpu, &mut slow, &[24.0]);
+    to_pause(&gpu, &mut slow, &[16.0, 17.0, 16.5]);
     assert_same(&gpu, &full, &slow);
 }
 
@@ -119,12 +150,13 @@ fn every_loop_paints_the_same_stroke_again() {
     let gpu = GpuContext::new().unwrap();
     let mut player = player(&gpu, DemoStroke::TapAndLift);
     to_pause(&gpu, &mut player, &[18.0]);
-    let first = player.rgba(&gpu).unwrap();
+    let (first, bristles) = (player.rgba(&gpu).unwrap(), snapshot(&gpu, &player));
     assert!(inked(&first), "nothing painted");
-    while player.phase() == Phase::Pause {
-        player.advance(&gpu, 18.0).unwrap();
-    }
+    advance_until(&gpu, &mut player, &[18.0], |p| p.phase() != Phase::Pause);
     to_pause(&gpu, &mut player, &[18.0]);
+    let again = snapshot(&gpu, &player);
+    assert_eq!(again.tips_px, bristles.tips_px);
+    assert_eq!(again.chains_px, bristles.chains_px);
     assert!(
         player.rgba(&gpu).unwrap() == first,
         "the second loop differs"
@@ -172,4 +204,57 @@ fn the_pen_lifts_into_the_settle_before_the_pause() {
         }
     }
     assert_eq!(phases, [Phase::Stroke, Phase::Settle, Phase::Pause]);
+}
+
+#[test]
+fn a_restart_paints_what_a_new_player_paints() {
+    let gpu = GpuContext::new().unwrap();
+    let mut player = player(&gpu, DemoStroke::Zigzag);
+    player.set_speed(SLOW_MOTION);
+    player.advance(&gpu, 100.0).unwrap();
+    player.advance(&gpu, 16.0).unwrap();
+    player.pause();
+    let (brush, paint) = (other_brush(), other_paint());
+    let request = PlayerRequest {
+        brush: &brush,
+        paint: &paint,
+        stroke: DemoStroke::SCurve,
+    };
+    player.restart(&gpu, request).unwrap();
+    assert!(player.is_ready() && !player.is_playing());
+    assert_eq!((player.brush(), player.paint()), (&brush, &paint));
+    assert_eq!(player.session().tray.spec.pigment_slots, paint.slots);
+    assert_eq!(player.session().canvas.spec.pigment_slots, paint.slots);
+    player.play();
+    let mut fresh = StudioPlayer::new(&gpu, request).unwrap();
+    fresh.set_speed(SLOW_MOTION);
+    for one in [&mut player, &mut fresh] {
+        // 2 ms of loop time: no quantum unless time from before the restart is left.
+        one.advance(&gpu, 8.0).unwrap();
+        assert!(!one.brush_visible());
+        one.advance(&gpu, 16.0).unwrap();
+        assert!(one.brush_visible());
+        to_pause(&gpu, one, &[16.0, 17.0, 16.5]);
+    }
+    assert_same(&gpu, &player, &fresh);
+}
+
+#[test]
+fn a_restart_on_the_same_canvas_paints_what_a_new_player_paints() {
+    let gpu = GpuContext::new().unwrap();
+    let mut player = player(&gpu, DemoStroke::Zigzag);
+    player.run_until(&gpu, 300.0).unwrap();
+    let (brush, paint) = (brush(), paint());
+    let request = PlayerRequest {
+        brush: &brush,
+        paint: &paint,
+        stroke: DemoStroke::TapAndLift,
+    };
+    player.restart(&gpu, request).unwrap();
+    let mut fresh = StudioPlayer::new(&gpu, request).unwrap();
+    for one in [&mut player, &mut fresh] {
+        assert!(one.is_ready());
+        to_pause(&gpu, one, &[6.0]);
+    }
+    assert_same(&gpu, &player, &fresh);
 }

@@ -94,18 +94,24 @@ impl Show {
     }
 }
 
-/// Drops the old canvas before allocating the new one, so two never coexist.
+/// Swaps the session's canvas for a 1×1 one, freeing the full-size canvas.
+fn shrink_canvas(session: &mut PaintSession, gpu: &GpuContext) -> Result<(), CanvasError> {
+    let placeholder = CanvasSpec {
+        width: 1,
+        height: 1,
+        ..session.canvas.spec.clone()
+    };
+    session.canvas = Canvas::new(gpu, &session.db, placeholder)?;
+    Ok(())
+}
+
+/// A fresh canvas of `spec`; the session never holds two full-size canvases.
 fn replace_canvas(
     session: &mut PaintSession,
     gpu: &GpuContext,
     spec: CanvasSpec,
 ) -> Result<(), CanvasError> {
-    let placeholder = CanvasSpec {
-        width: 1,
-        height: 1,
-        ..spec.clone()
-    };
-    session.canvas = Canvas::new(gpu, &session.db, placeholder)?;
+    shrink_canvas(session, gpu)?;
     session.canvas = Canvas::new(gpu, &session.db, spec)?;
     Ok(())
 }
@@ -116,8 +122,15 @@ fn replace_canvas(
 /// and pause only change how much real time a quantum takes, so every speed
 /// paints the same pixels. Each loop starts on a fresh canvas with a freshly
 /// loaded brush and the clock at 0.
+///
+/// If a canvas cannot be allocated the player is not ready: it shows nothing,
+/// stands still and allocates nothing until the next `restart`.
 pub struct StudioPlayer {
     session: PaintSession,
+    /// The canvas spec the session's tray and state were built for.
+    built_for: CanvasSpec,
+    /// Whether the session's canvas is the show's real one.
+    ready: bool,
     show: Show,
     /// How many events this loop has played.
     cursor: usize,
@@ -131,10 +144,13 @@ pub struct StudioPlayer {
 impl StudioPlayer {
     pub fn new(gpu: &GpuContext, request: PlayerRequest<'_>) -> Result<StudioPlayer, StudioError> {
         let show = Show::of(request);
-        let mut session = PaintSession::headless(gpu, show.canvas_spec())?;
+        let built_for = show.canvas_spec();
+        let mut session = PaintSession::headless(gpu, built_for.clone())?;
         show.dress(&mut session, gpu);
         Ok(StudioPlayer {
             session,
+            built_for,
+            ready: true,
             show,
             cursor: 0,
             quanta: 0,
@@ -146,6 +162,9 @@ impl StudioPlayer {
 
     /// Replays the quanta due after `real_dt_ms` of real time.
     pub fn advance(&mut self, gpu: &GpuContext, real_dt_ms: f64) -> Result<(), StudioError> {
+        if !self.ready {
+            return Ok(());
+        }
         let speed = if self.playing { self.speed } else { 0.0 };
         let (due, rest_ms) = quanta_due(
             self.accumulated_ms,
@@ -160,8 +179,9 @@ impl StudioPlayer {
 
     /// Shows `request` from the start of a loop, keeping the speed and pause.
     ///
-    /// On an error the player waits at the end of a loop and tries the canvas
-    /// again when it next advances.
+    /// A new canvas spec (size, slots, primer or weave) gets a whole new session,
+    /// so nothing of the old one lingers; otherwise only the canvas is replaced.
+    /// On an error the player is not ready until a `restart` succeeds.
     pub fn restart(
         &mut self,
         gpu: &GpuContext,
@@ -170,12 +190,21 @@ impl StudioPlayer {
         self.show = Show::of(request);
         self.accumulated_ms = 0.0;
         self.finish_loop();
-        self.start_loop(gpu)
+        if self.show.canvas_spec() == self.built_for {
+            self.start_loop(gpu)
+        } else {
+            self.rebuild(gpu)
+        }
     }
 
-    /// Replays, ignoring speed and pause, until the loop clock reaches
-    /// `loop_ms` or the loop's end.
+    /// Replays quanta, ignoring speed and pause, until the loop clock reaches
+    /// `loop_ms`, rounded up to a whole quantum. It only moves forward within
+    /// the current loop: it never wraps into the next one, and a target behind
+    /// the clock, or past the loop's end, stops where the clock or the end is.
     pub fn run_until(&mut self, gpu: &GpuContext, loop_ms: f64) -> Result<(), StudioError> {
+        if !self.ready {
+            return Ok(());
+        }
         let target_ms = loop_ms.min(self.loop_ms());
         while self.loop_clock_ms() < target_ms {
             self.step(gpu)?;
@@ -183,9 +212,13 @@ impl StudioPlayer {
         Ok(())
     }
 
-    /// Negative speeds stop the replay like a pause.
+    /// Negative or non-finite speeds stop the replay like a pause.
     pub fn set_speed(&mut self, speed: f64) {
-        self.speed = speed.max(0.0);
+        self.speed = if speed.is_finite() {
+            speed.max(0.0)
+        } else {
+            0.0
+        };
     }
 
     pub fn pause(&mut self) {
@@ -245,9 +278,15 @@ impl StudioPlayer {
         self.show.fit.reach_px
     }
 
+    /// Whether the canvas is the show's real one; when it is not (a canvas
+    /// could not be allocated), renderers should draw nothing.
+    pub fn is_ready(&self) -> bool {
+        self.ready
+    }
+
     /// Whether the brush is on show: from the loop's first frame until the pause.
     pub fn brush_visible(&self) -> bool {
-        self.quanta > 0 && self.phase() != Phase::Pause
+        self.ready && self.quanta > 0 && self.phase() != Phase::Pause
     }
 
     /// The canvas as shown, at 1:1, as straight sRGB RGBA8.
@@ -287,12 +326,30 @@ impl StudioPlayer {
         Ok(())
     }
 
+    /// The next loop on a fresh canvas in the same session.
     fn start_loop(&mut self, gpu: &GpuContext) -> Result<(), StudioError> {
+        self.ready = false;
         replace_canvas(&mut self.session, gpu, self.show.canvas_spec())?;
+        self.begin_loop(gpu);
+        Ok(())
+    }
+
+    /// The next loop in a whole new session, built for the show's canvas.
+    fn rebuild(&mut self, gpu: &GpuContext) -> Result<(), StudioError> {
+        self.ready = false;
+        shrink_canvas(&mut self.session, gpu)?;
+        let spec = self.show.canvas_spec();
+        self.session = PaintSession::headless(gpu, spec.clone())?;
+        self.built_for = spec;
+        self.begin_loop(gpu);
+        Ok(())
+    }
+
+    fn begin_loop(&mut self, gpu: &GpuContext) {
         self.show.dress(&mut self.session, gpu);
         self.cursor = 0;
         self.quanta = 0;
-        Ok(())
+        self.ready = true;
     }
 
     /// Everything played and the pause over: the next quantum starts a loop.
