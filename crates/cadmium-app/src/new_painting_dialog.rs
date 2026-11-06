@@ -2,7 +2,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
+use cadmium_engine::canvas::CanvasSpec;
 use cadmium_engine::pigments::PigmentDb;
 use gtk::glib;
 
@@ -10,6 +10,7 @@ use crate::swatch::Swatch;
 
 mod build;
 mod format;
+mod ground;
 mod imp;
 mod selection;
 mod signals;
@@ -17,17 +18,6 @@ mod signals;
 use selection::PigmentSelection;
 
 const CONTENT_WIDTH: i32 = 560;
-
-const PRIMERS: [(Primer, &str); 2] = [
-    (Primer::WhiteGesso, "White gesso"),
-    (Primer::SiennaImprimatura, "Sienna imprimatura"),
-];
-
-const WEAVES: [(Weave, &str); 3] = [
-    (Weave::Linen, "Linen"),
-    (Weave::Cotton, "Cotton"),
-    (Weave::Smooth, "Smooth"),
-];
 
 struct Widgets {
     format_row: adw::ComboRow,
@@ -78,12 +68,8 @@ impl NewPaintingDialog {
         CanvasSpec {
             width: widgets.width_row.value() as u32,
             height: widgets.height_row.value() as u32,
-            primer: PRIMERS
-                .get(widgets.primer_row.selected() as usize)
-                .map_or(Primer::WhiteGesso, |(primer, _)| *primer),
-            weave: WEAVES
-                .get(widgets.weave_row.selected() as usize)
-                .map_or(Weave::Linen, |(weave, _)| *weave),
+            primer: ground::primer_at(widgets.primer_row.selected()),
+            weave: ground::weave_at(widgets.weave_row.selected()),
             pigment_slots: self.with_selection(PigmentSelection::slots),
         }
     }
