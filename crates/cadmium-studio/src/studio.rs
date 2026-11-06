@@ -25,6 +25,7 @@ const MARGIN_X_SHARE: f64 = 0.18;
 /// Wider than the side margin: the stroke's width spreads up and down.
 const MARGIN_Y_SHARE: f64 = 0.33;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Thumbnail {
     pub width: u32,
     pub height: u32,
@@ -62,9 +63,11 @@ impl fmt::Display for StudioError {
 impl std::error::Error for StudioError {}
 
 /// A private paint session that shows what a brush does.
+///
+/// Every run starts its clock at 0 on a fresh canvas with a freshly loaded brush,
+/// so the same brush and stroke always paint the same pixels.
 pub struct BrushStudio {
     session: PaintSession,
-    clock_ms: f64,
 }
 
 fn studio_spec() -> CanvasSpec {
@@ -78,10 +81,9 @@ fn studio_spec() -> CanvasSpec {
 }
 
 impl BrushStudio {
-    pub fn new(gpu: &GpuContext) -> Result<BrushStudio, CanvasError> {
+    pub fn new(gpu: &GpuContext) -> Result<BrushStudio, StudioError> {
         Ok(BrushStudio {
-            session: PaintSession::new(gpu, studio_spec())?,
-            clock_ms: 0.0,
+            session: PaintSession::headless(gpu, studio_spec())?,
         })
     }
 
@@ -143,19 +145,17 @@ impl BrushStudio {
         self.session.reload_brush(gpu);
     }
 
+    /// Paints `stroke` with its own sample times, so the clock starts at 0.
     fn paint(&mut self, gpu: &GpuContext, stroke: DemoStroke) {
-        let start_ms = self.clock_ms.ceil() as u32;
-        for (index, sample) in samples(stroke, self.stroke_box()).iter().enumerate() {
-            let sample = StrokeSample {
-                time_ms: start_ms + sample.time_ms,
-                ..*sample
-            };
+        let mut clock_ms = 0.0;
+        for (index, sample) in samples(stroke, self.stroke_box()).into_iter().enumerate() {
             self.touch(gpu, index, sample);
+            clock_ms = f64::from(sample.time_ms);
         }
         self.session.end_stroke();
         for _ in 0..SETTLE_FRAMES {
-            self.clock_ms += SETTLE_STEP_MS;
-            self.frame(gpu);
+            clock_ms += SETTLE_STEP_MS;
+            self.frame(gpu, clock_ms);
         }
     }
 
@@ -166,9 +166,8 @@ impl BrushStudio {
         } else {
             self.session.add_samples(&[sample]);
         }
-        self.clock_ms = f64::from(sample.time_ms);
         if index.is_multiple_of(FRAME_EVERY_SAMPLES) {
-            self.frame(gpu);
+            self.frame(gpu, f64::from(sample.time_ms));
         }
     }
 
@@ -183,9 +182,9 @@ impl BrushStudio {
         }
     }
 
-    fn frame(&mut self, gpu: &GpuContext) {
+    fn frame(&mut self, gpu: &GpuContext, clock_ms: f64) {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        self.session.encode_frame(gpu, self.clock_ms, &mut encoder);
+        self.session.encode_frame(gpu, clock_ms, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
     }
 }

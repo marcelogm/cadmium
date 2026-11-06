@@ -109,7 +109,7 @@ pub fn render(
 /// Opens a studio on the app's GPU, borrowing the state only to reach it.
 pub fn open_studio(state: &SharedState) -> Result<BrushStudio, StudioError> {
     let gpu = state.borrow().gpu.clone();
-    Ok(BrushStudio::new(&gpu)?)
+    BrushStudio::new(&gpu)
 }
 
 pub fn texture(thumbnail: Thumbnail) -> gdk::Texture {
