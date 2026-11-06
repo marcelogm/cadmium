@@ -9,7 +9,7 @@ use gtk::{gio, glib};
 use super::finished;
 use crate::LOG_DOMAIN;
 use crate::window::CadmiumWindow;
-use crate::writes::{EditMark, WriteKind};
+use crate::writes::{AfterWrite, EditMark, WriteKind};
 
 const SAVED_TOAST: &str = "Saved";
 const SAVING_TOAST: &str = "Saving…";
@@ -52,7 +52,7 @@ impl CadmiumWindow {
     }
 
     fn begin_write(&self, path: &Path, kind: WriteKind) -> bool {
-        if self.imp().writes_in_flight.borrow_mut().begin(path, kind) {
+        if self.imp().closing.borrow_mut().begin_write(path, kind) {
             return true;
         }
         glib::g_debug!(LOG_DOMAIN, "already writing {}", path.display());
@@ -77,8 +77,8 @@ impl CadmiumWindow {
 
     fn finish_write(&self, path: &Path) {
         let imp = self.imp();
-        imp.writes_in_flight.borrow_mut().finish(path);
-        if !imp.writes_in_flight.borrow().is_empty() {
+        let after = imp.closing.borrow_mut().finish_write(path);
+        if after == AfterWrite::StillWriting {
             return;
         }
         if let Some(timeout) = imp.write_wait_timeout.take() {
@@ -87,7 +87,7 @@ impl CadmiumWindow {
         if let Some(alert) = imp.write_wait_alert.take() {
             alert.force_close();
         }
-        if imp.close_after_writes.replace(false) {
+        if after == AfterWrite::CloseNow {
             self.close();
         }
     }

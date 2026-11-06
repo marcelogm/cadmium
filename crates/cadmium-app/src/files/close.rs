@@ -4,33 +4,34 @@ use gtk::glib;
 
 use crate::dialogs::{ask_to_quit_while_writing, unsaved_changes_discard_confirmed};
 use crate::window::CadmiumWindow;
-use crate::writes::work_would_be_lost;
+use crate::writes::CloseStep;
 
 const WRITE_HANG_SECONDS: u32 = 10;
 
 impl CadmiumWindow {
     pub fn work_would_be_lost(&self) -> bool {
         let unsaved_edits = self.state().borrow().has_unsaved_edits();
-        work_would_be_lost(unsaved_edits, &self.imp().writes_in_flight.borrow())
+        self.imp()
+            .closing
+            .borrow()
+            .work_would_be_lost(unsaved_edits)
     }
 
     pub fn may_close(&self) -> bool {
-        let imp = self.imp();
-        if imp.abandon_writes.get() {
-            return true;
+        let unsaved_edits = || self.state().borrow().has_unsaved_edits();
+        let step = self.imp().closing.borrow_mut().request_close(unsaved_edits);
+        match step {
+            CloseStep::Close => true,
+            CloseStep::WaitForWrites => {
+                self.offer_to_quit_if_writes_hang();
+                false
+            }
+            CloseStep::Ask => {
+                glib::spawn_future_local(confirm_close(self.clone()));
+                false
+            }
+            CloseStep::AlreadyAsking => false,
         }
-        if !imp.writes_in_flight.borrow().is_empty() {
-            imp.close_after_writes.set(true);
-            self.offer_to_quit_if_writes_hang();
-            return false;
-        }
-        if imp.close_confirmed.get() || !self.work_would_be_lost() {
-            return true;
-        }
-        if !imp.asking_to_close.replace(true) {
-            glib::spawn_future_local(confirm_close(self.clone()));
-        }
-        false
     }
 
     fn offer_to_quit_if_writes_hang(&self) {
@@ -55,9 +56,8 @@ impl CadmiumWindow {
 
 async fn confirm_close(window: CadmiumWindow) {
     let discard = unsaved_changes_discard_confirmed(&window).await;
-    window.imp().asking_to_close.set(false);
+    window.imp().closing.borrow_mut().discard_answered(discard);
     if discard {
-        window.imp().close_confirmed.set(true);
         window.close();
     }
 }
@@ -68,14 +68,14 @@ fn offer_to_quit_now(window: &glib::WeakRef<CadmiumWindow>) {
     };
     let imp = window.imp();
     imp.write_wait_timeout.take();
-    if imp.close_after_writes.get() && !imp.writes_in_flight.borrow().is_empty() {
+    if imp.closing.borrow().still_waiting_for_writes() {
         window.ask_to_quit_while_writing();
     }
 }
 
 fn abandon_writes_and_close(window: &glib::WeakRef<CadmiumWindow>) {
     if let Some(window) = window.upgrade() {
-        window.imp().abandon_writes.set(true);
+        window.imp().closing.borrow_mut().abandon_writes();
         window.close();
     }
 }
