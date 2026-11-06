@@ -1,8 +1,11 @@
 //! How a brush's hairs bend, slide, clump and hold paint.
 
+use serde::{Deserialize, Serialize};
+
 use super::within;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HairSpec {
     pub stiffness: f32,
     pub damping: f32,

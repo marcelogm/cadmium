@@ -1,5 +1,7 @@
 //! The shape of a brush's hair bundle.
 
+use serde::{Deserialize, Serialize};
+
 use super::within;
 
 const ROUND_POINT_ONSET: f32 = 0.5;
@@ -8,7 +10,8 @@ const BELLY_SPLAY_SHARE: f32 = 0.35;
 pub(crate) const MIN_LENGTH_SHARE: f32 = 0.2;
 
 /// Head controls. Length is in ferrule radii, density in hairs per pixel of width.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HeadSpec {
     pub thickness: f32,
     pub length: f32,
@@ -38,6 +41,12 @@ const fn head(thickness: f32, length: f32, dome: f32, slant: f32) -> HeadSpec {
         belly: 0.0,
         fan_deg: 0.0,
         density_per_px: 1.6,
+    }
+}
+
+impl Default for HeadSpec {
+    fn default() -> Self {
+        HeadSpec::ROUND
     }
 }
 

@@ -10,6 +10,20 @@ pub struct BrushSpec {
     pub hair: HairSpec,
 }
 
+impl BrushSpec {
+    pub const SIZE_RANGE_PX: [f32; 2] = [4.0, 500.0];
+
+    /// Same brush with every value in range.
+    pub fn clamped(&self) -> BrushSpec {
+        BrushSpec {
+            name: self.name.clone(),
+            size_px: super::within(self.size_px, Self::SIZE_RANGE_PX, 40.0),
+            head: self.head.clamped(),
+            hair: self.hair.clamped(),
+        }
+    }
+}
+
 const FACTORY: [(&str, f32, HeadSpec, HairSpec); 15] = [
     (
         "Round · Synthetic",
