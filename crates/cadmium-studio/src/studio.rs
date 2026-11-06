@@ -130,6 +130,7 @@ impl BrushStudio {
 
     /// The canvas as shown at `scale` times `THUMBNAIL_SIZE`, `scale` at most `STUDIO_SCALE`.
     fn capture(&self, gpu: &GpuContext, scale: u32) -> Result<Thumbnail, GpuLost> {
+        debug_assert!((1..=STUDIO_SCALE).contains(&scale));
         let (width, height) = (THUMBNAIL_SIZE.0 * scale, THUMBNAIL_SIZE.1 * scale);
         let presenter = &self.session.presenter;
         let target = presenter.create_target(gpu, width, height);

@@ -15,6 +15,10 @@ fn ink_share(rgba: &[u8]) -> f64 {
 /// the smooth gesso's shading and sRGB rounding, well below even a thin glaze.
 const INK_STEP: i32 = 24;
 
+fn is_inked(pixel: &[u8; 4], paper: &[u8; 4]) -> bool {
+    (0..3).any(|c| (i32::from(pixel[c]) - i32::from(paper[c])).abs() > INK_STEP)
+}
+
 /// The pixels that differ from the paper, read at the top-left corner, which the stroke
 /// box's margins keep bare.
 fn inked_pixels(rgba: &[u8]) -> Vec<[u8; 4]> {
@@ -22,9 +26,23 @@ fn inked_pixels(rgba: &[u8]) -> Vec<[u8; 4]> {
     let paper = pixels[0];
     pixels
         .iter()
-        .filter(|p| (0..3).any(|c| (i32::from(p[c]) - i32::from(paper[c])).abs() > INK_STEP))
+        .filter(|p| is_inked(p, &paper))
         .copied()
         .collect()
+}
+
+/// The mean channel difference between two same-sized images over the pixels inked in
+/// either, so the bare paper cannot dilute a shifted or smeared stroke.
+fn ink_difference(a: &[u8], b: &[u8]) -> f64 {
+    let ((a, _), (b, _)) = (a.as_chunks::<4>(), b.as_chunks::<4>());
+    let (paper_a, paper_b) = (a[0], b[0]);
+    let diffs: Vec<f64> = a
+        .iter()
+        .zip(b)
+        .filter(|(pa, pb)| is_inked(pa, &paper_a) || is_inked(pb, &paper_b))
+        .flat_map(|(pa, pb)| (0..3).map(|c| f64::from(pa[c].abs_diff(pb[c]))))
+        .collect();
+    diffs.iter().sum::<f64>() / diffs.len().max(1) as f64
 }
 
 fn mean_colour(pixels: &[[u8; 4]]) -> [f64; 3] {
@@ -155,13 +173,9 @@ fn the_full_thumbnail_is_the_thumbnail_at_twice_the_size() {
     );
     assert_eq!(full.rgba.len(), (full.width * full.height * 4) as usize);
     let halved = halve(&full.rgba, full.width as usize);
-    let off = halved
-        .iter()
-        .zip(&thumb.rgba)
-        .map(|(a, b)| f64::from(a.abs_diff(*b)))
-        .sum::<f64>()
-        / halved.len() as f64;
-    assert!(off < 4.0, "mean channel difference {off}");
+    let off = ink_difference(&halved, &thumb.rgba);
+    // Aligned is about 1.9 on radv and lavapipe; a 1 px shift at full size reads 4.5.
+    assert!(off < 3.0, "mean channel difference over the ink {off}");
     let (shown, kept) = (ink_share(&thumb.rgba), ink_share(&halved));
     assert!(
         (shown - kept).abs() < 0.1 * shown,
