@@ -1,5 +1,6 @@
 //! Headless brush studio: the real simulation on a small canvas, for previews.
 
+mod camera;
 mod clock;
 mod demo;
 mod fit;
@@ -8,6 +9,7 @@ mod player;
 mod schedule;
 mod studio;
 
+pub use camera::OrbitCamera;
 pub use clock::Phase;
 pub use demo::{DemoStroke, StrokeBox, samples};
 pub use player::{LOOP_PAUSE_MS, PlayerRequest, SLOW_MOTION, StudioPaint, StudioPlayer};

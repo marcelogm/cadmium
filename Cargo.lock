@@ -158,6 +158,7 @@ name = "cadmium-studio"
 version = "0.0.1"
 dependencies = [
  "cadmium-engine",
+ "glam",
 ]
 
 [[package]]
@@ -532,6 +533,15 @@ dependencies = [
  "libc",
  "system-deps 9.0.1",
  "windows-sys",
+]
+
+[[package]]
+name = "glam"
+version = "0.34.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54af5066834d6c2d404eb26ea036a15b15d9ff80db510b9a73ff95ab07f30831"
+dependencies = [
+ "bytemuck",
 ]
 
 [[package]]
