@@ -145,6 +145,10 @@ impl AppState {
         self.studio.is_some()
     }
 
+    pub fn studio(&self) -> Option<&StudioSession> {
+        self.studio.as_ref()
+    }
+
     pub fn studio_mut(&mut self) -> Option<&mut StudioSession> {
         self.studio.as_mut()
     }

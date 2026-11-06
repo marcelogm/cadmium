@@ -26,6 +26,7 @@ mod sliders;
 )]
 mod smoke;
 mod state;
+mod studio_view;
 mod surface_scale;
 mod swatch;
 mod thumbnails;
