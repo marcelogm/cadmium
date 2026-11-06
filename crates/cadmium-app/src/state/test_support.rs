@@ -92,7 +92,7 @@ pub(super) fn knife_totals(state: &AppState) -> PaintTotals {
     state.session.engine.knife_totals(&state.gpu).unwrap()
 }
 
-pub(super) fn holding_the_knife() -> AppState {
+pub(crate) fn holding_the_knife() -> AppState {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Knife));
     state

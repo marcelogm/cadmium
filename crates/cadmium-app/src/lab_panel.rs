@@ -76,7 +76,10 @@ impl LabPanel {
     }
 
     pub fn refresh(&self) {
-        let snapshot = Snapshot::of(&self.state.borrow(), &self.params);
+        let snapshot = Snapshot::of(
+            &self.state.borrow(),
+            self.params.iter().map(|control| control.spec.key),
+        );
         self.syncing.set(true);
         if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {
             self.rebuild_slots(&snapshot.infos);

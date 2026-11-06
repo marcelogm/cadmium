@@ -9,9 +9,9 @@ use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
-use self::by_dmabuf::ResizeDebounce;
 use self::by_readback::ReadbackTarget;
 use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
+use self::resize::ResizeDebounce;
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
 use crate::state::AppState;
@@ -24,6 +24,7 @@ const MILLISECONDS_PER_SECOND: f64 = 1000.0;
 mod by_dmabuf;
 mod by_readback;
 pub(crate) mod mode;
+mod resize;
 
 pub fn tray_view(viewport_px: (u32, u32)) -> ViewTransform {
     let zoom =

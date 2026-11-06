@@ -133,3 +133,6 @@ fn addable_pigments(db: &PigmentDb, slots: &[String]) -> Vec<PigmentChoice> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

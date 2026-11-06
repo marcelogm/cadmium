@@ -56,28 +56,29 @@ impl CursorOutline {
         self.radius() >= OUTLINE_MIN_RADIUS
     }
 
-    pub(crate) fn append_to(&self, snapshot: &gtk::Snapshot, centre: (f32, f32)) {
+    /// The outline's two rings: a dark one just outside a light one, so it shows on any paint.
+    pub(crate) fn rings(&self, centre: (f32, f32)) -> [RingStroke; 2] {
         let [along, across] = self.semi_axes;
-        append_ring(
-            snapshot,
-            &RingStroke {
-                centre,
-                semi_axes: [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
-                rotation_deg: self.rotation_deg,
-                colour: OUTLINE_DARK,
-                width: OUTLINE_WIDTH,
-            },
-        );
-        append_ring(
-            snapshot,
-            &RingStroke {
-                centre,
-                semi_axes: self.semi_axes,
-                rotation_deg: self.rotation_deg,
-                colour: OUTLINE_LIGHT,
-                width: OUTLINE_WIDTH,
-            },
-        );
+        let ring = |semi_axes, colour| RingStroke {
+            centre,
+            semi_axes,
+            rotation_deg: self.rotation_deg,
+            colour,
+            width: OUTLINE_WIDTH,
+        };
+        [
+            ring(
+                [along + OUTLINE_WIDTH, across + OUTLINE_WIDTH],
+                OUTLINE_DARK,
+            ),
+            ring(self.semi_axes, OUTLINE_LIGHT),
+        ]
+    }
+
+    pub(crate) fn append_to(&self, snapshot: &gtk::Snapshot, centre: (f32, f32)) {
+        for ring in self.rings(centre) {
+            append_ring(snapshot, &ring);
+        }
     }
 }
 
@@ -104,3 +105,6 @@ pub(crate) fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
     snapshot.append_stroke(&path.to_path(), &gsk::Stroke::new(ring.width), &ring.colour);
     snapshot.restore();
 }
+
+#[cfg(test)]
+mod tests;

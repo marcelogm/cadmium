@@ -1,11 +1,10 @@
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
-use cadmium_engine::pigments::MAX_SLOTS;
 use gtk::{gdk, glib};
 
 use super::BrushPanel;
-use super::presentation::pigment_click;
+use super::presentation::{offers_more_pigments, pigment_click};
 use super::snapshot::{PigmentChoice, Snapshot};
 use crate::swatch::{Swatch, SwatchShape};
 
@@ -24,7 +23,7 @@ impl BrushPanel {
             self.pigments.flow.append(&button);
             swatches.push(swatch);
         }
-        if snapshot.slots.len() < MAX_SLOTS && !snapshot.addable.is_empty() {
+        if offers_more_pigments(snapshot.slots.len(), snapshot.addable.len()) {
             self.pigments
                 .flow
                 .append(&self.add_pigment_button(&snapshot.addable));

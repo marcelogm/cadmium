@@ -57,17 +57,51 @@ fn paint_colour([red, green, blue]: [u8; 3], alpha: f32) -> gdk::RGBA {
     )
 }
 
+/// The ring to show next: a live ring at the pen (or where it was shown, when the pen has
+/// left), and a ring that has ended kept from the moment it ended until it has faded.
+fn next_shown_ring(
+    ring: Option<LoadRing>,
+    shown: Option<ShownRing>,
+    hover: Option<(f64, f64)>,
+    now: Instant,
+) -> Option<ShownRing> {
+    match (ring, shown) {
+        (Some(ring), _) => hover
+            .or(shown.map(|shown| shown.centre))
+            .map(|centre| ShownRing {
+                ring,
+                centre,
+                released_at: None,
+            }),
+        (None, Some(shown)) => match shown.released_at {
+            None => Some(ShownRing {
+                released_at: Some(now),
+                ..shown
+            }),
+            Some(released) if now.duration_since(released).as_secs_f32() < RING_FADE_SECONDS => {
+                Some(shown)
+            }
+            Some(_) => None,
+        },
+        (None, None) => None,
+    }
+}
+
+/// The shape to draw `shown` with at `now`, or none once it has faded.
+fn visible_shape(shown: &ShownRing, outline_radius: f32, now: Instant) -> Option<RingShape> {
+    let shape = ring_shape(outline_radius, &shown.ring);
+    match shown.released_at {
+        None => Some(shape),
+        Some(released) => fading_ring(shape, now.duration_since(released).as_secs_f32()),
+    }
+}
+
 pub(super) fn append_load_ring(
     snapshot: &gtk::Snapshot,
     shown: &ShownRing,
     outline: &CursorOutline,
 ) {
-    let shape = ring_shape(outline.radius(), &shown.ring);
-    let shape = match shown.released_at {
-        None => Some(shape),
-        Some(released) => fading_ring(shape, released.elapsed().as_secs_f32()),
-    };
-    if let Some(shape) = shape {
+    if let Some(shape) = visible_shape(shown, outline.radius(), Instant::now()) {
         let (x, y) = shown.centre;
         append_ring(
             snapshot,
@@ -93,28 +127,7 @@ impl TrayView {
             return imp.shown_ring.get().is_some();
         };
         let shown = imp.shown_ring.get();
-        let next = match (ring, shown) {
-            (Some(ring), _) => imp
-                .hover
-                .get()
-                .or(shown.map(|shown| shown.centre))
-                .map(|centre| ShownRing {
-                    ring,
-                    centre,
-                    released_at: None,
-                }),
-            (None, Some(shown)) => match shown.released_at {
-                None => Some(ShownRing {
-                    released_at: Some(Instant::now()),
-                    ..shown
-                }),
-                Some(released) if released.elapsed().as_secs_f32() < RING_FADE_SECONDS => {
-                    Some(shown)
-                }
-                Some(_) => None,
-            },
-            (None, None) => None,
-        };
+        let next = next_shown_ring(ring, shown, imp.hover.get(), Instant::now());
         imp.shown_ring.set(next);
         if shown.is_some() || next.is_some() {
             self.queue_draw();

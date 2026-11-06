@@ -5,7 +5,8 @@ use cadmium_engine::pigments::PigmentDb;
 use gtk::gio;
 
 use super::format::{MIN_SIDE, PaintingFormat, SIDE_STEP};
-use super::{NewPaintingDialog, PRIMERS, WEAVES, Widgets};
+use super::ground::{PRIMERS, WEAVES, primer_index, weave_index};
+use super::{NewPaintingDialog, Widgets};
 use crate::presets::PIGMENT_PRESETS;
 use crate::swatch::{Swatch, SwatchShape};
 
@@ -103,13 +104,10 @@ fn primer_combo(db: &PigmentDb, initial: &CanvasSpec) -> (adw::ComboRow, Swatch,
         .iter()
         .map(|(primer, _)| primer_srgb8(db, *primer))
         .collect();
-    let primer_index = PRIMERS
-        .iter()
-        .position(|(primer, _)| *primer == initial.primer)
-        .unwrap_or_default();
-    let primer_row = combo_row("Primer", PRIMERS.map(|(_, label)| label), primer_index);
+    let selected = primer_index(initial.primer);
+    let primer_row = combo_row("Primer", PRIMERS.map(|(_, label)| label), selected);
     let primer_swatch = Swatch::new(
-        primer_colours[primer_index],
+        primer_colours[selected],
         SwatchShape::RoundedRect,
         PRIMER_SWATCH_SIZE.0,
         PRIMER_SWATCH_SIZE.1,
@@ -119,15 +117,8 @@ fn primer_combo(db: &PigmentDb, initial: &CanvasSpec) -> (adw::ComboRow, Swatch,
 }
 
 fn weave_combo(initial: &CanvasSpec) -> adw::ComboRow {
-    let weave_index = WEAVES
-        .iter()
-        .position(|(weave, _)| *weave == initial.weave)
-        .unwrap_or_default();
-    combo_row(
-        "Canvas Texture",
-        WEAVES.map(|(_, label)| label),
-        weave_index,
-    )
+    let selected = weave_index(initial.weave);
+    combo_row("Canvas Texture", WEAVES.map(|(_, label)| label), selected)
 }
 
 fn pigments_section(

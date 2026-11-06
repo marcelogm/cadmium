@@ -9,7 +9,7 @@ use crate::LOG_DOMAIN;
 use crate::side_panel::panel_root;
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::Swatch;
-use crate::thumbnails::{ThumbnailCache, ThumbnailKey};
+use crate::thumbnails::ThumbnailCache;
 use crate::window::CadmiumWindow;
 
 mod build;
@@ -22,9 +22,9 @@ mod thumbnail_job;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
-    PanelTool, RackEntry, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text,
-    size_to_slider, slider_needs_sync, tool_group_description, tool_hint, tool_wording,
-    visible_controls,
+    PanelTool, ShownBrushes, loaded_text, percent_text, pile_is_highlighted, plate_gap_text,
+    rack_needs_refill, size_text, size_to_slider, slider_needs_sync, tool_group_description,
+    tool_hint, tool_wording, visible_controls,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -46,9 +46,6 @@ pub struct BrushPanel {
     studio: RefCell<Option<BrushStudio>>,
     thumbnail_job: Cell<ThumbnailJob>,
 }
-
-/// The entries and thumbnail keys the rack shows, in rack order.
-type ShownBrushes = (Vec<RackEntry>, Vec<ThumbnailKey>);
 
 impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
@@ -128,12 +125,12 @@ impl BrushPanel {
             .loaded_swatch
             .set_right_half_colour(Some(snapshot.held_colour));
         group.reserve_bar.set_value(f64::from(snapshot.held_level));
-        let loaded_text = if snapshot.held_is_clean {
-            wording.clean.to_string()
-        } else {
-            describe_recipe(&snapshot.slot_names, &snapshot.recipe)
-        };
-        group.loaded_row.set_subtitle(&loaded_text);
+        group.loaded_row.set_subtitle(&loaded_text(
+            &wording,
+            snapshot.held_is_clean,
+            &snapshot.slot_names,
+            &snapshot.recipe,
+        ));
     }
 
     fn show_sliders(&self, snapshot: &Snapshot) {
@@ -147,7 +144,7 @@ impl BrushPanel {
         group
             .size
             .value_label
-            .set_label(&format!("{:.0} px", snapshot.diameter_px));
+            .set_label(&size_text(snapshot.diameter_px));
         group.load.scale.set_value(f64::from(snapshot.load));
         group
             .load
@@ -169,14 +166,12 @@ impl BrushPanel {
     }
 
     fn show_rack(self: &Rc<Self>, snapshot: &Snapshot) {
-        let unchanged = self
-            .shown_brushes
-            .borrow()
-            .as_ref()
-            .is_some_and(|(entries, keys)| {
-                *entries == snapshot.brush_entries && *keys == snapshot.brush_keys
-            });
-        if !unchanged {
+        let needs_refill = rack_needs_refill(
+            self.shown_brushes.borrow().as_ref(),
+            &snapshot.brush_entries,
+            &snapshot.brush_keys,
+        );
+        if needs_refill {
             let thumbnails = self.cached_thumbnails(&snapshot.brush_keys);
             self.rack.fill(&snapshot.brush_entries, &thumbnails);
             let shown = (snapshot.brush_entries.clone(), snapshot.brush_keys.clone());
