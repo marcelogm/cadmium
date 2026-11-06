@@ -37,10 +37,10 @@ pub(super) fn open(window: &CadmiumWindow) {
 }
 
 /// Whether the screenshot can be taken: with an editor expected, once its
-/// dialog is mapped, its example strokes are shown and its test sheet is at rest. A smoke run turns
-/// animations off, so a mapped dialog is already at rest; the step's frame hold
-/// (`Editor(frames)` extends `earliest_end_frame`) only lets its contents draw.
-/// An editor that closed ends the run.
+/// dialog is mapped, its example strokes are shown and its test sheet is at
+/// rest. A smoke run turns animations off, so a mapped dialog is already at
+/// rest; the step's frame hold (`Editor(frames)` extends `earliest_end_frame`)
+/// only lets its contents draw. An editor that closed ends the run.
 pub(super) fn ready_for_screenshot(window: &CadmiumWindow, expects_editor: bool) -> bool {
     match readiness(expects_editor, shown(window)) {
         Readiness::Ready => true,
