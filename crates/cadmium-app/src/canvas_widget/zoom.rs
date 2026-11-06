@@ -75,6 +75,8 @@ impl CadmiumCanvas {
         self.set_view(view::pan(current, dx * scale, dy * scale));
     }
 
+    /// Turns the picture clockwise by `delta` radians about widget point (`widget_x`, `widget_y`),
+    /// which stays put on screen.
     pub fn rotate_around(&self, widget_x: f64, widget_y: f64, delta: f32) {
         let scale = self.device_scale();
         let current = self.state().borrow().view;
@@ -87,13 +89,15 @@ impl CadmiumCanvas {
         ));
     }
 
-    /// Turns the picture 15° clockwise (`clockwise`) or anticlockwise about the viewport centre.
+    /// Turns the picture one 15° step about the viewport centre, clockwise when `clockwise`,
+    /// otherwise anticlockwise.
     pub fn rotate_step(&self, clockwise: bool) {
         let delta = if clockwise { ROTATE_STEP } else { -ROTATE_STEP };
         let (x, y) = self.widget_centre();
         self.rotate_around(x, y, delta);
     }
 
+    /// The widget's centre, in widget px.
     pub fn widget_centre(&self) -> (f64, f64) {
         (
             f64::from(self.width()) / 2.0,

@@ -135,12 +135,11 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
         return;
     }
-    let samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
+    let mut samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
     let rotation = widget.view_rotation();
-    let samples: Vec<_> = samples
-        .into_iter()
-        .map(|sample| tilt_onto_canvas(sample, rotation))
-        .collect();
+    for sample in &mut samples {
+        *sample = tilt_onto_canvas(*sample, rotation);
+    }
     state.borrow_mut().motion(&samples);
 }
 
