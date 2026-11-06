@@ -48,6 +48,10 @@ impl CadmiumWindow {
         }
     }
 
+    pub fn set_brush_deletable(&self, deletable: bool) {
+        self.enable_action("delete-brush", deletable);
+    }
+
     fn enable_action(&self, name: &str, enabled: bool) {
         if let Some(action) = self.lookup_action(name).and_downcast::<gio::SimpleAction>()
             && action.is_enabled() != enabled

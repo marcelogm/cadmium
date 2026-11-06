@@ -31,6 +31,7 @@ pub(super) struct Snapshot {
     pub(super) medium: f32,
     pub(super) brush_names: Vec<String>,
     pub(super) brush_index: Option<usize>,
+    pub(super) brush_is_user: bool,
     pub(super) reload_each_stroke: bool,
     pub(super) clean_each_stroke: bool,
 }
@@ -70,6 +71,7 @@ impl Snapshot {
                 .map(|brush| brush.name.clone())
                 .collect(),
             brush_index: worn,
+            brush_is_user: worn.is_some_and(|index| state.brushes.is_user(index)),
             reload_each_stroke: state.reload_each_stroke,
             clean_each_stroke: state.clean_each_stroke,
         }

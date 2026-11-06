@@ -2,8 +2,8 @@ use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
 
-use super::BrushPanel;
 use super::presentation::{PLATE_GAP_KEY, slider_to_size};
+use super::{BrushPanel, rack};
 
 impl BrushPanel {
     pub(super) fn connect_controls(self: &Rc<Self>) {
@@ -25,9 +25,11 @@ impl BrushPanel {
             with_panel(&panel, |panel| panel.change_medium(scale))
         });
         let panel = Rc::downgrade(self);
-        group
-            .brush_row
-            .connect_selected_notify(move |row| with_panel(&panel, |panel| panel.pick_brush(row)));
+        self.rack
+            .flow
+            .connect_selected_children_changed(move |flow| {
+                with_panel(&panel, |panel| panel.pick_brush(flow))
+            });
         let panel = Rc::downgrade(self);
         group.reload_row.connect_active_notify(move |row| {
             with_panel(&panel, |panel| panel.change_reload_each_stroke(row))
@@ -63,13 +65,11 @@ impl BrushPanel {
         self.change_brush(|state| state.set_medium(medium));
     }
 
-    fn pick_brush(self: &Rc<Self>, row: &adw::ComboRow) {
-        let picked = self
-            .state
-            .borrow()
-            .brushes
-            .get(row.selected() as usize)
-            .cloned();
+    fn pick_brush(self: &Rc<Self>, flow: &gtk::FlowBox) {
+        let Some(index) = rack::picked(flow) else {
+            return;
+        };
+        let picked = self.state.borrow().brushes.get(index).cloned();
         let Some(brush) = picked else {
             return;
         };

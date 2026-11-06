@@ -13,6 +13,7 @@ use crate::window::CadmiumWindow;
 mod build;
 mod piles;
 mod presentation;
+mod rack;
 mod signals;
 mod snapshot;
 
@@ -29,6 +30,7 @@ pub struct BrushPanel {
     window: glib::WeakRef<CadmiumWindow>,
     pigments: PigmentsGroup,
     tool_group: ToolGroup,
+    rack: rack::Rack,
     clean_button: gtk::Button,
     hint: gtk::Label,
     pigment_swatches: RefCell<Vec<Swatch>>,
@@ -42,9 +44,11 @@ impl BrushPanel {
         let root = panel_root();
         let pigments = build::pigments_group();
         let tool_group = build::tool_group();
+        let rack = rack::rack();
         let clean_button = build::clean_button();
         let hint = build::hint_label();
         root.append(&pigments.group);
+        root.append(&rack.group);
         root.append(&tool_group.group);
         root.append(&clean_button);
         root.append(&hint);
@@ -54,6 +58,7 @@ impl BrushPanel {
             window: window.downgrade(),
             pigments,
             tool_group,
+            rack,
             clean_button,
             hint,
             pigment_swatches: RefCell::new(Vec::new()),
@@ -80,6 +85,7 @@ impl BrushPanel {
         self.highlight_piles(&snapshot);
         self.show_held_paint(&snapshot);
         self.show_sliders(&snapshot);
+        self.show_rack(&snapshot);
         self.show_stroke_options(&snapshot);
         self.show_controls_for(
             snapshot.tool,
@@ -147,20 +153,20 @@ impl BrushPanel {
             .set_label(&percent_text(f64::from(snapshot.medium)));
     }
 
-    fn show_stroke_options(&self, snapshot: &Snapshot) {
-        let group = &self.tool_group;
+    fn show_rack(&self, snapshot: &Snapshot) {
         if self.shown_brushes.borrow().as_ref() != Some(&snapshot.brush_names) {
-            let names: Vec<&str> = snapshot.brush_names.iter().map(String::as_str).collect();
-            group
-                .brush_row
-                .set_model(Some(&gtk::StringList::new(&names)));
+            rack::fill(&self.rack.flow, &snapshot.brush_names);
             self.shown_brushes
                 .replace(Some(snapshot.brush_names.clone()));
         }
-        let selected = snapshot
-            .brush_index
-            .map_or(gtk::INVALID_LIST_POSITION, |index| index as u32);
-        group.brush_row.set_selected(selected);
+        rack::select(&self.rack.flow, snapshot.brush_index);
+        if let Some(window) = self.window.upgrade() {
+            window.set_brush_deletable(snapshot.brush_is_user);
+        }
+    }
+
+    fn show_stroke_options(&self, snapshot: &Snapshot) {
+        let group = &self.tool_group;
         group.reload_row.set_active(snapshot.reload_each_stroke);
         group.clean_each_row.set_active(snapshot.clean_each_stroke);
     }
@@ -211,7 +217,7 @@ impl BrushPanel {
         group.load.row.set_visible(shown.load);
         group.medium.row.set_visible(shown.medium);
         group.plate_gap.row.set_visible(shown.plate_gap);
-        group.brush_row.set_visible(shown.shape);
+        self.rack.group.set_visible(shown.shape);
         group.reload_row.set_visible(shown.stroke_loading);
         group.clean_each_row.set_visible(shown.stroke_loading);
         self.clean_button.set_visible(shown.clean);

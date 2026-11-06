@@ -123,8 +123,6 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
     )
 }
 
-pub(super) const BRUSH_ROW_TITLE: &str = "Type";
-
 /// The library brush whose head and hair the settings wear, if any.
 pub(super) fn worn_brush<'a>(
     brushes: impl IntoIterator<Item = &'a BrushSpec>,
