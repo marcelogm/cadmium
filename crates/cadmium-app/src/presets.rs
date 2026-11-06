@@ -3,7 +3,8 @@ use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
 
 const STARTING_SIZE: (u32, u32) = (2048, 1536);
 const STARTING_PIGMENT: &str = "ultramarine_blue";
-const WHITES: [&str; 2] = ["titanium_white", "zinc_white"];
+/// The whites, which show nothing on a white primer.
+pub const WHITES: [&str; 2] = ["titanium_white", "zinc_white"];
 pub const STARTING_LOAD: f32 = DEFAULT_LOAD;
 
 pub const PRIMARIES: &[&str] = &[

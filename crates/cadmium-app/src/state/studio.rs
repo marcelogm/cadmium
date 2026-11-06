@@ -9,6 +9,7 @@ use cadmium_studio::{
 };
 
 use super::AppState;
+use crate::presets::WHITES;
 
 /// The name of a worn brush that is not in the library.
 const CURRENT_BRUSH_NAME: &str = "Current Brush";
@@ -17,8 +18,6 @@ const CURRENT_BRUSH_NAME: &str = "Current Brush";
 /// slow speeds: from speed 0.48 up the player's cap of 8 quanta (48 ms of
 /// simulation) per advance binds first.
 const MAX_FRAME_MS: f64 = 100.0;
-/// Slot ids ending in this are whites, which show nothing on a white primer.
-const WHITE_SUFFIX: &str = "_white";
 const FALLBACK_LOAD: f32 = 1.0;
 const DEMO_STROKE: DemoStroke = DemoStroke::SCurve;
 
@@ -266,7 +265,7 @@ impl AppState {
 fn first_colour(slots: &[String]) -> usize {
     slots
         .iter()
-        .position(|id| !id.ends_with(WHITE_SUFFIX))
+        .position(|id| !WHITES.contains(&id.as_str()))
         .unwrap_or(0)
 }
 
