@@ -148,9 +148,12 @@ impl PaintSurfaceWidget for CadmiumCanvas {
     }
 }
 
-fn wake_canvas(canvas: &glib::WeakRef<CadmiumCanvas>) {
-    if let Some(canvas) = canvas.upgrade() {
-        canvas.request_frame();
-        canvas.queue_draw();
-    }
+/// Whether the canvas is still there to wake.
+fn wake_canvas(canvas: &glib::WeakRef<CadmiumCanvas>) -> bool {
+    let Some(canvas) = canvas.upgrade() else {
+        return false;
+    };
+    canvas.request_frame();
+    canvas.queue_draw();
+    true
 }

@@ -152,11 +152,14 @@ pub(crate) fn frame_needed(
     studio_open && (playing || needs_present || !size_matches)
 }
 
-fn wake_studio(view: &glib::WeakRef<StudioView>) {
-    if let Some(view) = view.upgrade() {
-        view.request_frame();
-        view.queue_draw();
-    }
+/// Whether the view is still there to wake.
+fn wake_studio(view: &glib::WeakRef<StudioView>) -> bool {
+    let Some(view) = view.upgrade() else {
+        return false;
+    };
+    view.request_frame();
+    view.queue_draw();
+    true
 }
 
 fn append_studio_image(snapshot: &gtk::Snapshot, texture: &gdk::Texture, scale: f64) {

@@ -156,11 +156,33 @@ fn opening_and_closing_the_studio_wake_its_views() {
     let mut state = painting_state();
     let wakes = Rc::new(Cell::new(0));
     let counted = wakes.clone();
-    state.add_waker(Rc::new(move || counted.set(counted.get() + 1)));
+    state.add_waker(Rc::new(move || {
+        counted.set(counted.get() + 1);
+        true
+    }));
     state.open_studio();
     assert_eq!(wakes.get(), 1);
     state.close_studio();
     assert_eq!(wakes.get(), 2);
+}
+
+#[test]
+fn the_waker_of_a_view_that_is_gone_is_dropped_on_the_next_wake() {
+    let mut state = painting_state();
+    let wakes = Rc::new(Cell::new(0));
+    let counted = wakes.clone();
+    let gone = Rc::new(Cell::new(false));
+    let seen_gone = gone.clone();
+    state.add_waker(Rc::new(move || {
+        counted.set(counted.get() + 1);
+        !seen_gone.get()
+    }));
+    gone.set(true);
+    state.open_studio();
+    assert_eq!(wakes.get(), 1);
+    assert!(state.wakers.is_empty());
+    state.close_studio();
+    assert_eq!(wakes.get(), 1);
 }
 
 #[test]

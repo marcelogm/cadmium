@@ -43,7 +43,8 @@ const EMPTY_MIXTURE: Mixture = Mixture {
 };
 
 pub type SharedState = Rc<RefCell<AppState>>;
-pub type Waker = Rc<dyn Fn()>;
+/// Wakes one view; returns false once the view is gone, which drops the waker.
+pub type Waker = Rc<dyn Fn() -> bool>;
 
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
@@ -134,10 +135,9 @@ impl AppState {
         self.wakers.push(waker);
     }
 
-    fn wake(&self) {
-        for waker in &self.wakers {
-            waker();
-        }
+    /// Wakes every view, dropping the wakers of views that are gone.
+    fn wake(&mut self) {
+        self.wakers.retain(|waker| waker());
     }
 }
 
