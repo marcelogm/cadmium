@@ -116,9 +116,11 @@ impl BristleRig {
         self.tool = None;
     }
 
+    /// Each stroke starts from a freshly loaded brush: the hairs keep their
+    /// bend only for as long as the stroke and its settling last.
     pub(crate) fn begin_stroke(&mut self) {
+        self.reset();
         self.clock.begin_stroke();
-        self.last_dab = None;
         self.pressed = true;
         self.lift_pending = false;
     }

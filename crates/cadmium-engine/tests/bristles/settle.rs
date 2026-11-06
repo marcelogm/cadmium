@@ -204,3 +204,47 @@ fn a_stroke_that_never_reaches_the_canvas_asks_for_no_settling_frames() {
         );
     }
 }
+
+const NEXT_STROKE_Y: f64 = 200.0;
+
+fn dry(gpu: &GpuContext) -> PaintSession {
+    let mut s = session(gpu);
+    s.clean_brush(gpu);
+    s
+}
+
+fn first_dab_of_next_stroke(gpu: &GpuContext, s: &mut PaintSession, frame_clock_ms: f64) {
+    let start = StrokeSample {
+        y: NEXT_STROKE_Y,
+        ..pressed_sample(0)
+    };
+    s.begin_stroke(gpu, start);
+    frame_at(gpu, s, frame_clock_ms);
+}
+
+#[test]
+fn each_stroke_starts_from_a_brush_at_rest() {
+    let gpu = GpuContext::new().unwrap();
+    let mut used = HeldStroke::press_in(&gpu, dry(&gpu));
+    used.session.end_stroke();
+    used.settle_fully(&gpu);
+    assert!(
+        used.snapshot(&gpu)
+            .rest_bends
+            .iter()
+            .any(|bend| bend[0] != 0.0 || bend[1] != 0.0),
+        "the hard stroke left no bend"
+    );
+    let later_ms = used.frame_clock_ms + TICK_MS;
+    first_dab_of_next_stroke(&gpu, &mut used.session, later_ms);
+    let mut fresh = dry(&gpu);
+    first_dab_of_next_stroke(&gpu, &mut fresh, later_ms);
+    let used = used.snapshot(&gpu);
+    let fresh = fresh.engine.bristle_snapshot(&gpu).unwrap();
+    assert!(
+        used.chains_px == fresh.chains_px && used.rest_bends == fresh.rest_bends,
+        "the next stroke started from the last stroke's bend: tips {:?} instead of {:?}",
+        &used.tips_px[..2],
+        &fresh.tips_px[..2]
+    );
+}
