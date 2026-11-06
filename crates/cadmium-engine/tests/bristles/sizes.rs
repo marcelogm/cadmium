@@ -1,9 +1,9 @@
 use std::collections::{BTreeSet, VecDeque};
 
+use cadmium_engine::brush::HeadSpec;
 use cadmium_engine::canvas::StateTexture;
-use cadmium_engine::engine::{BristleSnapshot, PaintEngine};
+use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::gpu::GpuContext;
-use cadmium_engine::params::SimParams;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::{Dab, StrokeSample};
 
@@ -88,11 +88,7 @@ fn tiny_mark(volume: &[f32], width: usize) -> Mark {
 }
 
 fn density_extremes() -> [f32; 2] {
-    let spec = SimParams::specs()
-        .iter()
-        .find(|spec| spec.key == "bristle_density")
-        .expect("bristle density is a tunable");
-    [spec.min, spec.max]
+    HeadSpec::DENSITY_RANGE_PER_PX
 }
 
 #[test]
@@ -100,7 +96,7 @@ fn a_two_pixel_brush_still_leaves_a_mark() {
     let gpu = GpuContext::new().unwrap();
     for density_per_px in density_extremes() {
         let mut s = session(&gpu);
-        s.engine.params_mut().set("bristle_density", density_per_px);
+        s.brush.head.density_per_px = density_per_px;
         s.brush.geometry.max_diameter_px = TINY_DIAMETER_PX;
         s.reload_brush(&gpu);
         let samples = line(
@@ -196,7 +192,7 @@ fn island_areas_px2(volume: &[f32], hull: &[[f32; 2]]) -> Vec<usize> {
 fn the_largest_brush_pressed_without_clumping_leaves_no_holes() {
     let gpu = GpuContext::new().unwrap();
     let mut s = largest_brush_session(&gpu);
-    s.engine.params_mut().set("bristle_clumping", 0.0);
+    s.brush.hair.clumping = 0.0;
     drag(&gpu, &mut s, &[centre_press(0.0)]);
     let snapshot = s.engine.bristle_snapshot(&gpu).unwrap();
     let hull = convex_hull(touching_segment_ends(&snapshot));

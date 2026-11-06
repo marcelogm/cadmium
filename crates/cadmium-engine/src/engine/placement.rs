@@ -3,7 +3,7 @@ use super::dab_record::{
 };
 use super::footprint::Footprint;
 use super::{MAX_TIP_RADIUS, TIP_HALF, WetOilEngine};
-use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING};
+use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING, HairSpec};
 use crate::canvas::Canvas;
 use crate::compute::WORKGROUP_SIZE;
 use crate::region::clamped_region;
@@ -145,7 +145,7 @@ impl WetOilEngine {
         if profile.has_blade_footprint() && !heading_known(dab) {
             return None;
         }
-        let footprint = Footprint::of(dab, brush, &self.params, self.tip_radius);
+        let footprint = Footprint::of(dab, brush, self.tip_radius);
         let regions = DabRegions::around(dab, step.sweep, footprint, canvas)?;
         Some(Placement {
             record: self.record(brush, dab, step, &regions),
@@ -198,6 +198,11 @@ impl WetOilEngine {
     ) -> DabRecord {
         let params = &self.params;
         let profile = brush.tool.profile();
+        let hair = if profile.has_bristle_footprint() {
+            brush.hair.clamped()
+        } else {
+            HairSpec::default()
+        };
         let spreading = profile.spreading.rates(params);
         DabRecord {
             transfer_fraction: params.get("transfer_fraction"),
@@ -219,10 +224,10 @@ impl WetOilEngine {
             blade_spill_share: KNIFE_SPILL_SHARE,
             step_ratio,
             capillary_rate: rate_over_step(CAPILLARY_SHARE, step_ratio),
-            wicking_rate: rate_over_step(params.get("wicking_share"), step_ratio),
+            wicking_rate: rate_over_step(hair.wicking, step_ratio),
             slump_rate: rate_over_step(spreading.slump, step_ratio),
             slump_yield_um2_per_px: params.get("slump_yield_um2_per_px"),
-            hair_load_limit: params.get("bristle_load_limit"),
+            hair_load_limit: hair.load_limit,
             capillary_scale: capillary_scale(regions.tip_size),
             ..bytemuck::Zeroable::zeroed()
         }

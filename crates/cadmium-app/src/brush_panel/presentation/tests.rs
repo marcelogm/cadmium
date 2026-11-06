@@ -168,3 +168,18 @@ fn plate_gap_control_drives_the_knife_gap_parameter() {
     assert_eq!(plate_gap_spec().key, PLATE_GAP_KEY);
     assert_eq!(plate_gap_text(80.0), "80 µm");
 }
+
+#[test]
+fn the_default_settings_wear_the_first_factory_brush() {
+    let brushes = cadmium_engine::brush::factory_brushes();
+    let settings = cadmium_engine::brush::BrushSettings::default();
+    assert_eq!(worn_brush(&brushes, &settings), Some(0));
+}
+
+#[test]
+fn tuned_settings_wear_no_factory_brush() {
+    let brushes = cadmium_engine::brush::factory_brushes();
+    let mut settings = cadmium_engine::brush::BrushSettings::default();
+    settings.hair.clumping = 0.123;
+    assert_eq!(worn_brush(&brushes, &settings), None);
+}

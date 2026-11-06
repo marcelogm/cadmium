@@ -1,4 +1,4 @@
-use cadmium_engine::engine::{BRISTLE_SETTLE_MS, BristleSnapshot, PaintEngine};
+use cadmium_engine::engine::{BRISTLE_SETTLE_MS, BristleSnapshot};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::StrokeSample;
@@ -95,7 +95,7 @@ impl HeldStroke {
 
 fn unpointed(gpu: &GpuContext) -> PaintSession {
     let mut s = session(gpu);
-    s.engine.params_mut().set("bristle_pointing", 0.0);
+    s.brush.hair.wet_point = 0.0;
     s
 }
 

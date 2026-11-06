@@ -1,5 +1,5 @@
-use cadmium_engine::brush::BrushShape;
-use cadmium_engine::engine::{BristleSnapshot, PaintEngine};
+use cadmium_engine::brush::HeadSpec;
+use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::{StrokeSample, Tool};
@@ -48,13 +48,13 @@ fn press_samples(pressure: f32, time_ms: u32) -> Vec<StrokeSample> {
 
 fn unclumped(gpu: &GpuContext) -> PaintSession {
     let mut s = session(gpu);
-    s.engine.params_mut().set("bristle_clumping", 0.0);
+    s.brush.hair.clumping = 0.0;
     s
 }
 
 fn loose(gpu: &GpuContext) -> PaintSession {
     let mut s = unclumped(gpu);
-    s.engine.params_mut().set("bristle_pointing", 0.0);
+    s.brush.hair.wet_point = 0.0;
     s
 }
 
@@ -64,11 +64,10 @@ fn press(gpu: &GpuContext, s: &mut PaintSession, pressure: f32) -> BristleSnapsh
 }
 
 fn as_flat_with_round_length(s: &mut PaintSession) {
-    let round_length = s.engine.params().get("bristle_length_round");
-    s.engine
-        .params_mut()
-        .set("bristle_length_flat", round_length);
-    s.brush.shape = BrushShape::Flat;
+    s.brush.head = HeadSpec {
+        length: HeadSpec::ROUND.length,
+        ..HeadSpec::FLAT
+    };
 }
 
 fn touch_once(gpu: &GpuContext, s: &mut PaintSession, pressure: f32) -> BristleSnapshot {

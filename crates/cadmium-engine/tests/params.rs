@@ -1,4 +1,4 @@
-use cadmium_engine::brush::{BrushSettings, BrushShape};
+use cadmium_engine::brush::{BrushSettings, HairSpec, HeadSpec};
 use cadmium_engine::params::*;
 use cadmium_engine::stroke::Tool;
 
@@ -26,12 +26,34 @@ fn assert_each_spec_is_unique_with_its_default_in_range(specs: &[ParamSpec]) {
     }
 }
 
+const GONE_KEYS: [&str; 19] = [
+    "bristle_count",
+    "bristle_contrast",
+    "tilt_elongation",
+    "bristle_density",
+    "bristle_length_round",
+    "bristle_length_flat",
+    "bristle_length_fan",
+    "bristle_stiffness",
+    "bristle_damping",
+    "bristle_static_friction",
+    "bristle_kinetic_friction",
+    "bristle_drag_anisotropy",
+    "bristle_plasticity",
+    "bristle_clumping",
+    "bristle_pointing",
+    "bristle_point_release",
+    "bristle_point_film",
+    "bristle_load_limit",
+    "wicking_share",
+];
+
 #[test]
 fn specs_cover_every_lab_parameter_once() {
     let specs = SimParams::specs();
-    assert_eq!(specs.len(), 41);
+    assert_eq!(specs.len(), 25);
     assert_each_spec_is_unique_with_its_default_in_range(specs);
-    for gone in ["bristle_count", "bristle_contrast", "tilt_elongation"] {
+    for gone in GONE_KEYS {
         assert!(specs.iter().all(|spec| spec.key != gone), "{gone}");
     }
     let depth = specs.iter().find(|s| s.key == "penetration_um").unwrap();
@@ -83,7 +105,8 @@ fn reservoir_volume_follows_load() {
 fn default_brush_is_a_round_brush_with_the_first_slot() {
     let b = BrushSettings::default();
     assert_eq!(b.tool, Tool::Brush);
-    assert_eq!(b.shape, BrushShape::Round);
+    assert_eq!(b.head, HeadSpec::ROUND);
+    assert_eq!(b.hair, HairSpec::default());
     assert_eq!(b.geometry.max_diameter_px, 40.0);
     assert_eq!(b.recipe, vec![(0, 1.0)]);
 }
@@ -126,52 +149,35 @@ fn reservoir_volume_never_exceeds_a_full_load() {
 
 #[test]
 fn the_bristle_simulation_is_tuned_from_its_own_group() {
-    let keys = [
-        "bristle_density",
-        "bristle_length_round",
-        "bristle_length_flat",
-        "bristle_length_fan",
-        "bristle_stiffness",
-        "bristle_damping",
-        "bristle_press_depth",
-        "bristle_static_friction",
-        "bristle_kinetic_friction",
-        "bristle_drag_anisotropy",
-        "bristle_plasticity",
-        "bristle_clumping",
-        "bristle_pointing",
-        "bristle_point_release",
-        "bristle_point_film",
-        "bristle_wet_support",
-        "bristle_load_limit",
-    ];
-    for key in keys {
+    for key in ["bristle_press_depth", "bristle_wet_support"] {
         let spec = SimParams::specs().iter().find(|s| s.key == key).unwrap();
         assert_eq!(spec.group, ParamGroup::Bristles, "{key}");
     }
-    let density = SimParams::specs()
-        .iter()
-        .find(|s| s.key == "bristle_density")
-        .unwrap();
-    assert_eq!((density.min, density.max), (0.5, 8.0));
 }
 
 #[test]
 fn bristle_contact_tunables_span_their_physical_ranges() {
-    let ranges = [
-        ("bristle_static_friction", 0.0, 2.0),
-        ("bristle_kinetic_friction", 0.0, 2.0),
-        ("bristle_drag_anisotropy", 0.0, 1.0),
-        ("bristle_plasticity", 0.0, 20.0),
-        ("bristle_clumping", 0.0, 1.0),
-        ("bristle_pointing", 0.0, 1.0),
-        ("bristle_point_release", 0.01, 1.0),
-        ("bristle_point_film", 0.01, 1.0),
-        ("bristle_wet_support", 0.0, 1.0),
-        ("bristle_load_limit", 1.0, 5.0),
-    ];
+    let ranges = [("bristle_wet_support", 0.0, 1.0)];
     for (key, min, max) in ranges {
         let spec = SimParams::specs().iter().find(|s| s.key == key).unwrap();
         assert_eq!((spec.min, spec.max), (min, max), "{key}");
+    }
+}
+
+#[test]
+fn the_hair_and_head_are_no_longer_simulation_parameters() {
+    for key in [
+        "bristle_density",
+        "bristle_length_round",
+        "bristle_stiffness",
+        "bristle_clumping",
+        "bristle_pointing",
+        "bristle_load_limit",
+        "wicking_share",
+    ] {
+        assert!(
+            SimParams::specs().iter().all(|spec| spec.key != key),
+            "{key}"
+        );
     }
 }

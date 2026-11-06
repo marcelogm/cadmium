@@ -1,4 +1,4 @@
-use cadmium_engine::brush::BrushShape;
+use cadmium_engine::brush::{BrushSettings, BrushSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
 use cadmium_engine::stroke::Tool;
 use gtk::gdk;
@@ -123,11 +123,14 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
     )
 }
 
-pub(super) const SHAPES: [(BrushShape, &str); 3] = [
-    (BrushShape::Round, "Round"),
-    (BrushShape::Flat, "Flat"),
-    (BrushShape::Fan, "Fan"),
-];
+pub(super) const BRUSH_ROW_TITLE: &str = "Type";
+
+/// The factory brush whose head and hair the settings wear, if any.
+pub(super) fn worn_brush(brushes: &[BrushSpec], settings: &BrushSettings) -> Option<usize> {
+    brushes
+        .iter()
+        .position(|brush| brush.head == settings.head && brush.hair == settings.hair)
+}
 
 pub(super) fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {

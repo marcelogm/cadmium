@@ -4,7 +4,7 @@ use super::owners::{build_owner_map, owner_ranks};
 use super::roots::{
     Root, SplitMix, assign_clusters, bristle_count, bundle_gain, covered_area_px2, place_roots,
 };
-use crate::brush::BrushShape;
+use crate::brush::HeadSpec;
 use crate::engine::{MAX_TIP_RADIUS, MIN_DAB_RADIUS, TIP_HALF};
 use bytemuck::{Pod, Zeroable};
 
@@ -41,38 +41,36 @@ pub(crate) struct BristleLayout {
 
 pub(crate) struct ReachRequest {
     pub(crate) ferrule_radius_px: f32,
-    pub(crate) length_ratio: f32,
-    pub(crate) density_per_px: f32,
+    pub(crate) head: HeadSpec,
 }
 
 pub(crate) struct LayoutRequest {
-    pub(crate) shape: BrushShape,
+    pub(crate) head: HeadSpec,
     pub(crate) ferrule_radius_px: f32,
-    pub(crate) length_ratio: f32,
-    pub(crate) density_per_px: f32,
     pub(crate) seed: u64,
 }
 
 pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
+    let head = request.head;
     let radius_px = request
         .ferrule_radius_px
         .clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
     let mut random = SplitMix::new(request.seed);
-    let count = bristle_count(radius_px, request.density_per_px).min(disc_texel_count(radius_px));
-    let roots = place_roots(request.shape, radius_px, count, &mut random);
+    let count = bristle_count(radius_px, head.density_per_px).min(disc_texel_count(radius_px));
+    let roots = place_roots(&head, radius_px, count, &mut random);
     let clusters = assign_clusters(&roots);
     let tip_roots: Vec<[f32; 2]> = roots.iter().map(tip_position).collect();
     let map = build_owner_map(&tip_roots, &roots, radius_px);
     let coverage_radius_px =
-        (covered_area_px2(request.shape, radius_px) / (std::f32::consts::PI * count as f32)).sqrt()
-            * bundle_gain(radius_px, request.density_per_px);
+        (covered_area_px2(&head, radius_px) / (std::f32::consts::PI * count as f32)).sqrt()
+            * bundle_gain(radius_px, head.density_per_px);
     let bristles = roots
         .iter()
         .enumerate()
         .map(|(index, root)| BristleRest {
             root_px: root.position_px,
             splay: root.splay,
-            length_px: radius_px * request.length_ratio * (1.0 + random.jitter()),
+            length_px: radius_px * head.length * root.length_share * (1.0 + random.jitter()),
             stiffness: BASE_STIFFNESS * (1.0 + random.jitter()),
             radius_px: (coverage_radius_px * (1.0 + random.jitter())).max(MIN_BRISTLE_RADIUS_PX),
             cluster: clusters[index],
@@ -93,9 +91,10 @@ pub(crate) fn reach_bound_px(request: &ReachRequest) -> f32 {
     let radius_px = request
         .ferrule_radius_px
         .clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
-    let longest_px = radius_px * request.length_ratio * (1.0 + BRISTLE_JITTER_SHARE);
-    let count = bristle_count(radius_px, request.density_per_px).min(disc_texel_count(radius_px));
-    let gain = bundle_gain(radius_px, request.density_per_px);
+    let longest_px = radius_px * request.head.length * (1.0 + BRISTLE_JITTER_SHARE);
+    let density_per_px = request.head.density_per_px;
+    let count = bristle_count(radius_px, density_per_px).min(disc_texel_count(radius_px));
+    let gain = bundle_gain(radius_px, density_per_px);
     let widest_px = (radius_px / (count as f32).sqrt() * gain * (1.0 + BRISTLE_JITTER_SHARE))
         .max(MIN_BRISTLE_RADIUS_PX);
     radius_px + longest_px + widest_px
@@ -155,3 +154,6 @@ fn row_texel_count(y: i32, radius_squared: f32) -> usize {
     let last = reach.min(size - half - 1);
     (last - first + 1) as usize
 }
+
+#[cfg(test)]
+mod tests;

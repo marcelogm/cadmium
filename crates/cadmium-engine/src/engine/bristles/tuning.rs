@@ -1,4 +1,4 @@
-use crate::brush::BrushShape;
+use crate::brush::{HairSpec, HeadSpec};
 use crate::params::SimParams;
 
 pub(super) const BRISTLE_TUNING_BYTES: u64 = std::mem::size_of::<BristleTuning>() as u64;
@@ -22,29 +22,25 @@ pub(crate) struct BristleTuning {
 }
 
 impl BristleTuning {
-    pub(crate) fn of(params: &SimParams, shape: BrushShape, canvas_tooth_um: f32) -> BristleTuning {
-        let static_friction = params.get("bristle_static_friction");
+    pub(crate) fn of(
+        params: &SimParams,
+        head: &HeadSpec,
+        hair: &HairSpec,
+        canvas_tooth_um: f32,
+    ) -> BristleTuning {
         BristleTuning {
-            static_friction,
-            kinetic_friction: params.get("bristle_kinetic_friction").min(static_friction),
-            drag_anisotropy: params.get("bristle_drag_anisotropy"),
-            plasticity: params.get("bristle_plasticity"),
-            clumping: params.get("bristle_clumping"),
-            pointing: params.get("bristle_pointing"),
-            point_release: params.get("bristle_point_release"),
-            point_axes: point_axes(shape),
-            point_film: params.get("bristle_point_film"),
+            static_friction: hair.static_friction,
+            kinetic_friction: hair.kinetic_friction.min(hair.static_friction),
+            drag_anisotropy: hair.drag_anisotropy,
+            plasticity: hair.bend_memory,
+            clumping: hair.clumping,
+            pointing: hair.wet_point,
+            point_release: hair.point_release,
+            point_axes: head.point_axes(),
+            point_film: hair.point_film,
             wet_support: params.get("bristle_wet_support"),
             canvas_tooth_um,
         }
-    }
-}
-
-fn point_axes(shape: BrushShape) -> [f32; 2] {
-    match shape {
-        BrushShape::Round => [1.0, 1.0],
-        BrushShape::Flat => [0.0, 1.0],
-        BrushShape::Fan => [0.0, 0.0],
     }
 }
 

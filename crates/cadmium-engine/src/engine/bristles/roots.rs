@@ -2,10 +2,8 @@ use super::layout::{
     BRISTLE_JITTER_SHARE, BRISTLES_PER_CLUSTER, BUNDLE_COVERING_GAIN, FULL_BUNDLE_GAIN_RADIUS_PX,
     MAX_BRISTLES, MIN_BRISTLES,
 };
-use crate::brush::BrushShape;
-use crate::engine::footprint::{FAN_THICKNESS_SHARE, FLAT_THICKNESS_SHARE};
+use crate::brush::{HeadSpec, Section};
 
-const FAN_SPREAD_DEG: f32 = 50.0;
 const FAN_ARC_RADIUS_SHARE: f32 = 0.6;
 const GOLDEN_ANGLE_RAD: f32 = 2.399_963_2;
 const SPIRAL_JITTER_SHARE: f32 = 0.3;
@@ -16,6 +14,7 @@ pub(super) struct Root {
     pub(super) position_px: [f32; 2],
     pub(super) splay: [f32; 2],
     pub(super) lane_direction: [f32; 2],
+    pub(super) length_share: f32,
 }
 
 pub(super) struct SplitMix(u64);
@@ -61,31 +60,58 @@ pub(super) fn bundle_gain(radius_px: f32, density_per_px: f32) -> f32 {
     1.0 + (BUNDLE_COVERING_GAIN - 1.0) * eased
 }
 
-pub(super) fn covered_area_px2(shape: BrushShape, radius_px: f32) -> f32 {
+pub(super) fn covered_area_px2(head: &HeadSpec, radius_px: f32) -> f32 {
     let diameter_px = 2.0 * radius_px;
-    match shape {
-        BrushShape::Round => std::f32::consts::PI * radius_px * radius_px,
-        BrushShape::Flat => diameter_px * diameter_px * FLAT_THICKNESS_SHARE,
-        BrushShape::Fan => {
-            let arc_px = FAN_ARC_RADIUS_SHARE * radius_px * 2.0 * FAN_SPREAD_DEG.to_radians();
-            arc_px * diameter_px * FAN_THICKNESS_SHARE
+    match head.section() {
+        Section::Round => std::f32::consts::PI * radius_px * radius_px,
+        Section::Bar => diameter_px * diameter_px * head.thickness,
+        Section::Arc => {
+            let arc_px = FAN_ARC_RADIUS_SHARE * radius_px * 2.0 * head.fan_deg.to_radians();
+            arc_px * diameter_px * head.thickness
         }
     }
 }
 
 pub(super) fn place_roots(
-    shape: BrushShape,
+    head: &HeadSpec,
     radius_px: f32,
     count: usize,
     random: &mut SplitMix,
 ) -> Vec<Root> {
     (0..count)
-        .map(|index| match shape {
-            BrushShape::Round => spiral_root(index, count, radius_px, random),
-            BrushShape::Flat => flat_root(index, count, radius_px, random),
-            BrushShape::Fan => fan_root(index, count, radius_px, random),
+        .map(|index| {
+            let mut root = section_root(head, index, count, radius_px, random);
+            let unit = root.position_px.map(|v| v / radius_px);
+            root.length_share = head.length_share(unit);
+            bulge(&mut root, head, unit);
+            root
         })
         .collect()
+}
+
+fn bulge(root: &mut Root, head: &HeadSpec, unit: [f32; 2]) {
+    let amount = head.bulge();
+    if amount <= 0.0 {
+        return;
+    }
+    root.splay[0] += unit[0] * amount;
+    if head.section() != Section::Arc {
+        root.splay[1] += unit[1] * amount;
+    }
+}
+
+fn section_root(
+    head: &HeadSpec,
+    index: usize,
+    count: usize,
+    radius_px: f32,
+    random: &mut SplitMix,
+) -> Root {
+    match head.section() {
+        Section::Round => spiral_root(index, count, radius_px, random),
+        Section::Bar => flat_root(index, count, radius_px, head.thickness, random),
+        Section::Arc => fan_root(index, count, radius_px, head, random),
+    }
 }
 
 fn spiral_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) -> Root {
@@ -99,6 +125,7 @@ fn spiral_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix
         position_px: [outward[0] * distance_px, outward[1] * distance_px],
         splay: [0.0, 0.0],
         lane_direction: outward,
+        length_share: 1.0,
     }
 }
 
@@ -111,11 +138,17 @@ fn lattice_point(index: usize, count: usize, random: &mut SplitMix) -> [f32; 2] 
     [coordinate(0, random), coordinate(1, random)]
 }
 
-fn flat_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) -> Root {
+fn flat_root(
+    index: usize,
+    count: usize,
+    radius_px: f32,
+    thickness: f32,
+    random: &mut SplitMix,
+) -> Root {
     let [across, thick] = lattice_point(index, count, random);
     let mut position_px = [
         (2.0 * across - 1.0) * radius_px,
-        (2.0 * thick - 1.0) * radius_px * FLAT_THICKNESS_SHARE,
+        (2.0 * thick - 1.0) * radius_px * thickness,
     ];
     let reach_px = position_px[0].hypot(position_px[1]);
     if reach_px > radius_px {
@@ -127,16 +160,23 @@ fn flat_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) 
         position_px,
         splay: [0.0, 0.0],
         lane_direction: [0.0, side],
+        length_share: 1.0,
     }
 }
 
-fn fan_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) -> Root {
+fn fan_root(
+    index: usize,
+    count: usize,
+    radius_px: f32,
+    head: &HeadSpec,
+    random: &mut SplitMix,
+) -> Root {
     let [across, thick] = lattice_point(index, count, random);
-    let angle = (2.0 * across - 1.0) * FAN_SPREAD_DEG.to_radians();
-    let band_px = 2.0 * radius_px * FAN_THICKNESS_SHARE;
+    let angle = (2.0 * across - 1.0) * head.fan_deg.to_radians();
+    let band_px = 2.0 * radius_px * head.thickness;
     let distance_px = FAN_ARC_RADIUS_SHARE * radius_px + (thick - 0.5) * band_px;
     let outward = [angle.sin(), angle.cos()];
-    let spread = FAN_SPREAD_DEG.to_radians();
+    let spread = head.fan_deg.to_radians();
     let arc_centroid_px = FAN_ARC_RADIUS_SHARE * radius_px * spread.sin() / spread;
     Root {
         position_px: [
@@ -145,6 +185,7 @@ fn fan_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix) -
         ],
         splay: [outward[0], 0.0],
         lane_direction: outward,
+        length_share: 1.0,
     }
 }
 

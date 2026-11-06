@@ -15,7 +15,7 @@ mod painter;
 use std::f64::consts::{PI, TAU};
 use std::path::PathBuf;
 
-use cadmium_engine::brush::BrushShape;
+use cadmium_engine::brush::HeadSpec;
 use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
 use cadmium_engine::document::{export_png, save};
 use cadmium_engine::gpu::GpuContext;
@@ -67,7 +67,7 @@ const SLAB_SHADE: Tint = Tint {
 fn underpainting(angle: f64, tint: Tint) -> Layer {
     Layer {
         brush: Brush {
-            shape: BrushShape::Flat,
+            head: HeadSpec::FLAT,
             diameter: 56.0,
             load: 0.9,
             medium: 0.35,
@@ -89,7 +89,7 @@ fn underpainting(angle: f64, tint: Tint) -> Layer {
 fn body(angle: f64, tint: Tint) -> Layer {
     Layer {
         brush: Brush {
-            shape: BrushShape::Flat,
+            head: HeadSpec::FLAT,
             diameter: 44.0,
             load: 1.0,
             medium: 0.08,
@@ -155,7 +155,7 @@ fn paint_faces(painter: &mut Painter) {
 /// Each bond in two overlapping pulls of a round brush, never quite on the line.
 fn paint_bonds(painter: &mut Painter) {
     let bond = Brush {
-        shape: BrushShape::Round,
+        head: HeadSpec::ROUND,
         diameter: 28.0,
         load: 1.0,
         medium: 0.05,
@@ -184,7 +184,7 @@ fn paint_bonds(painter: &mut Painter) {
 /// paint the brush drops where it lands evens out; never quite a circle.
 fn paint_atom(painter: &mut Painter, center: Point, radius: f64, recipe: &[(usize, f32)]) {
     let brush = Brush {
-        shape: BrushShape::Round,
+        head: HeadSpec::ROUND,
         diameter: (radius * 0.9) as f32,
         load: 1.0,
         medium: 0.05,
@@ -233,7 +233,7 @@ fn paint_atoms(painter: &mut Painter) {
     );
     painter.dry();
     let glint = Brush {
-        shape: BrushShape::Round,
+        head: HeadSpec::ROUND,
         diameter: 18.0,
         load: 1.0,
         medium: 0.05,

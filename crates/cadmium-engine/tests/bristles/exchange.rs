@@ -89,9 +89,7 @@ fn strong_wicking_between_widely_spaced_dabs_never_overdraws_a_tip_texel() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     s.brush.geometry.max_diameter_px = WIDE_DIAMETER_PX;
-    s.engine
-        .params_mut()
-        .set("wicking_share", STRONGEST_WICKING_SHARE);
+    s.brush.hair.wicking = STRONGEST_WICKING_SHARE;
     s.reload_brush(&gpu);
     let samples = line(128.0, 40.0, 470.0, STROKE_PRESSURE, STROKE_TILT_DEG);
     let lowest_um = drag_watching_the_tip(&gpu, &mut s, &samples);

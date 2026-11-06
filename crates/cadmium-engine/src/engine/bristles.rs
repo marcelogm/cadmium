@@ -16,7 +16,7 @@ pub(crate) use layout::{
 };
 pub(crate) use owners::OUTSIDE_TIP;
 pub use rig::BRISTLE_SETTLE_MS;
-pub(crate) use rig::{BristleRig, length_ratio};
+pub(crate) use rig::BristleRig;
 pub(crate) use state::{
     BRISTLE_FLARE_SHARE, BRISTLE_SOLVER_ITERATIONS, BRISTLE_STATE_VECTORS,
     BRISTLE_TIP_STIFFNESS_SHARE, BRISTLE_WORKGROUP_SIZE, BRISTLES_PER_THREAD, BristleBuffers,

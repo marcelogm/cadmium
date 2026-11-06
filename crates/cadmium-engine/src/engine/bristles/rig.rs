@@ -1,7 +1,7 @@
 use super::handle::{HandleClock, HandleGauge, ferrule_over_nib, substeps};
 use super::layout::{BristleLayout, LayoutRequest, layout};
 use super::state::BristleBuffers;
-use crate::brush::BrushShape;
+use crate::brush::{HairSpec, HeadSpec};
 use crate::engine::dab_record::DabRecord;
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
@@ -12,19 +12,25 @@ pub const BRISTLE_SETTLE_MS: f32 = 1500.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct LayoutKey {
-    shape: BrushShape,
+    head_bits: [u32; 7],
     ferrule_radius_bits: u32,
-    length_ratio_bits: u32,
-    density_bits: u32,
 }
 
 impl LayoutKey {
     fn of(request: &LayoutRequest) -> LayoutKey {
+        let h = request.head;
         LayoutKey {
-            shape: request.shape,
+            head_bits: [
+                h.thickness,
+                h.length,
+                h.dome,
+                h.slant,
+                h.belly,
+                h.fan_deg,
+                h.density_per_px,
+            ]
+            .map(f32::to_bits),
             ferrule_radius_bits: request.ferrule_radius_px.to_bits(),
-            length_ratio_bits: request.length_ratio.to_bits(),
-            density_bits: request.density_per_px.to_bits(),
         }
     }
 }
@@ -37,7 +43,8 @@ pub(crate) struct BristleRig {
     mean_radius_px: f32,
     reach_px: f32,
     ferrule_radius_px: f32,
-    shape: BrushShape,
+    head: HeadSpec,
+    hair: HairSpec,
     tool: Option<Tool>,
     previous_orientation: Option<[f32; 2]>,
     reset_pending: bool,
@@ -58,7 +65,8 @@ impl BristleRig {
             mean_radius_px: 0.0,
             reach_px: 0.0,
             ferrule_radius_px: 0.0,
-            shape: BrushShape::Round,
+            head: HeadSpec::ROUND,
+            hair: HairSpec::default(),
             tool: None,
             previous_orientation: None,
             reset_pending: true,
@@ -74,8 +82,16 @@ impl BristleRig {
         &self.radii_px
     }
 
-    pub(crate) fn shape(&self) -> BrushShape {
-        self.shape
+    pub(crate) fn head(&self) -> HeadSpec {
+        self.head
+    }
+
+    pub(crate) fn wear(&mut self, hair: HairSpec) {
+        self.hair = hair;
+    }
+
+    pub(crate) fn hair(&self) -> HairSpec {
+        self.hair
     }
 
     pub(crate) fn clusters(&self) -> &[u32] {
@@ -123,6 +139,7 @@ impl BristleRig {
         request: &LayoutRequest,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        self.head = request.head;
         let key = LayoutKey::of(request);
         if self.key == Some(key) {
             return;
@@ -130,7 +147,6 @@ impl BristleRig {
         let laid = layout(request);
         buffers.upload(gpu, &laid, encoder);
         self.adopt(&laid, request.ferrule_radius_px);
-        self.shape = request.shape;
         self.key = Some(key);
         self.reset();
     }
@@ -165,8 +181,8 @@ impl BristleRig {
         record.dt_seconds = self.clock.elapsed_seconds(dab.time_ms);
         record.substeps = substeps(travel_px, self.mean_radius_px);
         record.bristle_total = self.count;
-        record.bristle_stiffness = params.get("bristle_stiffness");
-        record.bristle_damping = params.get("bristle_damping");
+        record.bristle_stiffness = self.hair.stiffness;
+        record.bristle_damping = self.hair.damping;
         record.bristle_reset = u32::from(std::mem::take(&mut self.reset_pending));
         record.bristle_orientation = self.continuous_orientation(record.orientation);
         self.last_dab = Some(*record);
@@ -193,7 +209,7 @@ impl BristleRig {
     }
 
     fn continuous_orientation(&mut self, orientation: [f32; 2]) -> [f32; 2] {
-        if self.shape == BrushShape::Round {
+        if self.head.is_round() {
             return ROUND_ROOT_ORIENTATION;
         }
         let turned_back = self.previous_orientation.is_some_and(|previous| {
@@ -207,14 +223,6 @@ impl BristleRig {
         self.previous_orientation = Some(continuous);
         continuous
     }
-}
-
-pub(crate) fn length_ratio(shape: BrushShape, params: &SimParams) -> f32 {
-    params.get(match shape {
-        BrushShape::Round => "bristle_length_round",
-        BrushShape::Flat => "bristle_length_flat",
-        BrushShape::Fan => "bristle_length_fan",
-    })
 }
 
 #[cfg(test)]

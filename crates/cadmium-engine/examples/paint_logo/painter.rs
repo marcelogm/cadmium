@@ -1,6 +1,6 @@
 //! Drives a paint session the way a hand at the easel would, frame by frame.
 
-use cadmium_engine::brush::BrushShape;
+use cadmium_engine::brush::HeadSpec;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 
@@ -14,7 +14,7 @@ const MIX_JITTER: f64 = 0.08;
 /// Which brush, how big, and how it was loaded.
 #[derive(Clone, Copy)]
 pub struct Brush {
-    pub shape: BrushShape,
+    pub head: HeadSpec,
     pub diameter: f32,
     pub load: f32,
     pub medium: f32,
@@ -39,7 +39,7 @@ impl Painter {
 
     pub fn load(&mut self, brush: Brush, recipe: &[(usize, f32)]) {
         let settings = &mut self.session.brush;
-        settings.shape = brush.shape;
+        settings.head = brush.head;
         settings.recipe = vary(&mut self.rng, recipe, MIX_JITTER);
         settings.geometry.max_diameter_px = brush.diameter;
         settings.load = brush.load;

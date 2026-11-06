@@ -22,3 +22,16 @@ fn stroke_geometry_keeps_pressure_shrink_for_other_tools() {
     let geometry = full_diameter_spacing(shrinking_geometry(), false);
     assert_eq!(geometry.min_diameter_ratio, 0.2);
 }
+
+#[test]
+fn wearing_a_brush_takes_its_head_hair_and_size() {
+    let mut settings = super::BrushSettings::default();
+    let mop = super::factory_brushes()
+        .into_iter()
+        .find(|brush| brush.head == super::HeadSpec::MOP)
+        .unwrap();
+    settings.wear(&mop);
+    assert_eq!(settings.head, mop.head);
+    assert_eq!(settings.hair, mop.hair);
+    assert_eq!(settings.geometry.max_diameter_px, mop.size_px);
+}
