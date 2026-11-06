@@ -24,14 +24,39 @@ pub(super) fn tip_icon(view: TipView) -> gtk::DrawingArea {
         .accessible_role(gtk::AccessibleRole::Presentation)
         .build();
     area.set_draw_func(move |area, context, width, height| {
-        draw(context, &view, &area.color(), [width, height]);
+        draw(
+            context,
+            &view,
+            &area.color(),
+            [width, height],
+            pixel_scale(area),
+        );
     });
     area
 }
 
-fn draw(context: &cairo::Context, view: &TipView, ink: &gdk::RGBA, size: [i32; 2]) {
+/// Device pixels per logical one where `widget` shows, fractional scaling included.
+fn pixel_scale(widget: &impl IsA<gtk::Widget>) -> f64 {
+    widget
+        .native()
+        .and_then(|native| native.surface())
+        .map_or_else(
+            || f64::from(widget.scale_factor()),
+            |surface| surface.scale(),
+        )
+}
+
+/// Draws `view` fitted into `size`, its mouth line and axis on whole device pixels at
+/// `pixel_scale`.
+fn draw(
+    context: &cairo::Context,
+    view: &TipView,
+    ink: &gdk::RGBA,
+    size: [i32; 2],
+    pixel_scale: f64,
+) {
     let [min, max] = view.bounds().map(|corner| corner.map(f64::from));
-    let fit = contain(min, max, size.map(f64::from), PADDING);
+    let fit = contain(min, max, size.map(f64::from), PADDING).snapped(pixel_scale, LINE_WIDTH);
     context.set_line_width(LINE_WIDTH);
     context.set_line_join(cairo::LineJoin::Round);
     trace(context, &fit, &view.ferrule.outline);
