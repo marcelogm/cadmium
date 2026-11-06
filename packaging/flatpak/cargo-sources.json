@@ -691,19 +691,6 @@
   {
     "type": "archive",
     "archive-type": "tar-gzip",
-    "url": "https://static.crates.io/crates/glam/glam-0.34.1.crate",
-    "sha256": "fc148d4ddd3930c52f9e5ae79b89805c6f07e9ff417e7b083e0348cea60a5aba",
-    "dest": "cargo/vendor/glam-0.34.1"
-  },
-  {
-    "type": "inline",
-    "contents": "{\"package\": \"fc148d4ddd3930c52f9e5ae79b89805c6f07e9ff417e7b083e0348cea60a5aba\", \"files\": {}}",
-    "dest": "cargo/vendor/glam-0.34.1",
-    "dest-filename": ".cargo-checksum.json"
-  },
-  {
-    "type": "archive",
-    "archive-type": "tar-gzip",
     "url": "https://static.crates.io/crates/glib/glib-0.22.10.crate",
     "sha256": "e4cf9e5bd8713f1990a92c422998826e0fb34824277b46bc59757373483c6694",
     "dest": "cargo/vendor/glib-0.22.10"
