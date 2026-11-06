@@ -146,7 +146,13 @@ fn reference(@builtin(local_invocation_index) thread: u32) {
         if (weights[0] > 0.0) {
             found = weighted_heights[0] / weights[0];
         }
-        contact_reference.height = mix(contact_reference.height, found, dab.rest_follow);
+        // A full follow replaces the height outright: mix() at 1.0 can still
+        // carry the previous stroke's height in its rounding.
+        contact_reference.height = select(
+            mix(contact_reference.height, found, dab.rest_follow),
+            found,
+            dab.rest_follow >= 1.0,
+        );
     }
 }
 
