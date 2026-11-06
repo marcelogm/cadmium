@@ -100,6 +100,14 @@ pub(crate) fn reach_bound_px(request: &ReachRequest) -> f32 {
     radius_px + longest_px + widest_px
 }
 
+/// How far below and around the ferrule the hairs of `head` can reach, in px.
+pub fn bristle_reach_px(ferrule_radius_px: f32, head: &HeadSpec) -> f32 {
+    reach_bound_px(&ReachRequest {
+        ferrule_radius_px,
+        head: *head,
+    })
+}
+
 fn cell_frames(roots: &[Root], lanes: &[([f32; 2], [f32; 2])]) -> Vec<CellFrame> {
     roots
         .iter()

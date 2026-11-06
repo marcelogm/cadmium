@@ -57,16 +57,18 @@ pub(super) const SPREAD_SNIPPETS: [&str; 6] = [
     include_str!("../shaders/contact_press.wgsl"),
     include_str!("../shaders/contact_reach.wgsl"),
 ];
-pub(super) const CONTACT_SNIPPETS: [&str; 5] = [
+pub(super) const CONTACT_SNIPPETS: [&str; 6] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/bristle_rest.wgsl"),
+    include_str!("../shaders/bristle_frame.wgsl"),
     include_str!("../shaders/bristle.wgsl"),
     include_str!("../shaders/contact_mask.wgsl"),
     include_str!("../shaders/cell_grid.wgsl"),
 ];
-pub(super) const BRISTLE_SNIPPETS: [&str; 9] = [
+pub(super) const BRISTLE_SNIPPETS: [&str; 10] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/bristle_rest.wgsl"),
+    include_str!("../shaders/bristle_frame.wgsl"),
     include_str!("../shaders/bristle.wgsl"),
     include_str!("../shaders/bristle_tuning.wgsl"),
     include_str!("../shaders/bristle_relief.wgsl"),
@@ -74,6 +76,11 @@ pub(super) const BRISTLE_SNIPPETS: [&str; 9] = [
     include_str!("../shaders/bristle_memory.wgsl"),
     include_str!("../shaders/bristle_point.wgsl"),
     include_str!("../shaders/bristle_clump.wgsl"),
+];
+const BRISTLE_VIEW_SNIPPETS: [&str; 3] = [
+    include_str!("../shaders/bristle_rest.wgsl"),
+    include_str!("../shaders/bristle_frame.wgsl"),
+    include_str!("../shaders/bristle_view.wgsl"),
 ];
 pub(super) const EYEDROPPER_SNIPPETS: [&str; 2] = [
     include_str!("../shaders/brush_tip.wgsl"),
@@ -156,4 +163,8 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
     }
     source.push_str(body);
     source
+}
+
+pub(crate) fn bristle_view_source() -> String {
+    shader_source(&BRISTLE_VIEW_SNIPPETS, "")
 }

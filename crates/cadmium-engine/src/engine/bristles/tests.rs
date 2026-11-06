@@ -299,3 +299,33 @@ fn the_disc_texel_count_matches_a_scan_of_every_tip_texel() {
         );
     }
 }
+
+#[test]
+fn the_reach_grows_with_the_hair_length() {
+    let short = HeadSpec {
+        length: 1.0,
+        ..HeadSpec::ROUND
+    };
+    let long = HeadSpec {
+        length: 3.0,
+        ..HeadSpec::ROUND
+    };
+    assert!(bristle_reach_px(20.0, &long) > bristle_reach_px(20.0, &short));
+}
+
+#[test]
+fn a_fan_reaches_at_least_as_far_as_its_flat_counterpart() {
+    let flat = HeadSpec {
+        fan_deg: 0.0,
+        ..HeadSpec::FAN
+    };
+    assert!(bristle_reach_px(20.0, &HeadSpec::FAN) >= bristle_reach_px(20.0, &flat));
+}
+
+#[test]
+fn the_ferrule_radius_is_half_the_diameter_within_the_tip() {
+    use crate::engine::{MAX_TIP_RADIUS, MIN_DAB_RADIUS, ferrule_radius_for};
+    assert_eq!(ferrule_radius_for(40.0), 20.0);
+    assert_eq!(ferrule_radius_for(0.0), MIN_DAB_RADIUS);
+    assert_eq!(ferrule_radius_for(10.0 * TIP_SIZE as f32), MAX_TIP_RADIUS);
+}

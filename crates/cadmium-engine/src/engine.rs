@@ -16,7 +16,10 @@ mod readout;
 mod reservoir;
 pub(crate) mod shader;
 
-pub use bristles::{BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX};
+pub use bristles::{
+    BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, BristleView, RELIEF_UM_PER_PX,
+    bristle_reach_px,
+};
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use readout::BrushReadout;
@@ -66,6 +69,12 @@ const BLADE_DELTA_BYTES: u64 =
 const BLADE_CELL_GROUP_SIZE: u32 = 64;
 const DRY_WORKGROUP_SIZE: u32 = 8;
 const BRISTLE_LAYOUT_SEED: u64 = 0x00C4_D317_B215_7E55;
+
+/// The ferrule radius a brush of `diameter_px` paints with: half the
+/// diameter, clamped to what the tip texture can hold.
+pub fn ferrule_radius_for(diameter_px: f32) -> f32 {
+    (diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS)
+}
 
 pub struct DabBatch<'a> {
     pub brush: &'a BrushSettings,
@@ -167,7 +176,7 @@ impl WetOilEngine {
 
     pub fn resize_tip(&mut self, radius_px: f32) {
         if radius_px.is_finite() {
-            self.tip_radius = radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+            self.tip_radius = ferrule_radius_for(2.0 * radius_px);
         }
     }
 

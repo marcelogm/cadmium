@@ -43,6 +43,7 @@ pub(crate) struct BristleRig {
     mean_radius_px: f32,
     reach_px: f32,
     ferrule_radius_px: f32,
+    root_half_extent_px: [f32; 2],
     head: HeadSpec,
     hair: HairSpec,
     tool: Option<Tool>,
@@ -65,6 +66,7 @@ impl BristleRig {
             mean_radius_px: 0.0,
             reach_px: 0.0,
             ferrule_radius_px: 0.0,
+            root_half_extent_px: [0.0; 2],
             head: HeadSpec::ROUND,
             hair: HairSpec::default(),
             tool: None,
@@ -80,6 +82,18 @@ impl BristleRig {
 
     pub(crate) fn radii_px(&self) -> &[f32] {
         &self.radii_px
+    }
+
+    pub(crate) fn count(&self) -> u32 {
+        self.count
+    }
+
+    pub(crate) fn ferrule_radius_px(&self) -> f32 {
+        self.ferrule_radius_px
+    }
+
+    pub(crate) fn root_half_extent_px(&self) -> [f32; 2] {
+        self.root_half_extent_px
     }
 
     pub(crate) fn head(&self) -> HeadSpec {
@@ -163,6 +177,9 @@ impl BristleRig {
             .map(|bristle| bristle.length_px)
             .fold(0.0, f32::max);
         self.ferrule_radius_px = ferrule_radius_px;
+        self.root_half_extent_px = bristles.iter().fold([0.0; 2], |extent, bristle| {
+            [0, 1].map(|axis| extent[axis].max(bristle.root_px[axis].abs()))
+        });
     }
 
     pub(crate) fn advance(&mut self, record: &mut DabRecord, dab: &Dab, params: &SimParams) {
