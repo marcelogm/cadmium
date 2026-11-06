@@ -59,6 +59,28 @@ impl fmt::Display for StudioError {
 
 impl std::error::Error for StudioError {}
 
+/// The paint a studio brush is loaded with.
+pub(crate) struct Loading<'a> {
+    pub recipe: &'a [(usize, f32)],
+    pub load: f32,
+    pub medium: f32,
+}
+
+/// Holds `brush` as it is, freshly loaded with `loading`.
+pub(crate) fn wear(
+    session: &mut PaintSession,
+    gpu: &GpuContext,
+    brush: &BrushSpec,
+    loading: Loading<'_>,
+) {
+    let settings = &mut session.brush;
+    settings.wear(brush);
+    settings.recipe = loading.recipe.to_vec();
+    settings.load = loading.load;
+    settings.medium = loading.medium;
+    session.reload_brush(gpu);
+}
+
 /// A private paint session that shows what a brush does.
 ///
 /// Every run starts its clock at 0 on a fresh canvas with a freshly loaded brush,
@@ -135,12 +157,12 @@ impl BrushStudio {
     fn wear(&mut self, gpu: &GpuContext, brush: &BrushSpec) {
         let mut fitted = brush.clone();
         fitted.size_px = fitted.size_px.min(STUDIO_MAX_SIZE_PX);
-        let settings = &mut self.session.brush;
-        settings.wear(&fitted);
-        settings.recipe = vec![(0, 1.0)];
-        settings.load = STUDIO_LOAD;
-        settings.medium = STUDIO_MEDIUM;
-        self.session.reload_brush(gpu);
+        let loading = Loading {
+            recipe: &[(0, 1.0)],
+            load: STUDIO_LOAD,
+            medium: STUDIO_MEDIUM,
+        };
+        wear(&mut self.session, gpu, &fitted, loading);
     }
 
     fn stroke_box(&self) -> StrokeBox {
