@@ -13,6 +13,7 @@ use glam::camera::rh::{proj::directx, view::look_at_mat4};
 use glam::{Mat4, Vec3};
 
 use crate::StrokeBox;
+use crate::mesh::{FERRULE_LENGTH, HANDLE_CLEARANCE};
 
 /// Yaw of the reset view, around the canvas normal.
 const RESET_YAW: f32 = -35.0 * DEG;
@@ -42,10 +43,6 @@ const ZOOM_MAX: f32 = 4.0;
 const NEAR_FACTOR: f32 = 0.1;
 /// Ferrule radius, as a share of the reach: a rough size for the framing.
 const FERRULE_SHARE: f32 = 1.0 / 6.0;
-/// The ferrule's length above the reach, in ferrule radii.
-const FERRULE_LENGTH: f32 = 1.5;
-/// Clearance above the ferrule for the handle, in ferrule radii.
-const HANDLE_CLEARANCE: f32 = 4.0;
 
 const DEG: f32 = std::f32::consts::PI / 180.0;
 

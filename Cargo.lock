@@ -157,6 +157,7 @@ dependencies = [
 name = "cadmium-studio"
 version = "0.0.1"
 dependencies = [
+ "bytemuck",
  "cadmium-engine",
  "glam",
 ]
