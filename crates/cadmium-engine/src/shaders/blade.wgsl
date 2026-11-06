@@ -143,7 +143,7 @@ fn rest(@builtin(local_invocation_index) thread: u32) {
         if (found <= NO_PEAK) {
             found = centre_dry_height();
         }
-        let settled = mix(blade.rest, found, dab.rest_follow);
+        let settled = followed_rest(blade.rest, found, dab.rest_follow, dab.first_rest);
         blade.rest = settled;
         blade.plane = settled + dab.blade_gap_um;
         blade.band_weight[LOWER_END] = lower_weights[0];

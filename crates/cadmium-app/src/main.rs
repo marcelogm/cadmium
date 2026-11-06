@@ -1,6 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod application;
+mod brush_editor;
 mod brush_files;
 mod brush_library;
 mod brush_panel;
@@ -26,6 +27,7 @@ mod sliders;
 )]
 mod smoke;
 mod state;
+mod studio_view;
 mod surface_scale;
 mod swatch;
 mod thumbnails;

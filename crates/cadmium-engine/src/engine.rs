@@ -16,7 +16,10 @@ mod readout;
 mod reservoir;
 pub(crate) mod shader;
 
-pub use bristles::{BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX};
+pub use bristles::{
+    BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, BristleView, RELIEF_UM_PER_PX,
+    bristle_reach_px,
+};
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use readout::BrushReadout;
@@ -29,7 +32,7 @@ use pass::dip::DipPass;
 use pass::dry::DryPass;
 use pass::pick::PickPass;
 use pass::{DabPasses, DabResources};
-use placement::{PreviousDab, mark_dab_regions};
+use placement::{FirstRest, PreviousDab, mark_dab_regions};
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -66,6 +69,12 @@ const BLADE_DELTA_BYTES: u64 =
 const BLADE_CELL_GROUP_SIZE: u32 = 64;
 const DRY_WORKGROUP_SIZE: u32 = 8;
 const BRISTLE_LAYOUT_SEED: u64 = 0x00C4_D317_B215_7E55;
+
+/// The ferrule radius a brush of `diameter_px` paints with: half the
+/// diameter, clamped to what the tip texture can hold.
+pub fn ferrule_radius_for(diameter_px: f32) -> f32 {
+    (diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS)
+}
 
 pub struct DabBatch<'a> {
     pub brush: &'a BrushSettings,
@@ -139,7 +148,7 @@ pub struct WetOilEngine {
     tip_radius: f32,
     loaded_thickness_um: f32,
     buffers: Buffers,
-    rest_pending: bool,
+    first_rest: FirstRest,
     previous_dab: Option<PreviousDab>,
     bristles: BristleRig,
     dab_passes: DabPasses,
@@ -155,7 +164,7 @@ impl WetOilEngine {
             tip_radius: DEFAULT_MAX_DIAMETER_PX / 2.0,
             loaded_thickness_um: 0.0,
             buffers: Buffers::new(gpu),
-            rest_pending: true,
+            first_rest: FirstRest::new(),
             previous_dab: None,
             bristles: BristleRig::new(),
             dab_passes: DabPasses::new(gpu),
@@ -167,7 +176,7 @@ impl WetOilEngine {
 
     pub fn resize_tip(&mut self, radius_px: f32) {
         if radius_px.is_finite() {
-            self.tip_radius = radius_px.clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+            self.tip_radius = ferrule_radius_for(2.0 * radius_px);
         }
     }
 
@@ -228,7 +237,7 @@ impl WetOilEngine {
 
 impl PaintEngine for WetOilEngine {
     fn begin_stroke(&mut self) {
-        self.rest_pending = true;
+        self.first_rest.begin_stroke();
         self.previous_dab = None;
         self.bristles.begin_stroke();
     }
@@ -249,7 +258,7 @@ impl PaintEngine for WetOilEngine {
         if placements.is_empty() {
             return;
         }
-        self.take_first_rest(&mut placements);
+        self.first_rest.take(&mut placements);
         let dab_records = upload_dab_records(gpu, &placements);
         self.dab_passes.fit_scratch(gpu, &placements);
         let resources = DabResources {

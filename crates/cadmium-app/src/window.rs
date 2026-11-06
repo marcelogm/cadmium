@@ -72,6 +72,42 @@ impl CadmiumWindow {
         self.imp().thumbnails_pending.set(pending);
     }
 
+    pub fn has_editor(&self) -> bool {
+        self.imp().editor.borrow().is_some()
+    }
+
+    /// The open brush editor, if any.
+    pub fn editor(&self) -> Option<adw::Dialog> {
+        self.imp().editor.borrow().clone()
+    }
+
+    pub fn keep_editor(&self, editor: &adw::Dialog) {
+        self.imp().editor.replace(Some(editor.clone()));
+    }
+
+    fn close_editor(&self) {
+        let editor = self.imp().editor.take();
+        if let Some(editor) = editor {
+            editor.force_close();
+        }
+    }
+
+    /// Closes the editor's studio and refreshes the panels, which restarts the
+    /// thumbnails it paused; on a lost GPU the panels are left alone, so the
+    /// thumbnail job does not start on a dead device.
+    pub fn after_editor_closed(&self) {
+        self.imp().editor.take();
+        let gpu_lost = {
+            let state = self.state();
+            let mut state = state.borrow_mut();
+            state.close_studio();
+            state.gpu_is_lost()
+        };
+        if !gpu_lost {
+            self.refresh_panels();
+        }
+    }
+
     pub fn show_sidebar_page(&self, name: &str) {
         let imp = self.imp();
         imp.split_view.set_show_sidebar(true);

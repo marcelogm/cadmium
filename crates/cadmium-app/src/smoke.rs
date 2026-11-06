@@ -11,6 +11,7 @@ use crate::window::CadmiumWindow;
 
 mod brushes;
 mod config;
+mod editor;
 mod steps;
 #[cfg(test)]
 mod tests;
@@ -42,9 +43,11 @@ impl SmokeConfig {
             run_dmabuf_selftest(app, window, policy);
             return;
         }
+        let steps = self.steps();
         let run = SmokeRun {
             app: app.downgrade(),
-            steps: self.steps(),
+            expects_editor: steps.iter().any(SmokeStep::opens_editor),
+            steps,
             drawn: Cell::new(0),
             next_step: Cell::new(0),
             earliest_end_frame: Cell::new(self.exit_after_frames),
@@ -57,6 +60,8 @@ impl SmokeConfig {
 struct SmokeRun {
     app: glib::WeakRef<adw::Application>,
     steps: Vec<SmokeStep>,
+    /// Whether a step opens the brush editor, which the screenshot must then show.
+    expects_editor: bool,
     drawn: Cell<u32>,
     next_step: Cell<usize>,
     earliest_end_frame: Cell<u32>,
@@ -79,7 +84,8 @@ impl SmokeRun {
     }
 
     fn run_step(&self, step: &SmokeStep, window: &CadmiumWindow) -> bool {
-        if !step.is_ready(self.drawn.get(), self.earliest_end_frame.get(), window) {
+        let (frame, end) = (self.drawn.get(), self.earliest_end_frame.get());
+        if !step.is_ready(frame, end, self.expects_editor, window) {
             return false;
         }
         let frames_late = self
@@ -89,12 +95,9 @@ impl SmokeRun {
         if !step.run(&self.app, window, frames_late, &self.file_work) {
             return false;
         }
-        if FileWork::is_file_step(step) {
-            self.earliest_end_frame.set(
-                self.earliest_end_frame
-                    .get()
-                    .max(self.drawn.get() + SETTLE_FRAMES_AFTER_FILE_WORK),
-            );
+        if let Some(frames) = step.settle_frames() {
+            self.earliest_end_frame
+                .set(self.earliest_end_frame.get().max(self.drawn.get() + frames));
         }
         true
     }

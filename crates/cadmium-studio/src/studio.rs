@@ -7,9 +7,10 @@ use cadmium_engine::canvas::{Canvas, CanvasError, CanvasSpec, Primer, Weave};
 use cadmium_engine::gpu::{GpuContext, GpuLost};
 use cadmium_engine::present::{PresentRequest, ViewTransform, readback_rgba8};
 use cadmium_engine::session::PaintSession;
-use cadmium_engine::stroke::StrokeSample;
 
-use crate::demo::{DemoStroke, StrokeBox, samples};
+use crate::demo::{DemoStroke, StrokeBox};
+use crate::loading::{Loading, wear};
+use crate::schedule::{StrokeSchedule, replay};
 
 pub const THUMBNAIL_SIZE: (u32, u32) = (192, 64);
 const STUDIO_SCALE: u32 = 2;
@@ -18,9 +19,6 @@ const STUDIO_MAX_SIZE_PX: f32 = 44.0;
 const STUDIO_PIGMENT: &str = "burnt_umber";
 const STUDIO_MEDIUM: f32 = 0.1;
 const STUDIO_LOAD: f32 = 1.0;
-const FRAME_EVERY_SAMPLES: usize = 3;
-const SETTLE_FRAMES: u32 = 20;
-const SETTLE_STEP_MS: f64 = 60.0;
 const MARGIN_X_SHARE: f64 = 0.18;
 /// Wider than the side margin: the stroke's width spreads up and down.
 const MARGIN_Y_SHARE: f64 = 0.33;
@@ -96,7 +94,8 @@ impl BrushStudio {
     ) -> Result<(), StudioError> {
         self.session.canvas = Canvas::new(gpu, &self.session.db, studio_spec())?;
         self.wear(gpu, brush);
-        self.paint(gpu, stroke);
+        let schedule = StrokeSchedule::thumbnail(stroke, self.stroke_box());
+        replay(&mut self.session, gpu, schedule.events());
         Ok(())
     }
 
@@ -120,14 +119,14 @@ impl BrushStudio {
         let presenter = &self.session.presenter;
         let target = presenter.create_target(gpu, THUMBNAIL_SIZE.0, THUMBNAIL_SIZE.1);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        let request = PresentRequest {
-            canvas: &self.session.canvas,
-            view: ViewTransform {
+        let request = PresentRequest::of_canvas(
+            &self.session.canvas,
+            ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
                 zoom: 1.0 / STUDIO_SCALE as f32,
             },
-        };
+        );
         presenter.encode_present(gpu, request, &target, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         readback_rgba8(gpu, &target)
@@ -137,38 +136,12 @@ impl BrushStudio {
     fn wear(&mut self, gpu: &GpuContext, brush: &BrushSpec) {
         let mut fitted = brush.clone();
         fitted.size_px = fitted.size_px.min(STUDIO_MAX_SIZE_PX);
-        let settings = &mut self.session.brush;
-        settings.wear(&fitted);
-        settings.recipe = vec![(0, 1.0)];
-        settings.load = STUDIO_LOAD;
-        settings.medium = STUDIO_MEDIUM;
-        self.session.reload_brush(gpu);
-    }
-
-    /// Paints `stroke` with its own sample times, so the clock starts at 0.
-    fn paint(&mut self, gpu: &GpuContext, stroke: DemoStroke) {
-        let mut clock_ms = 0.0;
-        for (index, sample) in samples(stroke, self.stroke_box()).into_iter().enumerate() {
-            self.touch(gpu, index, sample);
-            clock_ms = f64::from(sample.time_ms);
-        }
-        self.session.end_stroke();
-        for _ in 0..SETTLE_FRAMES {
-            clock_ms += SETTLE_STEP_MS;
-            self.frame(gpu, clock_ms);
-        }
-    }
-
-    /// Feeds one sample of the stroke, showing a frame every few samples.
-    fn touch(&mut self, gpu: &GpuContext, index: usize, sample: StrokeSample) {
-        if index == 0 {
-            self.session.begin_stroke(gpu, sample);
-        } else {
-            self.session.add_samples(&[sample]);
-        }
-        if index.is_multiple_of(FRAME_EVERY_SAMPLES) {
-            self.frame(gpu, f64::from(sample.time_ms));
-        }
+        let loading = Loading {
+            recipe: &[(0, 1.0)],
+            load: STUDIO_LOAD,
+            medium: STUDIO_MEDIUM,
+        };
+        wear(&mut self.session, gpu, &fitted, loading);
     }
 
     fn stroke_box(&self) -> StrokeBox {
@@ -180,11 +153,5 @@ impl BrushStudio {
             width: width * (1.0 - 2.0 * MARGIN_X_SHARE),
             height: height * (1.0 - 2.0 * MARGIN_Y_SHARE),
         }
-    }
-
-    fn frame(&mut self, gpu: &GpuContext, clock_ms: f64) {
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        self.session.encode_frame(gpu, clock_ms, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
     }
 }

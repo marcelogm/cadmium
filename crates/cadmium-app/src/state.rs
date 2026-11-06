@@ -9,6 +9,7 @@ use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
+use cadmium_studio::StudioError;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
@@ -20,6 +21,7 @@ pub use gesture::LoadRing;
 pub use history::DryOutcome;
 pub use pen::PenReadout;
 pub use recipe::PigmentClick;
+pub use studio::StudioSession;
 
 mod clock;
 mod dip;
@@ -32,6 +34,7 @@ mod lab;
 mod library;
 mod pen;
 mod recipe;
+mod studio;
 mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
@@ -40,7 +43,12 @@ const EMPTY_MIXTURE: Mixture = Mixture {
 };
 
 pub type SharedState = Rc<RefCell<AppState>>;
-pub type Waker = Rc<dyn Fn()>;
+/// Wakes one view; returns false once the view is gone, which drops the waker.
+///
+/// A waker runs under the caller's `borrow_mut` of the state, so it must not
+/// borrow `AppState` or its `SharedState`: it only schedules work
+/// (`request_frame`, `queue_draw`) for the view to do later.
+pub type Waker = Rc<dyn Fn() -> bool>;
 
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
@@ -70,6 +78,8 @@ pub struct AppState {
     last_sample_time_ms: Option<u32>,
     clock: Box<dyn Clock>,
     wakers: Vec<Waker>,
+    studio: Option<StudioSession>,
+    studio_error: Option<StudioError>,
 }
 
 impl AppState {
@@ -109,6 +119,8 @@ impl AppState {
             last_sample_time_ms: None,
             clock: Box::new(SystemClock::new()),
             wakers: Vec::new(),
+            studio: None,
+            studio_error: None,
         };
         state.reload_brush();
         Ok(state)
@@ -127,10 +139,9 @@ impl AppState {
         self.wakers.push(waker);
     }
 
-    fn wake(&self) {
-        for waker in &self.wakers {
-            waker();
-        }
+    /// Wakes every view, dropping the wakers of views that are gone.
+    fn wake(&mut self) {
+        self.wakers.retain(|waker| waker());
     }
 }
 

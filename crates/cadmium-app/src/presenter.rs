@@ -37,6 +37,8 @@ pub enum PresentSource {
     #[default]
     Painting,
     Tray,
+    /// The brush studio's 3D scene; presented only while the studio is open.
+    Studio,
 }
 
 impl PresentSource {
@@ -52,10 +54,7 @@ impl PresentSource {
                 state.encode_frame(encoder);
                 state.session.presenter.encode_present(
                     gpu,
-                    PresentRequest {
-                        canvas: &state.session.canvas,
-                        view: state.view,
-                    },
+                    PresentRequest::of_canvas(&state.session.canvas, state.view),
                     target,
                     encoder,
                 );
@@ -65,14 +64,12 @@ impl PresentSource {
                 let view = tray_view((target.width(), target.height()));
                 state.session.presenter.encode_present(
                     gpu,
-                    PresentRequest {
-                        canvas: &state.session.tray,
-                        view,
-                    },
+                    PresentRequest::of_canvas(&state.session.tray, view),
                     target,
                     encoder,
                 );
             }
+            PresentSource::Studio => state.encode_studio_present(gpu, target, encoder),
         }
     }
 }

@@ -146,7 +146,8 @@ fn reference(@builtin(local_invocation_index) thread: u32) {
         if (weights[0] > 0.0) {
             found = weighted_heights[0] / weights[0];
         }
-        contact_reference.height = mix(contact_reference.height, found, dab.rest_follow);
+        contact_reference.height =
+            followed_rest(contact_reference.height, found, dab.rest_follow, dab.first_rest);
     }
 }
 

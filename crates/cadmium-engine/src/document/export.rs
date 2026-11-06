@@ -34,10 +34,7 @@ impl ExportedImage {
         session.encode_still_frame(gpu, &mut encoder);
         session.presenter.encode_present(
             gpu,
-            PresentRequest {
-                canvas: &session.canvas,
-                view: UNSCALED_VIEW,
-            },
+            PresentRequest::of_canvas(&session.canvas, UNSCALED_VIEW),
             &target,
             &mut encoder,
         );

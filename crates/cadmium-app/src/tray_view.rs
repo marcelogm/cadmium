@@ -165,9 +165,12 @@ impl PaintSurfaceWidget for TrayView {
     }
 }
 
-fn wake_tray(tray: &glib::WeakRef<TrayView>) {
-    if let Some(tray) = tray.upgrade() {
-        tray.request_frame();
-        tray.queue_draw();
-    }
+/// Whether the tray is still there to wake.
+fn wake_tray(tray: &glib::WeakRef<TrayView>) -> bool {
+    let Some(tray) = tray.upgrade() else {
+        return false;
+    };
+    tray.request_frame();
+    tray.queue_draw();
+    true
 }

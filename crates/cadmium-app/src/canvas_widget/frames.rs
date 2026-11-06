@@ -4,7 +4,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use super::CadmiumCanvas;
-use crate::handlers::run_handlers;
+use crate::handlers::{announce_gpu_loss_once, run_handlers};
 use crate::presenter::FramePresenter;
 use crate::state::AppState;
 use crate::surface_scale::viewport_px;
@@ -58,14 +58,12 @@ impl CadmiumCanvas {
 
     fn announce_if_gpu_lost(&self) {
         let imp = self.imp();
-        let lost = imp
-            .state
-            .get()
-            .and_then(|state| state.try_borrow().ok().map(|state| state.gpu_is_lost()))
-            .unwrap_or(false);
-        if lost && !imp.gpu_lost_announced.replace(true) {
-            run_handlers(&imp.gpu_lost_handlers, self);
-        }
+        announce_gpu_loss_once(
+            imp.state.get(),
+            &imp.gpu_lost_announced,
+            &imp.gpu_lost_handlers,
+            self,
+        );
     }
 
     fn present_if_needed(&self) {

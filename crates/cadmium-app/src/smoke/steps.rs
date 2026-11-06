@@ -11,8 +11,8 @@ use crate::LOG_DOMAIN;
 use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
-use super::SmokeConfig;
 use super::brushes::BrushStep;
+use super::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig, editor};
 
 const TOOL_ACTION: &str = "win.tool";
 const STROKE_PIGMENT: &str = "ultramarine_blue";
@@ -84,17 +84,22 @@ impl SmokeStep {
         &self,
         frame: u32,
         earliest_end_frame: u32,
+        expects_editor: bool,
         window: &CadmiumWindow,
     ) -> bool {
         match self {
             SmokeStep::ChooseTool(_)
             | SmokeStep::OpenDialog(_)
             | SmokeStep::ShowPage(_)
-            | SmokeStep::ShowTray
-            | SmokeStep::Brush(_) => true,
+            | SmokeStep::ShowTray => true,
+            SmokeStep::Brush(step) => step.is_ready(window),
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
-            SmokeStep::Screenshot(_) => frame >= earliest_end_frame && !window.thumbnails_pending(),
+            SmokeStep::Screenshot(_) => {
+                frame >= earliest_end_frame
+                    && !window.thumbnails_pending()
+                    && editor::ready_for_screenshot(window, expects_editor)
+            }
             SmokeStep::Quit => frame >= earliest_end_frame,
         }
     }
@@ -141,8 +146,9 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, tray, screenshot, quit. The brush folder
-    /// (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from it at start-up.
+    /// open, export, brush export, brush delete, page, tray, brush editor, screenshot, quit.
+    /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
+    /// it at start-up.
     pub(super) fn steps(&self) -> Vec<SmokeStep> {
         let mut steps = Vec::new();
         steps.extend(self.tool.map(SmokeStep::ChooseTool));
@@ -159,9 +165,27 @@ impl SmokeConfig {
         if self.tray {
             steps.push(SmokeStep::ShowTray);
         }
+        steps.extend(self.brushes.editor_step());
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));
         steps.push(SmokeStep::Quit);
         steps
+    }
+}
+
+impl SmokeStep {
+    /// Whether this step opens the brush editor, which the screenshot must then show.
+    pub(super) fn opens_editor(&self) -> bool {
+        matches!(self, SmokeStep::Brush(BrushStep::Editor(_)))
+    }
+
+    /// How many frames the run's end waits after this step: file work settles,
+    /// and the brush editor stays on show.
+    pub(super) fn settle_frames(&self) -> Option<u32> {
+        match self {
+            SmokeStep::Brush(BrushStep::Editor(frames)) => Some(*frames),
+            step if FileWork::is_file_step(step) => Some(SETTLE_FRAMES_AFTER_FILE_WORK),
+            _ => None,
+        }
     }
 }
 
@@ -190,7 +214,7 @@ impl FileWork {
         true
     }
 
-    pub(super) fn is_file_step(step: &SmokeStep) -> bool {
+    fn is_file_step(step: &SmokeStep) -> bool {
         matches!(
             step,
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) | SmokeStep::Brush(_)

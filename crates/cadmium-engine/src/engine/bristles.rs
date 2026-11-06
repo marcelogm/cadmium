@@ -7,9 +7,11 @@ mod rig;
 mod roots;
 mod state;
 mod tuning;
+mod view;
 
 pub(crate) use cells::CELL_GRID_SIDE;
 pub(crate) use clusters::{CLUSTER_SPAN_WORDS, MAX_CLUSTERS};
+pub use layout::bristle_reach_px;
 pub(super) use layout::disc_texel_count;
 pub(crate) use layout::{
     BRISTLE_VERTICES, LayoutRequest, MAX_BRISTLES, ReachRequest, reach_bound_px,
@@ -25,6 +27,7 @@ pub(crate) use state::{
 };
 pub use state::{BristleCell, BristleSnapshot, RELIEF_UM_PER_PX};
 pub(crate) use tuning::BristleTuning;
+pub use view::BristleView;
 
 #[cfg(test)]
 mod tests;

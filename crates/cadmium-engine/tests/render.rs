@@ -40,7 +40,12 @@ fn shade_and_present(
         },
         &mut enc,
     );
-    presenter.encode_present(gpu, PresentRequest { canvas, view }, &target, &mut enc);
+    presenter.encode_present(
+        gpu,
+        PresentRequest::of_canvas(canvas, view),
+        &target,
+        &mut enc,
+    );
     gpu.queue.submit([enc.finish()]);
     readback_rgba8(gpu, &target).unwrap()
 }
@@ -105,6 +110,122 @@ fn wet_ultramarine_over_white_looks_blue() {
         "{:?}",
         &px[i..i + 3]
     );
+}
+
+const CANVAS_SIZE: u32 = 128;
+
+fn present_to_rgba8(
+    gpu: &GpuContext,
+    presenter: &Presenter,
+    request: PresentRequest<'_>,
+    w: u32,
+    h: u32,
+) -> Vec<u8> {
+    let target = presenter.create_target(gpu, w, h);
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    presenter.encode_present(gpu, request, &target, &mut enc);
+    gpu.queue.submit([enc.finish()]);
+    readback_rgba8(gpu, &target).unwrap()
+}
+
+#[test]
+fn presenting_the_display_view_directly_matches_presenting_the_canvas() {
+    let gpu = GpuContext::new().unwrap();
+    let mut canvas = blank(&gpu);
+    let n = (CANVAS_SIZE * CANVAS_SIZE) as usize;
+    let mut pig = vec![0.0f32; n * 4];
+    for i in 0..n {
+        pig[i * 4] = 1.0;
+    }
+    canvas.write_f32(&gpu, StateTexture::WetPig0, &pig);
+    canvas.write_f32(&gpu, StateTexture::WetVol, &vec![200.0; n]);
+    canvas.dirty.mark_all();
+    let via_canvas = shade_and_present(&gpu, &mut canvas, IDENTITY_VIEW, CANVAS_SIZE, CANVAS_SIZE);
+    let presenter = Presenter::new(&gpu);
+    let request = PresentRequest {
+        source: canvas.view(StateTexture::Display),
+        view: IDENTITY_VIEW,
+    };
+    let via_view = present_to_rgba8(&gpu, &presenter, request, CANVAS_SIZE, CANVAS_SIZE);
+    assert_eq!(via_canvas, via_view);
+}
+
+const SOURCE_SIZE: (u32, u32) = (64, 32);
+const TARGET_SIZE: (u32, u32) = (96, 48);
+const F16_ONE: u16 = 0x3C00;
+const F16_HALF: u16 = 0x3800;
+const F16_NEG_TENTH: u16 = 0xAE66;
+const BACKGROUND_SRGB8: [u8; 3] = [192, 191, 188];
+
+fn solid_source(gpu: &GpuContext, rgb: [u16; 3]) -> wgpu::TextureView {
+    let (w, h) = SOURCE_SIZE;
+    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("solid_source"),
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba16Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let texel: Vec<u8> = [rgb[0], rgb[1], rgb[2], F16_ONE]
+        .iter()
+        .flat_map(|c| c.to_le_bytes())
+        .collect();
+    let data = texel.repeat((w * h) as usize);
+    gpu.queue.write_texture(
+        texture.as_image_copy(),
+        &data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w * 8),
+            rows_per_image: Some(h),
+        },
+        texture.size(),
+    );
+    texture.create_view(&Default::default())
+}
+
+fn present_solid(gpu: &GpuContext, rgb: [u16; 3]) -> Vec<u8> {
+    let source = solid_source(gpu, rgb);
+    let presenter = Presenter::new(gpu);
+    let request = PresentRequest {
+        source: &source,
+        view: IDENTITY_VIEW,
+    };
+    present_to_rgba8(gpu, &presenter, request, TARGET_SIZE.0, TARGET_SIZE.1)
+}
+
+fn texel(px: &[u8], x: u32, y: u32) -> [u8; 3] {
+    let i = ((y * TARGET_SIZE.0 + x) * 4) as usize;
+    [px[i], px[i + 1], px[i + 2]]
+}
+
+#[test]
+fn a_standalone_linear_source_is_encoded_and_surrounded_by_background() {
+    let gpu = GpuContext::new().unwrap();
+    let px = present_solid(&gpu, [F16_HALF; 3]);
+    let expected = (255.0_f32 * (1.055 * 0.5_f32.powf(1.0 / 2.4) - 0.055)).round() as i32;
+    for c in texel(&px, 10, 10) {
+        assert!((c as i32 - expected).abs() <= 1, "{c} vs {expected}");
+    }
+    assert_eq!(texel(&px, 80, 40), BACKGROUND_SRGB8);
+}
+
+#[test]
+fn an_out_of_gamut_source_is_compressed_toward_gray_not_clipped() {
+    let gpu = GpuContext::new().unwrap();
+    let px = present_solid(&gpu, [F16_NEG_TENTH, F16_HALF, F16_HALF]);
+    let [r, g, b] = texel(&px, 10, 10);
+    // Clipping alone would leave g = b = 0.5 linear (sRGB 188); compression pulls them in.
+    assert!(r <= 1, "red {r}");
+    assert!(g.abs_diff(b) <= 1, "{g} {b}");
+    assert!((180..=186).contains(&g), "green {g}");
 }
 
 #[test]
