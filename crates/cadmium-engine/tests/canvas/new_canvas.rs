@@ -116,3 +116,17 @@ fn gesso_swatch_is_near_white_and_imprimatura_is_warm() {
     assert!(red > green && green > blue, "{:?}", [red, green, blue]);
     assert!(red < gesso[0] || blue < gesso[2]);
 }
+
+#[test]
+fn a_paper_ground_is_brighter_than_gesso_and_below_full_reflectance() {
+    let db = PigmentDb::builtin();
+    let gesso = primer_srgb8(&db, Primer::WhiteGesso);
+    let paper = primer_srgb8(&db, Primer::Paper);
+    assert!(paper.iter().all(|channel| *channel >= 244), "{paper:?}");
+    assert!(
+        (0..3).all(|c| paper[c] > gesso[c]),
+        "{paper:?} vs {gesso:?}"
+    );
+    let bands = primer_reflectance(&db, Primer::Paper);
+    assert!(bands.iter().all(|r| *r > 0.0 && *r < 1.0), "{bands:?}");
+}

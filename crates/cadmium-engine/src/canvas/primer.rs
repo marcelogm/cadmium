@@ -12,6 +12,9 @@ const IMPRIMATURA_PIGMENT_ID: &str = "burnt_sienna";
 const IMPRIMATURA_FRACTION: f32 = 0.5;
 const IMPRIMATURA_THICKNESS_UM: f32 = 12.0;
 const TRAY_REFLECTANCE: f32 = 0.75;
+/// The paper ground's brightest band: just under full reflectance, so layers composited
+/// over it stay well clear of the `1 − R·R` pole.
+const PAPER_TOP_REFLECTANCE: f32 = 0.99;
 
 const INIT_WORKGROUP_SIZE: u32 = 8;
 
@@ -42,6 +45,10 @@ pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
             )
         }
         Primer::Tray => [TRAY_REFLECTANCE; BANDS],
+        Primer::Paper => {
+            let top = gesso.iter().copied().fold(0.0, f32::max);
+            gesso.map(|band| band / top * PAPER_TOP_REFLECTANCE)
+        }
     }
 }
 

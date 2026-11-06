@@ -9,6 +9,9 @@ pub enum Primer {
     WhiteGesso,
     SiennaImprimatura,
     Tray,
+    /// A bright, plain ground for previews painted by hand: gesso's white lifted to paper.
+    /// Not offered for paintings.
+    Paper,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
