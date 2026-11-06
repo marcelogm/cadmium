@@ -1,5 +1,5 @@
-//! The example strokes under the schematic (D3): an S-curve and a pressure ramp, painted by
-//! the engine with the draft brush and the painting's paint (C4).
+//! The example strokes under the schematic: an S-curve and a pressure ramp, painted by
+//! the engine with the draft brush and the painting's paint.
 
 use std::cell::RefCell;
 

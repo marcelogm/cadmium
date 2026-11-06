@@ -1,4 +1,4 @@
-//! What the editor's example strokes are painted with: the painting's own paint (C4).
+//! What the editor's example strokes are painted with: the painting's own paint.
 
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::MAX_SLOTS;
@@ -11,7 +11,7 @@ use crate::presets::WHITES;
 const FALLBACK_LOAD: f32 = 1.0;
 
 impl AppState {
-    /// The painting's canvas and paint (C4). A brush that would show nothing — empty, or
+    /// The painting's canvas and paint. A brush that would show nothing — empty, or
     /// holding only whites, which vanish on a white primer — is shown loaded with the
     /// studio's demo pigment instead, like the rack's thumbnails.
     pub fn studio_paint(&self) -> StudioPaint {
