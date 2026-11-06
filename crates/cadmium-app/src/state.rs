@@ -9,6 +9,7 @@ use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
+use cadmium_studio::StudioError;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
@@ -20,6 +21,7 @@ pub use gesture::LoadRing;
 pub use history::DryOutcome;
 pub use pen::PenReadout;
 pub use recipe::PigmentClick;
+pub use studio::StudioSession;
 
 mod clock;
 mod dip;
@@ -32,6 +34,7 @@ mod lab;
 mod library;
 mod pen;
 mod recipe;
+mod studio;
 mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
@@ -70,6 +73,8 @@ pub struct AppState {
     last_sample_time_ms: Option<u32>,
     clock: Box<dyn Clock>,
     wakers: Vec<Waker>,
+    studio: Option<StudioSession>,
+    studio_error: Option<StudioError>,
 }
 
 impl AppState {
@@ -109,6 +114,8 @@ impl AppState {
             last_sample_time_ms: None,
             clock: Box::new(SystemClock::new()),
             wakers: Vec::new(),
+            studio: None,
+            studio_error: None,
         };
         state.reload_brush();
         Ok(state)
