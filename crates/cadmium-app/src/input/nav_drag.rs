@@ -97,7 +97,6 @@ pub(super) struct NavPress {
     pub(super) button: NavButton,
     pub(super) from_pen: bool,
     /// The mode held keys (Space, Ctrl or Shift) have ready for the primary contact, if any.
-    /// It steers only the primary contact.
     pub(super) held: Option<NavMode>,
     /// Whether the current tool pans with the primary contact (the Move tool).
     pub(super) tool_pans: bool,

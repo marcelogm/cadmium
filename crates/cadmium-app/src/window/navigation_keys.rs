@@ -7,8 +7,8 @@ use crate::input::nav_drag::{SpacePress, modifiers_after, space_press};
 
 impl CadmiumWindow {
     /// Tracks the keys that ready a navigation drag on the canvas: Space moves, Ctrl zooms,
-    /// Shift rotates. Space is taken before the focused widget sees it, even from open popovers and menus,
-    /// except by text fields and dialogs.
+    /// Shift rotates. Space is taken before the focused widget sees it, even from open
+    /// popovers and menus, except by text fields and dialogs.
     pub(super) fn setup_navigation_keys(&self) {
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
@@ -25,11 +25,11 @@ impl CadmiumWindow {
             move |_, key, _, modifiers| window.key_released(key, modifiers)
         ));
         self.add_controller(keys);
-        self.connect_is_active_notify(Self::release_space_when_inactive);
+        self.connect_is_active_notify(Self::release_held_keys_when_inactive);
     }
 
     /// Drops the held keys when the window loses focus, since their releases would go unseen.
-    fn release_space_when_inactive(&self) {
+    fn release_held_keys_when_inactive(&self) {
         if !self.is_active() {
             self.imp().space_claimed.set(false);
             self.show_held_keys(false, gdk::ModifierType::empty());
