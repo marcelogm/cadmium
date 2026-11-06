@@ -253,3 +253,26 @@ fn a_rotate_drag_pressed_on_the_centre_rotates_once_it_has_moved_out() {
     };
     assert!((delta - std::f32::consts::FRAC_PI_2).abs() < 1e-4);
 }
+
+#[test]
+fn modifiers_follow_ctrl_and_shift_presses_and_releases() {
+    let none = gdk::ModifierType::empty();
+    let ctrl = gdk::ModifierType::CONTROL_MASK;
+    let shift = gdk::ModifierType::SHIFT_MASK;
+    assert_eq!(modifiers_after(gdk::Key::Control_L, true, none), ctrl);
+    assert_eq!(modifiers_after(gdk::Key::Shift_R, true, ctrl), ctrl | shift);
+    assert_eq!(
+        modifiers_after(gdk::Key::Control_R, false, ctrl | shift),
+        shift
+    );
+    assert_eq!(modifiers_after(gdk::Key::Shift_L, false, shift), none);
+    assert_eq!(modifiers_after(gdk::Key::a, true, ctrl), ctrl);
+}
+
+#[test]
+fn a_space_hold_keeps_claiming_space_until_it_is_released() {
+    assert_eq!(space_press(false, true), SpacePress::Hold);
+    assert_eq!(space_press(true, true), SpacePress::Hold);
+    assert_eq!(space_press(true, false), SpacePress::Release);
+    assert_eq!(space_press(false, false), SpacePress::Pass);
+}

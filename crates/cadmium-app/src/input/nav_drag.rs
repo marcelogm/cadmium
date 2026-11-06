@@ -140,6 +140,47 @@ pub(crate) fn space_mode(modifiers: gdk::ModifierType) -> NavMode {
     }
 }
 
+/// The modifiers in force once `key` is pressed or released, given the `before` state
+/// that key events carry. Only Ctrl and Shift matter to a Space drag; other keys change nothing.
+pub(crate) fn modifiers_after(
+    key: gdk::Key,
+    pressed: bool,
+    before: gdk::ModifierType,
+) -> gdk::ModifierType {
+    let mask = match key {
+        gdk::Key::Control_L | gdk::Key::Control_R => gdk::ModifierType::CONTROL_MASK,
+        gdk::Key::Shift_L | gdk::Key::Shift_R => gdk::ModifierType::SHIFT_MASK,
+        _ => return before,
+    };
+    if pressed {
+        before | mask
+    } else {
+        before - mask
+    }
+}
+
+/// What the window does with a Space press.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SpacePress {
+    /// Leave the press to the focused widget.
+    Pass,
+    /// Take the press and ready (or keep ready) a navigation drag.
+    Hold,
+    /// Take the press and drop the hold: a dialog or text field took over mid-hold.
+    Release,
+}
+
+/// Decides a Space press. `holding` is whether a hold is active; `free` is whether Space is
+/// free for navigation (no dialog, no text field focused). A hold keeps claiming Space even
+/// when not free, so auto-repeat can't leak into a dialog that opened meanwhile.
+pub(crate) fn space_press(holding: bool, free: bool) -> SpacePress {
+    match (free, holding) {
+        (true, _) => SpacePress::Hold,
+        (false, true) => SpacePress::Release,
+        (false, false) => SpacePress::Pass,
+    }
+}
+
 /// Whether a click of `button` picks a colour. It doesn't check for a stroke in
 /// progress; callers do (`side_button_may_act`).
 pub(super) fn picks_colour(
