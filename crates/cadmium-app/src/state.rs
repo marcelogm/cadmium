@@ -44,6 +44,10 @@ const EMPTY_MIXTURE: Mixture = Mixture {
 
 pub type SharedState = Rc<RefCell<AppState>>;
 /// Wakes one view; returns false once the view is gone, which drops the waker.
+///
+/// A waker runs under the caller's `borrow_mut` of the state, so it must not
+/// borrow `AppState` or its `SharedState`: it only schedules work
+/// (`request_frame`, `queue_draw`) for the view to do later.
 pub type Waker = Rc<dyn Fn() -> bool>;
 
 pub struct AppState {
