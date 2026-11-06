@@ -63,7 +63,10 @@ fn fit_height(scroller: &gtk::ScrolledWindow, list: &gtk::ListBox) {
     if list.root().is_none() {
         return;
     }
-    let natural = |widget: &gtk::Widget| widget.measure(gtk::Orientation::Vertical, -1).1;
+    let natural = |widget: &gtk::Widget| {
+        let (_, natural, _, _) = widget.measure(gtk::Orientation::Vertical, -1);
+        natural
+    };
     let hidden: i32 = std::iter::successors(list.row_at_index(VISIBLE_ROWS), |row| {
         row.next_sibling().and_downcast::<gtk::ListBoxRow>()
     })

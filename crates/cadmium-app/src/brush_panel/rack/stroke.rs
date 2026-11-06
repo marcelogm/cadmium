@@ -1,4 +1,4 @@
-//! A rack row's stroke: the brush's thumbnail at a fixed size, painted with Cairo.
+//! A rack row's stroke: the brush's thumbnail scaled into a fixed size, painted with Cairo.
 //!
 //! A fixed-size drawing area rather than a `gtk::Picture`, whose natural size would follow
 //! the texture and take the labels' width or stretch the row.

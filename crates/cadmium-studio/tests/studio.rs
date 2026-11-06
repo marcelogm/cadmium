@@ -34,6 +34,21 @@ fn mean_colour(pixels: &[[u8; 4]]) -> [f64; 3] {
     sum.map(|channel| channel / pixels.len() as f64)
 }
 
+/// Averages each 2x2 block of a `width`-wide RGBA8 image.
+fn halve(rgba: &[u8], width: usize) -> Vec<u8> {
+    let height = rgba.len() / 4 / width;
+    let at = |x: usize, y: usize, c: usize| u32::from(rgba[(y * width + x) * 4 + c]);
+    let block = |x: usize, y: usize, c: usize| {
+        let sum = at(x, y, c) + at(x + 1, y, c) + at(x, y + 1, c) + at(x + 1, y + 1, c);
+        ((sum + 2) / 4) as u8
+    };
+    (0..height)
+        .step_by(2)
+        .flat_map(|y| (0..width).step_by(2).map(move |x| (x, y)))
+        .flat_map(|(x, y)| (0..4).map(move |c| block(x, y, c)))
+        .collect()
+}
+
 fn brush_with(head: HeadSpec) -> BrushSpec {
     factory_brushes()
         .into_iter()
@@ -124,5 +139,32 @@ fn a_thumbnail_is_painted_in_ultramarine() {
     assert!(
         b > r + 20.0 && b > g + 20.0,
         "mean inked colour {r} {g} {b}"
+    );
+}
+
+#[test]
+fn the_full_thumbnail_is_the_thumbnail_at_twice_the_size() {
+    let gpu = GpuContext::new().unwrap();
+    let mut studio = BrushStudio::new(&gpu).unwrap();
+    let brush = brush_with(HeadSpec::FLAT);
+    let thumb = studio.thumbnail(&gpu, &brush).unwrap();
+    let full = studio.thumbnail_full(&gpu, &brush).unwrap();
+    assert_eq!(
+        (full.width, full.height),
+        (THUMBNAIL_SIZE.0 * 2, THUMBNAIL_SIZE.1 * 2)
+    );
+    assert_eq!(full.rgba.len(), (full.width * full.height * 4) as usize);
+    let halved = halve(&full.rgba, full.width as usize);
+    let off = halved
+        .iter()
+        .zip(&thumb.rgba)
+        .map(|(a, b)| f64::from(a.abs_diff(*b)))
+        .sum::<f64>()
+        / halved.len() as f64;
+    assert!(off < 4.0, "mean channel difference {off}");
+    let (shown, kept) = (ink_share(&thumb.rgba), ink_share(&halved));
+    assert!(
+        (shown - kept).abs() < 0.1 * shown,
+        "inked {shown} vs {kept}"
     );
 }

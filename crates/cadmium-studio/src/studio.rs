@@ -12,8 +12,8 @@ use crate::demo::{DemoStroke, StrokeBox};
 use crate::loading::{Loading, wear};
 use crate::schedule::{StrokeSchedule, replay};
 
-/// A rack row's stroke (10:3), shown 153x46 px: about 1.5x device pixels for a
-/// sharp HiDPI row. Unrelated to `STUDIO_SCALE`, the supersampling factor.
+/// A rack row's stroke (10:3), shown 153x46 px. The rack takes `thumbnail_full`, at
+/// `STUDIO_SCALE` times this, so a row stays sharp at a screen scale of 2.
 pub const THUMBNAIL_SIZE: (u32, u32) = (240, 72);
 const STUDIO_SCALE: u32 = 2;
 /// Small enough that a fan's splayed hairs stay inside the thumbnail.
@@ -109,30 +109,47 @@ impl BrushStudio {
         brush: &BrushSpec,
     ) -> Result<Thumbnail, StudioError> {
         self.run(gpu, brush, DemoStroke::SCurve)?;
-        let rgba = self.rgba(gpu)?;
-        Ok(Thumbnail {
-            width: THUMBNAIL_SIZE.0,
-            height: THUMBNAIL_SIZE.1,
-            rgba,
-        })
+        Ok(self.capture(gpu, 1)?)
+    }
+
+    /// The brush's S-curve at the studio canvas's own resolution, twice `THUMBNAIL_SIZE`:
+    /// sharp where a thumbnail pixel spans more than one screen pixel.
+    pub fn thumbnail_full(
+        &mut self,
+        gpu: &GpuContext,
+        brush: &BrushSpec,
+    ) -> Result<Thumbnail, StudioError> {
+        self.run(gpu, brush, DemoStroke::SCurve)?;
+        Ok(self.capture(gpu, STUDIO_SCALE)?)
     }
 
     /// The canvas as shown, at thumbnail size, as straight sRGB RGBA8.
     pub fn rgba(&self, gpu: &GpuContext) -> Result<Vec<u8>, GpuLost> {
+        Ok(self.capture(gpu, 1)?.rgba)
+    }
+
+    /// The canvas as shown at `scale` times `THUMBNAIL_SIZE`, `scale` at most `STUDIO_SCALE`.
+    fn capture(&self, gpu: &GpuContext, scale: u32) -> Result<Thumbnail, GpuLost> {
+        let (width, height) = (THUMBNAIL_SIZE.0 * scale, THUMBNAIL_SIZE.1 * scale);
         let presenter = &self.session.presenter;
-        let target = presenter.create_target(gpu, THUMBNAIL_SIZE.0, THUMBNAIL_SIZE.1);
+        let target = presenter.create_target(gpu, width, height);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         let request = PresentRequest::of_canvas(
             &self.session.canvas,
             ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
-                zoom: 1.0 / STUDIO_SCALE as f32,
+                zoom: scale as f32 / STUDIO_SCALE as f32,
             },
         );
         presenter.encode_present(gpu, request, &target, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        readback_rgba8(gpu, &target)
+        let rgba = readback_rgba8(gpu, &target)?;
+        Ok(Thumbnail {
+            width,
+            height,
+            rgba,
+        })
     }
 
     /// Holds `brush` at a size that fits, freshly loaded with the studio paint.
