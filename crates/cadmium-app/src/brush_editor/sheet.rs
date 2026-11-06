@@ -106,6 +106,7 @@ impl Editor {
             return;
         };
         let gpu = window.state().borrow().gpu.clone();
+        self.sheet.view.finish_stroke();
         let cleared = self.sheet.shared.borrow_mut().clear(&gpu);
         match cleared {
             Ok(()) => {
@@ -132,6 +133,7 @@ fn clear_button() -> gtk::Button {
         .build();
     gtk::Button::builder()
         .child(&label)
+        .tooltip_text("Clear the test sheet")
         .halign(gtk::Align::End)
         .valign(gtk::Align::Start)
         .margin_top(CLEAR_MARGIN)
@@ -139,7 +141,8 @@ fn clear_button() -> gtk::Button {
         .build()
 }
 
-/// A faint line in the middle of a blank sheet; pointer events go through it.
+/// A faint line in the middle of a blank sheet; pointer events go through it, and screen
+/// readers skip it (the sheet's own description says as much).
 fn hint_label() -> gtk::Label {
     gtk::Label::builder()
         .use_markup(true)
@@ -147,6 +150,7 @@ fn hint_label() -> gtk::Label {
         .halign(gtk::Align::Center)
         .valign(gtk::Align::Center)
         .can_target(false)
+        .accessible_role(gtk::AccessibleRole::Presentation)
         .build()
 }
 

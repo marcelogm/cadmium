@@ -137,7 +137,7 @@ impl TestSheetView {
     }
 
     /// Ends the stroke under way, if any.
-    fn finish_stroke(&self) {
+    pub(in crate::brush_editor) fn finish_stroke(&self) {
         let imp = self.imp();
         imp.stroking_device.replace(None);
         if !imp.stroking.replace(false) {
