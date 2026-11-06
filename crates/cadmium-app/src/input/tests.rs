@@ -1,3 +1,4 @@
+use super::nav_drag::NavMode;
 use super::*;
 
 #[test]
@@ -13,16 +14,20 @@ fn pen_down_during_a_pan_does_not_paint() {
 }
 
 #[test]
-fn one_pan_ending_leaves_the_other_panning() {
-    let pans = PanFlags::default();
-    pans.set(PanGesture::Primary, true);
-    pans.set(PanGesture::Middle, true);
-    pans.set(PanGesture::Middle, false);
-    assert!(pans.any());
-    assert!(pans.is_panning(PanGesture::Primary));
-    assert!(!pans.is_panning(PanGesture::Middle));
-    pans.set(PanGesture::Primary, false);
-    assert!(!pans.any());
+fn one_drag_ending_leaves_the_other_navigating() {
+    let drags = NavDrags::default();
+    drags.set(
+        NavButton::Primary,
+        Some(NavDrag::new(NavMode::Pan, (0.0, 0.0))),
+    );
+    drags.set(
+        NavButton::Middle,
+        Some(NavDrag::new(NavMode::Zoom, (0.0, 0.0))),
+    );
+    drags.set(NavButton::Middle, None);
+    assert!(drags.any());
+    drags.set(NavButton::Primary, None);
+    assert!(!drags.any());
 }
 
 #[test]

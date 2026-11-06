@@ -80,6 +80,7 @@ fn reference_thumbnail(gpu: &GpuContext, brush: &BrushSpec) -> Vec<u8> {
             origin_x: 0.0,
             origin_y: 0.0,
             zoom: 0.5,
+            rotation: 0.0,
         },
     );
     presenter.encode_present(gpu, request, &target, &mut encoder);

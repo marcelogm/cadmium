@@ -108,6 +108,7 @@ pub fn presented_rgba(gpu: &GpuContext, s: &PaintSession, width: u32, height: u3
                 origin_x: 0.0,
                 origin_y: 0.0,
                 zoom: 1.0,
+                rotation: 0.0,
             },
         ),
         &target,

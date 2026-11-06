@@ -17,6 +17,7 @@ const ONE_TO_ONE: ViewTransform = ViewTransform {
     origin_x: 0.0,
     origin_y: 0.0,
     zoom: 1.0,
+    rotation: 0.0,
 };
 /// How far a fresh dip may differ from the first one, as a share of it.
 const DIP_TOLERANCE: f64 = 0.01;

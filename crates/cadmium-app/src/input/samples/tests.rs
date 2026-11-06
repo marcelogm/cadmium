@@ -85,3 +85,37 @@ fn a_history_point_keeps_its_distance_from_the_event() {
     let to_widget = SurfaceToWidget::anchored((300.0, 120.0), (40.0, 70.0));
     assert_eq!(to_widget.point(295.0, 132.0), (35.0, 82.0));
 }
+
+#[test]
+fn a_turned_view_turns_the_pen_tilt_back_onto_the_canvas() {
+    let sample = StrokeSample {
+        x: 1.0,
+        y: 2.0,
+        pressure: 0.5,
+        tilt_x_deg: 30.0,
+        tilt_y_deg: 0.0,
+        time_ms: 7,
+    };
+    let on_canvas = tilt_onto_canvas(sample, std::f32::consts::FRAC_PI_2);
+    assert!(on_canvas.tilt_x_deg.abs() < 1e-4);
+    assert!((on_canvas.tilt_y_deg + 30.0).abs() < 1e-4);
+    assert_eq!((on_canvas.x, on_canvas.y, on_canvas.time_ms), (1.0, 2.0, 7));
+    assert_eq!(tilt_onto_canvas(sample, 0.0), sample);
+}
+
+#[test]
+fn an_off_axis_tilt_turns_by_the_view_rotation_and_keeps_its_size() {
+    let sample = StrokeSample {
+        tilt_x_deg: 20.0,
+        tilt_y_deg: 10.0,
+        ..fallback()
+    };
+    let rotation = 30.0_f32.to_radians();
+    let (s, c) = rotation.sin_cos();
+    let on_canvas = tilt_onto_canvas(sample, rotation);
+    assert!((on_canvas.tilt_x_deg - (c * 20.0 + s * 10.0)).abs() < 1e-4);
+    assert!((on_canvas.tilt_y_deg - (-s * 20.0 + c * 10.0)).abs() < 1e-4);
+    let size = |x: f32, y: f32| x.hypot(y);
+    let turned = size(on_canvas.tilt_x_deg, on_canvas.tilt_y_deg);
+    assert!((turned - size(20.0, 10.0)).abs() < 1e-4);
+}

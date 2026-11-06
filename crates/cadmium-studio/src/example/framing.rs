@@ -19,6 +19,7 @@ pub(super) fn view_for((width, height): (u32, u32)) -> ViewTransform {
         origin_x: (-(sheet_w / zoom - canvas_w) / 2.0) as f32,
         origin_y: (-(sheet_h / zoom - canvas_h) / 2.0) as f32,
         zoom: zoom as f32,
+        rotation: 0.0,
     }
 }
 

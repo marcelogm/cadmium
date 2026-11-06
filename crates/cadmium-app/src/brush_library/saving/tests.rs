@@ -1,7 +1,7 @@
 use cadmium_engine::brush::{BrushSpec, HeadSpec, brush_to_json, factory_brushes};
 
-use super::super::test_dir::TempDir;
 use crate::brush_library::{BrushLibrary, LibraryError};
+use crate::test_dir::TempDir;
 
 fn custom(name: &str) -> BrushSpec {
     BrushSpec {

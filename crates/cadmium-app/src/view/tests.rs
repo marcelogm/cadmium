@@ -1,3 +1,5 @@
+use std::f32::consts::{FRAC_PI_2, PI};
+
 use super::*;
 
 const TOLERANCE: f64 = 1e-3;
@@ -96,4 +98,78 @@ fn every_viewport_corner_lands_on_the_canvas() {
             assert!(inside((1200, 900), point), "{viewport:?} {point:?}");
         }
     }
+}
+
+fn tilted_view(rotation: f32) -> ViewTransform {
+    ViewTransform {
+        origin_x: 120.0,
+        origin_y: -40.0,
+        zoom: 2.5,
+        rotation,
+    }
+}
+
+#[test]
+fn screen_and_canvas_points_round_trip_at_any_turn() {
+    for rotation in [0.0, 0.3, FRAC_PI_2, -2.0, PI] {
+        let view = tilted_view(rotation);
+        let canvas = viewport_to_canvas(view, 310.0, 75.0);
+        assert!(close(
+            canvas_to_viewport(view, canvas.0, canvas.1),
+            (310.0, 75.0)
+        ));
+    }
+}
+
+#[test]
+fn a_quarter_turn_shows_the_canvas_x_axis_going_down_the_screen() {
+    let view = ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom: 1.0,
+        rotation: FRAC_PI_2,
+    };
+    assert!(close(canvas_to_viewport(view, 10.0, 0.0), (0.0, 10.0)));
+}
+
+#[test]
+fn zooming_a_turned_view_keeps_the_canvas_point_under_the_pointer() {
+    let view = tilted_view(0.7);
+    let before = viewport_to_canvas(view, 300.0, 200.0);
+    let zoomed = zoom_around(view, 300.0, 200.0, view.zoom * 3.0);
+    assert!(close(viewport_to_canvas(zoomed, 300.0, 200.0), before));
+    assert_eq!(zoomed.rotation, view.rotation);
+}
+
+#[test]
+fn panning_a_turned_view_moves_the_canvas_with_the_pointer() {
+    let view = tilted_view(1.1);
+    let under_pointer = viewport_to_canvas(view, 100.0, 100.0);
+    let panned = pan(view, 40.0, -20.0);
+    assert!(close(
+        viewport_to_canvas(panned, 140.0, 80.0),
+        under_pointer
+    ));
+}
+
+#[test]
+fn rotating_keeps_the_canvas_point_under_the_anchor() {
+    let view = tilted_view(0.2);
+    let before = viewport_to_canvas(view, 250.0, 150.0);
+    let rotated = rotate_around(view, 250.0, 150.0, 0.5);
+    assert!(close(viewport_to_canvas(rotated, 250.0, 150.0), before));
+    assert!((rotated.rotation - 0.7).abs() < 1e-6);
+}
+
+#[test]
+fn rotation_stays_within_half_a_turn_either_way() {
+    let view = rotate_around(tilted_view(3.0), 0.0, 0.0, 1.0);
+    assert!((view.rotation - (4.0 - 2.0 * PI)).abs() < 1e-5);
+    assert!((normalise_rotation(-PI) - PI).abs() < 1e-6);
+    assert_eq!(normalise_rotation(f32::NAN), 0.0);
+}
+
+#[test]
+fn fitting_straightens_the_view() {
+    assert_eq!(fit_view((800, 600), (1000.0, 700.0), 24.0).rotation, 0.0);
 }

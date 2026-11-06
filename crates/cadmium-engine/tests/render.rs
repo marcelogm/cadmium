@@ -54,6 +54,7 @@ const IDENTITY_VIEW: ViewTransform = ViewTransform {
     origin_x: 0.0,
     origin_y: 0.0,
     zoom: 1.0,
+    rotation: 0.0,
 };
 
 #[test]
@@ -84,6 +85,7 @@ fn area_outside_the_canvas_is_background() {
             origin_x: -50.0,
             origin_y: 0.0,
             zoom: 1.0,
+            rotation: 0.0,
         },
         128,
         128,
@@ -263,4 +265,28 @@ fn impasto_edge_facing_the_light_is_brighter_than_the_edge_in_shadow() {
     let (lit_top, shaded_bottom) = (luma(64, 32), luma(64, 95));
     assert!(lit_left > shaded_right + 30, "{lit_left} vs {shaded_right}");
     assert!(lit_top > shaded_bottom + 30, "{lit_top} vs {shaded_bottom}");
+}
+
+#[test]
+fn a_quarter_turn_swings_the_canvas_around_the_view_origin() {
+    let gpu = GpuContext::new().unwrap();
+    let mut canvas = blank(&gpu);
+    let turned = ViewTransform {
+        rotation: std::f32::consts::FRAC_PI_2,
+        ..IDENTITY_VIEW
+    };
+    let px = shade_and_present(&gpu, &mut canvas, turned, TARGET_SIZE.0, TARGET_SIZE.1);
+    assert_eq!(texel(&px, 48, 24), BACKGROUND_SRGB8);
+    let shifted_into_view = ViewTransform {
+        origin_y: 64.0,
+        ..turned
+    };
+    let px = shade_and_present(
+        &gpu,
+        &mut canvas,
+        shifted_into_view,
+        TARGET_SIZE.0,
+        TARGET_SIZE.1,
+    );
+    assert_ne!(texel(&px, 48, 24), BACKGROUND_SRGB8);
 }

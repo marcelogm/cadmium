@@ -109,6 +109,10 @@ impl CadmiumCanvas {
 }
 
 impl PaintSurfaceWidget for CadmiumCanvas {
+    fn view_rotation(&self) -> f32 {
+        self.state().borrow().view.rotation
+    }
+
     fn state(&self) -> SharedState {
         CadmiumCanvas::state(self)
     }
@@ -145,6 +149,10 @@ impl PaintSurfaceWidget for CadmiumCanvas {
 
     fn contact_released(&self) {
         run_handlers(&self.imp().released_handlers, self);
+    }
+
+    fn holds_navigation(&self) -> bool {
+        self.space_mode().is_some()
     }
 }
 

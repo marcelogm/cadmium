@@ -1,7 +1,7 @@
 use cadmium_engine::brush::{BrushSettings, BrushSpec, HeadSpec, brush_to_json, factory_brushes};
 
-use super::test_dir::TempDir;
 use super::{BrushLibrary, LibraryError, export_name, file_name_for};
+use crate::test_dir::TempDir;
 
 fn names(library: &BrushLibrary) -> Vec<String> {
     library.all().map(|brush| brush.name.clone()).collect()

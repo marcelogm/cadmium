@@ -1,4 +1,5 @@
 use super::*;
+use crate::input::nav_drag::NavMode;
 
 #[derive(Default)]
 pub struct CadmiumCanvas {
@@ -21,6 +22,7 @@ pub struct CadmiumCanvas {
     pub gpu_lost_handlers: RefCell<Vec<CanvasHandler>>,
     pub released_handlers: RefCell<Vec<CanvasHandler>>,
     pub gpu_lost_announced: Cell<bool>,
+    pub(crate) space_mode: Cell<Option<NavMode>>,
 }
 
 #[glib::object_subclass]

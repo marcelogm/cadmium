@@ -2,11 +2,19 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::application::ACCELERATORS;
+use crate::input::nav_drag::NavMode;
 use crate::tools::UiTool;
 
 const APPLICATION_ICON: &str = "io.github.marcelogm.Cadmium";
 const PIGMENT_DATA_CREDIT: &str =
     "Provisional spectra, hand-tuned from each pigment's known appearance; not measurements";
+
+/// The hold-and-drag gestures, with the keys held for each and the mode they start.
+const NAVIGATION_GESTURES: [(&str, &str, NavMode); 3] = [
+    ("Move Canvas", "space", NavMode::Pan),
+    ("Zoom Canvas", "<Control>space", NavMode::Zoom),
+    ("Rotate Canvas", "<Shift>space", NavMode::Rotate),
+];
 
 pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
     (
@@ -34,7 +42,10 @@ pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
             ("Zoom In", "win.zoom-in"),
             ("Zoom Out", "win.zoom-out"),
             ("Fit to Window", "win.zoom-fit"),
+            ("Rotate Left", "win.rotate-left"),
+            ("Rotate Right", "win.rotate-right"),
             ("Show or Hide Sidebar", "win.toggle-sidebar"),
+            ("Preferences", "win.preferences"),
             ("Keyboard Shortcuts", "app.shortcuts"),
         ],
     ),
@@ -75,7 +86,19 @@ pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     for (title, entries) in ACTION_SHORTCUTS {
         dialog.add(action_shortcuts(title, entries));
     }
+    dialog.add(navigation_shortcuts());
     dialog
+}
+
+/// The Canvas Navigation section of the shortcuts dialog.
+fn navigation_shortcuts() -> adw::ShortcutsSection {
+    let section = adw::ShortcutsSection::new(Some("Canvas Navigation"));
+    for (label, keys, _) in NAVIGATION_GESTURES {
+        let item = adw::ShortcutsItem::new(label, keys);
+        item.set_subtitle("Hold and drag");
+        section.add(item);
+    }
+    section
 }
 
 fn tool_shortcuts() -> adw::ShortcutsSection {

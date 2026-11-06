@@ -1,6 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod application;
+mod atomic_file;
 mod brush_editor;
 mod brush_files;
 mod brush_library;
@@ -18,8 +19,10 @@ mod ink;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;
+mod preferences_dialog;
 mod presenter;
 mod presets;
+mod settings;
 mod side_panel;
 mod sliders;
 #[cfg_attr(
@@ -30,6 +33,8 @@ mod smoke;
 mod state;
 mod surface_scale;
 mod swatch;
+#[cfg(test)]
+mod test_dir;
 mod thumbnails;
 mod tools;
 mod tray_view;

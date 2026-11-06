@@ -12,6 +12,7 @@ use cadmium_engine::stroke::Tool;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
+use crate::settings::SettingsStore;
 use crate::tools::UiTool;
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
@@ -52,6 +53,7 @@ pub struct AppState {
     pub gpu: Rc<GpuContext>,
     pub session: PaintSession,
     pub brushes: BrushLibrary,
+    pub settings: SettingsStore,
     /// The library brush last picked, told apart from others with the same head and hair.
     worn_brush_index: Option<usize>,
     pub view: ViewTransform,
@@ -88,11 +90,13 @@ impl AppState {
             gpu,
             session,
             brushes: BrushLibrary::factory_only(),
+            settings: SettingsStore::default(),
             worn_brush_index: None,
             view: ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
                 zoom: 1.0,
+                rotation: 0.0,
             },
             ui_tool: UiTool::default(),
             tube_slot: 0,

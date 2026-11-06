@@ -1,6 +1,9 @@
 use cadmium_engine::stroke::StrokeSample;
 use gtk::gdk;
 use gtk::glib::translate::IntoGlib;
+use gtk::prelude::*;
+
+use super::nav_drag::PenButtons;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
 const MOUSE_PRESSURE: f32 = 1.0;
@@ -117,6 +120,18 @@ pub(crate) fn motion_samples(
     samples
 }
 
+/// `sample` with its screen-space tilt turned into the canvas's frame, for a view whose
+/// picture is turned clockwise by `rotation` radians.
+pub(crate) fn tilt_onto_canvas(sample: StrokeSample, rotation: f32) -> StrokeSample {
+    let (s, c) = rotation.sin_cos();
+    let (x, y) = (sample.tilt_x_deg, sample.tilt_y_deg);
+    StrokeSample {
+        tilt_x_deg: c * x + s * y,
+        tilt_y_deg: -s * x + c * y,
+        ..sample
+    }
+}
+
 pub(crate) fn is_primary_contact(event: &gdk::Event) -> bool {
     match event.downcast_ref::<gdk::ButtonEvent>() {
         Some(button) => button.button() == gdk::BUTTON_PRIMARY,
@@ -135,6 +150,16 @@ pub(super) fn is_eraser(event: &gdk::Event) -> bool {
     event
         .device_tool()
         .is_some_and(|tool| tool.tool_type() == gdk::DeviceToolType::Eraser)
+}
+
+/// How `widget`'s display numbers the pen's barrel buttons.
+pub(super) fn pen_buttons_of(widget: &impl IsA<gtk::Widget>) -> PenButtons {
+    // gdk's `backend()` panics on a display type it doesn't know, so match the name.
+    if widget.display().type_().name() == "GdkWaylandDisplay" {
+        PenButtons::Wayland
+    } else {
+        PenButtons::Other
+    }
 }
 
 #[cfg(test)]

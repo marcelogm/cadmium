@@ -5,11 +5,13 @@ use gtk::subclass::prelude::*;
 use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
+use crate::input::nav_drag::{NavMode, ViewStep};
 use crate::surface_scale::device_scale;
 use crate::view;
 
 const FIT_MARGIN: f64 = 24.0;
 const ZOOM_STEP: f32 = 1.25;
+const ROTATE_STEP: f32 = std::f32::consts::PI / 12.0;
 
 impl CadmiumCanvas {
     pub fn device_scale(&self) -> f64 {
@@ -74,17 +76,70 @@ impl CadmiumCanvas {
         self.set_view(view::pan(current, dx * scale, dy * scale));
     }
 
-    fn zoom_around_center(&self, zoom: f32) {
-        self.set_zoom_around(
+    /// Turns the picture clockwise by `delta` radians about widget point (`widget_x`, `widget_y`),
+    /// which stays put on screen.
+    pub fn rotate_around(&self, widget_x: f64, widget_y: f64, delta: f32) {
+        let scale = self.device_scale();
+        let current = self.state().borrow().view;
+        self.imp().user_moved_view.set(true);
+        self.set_view(view::rotate_around(
+            current,
+            widget_x * scale,
+            widget_y * scale,
+            delta,
+        ));
+    }
+
+    /// Turns the picture one 15° step about the viewport centre, clockwise when `clockwise`,
+    /// otherwise anticlockwise.
+    pub fn rotate_step(&self, clockwise: bool) {
+        let delta = if clockwise { ROTATE_STEP } else { -ROTATE_STEP };
+        let (x, y) = self.widget_centre();
+        self.rotate_around(x, y, delta);
+    }
+
+    /// The widget's centre, in widget px.
+    pub fn widget_centre(&self) -> (f64, f64) {
+        (
             f64::from(self.width()) / 2.0,
             f64::from(self.height()) / 2.0,
-            zoom,
-        );
+        )
+    }
+
+    /// The mode Space holds ready on the canvas, while it is held.
+    pub(crate) fn space_mode(&self) -> Option<NavMode> {
+        self.imp().space_mode.get()
+    }
+
+    /// Holds `mode` ready (Space down) or lets go (`None`); the pointer shows which.
+    pub(crate) fn set_space_mode(&self, mode: Option<NavMode>) {
+        if self.imp().space_mode.replace(mode) != mode {
+            self.set_cursor_from_name(Some(
+                mode.map_or(super::CANVAS_CURSOR, NavMode::cursor_name),
+            ));
+        }
+    }
+
+    /// Applies one step of a navigation drag to the view.
+    pub(crate) fn apply_view_step(&self, step: ViewStep) {
+        match step {
+            ViewStep::Pan { dx, dy } => self.pan_by(dx, dy),
+            ViewStep::Zoom { anchor, factor } => {
+                self.set_zoom_around(anchor.0, anchor.1, self.zoom() * factor)
+            }
+            ViewStep::Rotate { centre, delta } => self.rotate_around(centre.0, centre.1, delta),
+        }
+    }
+
+    fn zoom_around_center(&self, zoom: f32) {
+        let (x, y) = self.widget_centre();
+        self.set_zoom_around(x, y, zoom);
     }
 
     fn set_view(&self, new_view: ViewTransform) {
         let new_view = ViewTransform {
             zoom: view::clamp_zoom(new_view.zoom),
+            rotation: view::normalise_rotation(new_view.rotation),
             ..new_view
         };
         self.state().borrow_mut().view = new_view;
@@ -96,7 +151,7 @@ impl CadmiumCanvas {
     pub(super) fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        Some(CursorOutline::of_brush(&state, to_widget))
+        Some(CursorOutline::of_brush(&state, to_widget).turned(state.view.rotation))
     }
 
     pub(super) fn note_device_scale(&self) {

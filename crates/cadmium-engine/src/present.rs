@@ -13,14 +13,17 @@ pub struct ViewTransform {
     pub origin_x: f32,
     pub origin_y: f32,
     pub zoom: f32,
+    /// Clockwise turn of the picture on screen, in radians, about the viewport's top-left
+    /// pixel: screen px `p` shows canvas point `origin + R(-rotation) * p / zoom`.
+    pub rotation: f32,
 }
 
 /// What to present and how to frame it.
 ///
 /// `source` must be a 2D, single-sample, single-layer view of a linear `Rgba16Float`
 /// texture with `TEXTURE_BINDING`. Other formats (e.g. `Rgba8Unorm`) are not rejected and
-/// render incorrectly. `view.origin_*` and `view.zoom` are in source-texel units; the
-/// source's alpha is ignored.
+/// render incorrectly. `view.origin_*` and `view.zoom` are in source-texel units;
+/// `view.rotation` is in radians; the source's alpha is ignored.
 pub struct PresentRequest<'a> {
     pub source: &'a wgpu::TextureView,
     pub view: ViewTransform,
@@ -47,7 +50,7 @@ fn source_binding(source: &wgpu::TextureView) -> wgpu::BindGroupEntry<'_> {
 struct PresentParams {
     origin: [f32; 2],
     zoom: f32,
-    _pad: f32,
+    rotation: f32,
 }
 
 pub struct Presenter {
@@ -99,7 +102,7 @@ impl Presenter {
         let params = PresentParams {
             origin: [view.origin_x, view.origin_y],
             zoom: view.zoom,
-            _pad: 0.0,
+            rotation: view.rotation,
         };
         let params_buffer = gpu
             .device

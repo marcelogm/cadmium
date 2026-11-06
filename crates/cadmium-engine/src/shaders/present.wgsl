@@ -1,7 +1,7 @@
 struct PresentParams {
     origin: vec2<f32>,
     zoom: f32,
-    _pad: f32,
+    rotation: f32,
 };
 
 const NEAREST_ZOOM: f32 = 2.0;
@@ -54,6 +54,13 @@ fn srgb_encode(linear: vec3<f32>) -> vec3<f32> {
     return select(curve, SRGB_LINEAR_SLOPE * v, v <= vec3<f32>(SRGB_LINEAR_SEGMENT_END));
 }
 
+// The canvas offset a screen offset `p` shows when the picture is turned clockwise by `angle`.
+fn unturn(p: vec2<f32>, angle: f32) -> vec2<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return vec2<f32>(c * p.x + s * p.y, -s * p.x + c * p.y);
+}
+
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let target_size = textureDimensions(target_image);
@@ -61,7 +68,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let canvas_size = vec2<f32>(textureDimensions(display));
-    let position = params.origin + (vec2<f32>(id.xy) + vec2<f32>(0.5)) / params.zoom;
+    let position = params.origin + unturn((vec2<f32>(id.xy) + vec2<f32>(0.5)) / params.zoom, params.rotation);
     if (any(position < vec2<f32>(0.0)) || any(position >= canvas_size)) {
         textureStore(target_image, vec2<i32>(id.xy), vec4<f32>(BACKGROUND_SRGB8 / SRGB8_MAX, 1.0));
         return;

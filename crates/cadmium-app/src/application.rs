@@ -10,6 +10,7 @@ use crate::LOG_DOMAIN;
 use crate::brush_library::BrushLibrary;
 use crate::dialogs;
 use crate::presets::starting_canvas_spec;
+use crate::settings::SettingsStore;
 use crate::smoke::SmokeConfig;
 use crate::state::{AppState, SharedState};
 use crate::window::CadmiumWindow;
@@ -19,7 +20,7 @@ const MISSING_GPU_HEADING: &str = "No Vulkan GPU Available";
 const MISSING_GPU_BODY: &str = "Cadmium needs a GPU with Vulkan to simulate the paint.";
 const OUT_OF_VIDEO_MEMORY_HEADING: &str = "Not Enough Video Memory";
 
-pub const ACCELERATORS: [(&str, &[&str]); 14] = [
+pub const ACCELERATORS: [(&str, &[&str]); 17] = [
     ("win.undo", &["<Control>z"]),
     ("win.redo", &["<Control><Shift>z"]),
     ("win.dry", &["<Control>d"]),
@@ -31,7 +32,10 @@ pub const ACCELERATORS: [(&str, &[&str]); 14] = [
     ("win.zoom-in", &["<Control>plus", "<Control>equal"]),
     ("win.zoom-out", &["<Control>minus"]),
     ("win.zoom-fit", &["<Control>0"]),
+    ("win.rotate-left", &["<Control>bracketleft"]),
+    ("win.rotate-right", &["<Control>bracketright"]),
     ("win.toggle-sidebar", &["F9"]),
+    ("win.preferences", &["<Control>comma"]),
     ("app.shortcuts", &["<Control>question"]),
     ("app.quit", &["<Control>q"]),
 ];
@@ -88,6 +92,9 @@ fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
     };
     if let Some(dir) = brush_dir {
         load_brush_library(&state, dir);
+    }
+    if smoke.borrow().is_none() {
+        state.borrow_mut().settings = SettingsStore::load(SettingsStore::default_path());
     }
     let window = CadmiumWindow::new(app, state);
     if let Some(smoke) = smoke.borrow_mut().take() {

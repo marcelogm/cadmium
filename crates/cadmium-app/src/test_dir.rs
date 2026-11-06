@@ -1,4 +1,4 @@
-//! A throwaway brush folder for the library's tests, removed again when dropped.
+//! A throwaway folder for tests, removed again when dropped.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -6,12 +6,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
 /// A fresh folder under the system temp dir.
-pub(super) struct TempDir(pub(super) PathBuf);
+pub(crate) struct TempDir(pub(crate) PathBuf);
 
 impl TempDir {
-    pub(super) fn new() -> TempDir {
+    pub(crate) fn new() -> TempDir {
         let dir = std::env::temp_dir().join(format!(
-            "cadmium-brushes-{}-{}",
+            "cadmium-test-{}-{}",
             std::process::id(),
             NEXT_DIR.fetch_add(1, Ordering::Relaxed)
         ));
@@ -19,12 +19,12 @@ impl TempDir {
         TempDir(dir)
     }
 
-    pub(super) fn path(&self) -> PathBuf {
+    pub(crate) fn path(&self) -> PathBuf {
         self.0.clone()
     }
 
     /// The names of the files in the folder, hidden ones included, sorted.
-    pub(super) fn files(&self) -> Vec<String> {
+    pub(crate) fn files(&self) -> Vec<String> {
         let mut names: Vec<String> = std::fs::read_dir(&self.0)
             .unwrap()
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())

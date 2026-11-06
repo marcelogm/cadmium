@@ -4,13 +4,13 @@ use cadmium_engine::stroke::StrokeSample;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
+use super::nav_drag::{NavButton, picks_colour};
 use super::samples::{
-    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples,
+    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples, pen_buttons_of,
+    tilt_onto_canvas,
 };
 use super::{Contact, PaintSurfaceWidget, release, side_button_may_act, stroke_may_begin};
 use crate::tools::Press;
-
-const EYEDROPPER_BUTTON: u32 = gdk::BUTTON_SECONDARY;
 
 pub(super) fn stylus_gesture<W: PaintSurfaceWidget>(
     widget: &W,
@@ -71,7 +71,8 @@ fn widget_sample<W: PaintSurfaceWidget>(
     x: f64,
     y: f64,
 ) -> StrokeSample {
-    event_sample(event, x, y, |x, y| widget.surface_point(x, y))
+    let sample = event_sample(event, x, y, |x, y| widget.surface_point(x, y));
+    tilt_onto_canvas(sample, widget.view_rotation())
 }
 
 fn stylus_down<W: PaintSurfaceWidget>(
@@ -85,7 +86,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         return;
     };
     if !is_primary_contact(&event)
-        || !stroke_may_begin(contact.pans.any())
+        || !stroke_may_begin(contact.drags.any() || widget.holds_navigation())
         || !widget.accepts_point(x, y)
     {
         return;
@@ -134,7 +135,11 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
         return;
     }
-    let samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
+    let mut samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
+    let rotation = widget.view_rotation();
+    for sample in &mut samples {
+        *sample = tilt_onto_canvas(*sample, rotation);
+    }
     state.borrow_mut().motion(&samples);
 }
 
@@ -172,17 +177,34 @@ fn stylus_proximity<W: PaintSurfaceWidget>(
 
 pub(super) fn eyedropper_click<W: PaintSurfaceWidget>(widget: &W) -> gtk::GestureClick {
     let click = gtk::GestureClick::new();
-    click.set_button(EYEDROPPER_BUTTON);
+    click.set_button(0);
     click.connect_pressed(glib::clone!(
         #[weak]
         widget,
-        move |_, _, x, y| pick_with_side_button(&widget, x, y)
+        move |click, _, x, y| pick_with_side_button(&widget, click, x, y)
     ));
     click
 }
 
-fn pick_with_side_button<W: PaintSurfaceWidget>(widget: &W, x: f64, y: f64) {
-    if side_button_may_act(widget.state().borrow().is_stroking()) && widget.accepts_point(x, y) {
+/// Picks the colour at (`x`, `y`) when the clicked button is bound to picking: a pen's
+/// barrel button by its setting, a mouse's right button always.
+fn pick_with_side_button<W: PaintSurfaceWidget>(
+    widget: &W,
+    click: &gtk::GestureClick,
+    x: f64,
+    y: f64,
+) {
+    let from_pen = click
+        .current_event()
+        .is_some_and(|event| comes_from_a_pen(&event));
+    let (stroking, settings) = {
+        let state = widget.state();
+        let state = state.borrow();
+        (state.is_stroking(), state.settings.get())
+    };
+    let picks = NavButton::from_button(click.current_button())
+        .is_some_and(|button| picks_colour(button, from_pen, pen_buttons_of(widget), settings));
+    if picks && side_button_may_act(stroking) && widget.accepts_point(x, y) {
         widget.pick_colour_at(x, y);
     }
 }

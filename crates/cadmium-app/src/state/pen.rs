@@ -5,6 +5,8 @@ use super::AppState;
 const RATE_SMOOTHING: f32 = 0.2;
 const MILLISECONDS_PER_SECOND: f32 = 1000.0;
 
+/// The pen's latest pressure, tilt and sampling rate. Tilt is in the canvas's frame: the pen's
+/// lean as the painting sees it, so it changes when the view turns.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PenReadout {
     pub pressure: f32,

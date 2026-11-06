@@ -17,7 +17,7 @@ pub(super) const SIZE_STEP: f64 = 0.01;
 pub(super) const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_UNIT: &str = "µm";
 pub(super) const EYEDROPPER_HINT: &str = "Click the canvas to pick up the paint on it. \
-The right mouse button and the lower pen button pick a colour with any tool.";
+The right mouse button, or a pen button set to Pick Colour, picks a colour with any tool.";
 /// What a rack row calls a head or hair that matches no factory one.
 const CUSTOM_PART: &str = "Custom";
 

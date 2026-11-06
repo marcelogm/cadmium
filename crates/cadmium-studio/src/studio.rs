@@ -141,6 +141,7 @@ impl BrushStudio {
                 origin_x: 0.0,
                 origin_y: 0.0,
                 zoom: scale as f32 / STUDIO_SCALE as f32,
+                rotation: 0.0,
             },
         );
         presenter.encode_present(gpu, request, &target, &mut encoder);

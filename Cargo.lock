@@ -133,6 +133,8 @@ dependencies = [
  "libadwaita",
  "libc",
  "pollster",
+ "serde",
+ "serde_json",
  "wgpu",
  "wgpu-hal",
 ]
