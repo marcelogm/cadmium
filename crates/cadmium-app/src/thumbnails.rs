@@ -152,6 +152,16 @@ pub fn open_studio(state: &SharedState) -> Result<BrushStudio, StudioError> {
     BrushStudio::new(&gpu)
 }
 
+/// The rack positions showing `key`, given the keys in rack order: every twin gets it.
+pub fn rack_indices(shown: &[ThumbnailKey], key: ThumbnailKey) -> impl Iterator<Item = usize> {
+    shown
+        .iter()
+        .enumerate()
+        .filter(move |(_, shown)| **shown == key)
+        .map(|(index, _)| index)
+}
+
+/// Wraps a studio thumbnail (straight sRGB RGBA8, unpadded rows) as a GDK texture.
 pub fn texture(thumbnail: Thumbnail) -> gdk::Texture {
     let stride = thumbnail.width as usize * 4;
     gdk::MemoryTexture::new(

@@ -5,7 +5,7 @@ use cadmium_engine::brush::factory_brushes;
 use cadmium_engine::canvas::StateTexture;
 use cadmium_engine::stroke::Tool;
 
-use super::{ThumbnailCache, ThumbnailKey, next_missing, open_studio, render};
+use super::{ThumbnailCache, ThumbnailKey, next_missing, open_studio, rack_indices, render};
 use crate::state::test_support::{
     PAINT_ROW_Y, brush_totals, painting_state, present_one_frame, row_samples, stroke,
 };
@@ -41,6 +41,18 @@ fn twins_are_missing_only_once() {
     let missing = cache.missing(&brushes);
     assert_eq!(missing.len(), brushes.len() - 1);
     assert!(!missing.contains(&(brushes.len() - 1)));
+}
+
+#[test]
+fn a_thumbnail_goes_to_every_rack_entry_with_its_key() {
+    let mut brushes = factory_brushes();
+    let mut twin = brushes[2].clone();
+    twin.name = "Twin".into();
+    brushes.push(twin);
+    let shown: Vec<_> = brushes.iter().map(ThumbnailKey::of).collect();
+    let key = ThumbnailKey::of(&brushes[2]);
+    let indices: Vec<_> = rack_indices(&shown, key).collect();
+    assert_eq!(indices, [2, brushes.len() - 1]);
 }
 
 #[test]

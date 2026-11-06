@@ -1,9 +1,8 @@
 use std::cell::{Cell, RefCell};
-
-use cadmium_studio::BrushStudio;
 use std::rc::Rc;
 
 use adw::prelude::*;
+use cadmium_studio::BrushStudio;
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
@@ -27,6 +26,7 @@ use presentation::{
     slider_needs_sync, tool_group_description, tool_hint, tool_wording, visible_controls,
 };
 use snapshot::Snapshot;
+use thumbnail_job::ThumbnailJob;
 
 pub struct BrushPanel {
     root: gtk::Box,
@@ -48,14 +48,6 @@ pub struct BrushPanel {
 
 /// The names and thumbnail keys the rack shows, in rack order.
 type ShownBrushes = (Vec<String>, Vec<ThumbnailKey>);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ThumbnailJob {
-    Idle,
-    Pending,
-    /// The studio failed once; the rack keeps its names only.
-    Failed,
-}
 
 impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
