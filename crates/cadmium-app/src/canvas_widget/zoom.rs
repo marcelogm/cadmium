@@ -1,11 +1,12 @@
 use cadmium_engine::present::ViewTransform;
+use gtk::gdk;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
-use crate::input::nav_drag::{NavMode, ViewStep};
+use crate::input::nav_drag::{NavMode, ViewStep, held_mode};
 use crate::surface_scale::device_scale;
 use crate::view;
 
@@ -106,14 +107,17 @@ impl CadmiumCanvas {
         )
     }
 
-    /// The mode Space holds ready on the canvas, while it is held.
-    pub(crate) fn space_mode(&self) -> Option<NavMode> {
-        self.imp().space_mode.get()
+    /// Whether the window holds Space down for the canvas.
+    pub(crate) fn space_held(&self) -> bool {
+        self.imp().space_held.get()
     }
 
-    /// Holds `mode` ready (Space down) or lets go (`None`); the pointer shows which.
-    pub(crate) fn set_space_mode(&self, mode: Option<NavMode>) {
-        if self.imp().space_mode.replace(mode) != mode {
+    /// Records which navigation keys are held (Space, and Ctrl or Shift among `modifiers`);
+    /// the pointer shows the mode they have ready.
+    pub(crate) fn set_held_keys(&self, space_held: bool, modifiers: gdk::ModifierType) {
+        self.imp().space_held.set(space_held);
+        let mode = held_mode(space_held, modifiers);
+        if self.imp().held_mode.replace(mode) != mode {
             self.set_cursor_from_name(Some(
                 mode.map_or(super::CANVAS_CURSOR, NavMode::cursor_name),
             ));

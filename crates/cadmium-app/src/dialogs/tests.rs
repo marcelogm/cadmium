@@ -54,17 +54,15 @@ fn listed_navigation_keys_start_the_mode_they_name() {
     use gtk::gdk::ModifierType;
     // `gtk::accelerator_parse` needs GTK initialised, so the three spellings are read by hand.
     for (label, keys, mode) in NAVIGATION_GESTURES {
-        let (modifiers, key) = match keys.strip_prefix("<Control>") {
-            Some(key) => (ModifierType::CONTROL_MASK, key),
-            None => match keys.strip_prefix("<Shift>") {
-                Some(key) => (ModifierType::SHIFT_MASK, key),
-                None => (ModifierType::empty(), keys),
-            },
+        let (space_held, modifiers) = match keys {
+            "space" => (true, ModifierType::empty()),
+            "<Control>" => (false, ModifierType::CONTROL_MASK),
+            "<Shift>" => (false, ModifierType::SHIFT_MASK),
+            other => panic!("{label}: unexpected keys {other}"),
         };
-        assert_eq!(key, "space", "{label}");
         assert_eq!(
-            crate::input::nav_drag::space_mode(modifiers),
-            mode,
+            crate::input::nav_drag::held_mode(space_held, modifiers),
+            Some(mode),
             "{label}"
         );
     }

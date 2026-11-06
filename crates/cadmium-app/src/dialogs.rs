@@ -12,8 +12,8 @@ const PIGMENT_DATA_CREDIT: &str =
 /// The hold-and-drag gestures, with the keys held for each and the mode they start.
 const NAVIGATION_GESTURES: [(&str, &str, NavMode); 3] = [
     ("Move Canvas", "space", NavMode::Pan),
-    ("Zoom Canvas", "<Control>space", NavMode::Zoom),
-    ("Rotate Canvas", "<Shift>space", NavMode::Rotate),
+    ("Zoom Canvas", "<Control>", NavMode::Zoom),
+    ("Rotate Canvas", "<Shift>", NavMode::Rotate),
 ];
 
 pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [

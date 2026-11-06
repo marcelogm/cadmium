@@ -57,8 +57,9 @@ pub trait PaintSurfaceWidget:
         false
     }
     fn contact_released(&self) {}
-    /// Whether a held key has the primary contact navigate instead of paint.
-    fn holds_navigation(&self) -> bool {
+    /// Whether held keys (Space here, or `modifiers` from the contact's event) have the
+    /// primary contact navigate instead of paint.
+    fn holds_navigation(&self, _modifiers: gdk::ModifierType) -> bool {
         false
     }
 }
