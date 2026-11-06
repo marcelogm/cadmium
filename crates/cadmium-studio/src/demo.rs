@@ -4,7 +4,7 @@ use cadmium_engine::stroke::StrokeSample;
 
 const SAMPLES: u32 = 90;
 const TAP_SAMPLES: u32 = 24;
-pub(crate) const SAMPLE_INTERVAL_MS: u32 = 6;
+const SAMPLE_INTERVAL_MS: u32 = 6;
 const DEMO_TILT_DEG: f32 = 25.0;
 const ZIGZAG_TEETH: f64 = 3.0;
 
