@@ -7,7 +7,7 @@ use crate::settings::{PenButtonAction, Settings};
 /// How far, in widget px, a zoom drag goes for the view to zoom by a factor of e.
 const ZOOM_DRAG_PX_PER_E: f64 = 100.0;
 /// The log-zoom a zoom drag adds per widget px.
-pub(super) const ZOOM_PER_DRAG_PX: f64 = 1.0 / ZOOM_DRAG_PX_PER_E;
+const ZOOM_PER_DRAG_PX: f64 = 1.0 / ZOOM_DRAG_PX_PER_E;
 /// Nearer the centre than this, in widget px, a rotate drag's angle is too jumpy to follow.
 const ROTATE_DEAD_RADIUS: f64 = 8.0;
 
@@ -25,6 +25,7 @@ impl NavMode {
         match self {
             NavMode::Pan => "grab",
             NavMode::Zoom => "zoom-in",
+            // No standard rotate cursor exists; "move" stands in for one.
             NavMode::Rotate => "move",
         }
     }
@@ -51,9 +52,20 @@ impl NavButton {
         }
     }
 
+    /// The navigation button for a GDK button number, if it is one.
+    pub(super) fn from_button(button: u32) -> Option<NavButton> {
+        NavButton::ALL
+            .into_iter()
+            .find(|nav| nav.button() == button)
+    }
+
     /// A stable index into per-button tables.
     pub(super) fn index(self) -> usize {
-        self as usize
+        match self {
+            NavButton::Primary => 0,
+            NavButton::Middle => 1,
+            NavButton::Secondary => 2,
+        }
     }
 }
 
@@ -103,13 +115,14 @@ pub(crate) fn space_mode(modifiers: gdk::ModifierType) -> NavMode {
     }
 }
 
-/// Whether a click of `button` picks a colour.
-pub(super) fn picks_colour(button: u32, from_pen: bool, settings: Settings) -> bool {
+/// Whether a click of `button` picks a colour. It doesn't check for a stroke in
+/// progress; callers do (`side_button_may_act`).
+pub(super) fn picks_colour(button: NavButton, from_pen: bool, settings: Settings) -> bool {
     let action = match (button, from_pen) {
-        (gdk::BUTTON_MIDDLE, true) => settings.lower_pen_button,
-        (gdk::BUTTON_SECONDARY, true) => settings.upper_pen_button,
-        (gdk::BUTTON_SECONDARY, false) => PenButtonAction::PickColour,
-        _ => PenButtonAction::Nothing,
+        (NavButton::Middle, true) => settings.lower_pen_button,
+        (NavButton::Secondary, true) => settings.upper_pen_button,
+        (NavButton::Secondary, false) => PenButtonAction::PickColour,
+        (NavButton::Primary, _) | (NavButton::Middle, false) => PenButtonAction::Nothing,
     };
     action == PenButtonAction::PickColour
 }
@@ -161,14 +174,20 @@ impl NavDrag {
     }
 
     fn rotate_step(
-        &self,
+        &mut self,
         from: (f64, f64),
         to: (f64, f64),
         centre: (f64, f64),
     ) -> Option<ViewStep> {
         let at = |o: (f64, f64)| (self.start.0 + o.0 - centre.0, self.start.1 + o.1 - centre.1);
         let (a, b) = (at(from), at(to));
-        if a.0.hypot(a.1) < ROTATE_DEAD_RADIUS || b.0.hypot(b.1) < ROTATE_DEAD_RADIUS {
+        let dead = |p: (f64, f64)| p.0.hypot(p.1) < ROTATE_DEAD_RADIUS;
+        if dead(b) {
+            return None;
+        }
+        if dead(a) {
+            // Leaving the dead zone: rebase, so the next step sweeps from here.
+            self.last = to;
             return None;
         }
         let swept = (b.1.atan2(b.0) - a.1.atan2(a.0) + PI).rem_euclid(TAU) - PI;

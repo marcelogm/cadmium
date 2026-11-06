@@ -103,11 +103,20 @@ fn colour_picking_follows_the_bindings_for_a_pen_and_the_right_button_for_a_mous
         lower_pen_button: PenButtonAction::PickColour,
         upper_pen_button: PenButtonAction::Pan,
     };
-    assert!(picks_colour(gdk::BUTTON_MIDDLE, true, settings));
-    assert!(!picks_colour(gdk::BUTTON_SECONDARY, true, settings));
-    assert!(picks_colour(gdk::BUTTON_SECONDARY, false, settings));
-    assert!(!picks_colour(gdk::BUTTON_MIDDLE, false, settings));
-    assert!(!picks_colour(gdk::BUTTON_PRIMARY, true, settings));
+    assert!(picks_colour(NavButton::Middle, true, settings));
+    assert!(!picks_colour(NavButton::Secondary, true, settings));
+    assert!(picks_colour(NavButton::Secondary, false, settings));
+    assert!(!picks_colour(NavButton::Middle, false, settings));
+    assert!(!picks_colour(NavButton::Primary, true, settings));
+    assert!(!picks_colour(NavButton::Primary, false, settings));
+}
+
+#[test]
+fn gdk_buttons_map_to_nav_buttons() {
+    for button in NavButton::ALL {
+        assert_eq!(NavButton::from_button(button.button()), Some(button));
+    }
+    assert_eq!(NavButton::from_button(gdk::BUTTON_MIDDLE + 5), None);
 }
 
 #[test]
@@ -134,7 +143,7 @@ fn dragging_up_zooms_in_about_the_press_point() {
     let Some(ViewStep::Zoom { factor, .. }) = drag.step((7.0, -50.0), (0.0, 0.0)) else {
         panic!("a zoom drag zooms");
     };
-    assert!(factor < 1.0);
+    assert!((factor - (-0.5f64).exp() as f32).abs() < 1e-4);
 }
 
 #[test]
@@ -171,4 +180,15 @@ fn a_rotate_drag_crossing_the_left_takes_the_short_way() {
         panic!("a rotate drag rotates");
     };
     assert!(delta.abs() < 0.1);
+}
+
+#[test]
+fn a_rotate_drag_pressed_on_the_centre_rotates_once_it_has_moved_out() {
+    let centre = (100.0, 100.0);
+    let mut drag = NavDrag::new(NavMode::Rotate, centre);
+    assert_eq!(drag.step((100.0, 0.0), centre), None);
+    let Some(ViewStep::Rotate { delta, .. }) = drag.step((0.0, 100.0), centre) else {
+        panic!("a rotate drag rotates");
+    };
+    assert!((delta - std::f32::consts::FRAC_PI_2).abs() < 1e-4);
 }
