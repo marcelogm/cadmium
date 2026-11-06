@@ -70,6 +70,45 @@ fn todays_round_flat_and_fan_layouts_stay_bit_identical() {
     assert_eq!(prints, REFERENCE_FINGERPRINTS, "{prints:#x?}");
 }
 
+/// The other six factory heads, fingerprinted before the head sections were blended.
+const SHAPED_HEADS: [HeadSpec; 6] = [
+    HeadSpec::BRIGHT,
+    HeadSpec::FILBERT,
+    HeadSpec::RIGGER,
+    HeadSpec::ANGULAR,
+    HeadSpec::DAGGER,
+    HeadSpec::MOP,
+];
+const SHAPED_FINGERPRINTS: [u64; 12] = [
+    0x6279_b06d_79d0_d573,
+    0x48e5_e12d_12f8_bac8,
+    0x3cef_2cd3_0407_3fa3,
+    0x998a_943a_9766_76a5,
+    0x860e_2199_54e4_6fd4,
+    0x75d0_98ac_0a45_f6fd,
+    0xadf6_b075_cd0d_1fa1,
+    0x17f6_f20e_5d08_971a,
+    0xe889_9493_34db_2dc0,
+    0x74b6_9374_5f1f_40bf,
+    0xab7b_54ef_9f7f_1ffd,
+    0xa32f_bcbe_8db6_09a2,
+];
+
+fn shaped_fingerprints() -> Vec<u64> {
+    REFERENCE_RADII_PX
+        .iter()
+        .flat_map(|&radius_px| {
+            SHAPED_HEADS.map(|head| fingerprint(&reference_layout(head, radius_px)))
+        })
+        .collect()
+}
+
+#[test]
+fn the_six_shaped_factory_layouts_stay_bit_identical() {
+    let prints = shaped_fingerprints();
+    assert_eq!(prints, SHAPED_FINGERPRINTS, "{prints:#x?}");
+}
+
 const PROFILE_RADIUS_PX: f32 = 40.0;
 
 fn head_layout(head: HeadSpec) -> BristleLayout {
