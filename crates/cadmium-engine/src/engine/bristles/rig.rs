@@ -1,5 +1,5 @@
 use super::handle::{HandleClock, HandleGauge, ferrule_over_nib, substeps};
-use super::layout::{BristleLayout, LayoutRequest, layout};
+use super::layout::{BristleLayout, BristleRest, LayoutRequest, layout};
 use super::state::BristleBuffers;
 use crate::brush::{HairSpec, HeadSpec};
 use crate::engine::dab_record::DabRecord;
@@ -181,9 +181,7 @@ impl BristleRig {
             .map(|bristle| bristle.length_px)
             .fold(0.0, f32::max);
         self.ferrule_radius_px = ferrule_radius_px;
-        self.root_half_extent_px = bristles.iter().fold([0.0; 2], |extent, bristle| {
-            [0, 1].map(|axis| extent[axis].max(bristle.root_px[axis].abs()))
-        });
+        self.root_half_extent_px = [0, 1].map(|axis| widest_root_px(bristles, axis));
     }
 
     pub(crate) fn advance(&mut self, record: &mut DabRecord, dab: &Dab, params: &SimParams) {
@@ -244,6 +242,13 @@ impl BristleRig {
         self.previous_orientation = Some(continuous);
         continuous
     }
+}
+
+fn widest_root_px(bristles: &[BristleRest], axis: usize) -> f32 {
+    bristles
+        .iter()
+        .map(|bristle| bristle.root_px[axis].abs())
+        .fold(0.0, f32::max)
 }
 
 #[cfg(test)]
