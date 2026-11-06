@@ -81,8 +81,9 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
+      # Widget building, signal wiring, GObject subclasses and the code that needs a display, a GPU or real dmabufs only run in the smoke test; leave them out of the metric.
       - name: Test with coverage
-        run: xvfb-run -a cargo llvm-cov --workspace --release --locked --features cadmium-app/smoke --json --summary-only --output-path coverage.json
+        run: xvfb-run -a cargo llvm-cov --workspace --release --locked --features cadmium-app/smoke --ignore-filename-regex '/cadmium-app/src/(.+/)?(signals|build|wiring|layout|header|imp)\.rs$|/cadmium-app/src/(application|dmabuf_selftest|smoke)\.rs$|/cadmium-app/src/(dmabuf/(export|pool|sync)|dmabuf_selftest/run)\.rs$|/cadmium-app/src/presenter/by_(dmabuf|readback)\.rs$' --json --summary-only --output-path coverage.json
 
       - name: Coverage summary
         run: python3 .github/coverage-badge.py coverage.json badge/coverage.json >> "$GITHUB_STEP_SUMMARY"
