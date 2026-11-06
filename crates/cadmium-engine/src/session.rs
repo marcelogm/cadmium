@@ -56,9 +56,30 @@ pub struct PaintSession {
 
 impl PaintSession {
     pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
+        let history = History::new(gpu, history_budget(&spec), HISTORY_MAX_STEPS);
+        let tray = tray_spec(&spec.pigment_slots);
+        PaintSession::assemble(gpu, spec, tray, history)
+    }
+
+    /// A session for previews: the same simulation, but no undo history and a
+    /// one-tile tray, so it costs little more than its canvas.
+    pub fn headless(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
+        let tray = CanvasSpec {
+            width: TILE_SIZE,
+            height: TILE_SIZE,
+            ..tray_spec(&spec.pigment_slots)
+        };
+        PaintSession::assemble(gpu, spec, tray, History::new(gpu, 0, 0))
+    }
+
+    fn assemble(
+        gpu: &GpuContext,
+        spec: CanvasSpec,
+        tray: CanvasSpec,
+        history: History,
+    ) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
-        let history_budget = history_budget(&spec);
-        let tray = Canvas::new(gpu, &db, tray_spec(&spec.pigment_slots))?;
+        let tray = Canvas::new(gpu, &db, tray)?;
         let canvas = Canvas::new(gpu, &db, spec)?;
         let mut session = PaintSession {
             canvas,
@@ -66,7 +87,7 @@ impl PaintSession {
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
-            history: History::new(gpu, history_budget, HISTORY_MAX_STEPS),
+            history,
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
             db,
