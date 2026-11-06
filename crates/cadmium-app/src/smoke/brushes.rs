@@ -7,7 +7,8 @@ use adw::prelude::*;
 use gtk::glib;
 
 use super::SmokeConfig;
-use super::config::{lookup_flag, lookup_path};
+use super::config::{lookup_flag, lookup_path, parse_or_warn};
+use super::editor;
 use super::steps::SmokeStep;
 use crate::LOG_DOMAIN;
 use crate::window::CadmiumWindow;
@@ -17,6 +18,7 @@ pub(super) const BRUSH_IMPORT: &str = "CADMIUM_SMOKE_BRUSH_IMPORT";
 pub(super) const BRUSH: &str = "CADMIUM_SMOKE_BRUSH";
 pub(super) const BRUSH_EXPORT: &str = "CADMIUM_SMOKE_BRUSH_EXPORT";
 pub(super) const BRUSH_DELETE: &str = "CADMIUM_SMOKE_BRUSH_DELETE";
+pub(super) const BRUSH_EDITOR: &str = "CADMIUM_SMOKE_BRUSH_EDITOR";
 
 /// What a smoke run does with the brush library.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -26,6 +28,8 @@ pub(super) struct SmokeBrushes {
     pub(super) pick: Option<String>,
     pub(super) export: Option<PathBuf>,
     pub(super) delete: bool,
+    /// How many frames the brush editor stays on show.
+    pub(super) editor: Option<u32>,
 }
 
 impl SmokeBrushes {
@@ -38,6 +42,7 @@ impl SmokeBrushes {
                 .map(|value| value.to_string_lossy().into_owned()),
             export: lookup_path(lookup, BRUSH_EXPORT),
             delete: lookup_flag(lookup, BRUSH_DELETE),
+            editor: lookup(BRUSH_EDITOR).and_then(|value| parse_or_warn(BRUSH_EDITOR, &value)),
         }
     }
 
@@ -56,6 +61,11 @@ impl SmokeBrushes {
         let delete = self.delete.then_some(BrushStep::Delete);
         export.into_iter().chain(delete).map(SmokeStep::Brush)
     }
+
+    pub(super) fn editor_step(&self) -> Option<SmokeStep> {
+        self.editor
+            .map(|frames| SmokeStep::Brush(BrushStep::Editor(frames)))
+    }
 }
 
 impl SmokeConfig {
@@ -71,15 +81,26 @@ pub(super) enum BrushStep {
     Pick(String),
     Export(PathBuf),
     Delete,
+    /// Opens the brush editor paused mid-stroke, on show for this many frames.
+    Editor(u32),
 }
 
 impl BrushStep {
+    /// The editor waits for the rack's thumbnails: opening the studio pauses them.
+    pub(super) fn is_ready(&self, window: &CadmiumWindow) -> bool {
+        match self {
+            BrushStep::Editor(_) => !window.thumbnails_pending(),
+            _ => true,
+        }
+    }
+
     pub(super) fn run(&self, window: &CadmiumWindow) {
         match self {
             BrushStep::Import(path) => window.import_brush_file(path),
             BrushStep::Pick(name) => pick_from_rack(window, name),
             BrushStep::Export(path) => window.export_brush_to(path),
             BrushStep::Delete => window.delete_worn_brush_now(),
+            BrushStep::Editor(_) => editor::open_mid_stroke(window),
         }
     }
 }

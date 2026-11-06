@@ -11,6 +11,7 @@ use crate::window::CadmiumWindow;
 
 mod brushes;
 mod config;
+mod editor;
 mod steps;
 #[cfg(test)]
 mod tests;
@@ -89,12 +90,9 @@ impl SmokeRun {
         if !step.run(&self.app, window, frames_late, &self.file_work) {
             return false;
         }
-        if FileWork::is_file_step(step) {
-            self.earliest_end_frame.set(
-                self.earliest_end_frame
-                    .get()
-                    .max(self.drawn.get() + SETTLE_FRAMES_AFTER_FILE_WORK),
-            );
+        if let Some(frames) = step.settle_frames() {
+            self.earliest_end_frame
+                .set(self.earliest_end_frame.get().max(self.drawn.get() + frames));
         }
         true
     }

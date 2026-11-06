@@ -76,6 +76,11 @@ impl CadmiumWindow {
         self.imp().editor.borrow().is_some()
     }
 
+    /// The open brush editor, if any.
+    pub fn editor(&self) -> Option<adw::Dialog> {
+        self.imp().editor.borrow().clone()
+    }
+
     pub fn keep_editor(&self, editor: &adw::Dialog) {
         self.imp().editor.replace(Some(editor.clone()));
     }

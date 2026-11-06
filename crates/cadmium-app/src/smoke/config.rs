@@ -109,7 +109,7 @@ fn parse_tool(value: OsString) -> Option<UiTool> {
     parsed
 }
 
-fn parse_or_warn<T: std::str::FromStr>(name: &str, value: &OsString) -> Option<T> {
+pub(super) fn parse_or_warn<T: std::str::FromStr>(name: &str, value: &OsString) -> Option<T> {
     let parsed = value.to_str().and_then(|text| text.trim().parse().ok());
     if parsed.is_none() {
         glib::g_warning!(LOG_DOMAIN, "ignoring {name}={value:?}: not a valid value");

@@ -1,10 +1,13 @@
 use std::ffi::OsString;
 
-use super::brushes::{BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep};
+use super::brushes::{
+    BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EDITOR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep,
+};
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
     PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
 };
+use super::editor::mid_stroke_ms;
 use super::steps::{
     STROKE_PRESSURE_END, STROKE_PRESSURE_START, STROKE_SAMPLES, SmokeDialog, SmokeStep,
     smoke_stroke,
@@ -291,4 +294,62 @@ fn brush_delete_zero_and_empty_brush_values_do_nothing() {
         (BRUSH_IMPORT, ""),
     ]));
     assert_eq!(config, None);
+}
+
+#[test]
+fn brush_editor_alone_starts_a_smoke_run_that_opens_it() {
+    let config = SmokeConfig::from_lookup(lookup(&[(BRUSH_EDITOR, "60")])).unwrap();
+    assert_eq!(config.brushes.editor, Some(60));
+    assert_eq!(
+        config.steps(),
+        [SmokeStep::Brush(BrushStep::Editor(60)), SmokeStep::Quit]
+    );
+}
+
+#[test]
+fn brush_editor_opens_after_the_tray_and_before_the_screenshot() {
+    let config = SmokeConfig::from_lookup(lookup(&[
+        (SCREENSHOT, "/tmp/shot.png"),
+        (BRUSH_EDITOR, "60"),
+        (TRAY, "1"),
+        (BRUSH, "Round · Synthetic"),
+    ]))
+    .unwrap();
+    assert_eq!(
+        config.steps(),
+        [
+            SmokeStep::Brush(BrushStep::Pick("Round · Synthetic".to_string())),
+            SmokeStep::ShowTray,
+            SmokeStep::Brush(BrushStep::Editor(60)),
+            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+            SmokeStep::Quit,
+        ]
+    );
+}
+
+#[test]
+fn unparsable_brush_editor_frames_open_no_editor() {
+    assert_eq!(
+        SmokeConfig::from_lookup(lookup(&[(BRUSH_EDITOR, "soon")])),
+        None
+    );
+}
+
+#[test]
+fn the_brush_editor_holds_the_end_back_by_its_frames() {
+    let editor = SmokeStep::Brush(BrushStep::Editor(60));
+    let save = SmokeStep::Save(PathBuf::from("/tmp/a.cadmium"));
+    let screenshot = SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png"));
+    assert_eq!(editor.settle_frames(), Some(60));
+    assert_eq!(save.settle_frames(), Some(SETTLE_FRAMES_AFTER_FILE_WORK));
+    assert_eq!(screenshot.settle_frames(), None);
+}
+
+#[test]
+fn the_brush_editor_pauses_half_way_through_the_pen_travel() {
+    use cadmium_studio::{LOOP_PAUSE_MS, QUANTUM_MS, SETTLE_MS};
+    let stroke_ms = 534.0;
+    let loop_ms = stroke_ms + SETTLE_MS + QUANTUM_MS + LOOP_PAUSE_MS;
+    assert!((mid_stroke_ms(loop_ms) - stroke_ms / 2.0).abs() < 1e-9);
+    assert_eq!(mid_stroke_ms(LOOP_PAUSE_MS), 0.0);
 }
