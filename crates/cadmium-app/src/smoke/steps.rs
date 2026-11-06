@@ -12,6 +12,7 @@ use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
 use super::SmokeConfig;
+use super::brushes::BrushStep;
 
 const TOOL_ACTION: &str = "win.tool";
 const STROKE_PIGMENT: &str = "ultramarine_blue";
@@ -71,6 +72,7 @@ pub(super) enum SmokeStep {
     Save(PathBuf),
     Open(PathBuf),
     Export(PathBuf),
+    Brush(BrushStep),
     ShowPage(String),
     ShowTray,
     Screenshot(PathBuf),
@@ -88,7 +90,8 @@ impl SmokeStep {
             SmokeStep::ChooseTool(_)
             | SmokeStep::OpenDialog(_)
             | SmokeStep::ShowPage(_)
-            | SmokeStep::ShowTray => true,
+            | SmokeStep::ShowTray
+            | SmokeStep::Brush(_) => true,
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
             SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= earliest_end_frame,
@@ -115,6 +118,7 @@ impl SmokeStep {
             SmokeStep::Export(path) => {
                 return file_work.advance(|| window.export_to(path.clone()), path);
             }
+            SmokeStep::Brush(step) => step.run(window),
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
             SmokeStep::ShowTray => window.show_tray(),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
@@ -135,16 +139,21 @@ impl SmokeStep {
 }
 
 impl SmokeConfig {
+    /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
+    /// open, export, brush export, brush delete, page, tray, screenshot, quit. The brush folder
+    /// (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from it at start-up.
     pub(super) fn steps(&self) -> Vec<SmokeStep> {
         let mut steps = Vec::new();
         steps.extend(self.tool.map(SmokeStep::ChooseTool));
         steps.extend(self.dialog.map(SmokeStep::OpenDialog));
+        steps.extend(self.brushes.before_stroke());
         if self.stroke {
             steps.push(SmokeStep::PaintStroke);
         }
         steps.extend(self.save.clone().map(SmokeStep::Save));
         steps.extend(self.open.clone().map(SmokeStep::Open));
         steps.extend(self.export.clone().map(SmokeStep::Export));
+        steps.extend(self.brushes.after_files());
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
         if self.tray {
             steps.push(SmokeStep::ShowTray);
@@ -183,7 +192,7 @@ impl FileWork {
     pub(super) fn is_file_step(step: &SmokeStep) -> bool {
         matches!(
             step,
-            SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_)
+            SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) | SmokeStep::Brush(_)
         )
     }
 }

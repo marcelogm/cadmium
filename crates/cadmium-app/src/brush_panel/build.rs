@@ -1,11 +1,9 @@
 use adw::prelude::*;
-use cadmium_engine::brush::BrushSpec;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
 use super::presentation::{
-    BRUSH_ROW_TITLE, EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, PanelTool, SIZE_STEP,
-    plate_gap_spec, tool_wording,
+    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, PanelTool, SIZE_STEP, plate_gap_spec, tool_wording,
 };
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
@@ -38,7 +36,6 @@ pub(super) struct ToolGroup {
     pub(super) load: SliderRow,
     pub(super) plate_gap: SliderRow,
     pub(super) medium: SliderRow,
-    pub(super) brush_row: adw::ComboRow,
     pub(super) reload_row: adw::SwitchRow,
     pub(super) clean_each_row: adw::SwitchRow,
 }
@@ -66,13 +63,12 @@ pub(super) fn pigments_group() -> PigmentsGroup {
     PigmentsGroup { group, flow }
 }
 
-pub(super) fn tool_group(brushes: &[BrushSpec]) -> ToolGroup {
+pub(super) fn tool_group() -> ToolGroup {
     let (loaded_row, loaded_swatch, reserve_bar) = loaded_row();
     let size = size_row();
     let load = slider_row("Load", 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
     let plate_gap = plate_gap_row();
     let medium = slider_row("Medium", 0.0, MEDIUM_SLIDER_MAX, UNIT_STEP, UNIT_PAGE);
-    let brush_row = brush_row(brushes);
     let reload_row = adw::SwitchRow::builder().title(RELOAD_EACH_STROKE).build();
     let clean_each_row = adw::SwitchRow::builder().title(CLEAN_EACH_STROKE).build();
     let group = adw::PreferencesGroup::builder().title("Brush").build();
@@ -81,7 +77,6 @@ pub(super) fn tool_group(brushes: &[BrushSpec]) -> ToolGroup {
     group.add(&load.row);
     group.add(&plate_gap.row);
     group.add(&medium.row);
-    group.add(&brush_row);
     group.add(&reload_row);
     group.add(&clean_each_row);
     ToolGroup {
@@ -93,7 +88,6 @@ pub(super) fn tool_group(brushes: &[BrushSpec]) -> ToolGroup {
         load,
         plate_gap,
         medium,
-        brush_row,
         reload_row,
         clean_each_row,
     }
@@ -157,12 +151,4 @@ fn plate_gap_row() -> SliderRow {
         .scale
         .update_property(&[gtk::accessible::Property::Label(PLATE_GAP_TITLE)]);
     plate_gap
-}
-
-fn brush_row(brushes: &[BrushSpec]) -> adw::ComboRow {
-    let names: Vec<&str> = brushes.iter().map(|brush| brush.name.as_str()).collect();
-    adw::ComboRow::builder()
-        .title(BRUSH_ROW_TITLE)
-        .model(&gtk::StringList::new(&names))
-        .build()
 }

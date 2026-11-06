@@ -9,6 +9,7 @@ use crate::presenter::mode::PresentMode;
 use crate::tools::UiTool;
 
 use super::SmokeConfig;
+use super::brushes::SmokeBrushes;
 
 pub(super) const EXIT_AFTER_FRAMES: &str = "CADMIUM_SMOKE_EXIT_AFTER_FRAMES";
 pub(super) const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
@@ -47,6 +48,7 @@ impl SmokeConfig {
             save: lookup_path(&lookup, SAVE),
             open: lookup_path(&lookup, OPEN),
             export: lookup_path(&lookup, EXPORT),
+            brushes: SmokeBrushes::from_lookup(&lookup),
             dmabuf_selftest: lookup(DMABUF_SELFTEST).map(|_| lookup_policy(&lookup)),
         };
         if exit_after_frames.is_none()
@@ -74,17 +76,21 @@ impl SmokeConfig {
             && self.save.is_none()
             && self.open.is_none()
             && self.export.is_none()
+            && self.brushes.is_empty()
             && self.dmabuf_selftest.is_none()
     }
 }
 
-fn lookup_path(lookup: &impl Fn(&str) -> Option<OsString>, name: &str) -> Option<PathBuf> {
+pub(super) fn lookup_path(
+    lookup: &impl Fn(&str) -> Option<OsString>,
+    name: &str,
+) -> Option<PathBuf> {
     lookup(name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
 
-fn lookup_flag(lookup: &impl Fn(&str) -> Option<OsString>, name: &str) -> bool {
+pub(super) fn lookup_flag(lookup: &impl Fn(&str) -> Option<OsString>, name: &str) -> bool {
     lookup(name).is_some_and(|value| !value.is_empty() && value != "0")
 }
 

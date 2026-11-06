@@ -1,10 +1,12 @@
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::{BrushGeometry, PressureCurve, Tool};
 
+mod file;
 mod hair;
 mod head;
 mod library;
 
+pub use file::{BRUSH_EXTENSION, BrushFileError, ReadBrush, brush_from_json, brush_to_json};
 pub use hair::HairSpec;
 pub use head::HeadSpec;
 pub(crate) use head::Section;

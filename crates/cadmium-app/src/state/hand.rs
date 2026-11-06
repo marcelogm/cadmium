@@ -19,7 +19,9 @@ impl AppState {
         self.session.resize_tip();
     }
 
+    /// Wears a brush that is not picked from the library, forgetting the picked one.
     pub fn wear_brush(&mut self, brush: &BrushSpec) {
+        self.worn_brush_index = None;
         self.release();
         self.session.brush.wear(brush);
         self.session.resize_tip();

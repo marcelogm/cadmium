@@ -2,7 +2,6 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
-use cadmium_engine::brush::BrushSpec;
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
@@ -14,6 +13,7 @@ use crate::window::CadmiumWindow;
 mod build;
 mod piles;
 mod presentation;
+mod rack;
 mod signals;
 mod snapshot;
 
@@ -30,11 +30,12 @@ pub struct BrushPanel {
     window: glib::WeakRef<CadmiumWindow>,
     pigments: PigmentsGroup,
     tool_group: ToolGroup,
-    brushes: Vec<BrushSpec>,
+    rack: rack::Rack,
     clean_button: gtk::Button,
     hint: gtk::Label,
     pigment_swatches: RefCell<Vec<Swatch>>,
     shown_slots: RefCell<Option<Vec<String>>>,
+    shown_brushes: RefCell<Option<Vec<String>>>,
     syncing: Cell<bool>,
 }
 
@@ -42,11 +43,12 @@ impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
         let root = panel_root();
         let pigments = build::pigments_group();
-        let brushes = cadmium_engine::brush::factory_brushes();
-        let tool_group = build::tool_group(&brushes);
+        let tool_group = build::tool_group();
+        let rack = rack::rack();
         let clean_button = build::clean_button();
         let hint = build::hint_label();
         root.append(&pigments.group);
+        root.append(&rack.group);
         root.append(&tool_group.group);
         root.append(&clean_button);
         root.append(&hint);
@@ -56,11 +58,12 @@ impl BrushPanel {
             window: window.downgrade(),
             pigments,
             tool_group,
-            brushes,
+            rack,
             clean_button,
             hint,
             pigment_swatches: RefCell::new(Vec::new()),
             shown_slots: RefCell::new(None),
+            shown_brushes: RefCell::new(None),
             syncing: Cell::new(false),
         });
         panel.connect_controls();
@@ -74,7 +77,7 @@ impl BrushPanel {
     }
 
     pub fn refresh(self: &Rc<Self>) {
-        let snapshot = Snapshot::of(&self.state.borrow(), &self.brushes);
+        let snapshot = Snapshot::of(&self.state.borrow());
         self.syncing.set(true);
         if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {
             self.rebuild_pigments(&snapshot);
@@ -82,6 +85,7 @@ impl BrushPanel {
         self.highlight_piles(&snapshot);
         self.show_held_paint(&snapshot);
         self.show_sliders(&snapshot);
+        self.show_rack(&snapshot);
         self.show_stroke_options(&snapshot);
         self.show_controls_for(
             snapshot.tool,
@@ -149,12 +153,20 @@ impl BrushPanel {
             .set_label(&percent_text(f64::from(snapshot.medium)));
     }
 
+    fn show_rack(&self, snapshot: &Snapshot) {
+        if self.shown_brushes.borrow().as_ref() != Some(&snapshot.brush_names) {
+            rack::fill(&self.rack.flow, &snapshot.brush_names);
+            self.shown_brushes
+                .replace(Some(snapshot.brush_names.clone()));
+        }
+        rack::select(&self.rack.flow, snapshot.brush_index);
+        if let Some(window) = self.window.upgrade() {
+            window.set_brush_deletable(snapshot.brush_is_user);
+        }
+    }
+
     fn show_stroke_options(&self, snapshot: &Snapshot) {
         let group = &self.tool_group;
-        let selected = snapshot
-            .brush_index
-            .map_or(gtk::INVALID_LIST_POSITION, |index| index as u32);
-        group.brush_row.set_selected(selected);
         group.reload_row.set_active(snapshot.reload_each_stroke);
         group.clean_each_row.set_active(snapshot.clean_each_stroke);
     }
@@ -205,7 +217,7 @@ impl BrushPanel {
         group.load.row.set_visible(shown.load);
         group.medium.row.set_visible(shown.medium);
         group.plate_gap.row.set_visible(shown.plate_gap);
-        group.brush_row.set_visible(shown.shape);
+        self.rack.group.set_visible(shown.shape);
         group.reload_row.set_visible(shown.stroke_loading);
         group.clean_each_row.set_visible(shown.stroke_loading);
         self.clean_button.set_visible(shown.clean);

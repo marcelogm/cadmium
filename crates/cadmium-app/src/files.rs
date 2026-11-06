@@ -21,7 +21,7 @@ const GPU_LOST: &str = "the GPU was reset";
 pub const OUT_OF_VIDEO_MEMORY: &str = "not enough video memory";
 
 mod close;
-mod dialogs;
+pub(crate) mod dialogs;
 mod read;
 mod title;
 mod write;

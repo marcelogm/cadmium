@@ -26,6 +26,9 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("save", CadmiumWindow::save),
     ("save-as", CadmiumWindow::save_as),
     ("export", CadmiumWindow::export),
+    ("import-brush", CadmiumWindow::import_brush),
+    ("export-brush", CadmiumWindow::export_brush),
+    ("delete-brush", CadmiumWindow::delete_brush),
 ];
 
 impl CadmiumWindow {
@@ -34,6 +37,7 @@ impl CadmiumWindow {
             .iter()
             .map(|&(name, activate)| simple_action(name, activate));
         self.add_action_entries(std::iter::once(tool_action()).chain(simple));
+        self.set_brush_deletable(false);
     }
 
     pub(super) fn sync_history_actions(&self) {
@@ -46,6 +50,10 @@ impl CadmiumWindow {
         for (name, enabled) in [("undo", can_undo), ("redo", can_redo)] {
             self.enable_action(name, enabled);
         }
+    }
+
+    pub fn set_brush_deletable(&self, deletable: bool) {
+        self.enable_action("delete-brush", deletable);
     }
 
     fn enable_action(&self, name: &str, enabled: bool) {

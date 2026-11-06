@@ -9,11 +9,13 @@ use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
 use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
+mod brushes;
 mod config;
 mod steps;
 #[cfg(test)]
 mod tests;
 
+use brushes::SmokeBrushes;
 use steps::{FileWork, SmokeDialog, SmokeStep, quit};
 
 const SETTLE_FRAMES_AFTER_FILE_WORK: u32 = 10;
@@ -30,6 +32,7 @@ pub struct SmokeConfig {
     save: Option<PathBuf>,
     open: Option<PathBuf>,
     export: Option<PathBuf>,
+    brushes: SmokeBrushes,
     dmabuf_selftest: Option<ModifierPolicy>,
 }
 

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -6,6 +7,7 @@ use cadmium_engine::gpu::GpuContext;
 use gtk::{gdk, gio, glib};
 
 use crate::LOG_DOMAIN;
+use crate::brush_library::BrushLibrary;
 use crate::dialogs;
 use crate::presets::starting_canvas_spec;
 use crate::smoke::SmokeConfig;
@@ -80,6 +82,13 @@ fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
     let Some(state) = start_state(app) else {
         return;
     };
+    let brush_dir = match smoke.borrow().as_ref() {
+        None => Some(BrushLibrary::default_dir()),
+        Some(smoke) => smoke.brush_dir(),
+    };
+    if let Some(dir) = brush_dir {
+        load_brush_library(&state, dir);
+    }
     let window = CadmiumWindow::new(app, state);
     if let Some(smoke) = smoke.borrow_mut().take() {
         smoke.run(app, &window);
@@ -106,6 +115,15 @@ fn start_state(app: &adw::Application) -> Option<SharedState> {
             None
         }
     }
+}
+
+/// Smoke runs only load the folder they are given, never the painter's own brush folder.
+fn load_brush_library(state: &SharedState, dir: PathBuf) {
+    let (library, warnings) = BrushLibrary::load(dir);
+    for warning in &warnings {
+        glib::g_warning!(LOG_DOMAIN, "skipped brush {warning}");
+    }
+    state.borrow_mut().brushes = library;
 }
 
 fn report_startup_failure(app: &adw::Application, heading: &str, body: &str) {

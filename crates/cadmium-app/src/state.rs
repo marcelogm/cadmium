@@ -10,6 +10,7 @@ use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
 
+use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::tools::UiTool;
 use crate::writes::EditCounter;
@@ -28,6 +29,7 @@ mod gesture;
 mod hand;
 mod history;
 mod lab;
+mod library;
 mod pen;
 mod recipe;
 mod tray;
@@ -43,6 +45,9 @@ pub type Waker = Rc<dyn Fn()>;
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
     pub session: PaintSession,
+    pub brushes: BrushLibrary,
+    /// The library brush last picked, told apart from others with the same head and hair.
+    worn_brush_index: Option<usize>,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
     pub tube_slot: usize,
@@ -76,6 +81,8 @@ impl AppState {
         let mut state = AppState {
             gpu,
             session,
+            brushes: BrushLibrary::factory_only(),
+            worn_brush_index: None,
             view: ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
