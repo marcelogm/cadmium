@@ -8,7 +8,7 @@ use cadmium_engine::brush::BrushSpec;
 use cadmium_studio::{DemoStroke, SLOW_MOTION, StudioError, hair_name, head_name};
 use gtk::glib;
 
-use crate::state::{AppState, SharedState};
+use crate::state::{AppState, SharedState, StudioSession};
 use crate::studio_view::StudioView;
 use crate::window::CadmiumWindow;
 
@@ -56,7 +56,7 @@ pub fn open(window: &CadmiumWindow) {
     dialog.connect_closed(glib::clone!(
         #[weak]
         window,
-        move |dialog| window.after_editor_closed(dialog)
+        move |_| window.after_editor_closed()
     ));
     window.keep_editor(&dialog);
     dialog.present(Some(window));
@@ -91,21 +91,24 @@ fn runner(window: &CadmiumWindow, view: &StudioView) -> Runner {
 }
 
 fn apply(state: &mut AppState, action: ToolbarAction) {
-    if let ToolbarAction::Stroke(index) = action {
-        if let Some(&stroke) = DemoStroke::ALL.get(index) {
-            state.set_studio_stroke(stroke);
-        }
-        return;
-    }
-    let Some(studio) = state.studio_mut() else {
-        return;
-    };
     match action {
-        ToolbarAction::Play(true) => studio.player.play(),
-        ToolbarAction::Play(false) => studio.player.pause(),
-        ToolbarAction::SlowMotion(slow) => studio.player.set_speed(speed(slow)),
-        ToolbarAction::ResetView => studio.camera.reset(),
-        ToolbarAction::Stroke(_) => {}
+        ToolbarAction::Stroke(index) => {
+            if let Some(&stroke) = DemoStroke::ALL.get(index) {
+                state.set_studio_stroke(stroke);
+            }
+        }
+        ToolbarAction::Play(true) => change_studio(state, |studio| studio.player.play()),
+        ToolbarAction::Play(false) => change_studio(state, |studio| studio.player.pause()),
+        ToolbarAction::SlowMotion(slow) => {
+            change_studio(state, |studio| studio.player.set_speed(speed(slow)));
+        }
+        ToolbarAction::ResetView => change_studio(state, |studio| studio.camera.reset()),
+    }
+}
+
+fn change_studio(state: &mut AppState, change: impl FnOnce(&mut StudioSession)) {
+    if let Some(studio) = state.studio_mut() {
+        change(studio);
     }
 }
 

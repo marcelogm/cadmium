@@ -87,21 +87,20 @@ impl CadmiumWindow {
         }
     }
 
-    /// Closes the studio `editor` showed and refreshes the panels, which restarts
-    /// the thumbnails it paused; an editor opened since keeps its studio.
-    pub fn after_editor_closed(&self, editor: &adw::Dialog) {
-        let imp = self.imp();
-        let newer = imp
-            .editor
-            .borrow()
-            .as_ref()
-            .is_some_and(|kept| kept != editor);
-        if newer {
-            return;
+    /// Closes the editor's studio and refreshes the panels, which restarts the
+    /// thumbnails it paused; on a lost GPU the panels are left alone, so the
+    /// thumbnail job does not start on a dead device.
+    pub fn after_editor_closed(&self) {
+        self.imp().editor.take();
+        let gpu_lost = {
+            let state = self.state();
+            let mut state = state.borrow_mut();
+            state.close_studio();
+            state.gpu_is_lost()
+        };
+        if !gpu_lost {
+            self.refresh_panels();
         }
-        imp.editor.take();
-        self.state().borrow_mut().close_studio();
-        self.refresh_panels();
     }
 
     pub fn show_sidebar_page(&self, name: &str) {
