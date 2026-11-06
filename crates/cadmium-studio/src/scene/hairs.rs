@@ -13,7 +13,8 @@ const HAIR_WIDTH_SHARE: f32 = 0.35;
 /// The least drawn half-width, so the finest hairs still show.
 const MIN_HAIR_HALF_WIDTH_PX: f32 = 0.6;
 /// The lowest a ribbon reaches: just above the canvas at z = 0, so a hair
-/// lying on it never fights it for depth.
+/// lying on it never fights it for depth. This assumes a flat canvas; a plane
+/// displaced by the paint's relief must clamp to the height field instead.
 const LOWEST_HAIR_PX: f32 = 0.05;
 /// A quad's two triangles.
 const RIBBON_VERTICES: u32 = 6;
