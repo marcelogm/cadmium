@@ -14,11 +14,11 @@ use crate::tools::UiTool;
 const TEST_CANVAS: (u32, u32) = (512, 256);
 
 pub(super) const TEST_BRUSH_DIAMETER_PX: f32 = 16.0;
-pub(super) const PAINT_ROW_Y: f64 = 60.0;
+pub(crate) const PAINT_ROW_Y: f64 = 60.0;
 pub(super) const RAG_ROW_Y: f64 = 200.0;
 const STROKE_STEPS: u32 = 20;
 
-pub(super) fn painting_state() -> AppState {
+pub(crate) fn painting_state() -> AppState {
     let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
     let spec = CanvasSpec {
         width: TEST_CANVAS.0,
@@ -31,7 +31,7 @@ pub(super) fn painting_state() -> AppState {
     state
 }
 
-pub(super) fn row_samples(y: f64) -> Vec<StrokeSample> {
+pub(crate) fn row_samples(y: f64) -> Vec<StrokeSample> {
     (0..STROKE_STEPS)
         .map(|step| StrokeSample {
             x: 100.0 + f64::from(step) * 10.0,
@@ -44,13 +44,13 @@ pub(super) fn row_samples(y: f64) -> Vec<StrokeSample> {
         .collect()
 }
 
-pub(super) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
+pub(crate) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
     state.begin_stroke(tool, samples[0]);
     state.add_samples(&samples[1..]);
     state.release();
 }
 
-pub(super) fn present_one_frame(state: &mut AppState) {
+pub(crate) fn present_one_frame(state: &mut AppState) {
     let gpu = state.gpu.clone();
     let mut encoder = gpu
         .device
@@ -75,7 +75,7 @@ pub(super) const ULTRAMARINE_SLOT: usize = 4;
 
 pub(super) const RESERVE_TOLERANCE: f64 = 1e-3;
 
-pub(super) fn brush_totals(state: &AppState) -> PaintTotals {
+pub(crate) fn brush_totals(state: &AppState) -> PaintTotals {
     state.session.engine.brush_totals(&state.gpu).unwrap()
 }
 
