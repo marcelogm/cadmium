@@ -1,3 +1,5 @@
+use cadmium_engine::stroke::StrokeSample;
+
 use super::{FRAME_EVERY_SAMPLES, SETTLE_FRAMES, SETTLE_STEP_MS, StrokeSchedule, StudioEvent};
 use crate::demo::{DemoStroke, StrokeBox, samples};
 
@@ -58,4 +60,33 @@ fn check_structure(events: &[StudioEvent], stroke: DemoStroke) {
         })
         .collect();
     assert!(clocks.windows(2).all(|w| w[0] <= w[1]), "{stroke:?}");
+}
+
+/// `event`, `by_ms` later, written out by hand.
+fn later(event: StudioEvent, by_ms: u32) -> StudioEvent {
+    let moved = |sample: StrokeSample| StrokeSample {
+        time_ms: sample.time_ms + by_ms,
+        ..sample
+    };
+    match event {
+        StudioEvent::Begin(sample) => StudioEvent::Begin(moved(sample)),
+        StudioEvent::Add(sample) => StudioEvent::Add(moved(sample)),
+        StudioEvent::Frame(clock_ms) => StudioEvent::Frame(clock_ms + f64::from(by_ms)),
+        StudioEvent::End => StudioEvent::End,
+    }
+}
+
+#[test]
+fn a_shifted_schedule_moves_every_clock_forward_together() {
+    let schedule = StrokeSchedule::thumbnail(DemoStroke::PressureRamp, AREA);
+    let want: Vec<StudioEvent> = schedule.events().iter().map(|e| later(*e, 1000)).collect();
+    assert_eq!(schedule.shifted(1000).events(), want.as_slice());
+}
+
+#[test]
+fn the_last_clock_is_where_the_settle_ends() {
+    let schedule = StrokeSchedule::thumbnail(DemoStroke::SCurve, AREA);
+    let want = last_ms(DemoStroke::SCurve) + f64::from(SETTLE_FRAMES) * SETTLE_STEP_MS;
+    assert_eq!(schedule.last_clock_ms(), want);
+    assert_eq!(schedule.shifted(250).last_clock_ms(), want + 250.0);
 }

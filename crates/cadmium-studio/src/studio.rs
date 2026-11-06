@@ -10,6 +10,7 @@ use cadmium_engine::session::PaintSession;
 
 use crate::demo::{DemoStroke, StrokeBox};
 use crate::loading::{Loading, wear};
+use crate::paint::DEMO_PIGMENT;
 use crate::schedule::{StrokeSchedule, replay};
 
 /// A rack row's stroke (10:3), shown 153x46 px. The rack takes `thumbnail_full`, at
@@ -18,7 +19,6 @@ pub const THUMBNAIL_SIZE: (u32, u32) = (240, 72);
 const STUDIO_SCALE: u32 = 2;
 /// Small enough that a fan's splayed hairs stay inside the thumbnail.
 const STUDIO_MAX_SIZE_PX: f32 = 44.0;
-const STUDIO_PIGMENT: &str = "ultramarine_blue";
 const STUDIO_MEDIUM: f32 = 0.1;
 const STUDIO_LOAD: f32 = 1.0;
 /// 15% of the canvas width (72 px at 480): room for a fan's splay at the 44 px cap.
@@ -77,7 +77,7 @@ fn studio_spec() -> CanvasSpec {
         height: THUMBNAIL_SIZE.1 * STUDIO_SCALE,
         primer: Primer::WhiteGesso,
         weave: Weave::Smooth,
-        pigment_slots: vec![STUDIO_PIGMENT.to_string()],
+        pigment_slots: vec![DEMO_PIGMENT.to_string()],
     }
 }
 
