@@ -16,7 +16,7 @@ const SHEET_MARGIN: i32 = 18;
 
 /// The columns the editor fills.
 pub(super) struct Columns {
-    /// Left: the schematic goes on top (prepended), the example strokes' paper is under it.
+    /// Left: the schematic on top (prepended), the example strokes under it (appended).
     pub(super) drawing: gtk::Box,
     /// Right, scrolling: the Brush, Head and Hair groups.
     pub(super) controls: gtk::Box,
@@ -52,7 +52,6 @@ fn drawing_column() -> gtk::Box {
     let column = margined(gtk::Box::new(gtk::Orientation::Vertical, COLUMN_SPACING));
     // A size request leaves the margins out.
     column.set_width_request(DRAWING_WIDTH - 2 * COLUMN_MARGIN);
-    column.append(&paper::examples_placeholder());
     column
 }
 

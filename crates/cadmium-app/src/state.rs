@@ -32,6 +32,7 @@ mod lab;
 mod library;
 mod pen;
 mod recipe;
+mod studio_paint;
 mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {

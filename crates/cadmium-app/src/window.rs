@@ -72,6 +72,17 @@ impl CadmiumWindow {
         self.imp().thumbnails_pending.set(pending);
     }
 
+    /// Whether the brush editor is still painting its example strokes; smoke screenshots
+    /// wait for it.
+    pub fn examples_pending(&self) -> bool {
+        self.imp().examples_pending.get()
+    }
+
+    /// Set by the brush editor while it paints its example strokes.
+    pub fn set_examples_pending(&self, pending: bool) {
+        self.imp().examples_pending.set(pending);
+    }
+
     pub fn has_editor(&self) -> bool {
         self.imp().editor.borrow().is_some()
     }
@@ -97,6 +108,7 @@ impl CadmiumWindow {
     /// thumbnail job does not start on a dead device.
     pub fn after_editor_closed(&self) {
         self.imp().editor.take();
+        self.imp().examples_pending.set(false);
         let gpu_lost = self.state().borrow().gpu_is_lost();
         if !gpu_lost {
             self.refresh_panels();

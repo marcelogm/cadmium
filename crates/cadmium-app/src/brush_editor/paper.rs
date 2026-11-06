@@ -1,5 +1,5 @@
-//! Gridded paper: the example strokes and the test sheet will be painted on it. For now it
-//! stands in for both, blank.
+//! Gridded paper: under the example strokes until they are first painted, and where the
+//! test sheet will be painted (blank for now).
 
 use adw::prelude::*;
 use gtk::cairo;
@@ -11,8 +11,7 @@ const MAJOR_LINE: [f64; 3] = rgb(0xcfd5dc);
 const MINOR_STEP: f64 = 16.0;
 const MAJOR_STEP: f64 = 80.0;
 const LINE_WIDTH: f64 = 1.0;
-/// Where the example strokes go under the schematic: the example sheet's 910 × 440 at the
-/// column's width.
+/// The example strokes' picture under the schematic: the 910 × 440 sheet at the column's width.
 const EXAMPLES_SIZE: [i32; 2] = [312, 151];
 
 pub(super) const fn rgb(hex: u32) -> [f64; 3] {
@@ -23,9 +22,10 @@ pub(super) const fn rgb(hex: u32) -> [f64; 3] {
     ]
 }
 
-/// The blank paper where the example strokes will be.
-pub(super) fn examples_placeholder() -> gtk::DrawingArea {
-    let area = paper_area();
+/// The blank paper under the example strokes; it gives their picture its size. The card
+/// holding the picture rounds and clips it.
+pub(super) fn examples_paper() -> gtk::DrawingArea {
+    let area = grid_area();
     area.set_content_width(EXAMPLES_SIZE[0]);
     area.set_content_height(EXAMPLES_SIZE[1]);
     area
@@ -45,10 +45,16 @@ pub(super) fn test_sheet_placeholder(margin: i32) -> gtk::DrawingArea {
 
 /// A drawing area shaped like a libadwaita card: its corners rounded, the paper clipped to them.
 fn paper_area() -> gtk::DrawingArea {
+    let area = grid_area();
+    area.add_css_class("card");
+    area.set_overflow(gtk::Overflow::Hidden);
+    area
+}
+
+/// A drawing area painted with gridded paper.
+fn grid_area() -> gtk::DrawingArea {
     let area = gtk::DrawingArea::builder()
         .accessible_role(gtk::AccessibleRole::Presentation)
-        .css_classes(["card"])
-        .overflow(gtk::Overflow::Hidden)
         .build();
     area.set_draw_func(|_, context, width, height| {
         draw_grid(context, [f64::from(width), f64::from(height)]);

@@ -52,6 +52,8 @@ pub struct CadmiumWindow {
     pub editor: RefCell<Option<adw::Dialog>>,
     /// The rack is still painting thumbnails; exists so smoke screenshots wait for them.
     pub thumbnails_pending: Cell<bool>,
+    /// The brush editor is still painting its example strokes; smoke screenshots wait for them.
+    pub examples_pending: Cell<bool>,
 }
 
 #[glib::object_subclass]

@@ -1,7 +1,7 @@
 //! The brush editor: edits the worn brush as a draft, then saves it to the library.
 //!
 //! Three columns: the tip's drawing with the example strokes under it, the test sheet,
-//! and the controls. The examples and the test sheet are blank paper for now.
+//! and the controls. The test sheet is blank paper for now.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -18,17 +18,20 @@ mod brush_group;
 mod closing;
 mod controls;
 mod draft;
+mod examples;
 mod header;
 mod layout;
 mod listening;
 mod paper;
 mod parts;
+mod repainting;
 mod saving;
 mod schematic;
 mod wiring;
 
 use brush_group::BrushGroup;
 use draft::{Draft, Origin};
+use examples::{ExampleJob, Examples};
 use listening::Listening;
 use parts::PartGroups;
 use schematic::Subject;
@@ -46,6 +49,8 @@ struct Editor {
     brush: BrushGroup,
     parts: PartGroups,
     schematic: gtk::DrawingArea,
+    /// The example strokes under the schematic.
+    examples: Examples,
 }
 
 /// Shows the editor on the worn brush; while one is open, does nothing.
@@ -53,8 +58,12 @@ pub fn open(window: &CadmiumWindow) {
     if window.has_editor() {
         return;
     }
-    let draft = draft_for(&window.state().borrow());
-    let editor = Editor::new(window, draft);
+    let state = window.state();
+    let (draft, job) = {
+        let state = state.borrow();
+        (draft_for(&state), ExampleJob::new(&state))
+    };
+    let editor = Editor::new(window, draft, job);
     window.keep_editor(&editor.dialog);
     // The panels see the editor open: the brush panel lets go of its thumbnail studio.
     window.refresh_panels();
@@ -78,7 +87,7 @@ fn draft_for(state: &AppState) -> Draft {
 }
 
 impl Editor {
-    fn new(window: &CadmiumWindow, draft: Draft) -> Rc<Editor> {
+    fn new(window: &CadmiumWindow, draft: Draft, job: ExampleJob) -> Rc<Editor> {
         let header = header::header();
         let (dialog, columns) = layout::dialog(&draft.chosen_name(), &header.bar);
         let brush = brush_group::brush_group();
@@ -88,6 +97,8 @@ impl Editor {
         columns.controls.append(&parts.hair);
         let schematic = schematic::schematic_area();
         columns.drawing.prepend(&schematic);
+        let examples = Examples::new(job);
+        columns.drawing.append(examples.view.widget());
         let editor = Rc::new(Editor {
             window: window.downgrade(),
             dialog,
@@ -97,11 +108,13 @@ impl Editor {
             brush,
             parts,
             schematic,
+            examples,
         });
         editor.connect(&header);
         editor.connect_schematic();
         editor.sync();
         editor.keep_until_closed();
+        editor.paint_examples();
         editor
     }
 
