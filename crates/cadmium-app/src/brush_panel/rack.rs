@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use adw::prelude::*;
-use gtk::{gdk, gio};
+use gtk::{gdk, gio, glib};
 
 use super::presentation::RackEntry;
 
@@ -27,6 +27,9 @@ pub(super) struct Rack {
     scroller: gtk::ScrolledWindow,
     /// Each row's stroke, in rack order, so a thumbnail lands on its row.
     strokes: RefCell<Vec<StrokeView>>,
+    /// The row last scrolled into view, so a refresh that keeps the worn brush leaves the
+    /// rack where the user scrolled it.
+    scrolled_to: glib::WeakRef<gtk::ListBoxRow>,
 }
 
 pub(super) fn rack() -> Rack {
@@ -55,6 +58,7 @@ pub(super) fn rack() -> Rack {
         list,
         scroller,
         strokes: RefCell::new(Vec::new()),
+        scrolled_to: glib::WeakRef::new(),
     }
 }
 
@@ -74,6 +78,14 @@ fn fit_height(scroller: &gtk::ScrolledWindow, list: &gtk::ListBox) {
     .map(|row| natural(row.upcast_ref()))
     .sum();
     scroller.set_min_content_height(natural(list.upcast_ref()) - hidden);
+}
+
+fn scroll_once_laid_out(viewport: &gtk::Viewport, row: &gtk::ListBoxRow) -> glib::ControlFlow {
+    if row.height() == 0 {
+        return glib::ControlFlow::Continue;
+    }
+    viewport.scroll_to(row, None);
+    glib::ControlFlow::Break
 }
 
 fn menu_button() -> gtk::MenuButton {
@@ -121,9 +133,25 @@ impl Rack {
             .and_then(|index| i32::try_from(index).ok())
             .and_then(|index| self.list.row_at_index(index));
         match row {
-            Some(row) => self.list.select_row(Some(&row)),
+            Some(row) => {
+                self.list.select_row(Some(&row));
+                self.scroll_to(&row);
+            }
             None => self.list.unselect_all(),
         }
+    }
+
+    /// Scrolls `row` into view once it is laid out: a row a refill just added has no size
+    /// yet, and the viewport would scroll to where it is not.
+    fn scroll_to(&self, row: &gtk::ListBoxRow) {
+        if self.scrolled_to.upgrade().as_ref() == Some(row) {
+            return;
+        }
+        self.scrolled_to.set(Some(row));
+        let Some(viewport) = self.scroller.child().and_downcast::<gtk::Viewport>() else {
+            return;
+        };
+        row.add_tick_callback(move |row, _| scroll_once_laid_out(&viewport, row));
     }
 
     /// The rack position of the picked brush, if one is picked.
