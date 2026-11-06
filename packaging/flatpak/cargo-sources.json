@@ -691,14 +691,14 @@
   {
     "type": "archive",
     "archive-type": "tar-gzip",
-    "url": "https://static.crates.io/crates/glam/glam-0.34.2.crate",
-    "sha256": "54af5066834d6c2d404eb26ea036a15b15d9ff80db510b9a73ff95ab07f30831",
-    "dest": "cargo/vendor/glam-0.34.2"
+    "url": "https://static.crates.io/crates/glam/glam-0.34.1.crate",
+    "sha256": "fc148d4ddd3930c52f9e5ae79b89805c6f07e9ff417e7b083e0348cea60a5aba",
+    "dest": "cargo/vendor/glam-0.34.1"
   },
   {
     "type": "inline",
-    "contents": "{\"package\": \"54af5066834d6c2d404eb26ea036a15b15d9ff80db510b9a73ff95ab07f30831\", \"files\": {}}",
-    "dest": "cargo/vendor/glam-0.34.2",
+    "contents": "{\"package\": \"fc148d4ddd3930c52f9e5ae79b89805c6f07e9ff417e7b083e0348cea60a5aba\", \"files\": {}}",
+    "dest": "cargo/vendor/glam-0.34.1",
     "dest-filename": ".cargo-checksum.json"
   },
   {
