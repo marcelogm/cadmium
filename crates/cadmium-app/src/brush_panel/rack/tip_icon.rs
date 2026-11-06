@@ -8,7 +8,7 @@ use adw::prelude::*;
 use cadmium_studio::TipView;
 use gtk::{cairo, gdk};
 
-use super::fit::{Fit, contain};
+use crate::ink::{contain, trace};
 
 const ICON_SIZE: i32 = 30;
 const PADDING: f64 = 2.0;
@@ -67,16 +67,6 @@ fn draw(
     let _ = context.fill_preserve();
     set_ink(context, ink, 1.0);
     let _ = context.stroke();
-}
-
-/// Traces `points` as one closed path: the outlines are open polylines.
-fn trace(context: &cairo::Context, fit: &Fit, points: &[[f32; 2]]) {
-    context.new_path();
-    for &point in points {
-        let (x, y) = fit.place(point);
-        context.line_to(x, y);
-    }
-    context.close_path();
 }
 
 fn set_ink(context: &cairo::Context, ink: &gdk::RGBA, alpha: f32) {

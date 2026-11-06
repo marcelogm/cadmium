@@ -14,6 +14,7 @@ mod dmabuf;
 mod dmabuf_selftest;
 mod files;
 mod handlers;
+mod ink;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;
