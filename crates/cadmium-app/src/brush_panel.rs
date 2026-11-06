@@ -167,10 +167,17 @@ impl BrushPanel {
     }
 
     fn show_rack(self: &Rc<Self>, snapshot: &Snapshot) {
-        let shown = (snapshot.brush_names.clone(), snapshot.brush_keys.clone());
-        if self.shown_brushes.borrow().as_ref() != Some(&shown) {
+        let unchanged = self
+            .shown_brushes
+            .borrow()
+            .as_ref()
+            .is_some_and(|(names, keys)| {
+                *names == snapshot.brush_names && *keys == snapshot.brush_keys
+            });
+        if !unchanged {
             let thumbnails = self.cached_thumbnails(&snapshot.brush_keys);
             rack::fill(&self.rack.flow, &snapshot.brush_names, &thumbnails);
+            let shown = (snapshot.brush_names.clone(), snapshot.brush_keys.clone());
             self.shown_brushes.replace(Some(shown));
         }
         rack::select(&self.rack.flow, snapshot.brush_index);
