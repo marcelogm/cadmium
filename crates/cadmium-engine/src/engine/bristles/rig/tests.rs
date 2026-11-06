@@ -1,4 +1,5 @@
-use super::{BRISTLE_SETTLE_MS, BristleRig};
+use super::{BRISTLE_SETTLE_MS, BristleRig, LayoutKey, LayoutRequest};
+use crate::brush::HeadSpec;
 use crate::engine::dab_record::DabRecord;
 use crate::params::SimParams;
 use crate::stroke::{Dab, Tool};
@@ -89,4 +90,26 @@ fn a_brush_put_down_for_another_tool_does_not_settle() {
     rig.put_down();
     assert!(!rig.settling(16.0));
     assert!(rig.settle(16.0).is_none());
+}
+
+fn key_of(head: HeadSpec) -> LayoutKey {
+    LayoutKey::of(&LayoutRequest {
+        head,
+        ferrule_radius_px: 20.0,
+        seed: 7,
+    })
+}
+
+#[test]
+fn a_change_of_point_alone_keeps_the_layout() {
+    let pointed = HeadSpec {
+        point: 0.1,
+        ..HeadSpec::ROUND
+    };
+    assert_eq!(key_of(pointed), key_of(HeadSpec::ROUND));
+    let domed = HeadSpec {
+        dome: 0.5,
+        ..HeadSpec::ROUND
+    };
+    assert_ne!(key_of(domed), key_of(HeadSpec::ROUND));
 }

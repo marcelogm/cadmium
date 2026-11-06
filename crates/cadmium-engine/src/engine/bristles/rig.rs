@@ -12,7 +12,7 @@ pub const BRISTLE_SETTLE_MS: f32 = 1500.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct LayoutKey {
-    head_bits: [u32; 8],
+    head_bits: [u32; 7],
     ferrule_radius_bits: u32,
 }
 
@@ -25,7 +25,6 @@ impl LayoutKey {
                 h.length,
                 h.dome,
                 h.slant,
-                h.point,
                 h.belly,
                 h.fan_deg,
                 h.density_per_px,
@@ -140,6 +139,7 @@ impl BristleRig {
         request: &LayoutRequest,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        self.head = request.head;
         let key = LayoutKey::of(request);
         if self.key == Some(key) {
             return;
@@ -147,7 +147,6 @@ impl BristleRig {
         let laid = layout(request);
         buffers.upload(gpu, &laid, encoder);
         self.adopt(&laid, request.ferrule_radius_px);
-        self.head = request.head;
         self.key = Some(key);
         self.reset();
     }
