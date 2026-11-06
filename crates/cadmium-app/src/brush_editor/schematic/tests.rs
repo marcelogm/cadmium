@@ -7,8 +7,14 @@ use super::{Subject, paint};
 
 /// The sheet's own size: drawn at one pixel per sheet unit.
 const SIZE: [i32; 2] = [320, 582];
-/// Pixels this close to the edge lie outside the sheet's border: only paper and grid there.
-const MARGIN: usize = 4;
+/// The frame's lines cover pixel `MARGIN` from each edge: pixel 6 on the left and top, pixel
+/// `width - 6` (314) and `height - 6` (576) on the right and bottom. Pixels beyond them hold
+/// only paper and grid, or nothing at all in the rounded-off corners.
+const MARGIN: usize = 6;
+/// The rounded corners' radius in pixels, at any fit: a libadwaita card's.
+const CORNER: usize = 12;
+/// Half the sheet's size: drawn at half a pixel per sheet unit.
+const HALF_SIZE: [i32; 2] = [160, 291];
 /// Antialiasing slack, in 8-bit levels, around the paper and grid colours.
 const SLACK: f64 = 3.0;
 const DARK: u8 = 100;
@@ -17,7 +23,16 @@ const MIN_INKED: usize = 500;
 /// Draws `brush` on a sheet-sized image at `pixel_scale`, and gives the image with what landed
 /// where.
 fn drawn(brush: &BrushSpec, pixel_scale: f64) -> (cairo::ImageSurface, Vec<Mark>) {
-    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, SIZE[0], SIZE[1])
+    drawn_at(brush, SIZE, pixel_scale)
+}
+
+/// Draws `brush` fitted into an image of `size`, at `pixel_scale`.
+fn drawn_at(
+    brush: &BrushSpec,
+    size: [i32; 2],
+    pixel_scale: f64,
+) -> (cairo::ImageSurface, Vec<Mark>) {
+    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, size[0], size[1])
         .expect("an image surface");
     let context = cairo::Context::new(&surface).expect("a cairo context");
     let canvas = Canvas::new(&context, pixel_scale);
@@ -26,7 +41,7 @@ fn drawn(brush: &BrushSpec, pixel_scale: f64) -> (cairo::ImageSurface, Vec<Mark>
         head: None,
         hair: None,
     };
-    paint(&canvas, &subject, SIZE);
+    paint(&canvas, &subject, size);
     assert!(context.status().is_ok(), "{:?}", brush.head);
     let marks = canvas.marks.take();
     drop(canvas);
@@ -34,17 +49,22 @@ fn drawn(brush: &BrushSpec, pixel_scale: f64) -> (cairo::ImageSurface, Vec<Mark>
     (surface, marks)
 }
 
-/// Each pixel's red, green and blue, row by row.
-fn render(brush: &BrushSpec) -> Vec<[u8; 3]> {
-    let (mut surface, _) = drawn(brush, 1.0);
+/// Each pixel's red, green, blue and alpha (premultiplied), row by row.
+fn render(brush: &BrushSpec) -> Vec<[u8; 4]> {
+    render_at(brush, SIZE)
+}
+
+/// Like `render`, fitted into an image of `size`.
+fn render_at(brush: &BrushSpec, size: [i32; 2]) -> Vec<[u8; 4]> {
+    let (mut surface, _) = drawn_at(brush, size, 1.0);
     surface.flush();
     let stride = usize::try_from(surface.stride()).expect("a positive stride");
-    let width = SIZE[0] as usize;
+    let width = size[0] as usize;
     let data = surface.data().expect("the surface's pixels");
-    (0..width * SIZE[1] as usize)
+    (0..width * size[1] as usize)
         .map(|i| {
             let at = (i / width) * stride + (i % width) * 4;
-            [data[at + 2], data[at + 1], data[at]]
+            [data[at + 2], data[at + 1], data[at], data[at + 3]]
         })
         .collect()
 }
@@ -63,12 +83,27 @@ fn paper_or_grid(pixel: [u8; 3]) -> bool {
 fn in_margin(index: usize) -> bool {
     let (width, height) = (SIZE[0] as usize, SIZE[1] as usize);
     let (x, y) = (index % width, index / width);
-    x < MARGIN || y < MARGIN || x >= width - MARGIN || y >= height - MARGIN
+    x < MARGIN || y < MARGIN || x > width - MARGIN || y > height - MARGIN
+}
+
+/// Whether the pixel lies in one of the sheet's corner squares, where the rounding is.
+fn in_corner(index: usize) -> bool {
+    let (width, height) = (SIZE[0] as usize, SIZE[1] as usize);
+    let (x, y) = (index % width, index / width);
+    (x < CORNER || x >= width - CORNER) && (y < CORNER || y >= height - CORNER)
+}
+
+/// Paper or grid, opaque; or, in a corner, rounded off (partly or wholly transparent).
+fn blank(index: usize, [red, green, blue, alpha]: [u8; 4]) -> bool {
+    if alpha < u8::MAX {
+        return in_corner(index);
+    }
+    paper_or_grid([red, green, blue])
 }
 
 fn assert_on_the_sheet(brush: &BrushSpec) {
     let pixels = render(brush);
-    let stray = (0..pixels.len()).find(|&i| in_margin(i) && !paper_or_grid(pixels[i]));
+    let stray = (0..pixels.len()).find(|&i| in_margin(i) && !blank(i, pixels[i]));
     assert!(
         stray.is_none(),
         "ink at pixel {stray:?} for {:?}",
@@ -208,7 +243,7 @@ fn the_drawing_puts_ink_on_the_paper() {
     let pixels = render(&factory_brushes().swap_remove(0));
     let inked = pixels
         .iter()
-        .filter(|pixel| pixel.iter().all(|&c| c < DARK))
+        .filter(|pixel| pixel[..3].iter().all(|&c| c < DARK))
         .count();
     assert!(inked > MIN_INKED, "{inked}");
 }
@@ -226,4 +261,26 @@ fn a_thin_straight_line_covers_one_device_pixel() {
     let paper = PAPER[0];
     assert!(red(6) < paper - 0.3, "{}", red(6));
     assert!((red(5) - paper).abs() < 0.05 && (red(7) - paper).abs() < 0.05);
+}
+
+/// Pixels along the top-left diagonal: one outside a 12-pixel rounding, one inside it (and
+/// outside a 24-pixel one), whatever the fit.
+const OUTSIDE_THE_ARC: usize = 2;
+const INSIDE_THE_ARC: usize = 5;
+
+#[test]
+fn the_sheets_corners_are_rounded_like_a_card() {
+    for size in [SIZE, HALF_SIZE] {
+        let pixels = render_at(&factory_brushes().swap_remove(0), size);
+        let width = size[0] as usize;
+        let at = |x: usize, y: usize| pixels[y * width + x][3];
+        let last = [width - 1, size[1] as usize - 1];
+        for [x, y] in [[0, 0], [last[0], 0], [0, last[1]], last] {
+            assert_eq!(at(x, y), 0, "corner pixel ({x}, {y}) at {size:?}");
+        }
+        assert_eq!(at(OUTSIDE_THE_ARC, OUTSIDE_THE_ARC), 0, "{size:?}");
+        assert_eq!(at(INSIDE_THE_ARC, INSIDE_THE_ARC), u8::MAX, "{size:?}");
+        assert_eq!(at(0, CORNER), u8::MAX, "{size:?}");
+        assert_eq!(at(CORNER, 0), u8::MAX, "{size:?}");
+    }
 }

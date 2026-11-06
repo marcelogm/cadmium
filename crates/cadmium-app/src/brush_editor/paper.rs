@@ -43,9 +43,12 @@ pub(super) fn test_sheet_placeholder(margin: i32) -> gtk::DrawingArea {
     area
 }
 
+/// A drawing area shaped like a libadwaita card: its corners rounded, the paper clipped to them.
 fn paper_area() -> gtk::DrawingArea {
     let area = gtk::DrawingArea::builder()
         .accessible_role(gtk::AccessibleRole::Presentation)
+        .css_classes(["card"])
+        .overflow(gtk::Overflow::Hidden)
         .build();
     area.set_draw_func(|_, context, width, height| {
         draw_grid(context, [f64::from(width), f64::from(height)]);

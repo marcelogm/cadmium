@@ -2,6 +2,7 @@
 //! dimensions, the footprint and a title block, on light gridded paper — the owner-approved
 //! mockup, drawn from `TipGeometry` in sheet units, then fitted into the widget.
 
+use std::f64::consts::{FRAC_PI_2, PI};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -27,6 +28,9 @@ use views::Placed;
 
 /// The left column's width, and the sheet's height at it.
 const DISPLAY_SIZE: [i32; 2] = [312, 567];
+/// The sheet's corners are rounded like a libadwaita card's (`.card`, 12 px in 1.9), in
+/// widget units; the frame sits inside the rounding.
+const CARD_RADIUS: f64 = 12.0;
 const FRAME_INSET: f64 = 6.0;
 const FRAME_PEN: Pen = Pen::new(INK, 0.8);
 const GRID_STEP: f64 = 10.0;
@@ -46,6 +50,7 @@ pub(super) fn schematic_area() -> gtk::DrawingArea {
         .content_width(DISPLAY_SIZE[0])
         .content_height(DISPLAY_SIZE[1])
         .accessible_role(gtk::AccessibleRole::Img)
+        .css_classes(["card"])
         .build();
     area.update_property(&[gtk::accessible::Property::Label("Drawing of the brush tip")]);
     follow_scale(&area);
@@ -76,6 +81,8 @@ fn paint(canvas: &Canvas, subject: &Subject, size: [i32; 2]) {
     let fit = contain([0.0; 2], SHEET, size.map(f64::from), 0.0);
     canvas.translate(fit.origin[0], fit.origin[1]);
     canvas.scale(fit.scale, fit.scale);
+    rounded_sheet(canvas, CARD_RADIUS / fit.scale);
+    canvas.clip();
     paper(canvas);
     let tip = TipGeometry::new(&subject.brush.head, &subject.brush.hair);
     let sheet = Sheet::of(&tip, &figures(canvas, &tip));
@@ -93,6 +100,22 @@ fn figures(context: &cairo::Context, tip: &TipGeometry) -> Figures {
         footprint_caption: pen::width(context, footprint::CAPTION_TEXT, &CAPTION),
         tip_width: pen::width(context, &tip_width, &DIMENSION_LABEL),
     }
+}
+
+/// The sheet's outline, its corners rounded by `radius` (sheet units).
+fn rounded_sheet(context: &cairo::Context, radius: f64) {
+    let [width, height] = SHEET;
+    let corners = [
+        [width - radius, radius, -FRAC_PI_2],
+        [width - radius, height - radius, 0.0],
+        [radius, height - radius, FRAC_PI_2],
+        [radius, radius, PI],
+    ];
+    context.new_path();
+    for [x, y, start] in corners {
+        context.arc(x, y, radius, start, start + FRAC_PI_2);
+    }
+    context.close_path();
 }
 
 /// The paper, its grid, and the frame inside its edge.
