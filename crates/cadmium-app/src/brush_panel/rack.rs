@@ -1,6 +1,7 @@
 //! The Brushes group: one row per brush (its tip, its names, its stroke) and a library menu.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
@@ -27,9 +28,9 @@ pub(super) struct Rack {
     scroller: gtk::ScrolledWindow,
     /// Each row's stroke, in rack order, so a thumbnail lands on its row.
     strokes: RefCell<Vec<StrokeView>>,
-    /// The row last scrolled into view, so a refresh that keeps the worn brush leaves the
-    /// rack where the user scrolled it.
-    scrolled_to: glib::WeakRef<gtk::ListBoxRow>,
+    /// The row last scrolled into view, or waiting to be, so a refresh that keeps the worn
+    /// brush leaves the rack where the user scrolled it.
+    scrolled_to: Rc<glib::WeakRef<gtk::ListBoxRow>>,
 }
 
 pub(super) fn rack() -> Rack {
@@ -48,8 +49,19 @@ pub(super) fn rack() -> Rack {
         .overflow(gtk::Overflow::Hidden)
         .build();
     card.append(&scroller);
-    let sized = list.clone();
-    scroller.connect_map(move |scroller| fit_height(scroller, &sized));
+    let scrolled_to: Rc<glib::WeakRef<gtk::ListBoxRow>> = Rc::default();
+    let shown = list.clone();
+    let pending = Rc::clone(&scrolled_to);
+    // Showing the rack again scrolls only when a scroll was dropped while it was hidden (or
+    // none ran yet): a finished one leaves the rack where the user scrolled it.
+    scroller.connect_map(move |scroller| {
+        fit_height(scroller, &shown);
+        if pending.upgrade().is_none()
+            && let Some(row) = shown.selected_row()
+        {
+            scroll_when_laid_out(&pending, scroller, &row);
+        }
+    });
     let group = adw::PreferencesGroup::builder().title(RACK_TITLE).build();
     group.set_header_suffix(Some(&menu_button()));
     group.add(&card);
@@ -58,7 +70,7 @@ pub(super) fn rack() -> Rack {
         list,
         scroller,
         strokes: RefCell::new(Vec::new()),
-        scrolled_to: glib::WeakRef::new(),
+        scrolled_to,
     }
 }
 
@@ -80,11 +92,42 @@ fn fit_height(scroller: &gtk::ScrolledWindow, list: &gtk::ListBox) {
     scroller.set_min_content_height(natural(list.upcast_ref()) - hidden);
 }
 
-fn scroll_once_laid_out(viewport: &gtk::Viewport, row: &gtk::ListBoxRow) -> glib::ControlFlow {
+/// Scrolls `scroller` to `row` once it is laid out: a row a refill just added has no size
+/// yet, and the viewport would scroll to where it is not.
+fn scroll_when_laid_out(
+    pending: &Rc<glib::WeakRef<gtk::ListBoxRow>>,
+    scroller: &gtk::ScrolledWindow,
+    row: &gtk::ListBoxRow,
+) {
+    pending.set(Some(row));
+    let Some(viewport) = scroller.child().and_downcast::<gtk::Viewport>() else {
+        return;
+    };
+    let viewport = viewport.downgrade();
+    let pending = Rc::clone(pending);
+    row.add_tick_callback(move |row, _| scroll_once_laid_out(&pending, &viewport, row));
+}
+
+/// One frame of waiting for `row`: it stops when another row is wanted, and when the rack is
+/// hidden, where it would never be laid out (showing the rack again retries).
+fn scroll_once_laid_out(
+    pending: &glib::WeakRef<gtk::ListBoxRow>,
+    viewport: &glib::WeakRef<gtk::Viewport>,
+    row: &gtk::ListBoxRow,
+) -> glib::ControlFlow {
+    if pending.upgrade().as_ref() != Some(row) {
+        return glib::ControlFlow::Break;
+    }
+    if !row.is_mapped() {
+        pending.set(None);
+        return glib::ControlFlow::Break;
+    }
     if row.height() == 0 {
         return glib::ControlFlow::Continue;
     }
-    viewport.scroll_to(row, None);
+    if let Some(viewport) = viewport.upgrade() {
+        viewport.scroll_to(row, None);
+    }
     glib::ControlFlow::Break
 }
 
@@ -141,17 +184,11 @@ impl Rack {
         }
     }
 
-    /// Scrolls `row` into view once it is laid out: a row a refill just added has no size
-    /// yet, and the viewport would scroll to where it is not.
+    /// Scrolls `row` into view, unless it is the row already scrolled to.
     fn scroll_to(&self, row: &gtk::ListBoxRow) {
-        if self.scrolled_to.upgrade().as_ref() == Some(row) {
-            return;
+        if self.scrolled_to.upgrade().as_ref() != Some(row) {
+            scroll_when_laid_out(&self.scrolled_to, &self.scroller, row);
         }
-        self.scrolled_to.set(Some(row));
-        let Some(viewport) = self.scroller.child().and_downcast::<gtk::Viewport>() else {
-            return;
-        };
-        row.add_tick_callback(move |row, _| scroll_once_laid_out(&viewport, row));
     }
 
     /// The rack position of the picked brush, if one is picked.

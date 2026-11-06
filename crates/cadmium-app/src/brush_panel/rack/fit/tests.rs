@@ -51,3 +51,16 @@ fn snapping_puts_an_even_line_on_a_pixel_edge_at_twice_the_density() {
     assert!((snapped.origin[0] - 10.0).abs() < CLOSE);
     assert!((snapped.origin[1] - 8.0).abs() < CLOSE);
 }
+
+#[test]
+fn snapping_puts_a_fractional_line_edge_on_a_pixel_edge() {
+    let fit = Fit {
+        scale: 3.0,
+        origin: [10.2, 7.9],
+    };
+    // A 1 px line is 1.5 device pixels wide at 1.5×: its centre lands 0.75 past a pixel
+    // edge, so its left (top) edge is on that edge.
+    let snapped = fit.snapped(1.5, 1.0);
+    assert!((snapped.origin[0] - 15.75 / 1.5).abs() < CLOSE);
+    assert!((snapped.origin[1] - 11.75 / 1.5).abs() < CLOSE);
+}

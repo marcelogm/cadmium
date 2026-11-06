@@ -6,11 +6,13 @@ use super::{ICON_SIZE, LINE_WIDTH, PADDING, draw};
 
 /// The pixels a line drawn on the padding's edge may reach: half its width, and the half
 /// pixel the snapping may move it.
-const RING: usize = (PADDING - LINE_WIDTH) as usize;
+const RING: usize = (PADDING - LINE_WIDTH / 2.0 - 0.5) as usize;
 const SIDE: usize = ICON_SIZE as usize;
 /// A fitted drawing spans the room inside the padding along one axis, less a pixel.
 const MIN_SPAN: usize = SIDE - 2 * PADDING as usize - 1;
 const STRONG_INK: u8 = 128;
+/// The fewest fully opaque pixels in a row that make the mouth line read as crisp.
+const MIN_CRISP_RUN: usize = 6;
 
 /// Each pixel's alpha, row by row.
 fn alphas(head: &HeadSpec, hair: &HairSpec) -> Vec<u8> {
@@ -59,6 +61,28 @@ fn each_factory_tip_inks_inside_its_box() {
         assert!(
             span(|&(x, _)| x).max(span(|&(_, y)| y)) >= MIN_SPAN,
             "{} does not fill its box",
+            brush.name
+        );
+    }
+}
+
+/// The longest run of fully opaque pixels along any row.
+fn longest_opaque_run(alphas: &[u8]) -> usize {
+    alphas
+        .chunks(SIDE)
+        .flat_map(|row| row.split(|&alpha| alpha < u8::MAX))
+        .map(<[u8]>::len)
+        .max()
+        .unwrap_or(0)
+}
+
+#[test]
+fn each_factory_tip_draws_its_mouth_line_on_whole_pixels() {
+    for brush in factory_brushes() {
+        let run = longest_opaque_run(&alphas(&brush.head, &brush.hair));
+        assert!(
+            run >= MIN_CRISP_RUN,
+            "{} has no crisp horizontal line (longest opaque run {run})",
             brush.name
         );
     }

@@ -19,7 +19,8 @@ impl Fit {
     /// The same fit with its origin moved under half a device pixel, so a line of
     /// `line_width` through the drawing's x = 0 or y = 0 covers whole device pixels on a
     /// display of `pixel_scale` device pixels per unit: on a pixel's centre when the line is
-    /// an odd number of pixels wide, on its edge when even.
+    /// an odd number of pixels wide, on its edge when even; at a fractional width, one edge
+    /// of the line on a pixel edge. Assumes the widget's own origin sits on a device pixel.
     pub(super) fn snapped(self, pixel_scale: f64, line_width: f64) -> Fit {
         let offset = (line_width * pixel_scale / 2.0).fract();
         let snap = |at: f64| ((at * pixel_scale - offset).round() + offset) / pixel_scale;
