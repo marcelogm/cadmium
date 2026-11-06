@@ -6,56 +6,34 @@ use cadmium_engine::surface::Surface;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
-use self::navigation::{pan_gesture, pinch_gesture, scroll_controller};
+use self::nav_drag::{NavButton, NavDrag};
+use self::navigation::{nav_gesture, pinch_gesture, scroll_controller};
 use self::stylus::{eyedropper_click, hover_controller, stylus_gesture};
 use crate::canvas_widget::CadmiumCanvas;
 use crate::state::SharedState;
-
-const PAN_BUTTON: u32 = gdk::BUTTON_MIDDLE;
 
 pub(crate) mod nav_drag;
 mod navigation;
 pub(crate) mod samples;
 mod stylus;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PanGesture {
-    Primary,
-    Middle,
-}
-
-impl PanGesture {
-    fn button(self) -> u32 {
-        match self {
-            PanGesture::Primary => gdk::BUTTON_PRIMARY,
-            PanGesture::Middle => PAN_BUTTON,
-        }
-    }
-
-    fn index(self) -> usize {
-        match self {
-            PanGesture::Primary => 0,
-            PanGesture::Middle => 1,
-        }
-    }
-}
-
+/// The navigation drag each button has in progress.
 #[derive(Default)]
-struct PanFlags {
-    panning: [Cell<bool>; 2],
+struct NavDrags {
+    drags: [Cell<Option<NavDrag>>; 3],
 }
 
-impl PanFlags {
-    fn set(&self, gesture: PanGesture, panning: bool) {
-        self.panning[gesture.index()].set(panning);
+impl NavDrags {
+    fn set(&self, button: NavButton, drag: Option<NavDrag>) {
+        self.drags[button.index()].set(drag);
     }
 
-    fn is_panning(&self, gesture: PanGesture) -> bool {
-        self.panning[gesture.index()].get()
+    fn get(&self, button: NavButton) -> Option<NavDrag> {
+        self.drags[button.index()].get()
     }
 
     fn any(&self) -> bool {
-        self.panning.iter().any(Cell::get)
+        self.drags.iter().any(|drag| drag.get().is_some())
     }
 }
 
@@ -79,11 +57,15 @@ pub trait PaintSurfaceWidget:
         false
     }
     fn contact_released(&self) {}
+    /// Whether a held key has the primary contact navigate instead of paint.
+    fn holds_navigation(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Default)]
 struct Contact {
-    pans: PanFlags,
+    drags: NavDrags,
     stroking_device: RefCell<Option<gdk::Device>>,
 }
 
@@ -106,8 +88,9 @@ pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) {
 pub fn attach(canvas: &CadmiumCanvas) {
     let contact = Rc::new(Contact::default());
     attach_stylus_sharing(canvas, &contact);
-    canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Primary));
-    canvas.add_controller(pan_gesture(canvas, &contact, PanGesture::Middle));
+    for button in NavButton::ALL {
+        canvas.add_controller(nav_gesture(canvas, &contact, button));
+    }
     canvas.add_controller(scroll_controller(canvas));
     canvas.add_controller(pinch_gesture(canvas));
 }

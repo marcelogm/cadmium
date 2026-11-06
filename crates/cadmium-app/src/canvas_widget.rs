@@ -150,6 +150,10 @@ impl PaintSurfaceWidget for CadmiumCanvas {
     fn contact_released(&self) {
         run_handlers(&self.imp().released_handlers, self);
     }
+
+    fn holds_navigation(&self) -> bool {
+        self.space_mode().is_some()
+    }
 }
 
 /// Whether the canvas is still there to wake.

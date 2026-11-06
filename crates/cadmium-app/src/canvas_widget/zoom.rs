@@ -5,6 +5,7 @@ use gtk::subclass::prelude::*;
 use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
+use crate::input::nav_drag::{NavMode, ViewStep};
 use crate::surface_scale::device_scale;
 use crate::view;
 
@@ -103,6 +104,31 @@ impl CadmiumCanvas {
             f64::from(self.width()) / 2.0,
             f64::from(self.height()) / 2.0,
         )
+    }
+
+    /// The mode Space holds ready on the canvas, while it is held.
+    pub(crate) fn space_mode(&self) -> Option<NavMode> {
+        self.imp().space_mode.get()
+    }
+
+    /// Holds `mode` ready (Space down) or lets go (`None`); the pointer shows which.
+    pub(crate) fn set_space_mode(&self, mode: Option<NavMode>) {
+        if self.imp().space_mode.replace(mode) != mode {
+            self.set_cursor_from_name(Some(
+                mode.map_or(super::CANVAS_CURSOR, NavMode::cursor_name),
+            ));
+        }
+    }
+
+    /// Applies one step of a navigation drag to the view.
+    pub(crate) fn apply_view_step(&self, step: ViewStep) {
+        match step {
+            ViewStep::Pan { dx, dy } => self.pan_by(dx, dy),
+            ViewStep::Zoom { anchor, factor } => {
+                self.set_zoom_around(anchor.0, anchor.1, self.zoom() * factor)
+            }
+            ViewStep::Rotate { centre, delta } => self.rotate_around(centre.0, centre.1, delta),
+        }
     }
 
     fn zoom_around_center(&self, zoom: f32) {
