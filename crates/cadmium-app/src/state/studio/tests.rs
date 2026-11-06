@@ -149,6 +149,7 @@ fn a_frame_advances_by_the_time_since_the_last() {
     assert_eq!(snapshot(&state), reference(&state, 1.0, FRAME_MS));
 }
 
+/// Behaviour only: the player itself treats a negative time as none.
 #[test]
 fn a_clock_going_back_does_not_advance() {
     let clock = ScriptedClock::starting_at(1000.0);

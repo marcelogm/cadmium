@@ -13,7 +13,9 @@ use super::AppState;
 /// The name of a worn brush that is not in the library.
 const CURRENT_BRUSH_NAME: &str = "Current Brush";
 /// The longest real time one frame advances the player by; a longer stall
-/// (a hidden window, a debugger) resumes where it stopped.
+/// (a hidden window, a debugger) resumes where it stopped. It binds only at
+/// slow speeds: from speed 0.48 up the player's cap of 8 quanta (48 ms of
+/// simulation) per advance binds first.
 const MAX_FRAME_MS: f64 = 100.0;
 /// Slot ids ending in this are whites, which show nothing on a white primer.
 const WHITE_SUFFIX: &str = "_white";
@@ -140,7 +142,9 @@ impl AppState {
 
     /// Advances the open studio by the real time since its last frame,
     /// restarting it first when the painting's paint changed.
-    pub fn encode_studio_frame(&mut self) -> Result<(), StudioError> {
+    ///
+    /// Only `encode_studio_present` calls this, so every error closes the studio.
+    fn encode_studio_frame(&mut self) -> Result<(), StudioError> {
         if self.studio.is_none() {
             return Ok(());
         }
