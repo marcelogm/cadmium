@@ -1,6 +1,6 @@
 //! The tip's technical drawing in ink: front and side views with their ferrules, blue
-//! dimensions, the footprint and a title block, on light gridded paper — the owner-approved
-//! mockup, drawn from `TipGeometry` in sheet units, then fitted into the widget.
+//! dimensions, the footprint and a title block, on light gridded paper, drawn from
+//! `TipGeometry` in sheet units, then fitted into the widget.
 
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::rc::Rc;
