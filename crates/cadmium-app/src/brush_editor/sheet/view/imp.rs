@@ -5,7 +5,7 @@ use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene};
 
 use super::{CURSOR, DESCRIPTION, Link, append_sheet};
-use crate::brush_editor::paper::draw_grid;
+use crate::brush_editor::paper::draw_sheet_grid;
 use crate::handlers::Handler;
 use crate::presenter::FramePresenter;
 use crate::surface_scale::{SurfaceScaleWatch, device_scale};
@@ -85,6 +85,7 @@ impl WidgetImpl for TestSheetView {
         }
         let size = [f64::from(view.width()), f64::from(view.height())];
         let bounds = graphene::Rect::new(0.0, 0.0, size[0] as f32, size[1] as f32);
-        draw_grid(&snapshot.append_cairo(&bounds), size);
+        let context = snapshot.append_cairo(&bounds);
+        draw_sheet_grid(&context, size, view.cover(), device_scale(&*view));
     }
 }
