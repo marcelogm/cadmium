@@ -87,3 +87,52 @@ fn unknown_fields_are_ignored() {
                    "thumbnail": "later", "head": { "bristle_colour": "red" } }"#;
     assert!(brush_from_json(text).is_ok());
 }
+
+#[test]
+fn a_long_name_is_cut_and_reported() {
+    let long = "Sable ".repeat(40);
+    let text = format!(
+        r#"{{ "format": "cadmium-brush", "version": 1, "name": "{long}", "size_px": 30 }}"#
+    );
+    let read = brush_from_json(&text).unwrap();
+    assert_eq!(read.brush.name.chars().count(), super::MAX_NAME_CHARS);
+    assert!(read.adjusted);
+}
+
+#[test]
+fn a_name_is_cut_on_characters_not_bytes() {
+    let long = "·".repeat(100);
+    let text = format!(
+        r#"{{ "format": "cadmium-brush", "version": 1, "name": "{long}", "size_px": 30 }}"#
+    );
+    let read = brush_from_json(&text).unwrap();
+    assert_eq!(read.brush.name, "·".repeat(super::MAX_NAME_CHARS));
+}
+
+#[test]
+fn version_zero_is_read() {
+    let text = r#"{ "format": "cadmium-brush", "version": 0, "name": "Old", "size_px": 30 }"#;
+    assert_eq!(brush_from_json(text).unwrap().brush.name, "Old");
+}
+
+#[test]
+fn a_missing_format_is_malformed() {
+    let text = r#"{ "version": 1, "name": "x", "size_px": 10 }"#;
+    assert!(matches!(
+        brush_from_json(text),
+        Err(BrushFileError::Malformed(_))
+    ));
+}
+
+#[test]
+fn a_null_or_text_number_is_malformed() {
+    for size in ["null", r#""big""#] {
+        let text = format!(
+            r#"{{ "format": "cadmium-brush", "version": 1, "name": "x", "size_px": {size} }}"#
+        );
+        assert!(
+            matches!(brush_from_json(&text), Err(BrushFileError::Malformed(_))),
+            "{size}"
+        );
+    }
+}

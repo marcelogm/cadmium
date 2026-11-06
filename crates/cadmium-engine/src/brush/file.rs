@@ -8,6 +8,8 @@ pub const BRUSH_EXTENSION: &str = "cadbrush";
 const FORMAT: &str = "cadmium-brush";
 const VERSION: u32 = 1;
 pub(crate) const UNNAMED_BRUSH: &str = "Imported Brush";
+/// Longer names are cut to this many characters on reading.
+pub const MAX_NAME_CHARS: usize = 80;
 
 #[derive(Serialize, Deserialize)]
 struct BrushFile {
@@ -70,10 +72,7 @@ pub fn brush_from_json(text: &str) -> Result<ReadBrush, BrushFileError> {
     if file.version > VERSION {
         return Err(BrushFileError::NewerVersion(file.version));
     }
-    let name = match file.name.trim() {
-        "" => UNNAMED_BRUSH.to_string(),
-        trimmed => trimmed.to_string(),
-    };
+    let (name, cut) = brush_name(&file.name);
     let raw = BrushSpec {
         name,
         size_px: file.size_px,
@@ -82,9 +81,22 @@ pub fn brush_from_json(text: &str) -> Result<ReadBrush, BrushFileError> {
     };
     let brush = raw.clamped();
     Ok(ReadBrush {
-        adjusted: brush != raw,
+        adjusted: cut || brush != raw,
         brush,
     })
+}
+
+/// The trimmed name, or a placeholder when blank, and whether it had to be cut short.
+fn brush_name(name: &str) -> (String, bool) {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return (UNNAMED_BRUSH.to_string(), false);
+    }
+    if trimmed.chars().count() <= MAX_NAME_CHARS {
+        return (trimmed.to_string(), false);
+    }
+    let cut: String = trimmed.chars().take(MAX_NAME_CHARS).collect();
+    (cut.trim_end().to_string(), true)
 }
 
 #[cfg(test)]
