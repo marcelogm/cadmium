@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/cadmium-engine", "crates/cadmium-app"]
+members = ["crates/cadmium-engine", "crates/cadmium-studio", "crates/cadmium-app"]
 
 [workspace.package]
 edition = "2024"

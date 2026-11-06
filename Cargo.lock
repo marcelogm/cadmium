@@ -153,6 +153,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cadmium-studio"
+version = "0.0.1"
+dependencies = [
+ "cadmium-engine",
+]
+
+[[package]]
 name = "cairo-rs"
 version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

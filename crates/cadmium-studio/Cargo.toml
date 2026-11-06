@@ -1,0 +1,15 @@
+[package]
+name = "cadmium-studio"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Headless brush studio for Cadmium: demo strokes and brush thumbnails"
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+cadmium-engine = { path = "../cadmium-engine" }
+
+[lints]
+workspace = true
