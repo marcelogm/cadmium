@@ -29,6 +29,8 @@ pub struct StudioSession {
     pub camera: OrbitCamera,
     /// When the last frame advanced the player.
     last_ms: Option<f64>,
+    /// The viewport's width / height at the last present.
+    aspect: f32,
 }
 
 impl StudioSession {
@@ -40,7 +42,19 @@ impl StudioSession {
             scene: SceneRenderer::new(gpu),
             camera,
             last_ms: None,
+            aspect: 1.0,
         })
+    }
+
+    fn set_aspect(&mut self, aspect: f32) {
+        self.aspect = aspect;
+        self.camera.set_aspect(aspect);
+    }
+
+    /// The reset view framing the player's stroke box and brush.
+    fn reframe(&mut self) {
+        let player = &self.player;
+        self.camera = OrbitCamera::framing(player.stroke_box(), player.reach_px(), self.aspect);
     }
 
     /// The real time since the last frame, clamped to 0..=`MAX_FRAME_MS`.
@@ -184,9 +198,7 @@ impl AppState {
             return;
         };
         let size = (target.width(), target.height());
-        studio
-            .camera
-            .set_aspect(size.0 as f32 / size.1.max(1) as f32);
+        studio.set_aspect(size.0 as f32 / size.1.max(1) as f32);
         let request = SceneRequest {
             player: &studio.player,
             camera: &studio.camera,
@@ -197,6 +209,44 @@ impl AppState {
         session
             .presenter
             .encode_present(gpu, frame.present_request(), target, encoder);
+    }
+
+    /// Plays `stroke` from the start of a loop, keeping the brush, the speed,
+    /// the pause and the view: the stroke box depends only on the brush.
+    pub fn set_studio_stroke(&mut self, stroke: DemoStroke) {
+        let Some(brush) = self.studio.as_ref().map(|s| s.player.brush().clone()) else {
+            return;
+        };
+        self.restart_studio(&brush, stroke);
+    }
+
+    /// Shows `brush` from the start of a loop, keeping the stroke, the speed
+    /// and the pause; the view is reset to frame the new brush.
+    pub fn set_studio_brush(&mut self, brush: &BrushSpec) {
+        let Some(stroke) = self.studio.as_ref().map(|s| s.player.stroke()) else {
+            return;
+        };
+        self.restart_studio(brush, stroke);
+        if let Some(studio) = self.studio.as_mut() {
+            studio.reframe();
+        }
+    }
+
+    /// Restarts the open studio with the painting's paint; an error closes it.
+    fn restart_studio(&mut self, brush: &BrushSpec, stroke: DemoStroke) {
+        let paint = self.studio_paint();
+        let AppState { studio, gpu, .. } = self;
+        let Some(studio) = studio else {
+            return;
+        };
+        let request = PlayerRequest {
+            brush,
+            paint: &paint,
+            stroke,
+        };
+        if let Err(error) = studio.player.restart(gpu, request) {
+            self.fail_studio(error);
+        }
     }
 
     fn fail_studio(&mut self, error: StudioError) {

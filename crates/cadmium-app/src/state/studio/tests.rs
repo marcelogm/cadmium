@@ -1,10 +1,11 @@
 use cadmium_engine::brush::BrushSpec;
+use cadmium_engine::brush::factory_brushes;
 use cadmium_engine::canvas::Primer;
 use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::params::SimParams;
 use cadmium_engine::present::readback_rgba8;
-use cadmium_studio::{PlayerRequest, SLOW_MOTION, StudioPlayer};
+use cadmium_studio::{DemoStroke, OrbitCamera, PlayerRequest, SLOW_MOTION, StudioPlayer};
 
 use crate::state::AppState;
 use crate::state::test_support::{ScriptedClock, painting_state, scripted_painting_state};
@@ -32,22 +33,40 @@ fn open_at_rest(clock: &ScriptedClock) -> AppState {
 }
 
 /// A player shown what the state's studio shows, advanced by `elapsed_ms`.
-fn reference(state: &AppState, speed: f64, elapsed_ms: f64) -> BristleSnapshot {
-    let brush = state.worn_brush_spec();
+fn reference_player(state: &AppState, speed: f64, elapsed_ms: f64) -> StudioPlayer {
+    let shown = &state.studio.as_ref().unwrap().player;
     let paint = state.studio_paint();
     let request = PlayerRequest {
-        brush: &brush,
+        brush: shown.brush(),
         paint: &paint,
-        stroke: state.studio.as_ref().unwrap().player.stroke(),
+        stroke: shown.stroke(),
     };
     let mut player = StudioPlayer::new(&state.gpu, request).unwrap();
     player.set_speed(speed);
     player.advance(&state.gpu, elapsed_ms).unwrap();
     player
+}
+
+fn reference(state: &AppState, speed: f64, elapsed_ms: f64) -> BristleSnapshot {
+    let player = reference_player(state, speed, elapsed_ms);
+    player
         .session()
         .engine
         .bristle_snapshot(&state.gpu)
         .unwrap()
+}
+
+/// The studio is at the start of a loop: no brush on show and a fresh canvas.
+/// (A restart in the same session keeps the lifted hairs where they were, so
+/// the bristles are not compared.)
+fn assert_at_loop_start(state: &AppState) {
+    let player = &state.studio.as_ref().unwrap().player;
+    assert!(!player.brush_visible());
+    let fresh = reference_player(state, 1.0, 0.0);
+    assert_eq!(
+        player.rgba(&state.gpu).unwrap(),
+        fresh.rgba(&state.gpu).unwrap()
+    );
 }
 
 #[test]
@@ -217,4 +236,60 @@ fn a_closed_studio_leaves_the_target_untouched() {
     state.close_studio();
     clock.advance(FRAME_MS);
     assert_eq!(present(&mut state, &target), shown);
+}
+
+fn advanced_and_paused(clock: &ScriptedClock) -> AppState {
+    let mut state = open_at_rest(clock);
+    clock.advance(FRAME_MS);
+    state.encode_studio_frame().unwrap();
+    let studio = state.studio_mut().unwrap();
+    assert!(studio.player.brush_visible());
+    studio.player.pause();
+    studio.camera.orbit(40.0, 10.0);
+    state
+}
+
+#[test]
+fn a_new_stroke_restarts_the_loop_and_keeps_the_view() {
+    let clock = ScriptedClock::starting_at(1000.0);
+    let mut state = advanced_and_paused(&clock);
+    let camera = state.studio.as_ref().unwrap().camera;
+    state.set_studio_stroke(DemoStroke::Zigzag);
+    let studio = state.studio.as_ref().unwrap();
+    assert_eq!(studio.player.stroke(), DemoStroke::Zigzag);
+    assert!(!studio.player.is_playing());
+    assert_eq!(studio.camera, camera);
+    assert_at_loop_start(&state);
+}
+
+#[test]
+fn a_new_brush_restarts_the_loop_and_reframes_the_view() {
+    let clock = ScriptedClock::starting_at(1000.0);
+    let mut state = advanced_and_paused(&clock);
+    let target = state
+        .session
+        .presenter
+        .create_target(&state.gpu, TARGET_SIZE * 2, TARGET_SIZE);
+    present(&mut state, &target);
+    let brush = BrushSpec {
+        size_px: 48.0,
+        ..factory_brushes()[WORN_INDEX].clone()
+    };
+    state.set_studio_brush(&brush);
+    let studio = state.studio.as_ref().unwrap();
+    assert_eq!(studio.player.brush(), &brush);
+    assert_eq!(studio.player.stroke(), DemoStroke::SCurve);
+    assert!(!studio.player.is_playing());
+    let framed = OrbitCamera::framing(studio.player.stroke_box(), studio.player.reach_px(), 2.0);
+    assert_eq!(studio.camera, framed);
+    assert_at_loop_start(&state);
+}
+
+#[test]
+fn a_closed_studio_ignores_new_strokes_and_brushes() {
+    let mut state = painting_state();
+    state.set_studio_stroke(DemoStroke::Zigzag);
+    state.set_studio_brush(&factory_brushes()[0]);
+    assert!(!state.studio_open());
+    assert_eq!(state.take_studio_error(), None);
 }
