@@ -1,7 +1,7 @@
 //! The brush editor: edits the worn brush as a draft, then saves it to the library.
 //!
 //! Three columns: the tip's drawing with the example strokes under it, the test sheet,
-//! and the controls. The test sheet is blank paper for now.
+//! and the controls.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -28,6 +28,7 @@ mod parts;
 mod repainting;
 mod saving;
 mod schematic;
+mod sheet;
 mod wiring;
 
 use brush_group::BrushGroup;
@@ -36,6 +37,7 @@ use examples::{ExampleJob, Examples};
 use listening::Listening;
 use parts::PartGroups;
 use schematic::Subject;
+use sheet::{SHEET_FAILED, Sheet};
 
 /// The open editor. Signal handlers hold it weakly; the dialog's `closed` handler holds the
 /// one strong reference, and lets go of it there.
@@ -52,19 +54,31 @@ struct Editor {
     schematic: gtk::DrawingArea,
     /// The example strokes under the schematic.
     examples: Examples,
+    /// The test sheet in the centre; the editor owns its canvas.
+    sheet: Sheet,
 }
 
-/// Shows the editor on the worn brush; while one is open, does nothing.
+/// Shows the editor on the worn brush; while one is open, does nothing. A test sheet that
+/// can't be made keeps the editor shut, and says why.
 pub fn open(window: &CadmiumWindow) {
     if window.has_editor() {
         return;
     }
     let state = window.state();
-    let (draft, job) = {
+    let (draft, job, sheet) = {
         let state = state.borrow();
-        (draft_for(&state), ExampleJob::new(&state))
+        let draft = draft_for(&state);
+        let sheet = sheet::new_sheet(&state, draft.current());
+        (draft, ExampleJob::new(&state), sheet)
     };
-    let editor = Editor::new(window, draft, job);
+    let sheet = match sheet {
+        Ok(sheet) => Sheet::new(state, sheet),
+        Err(error) => {
+            failing::report(window, SHEET_FAILED, &error);
+            return;
+        }
+    };
+    let editor = Editor::new(window, draft, job, sheet);
     let stopping = Rc::downgrade(&editor);
     window.keep_editor(&editor.dialog, move || stop(&stopping));
     // The panels see the editor open: the brush panel lets go of its thumbnail studio.
@@ -89,9 +103,9 @@ fn draft_for(state: &AppState) -> Draft {
 }
 
 impl Editor {
-    fn new(window: &CadmiumWindow, draft: Draft, job: ExampleJob) -> Rc<Editor> {
+    fn new(window: &CadmiumWindow, draft: Draft, job: ExampleJob, sheet: Sheet) -> Rc<Editor> {
         let header = header::header();
-        let (dialog, columns) = layout::dialog(&draft.chosen_name(), &header.bar);
+        let (dialog, columns) = layout::dialog(&draft.chosen_name(), &header.bar, sheet.widget());
         let brush = brush_group::brush_group();
         columns.controls.append(&brush.group);
         let parts = parts::part_groups();
@@ -111,9 +125,11 @@ impl Editor {
             parts,
             schematic,
             examples,
+            sheet,
         });
         editor.connect(&header);
         editor.connect_schematic();
+        editor.connect_sheet();
         editor.sync();
         editor.keep_until_closed();
         editor.paint_examples();

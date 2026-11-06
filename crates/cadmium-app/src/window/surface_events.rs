@@ -119,7 +119,7 @@ impl CadmiumWindow {
         tray
     }
 
-    fn announce_copy_presentation(&self) {
+    pub(crate) fn announce_copy_presentation(&self) {
         if !self.imp().copy_presentation_announced.replace(true) {
             self.show_toast(COPY_PRESENTATION_TOAST);
         }

@@ -1,5 +1,5 @@
-//! Gridded paper: under the example strokes until they are first painted, and where the
-//! test sheet will be painted (blank for now).
+//! Gridded paper: under the example strokes until they are first painted, and round the
+//! test sheet's canvas.
 
 use adw::prelude::*;
 use gtk::cairo;
@@ -31,26 +31,6 @@ pub(super) fn examples_paper() -> gtk::DrawingArea {
     area
 }
 
-/// The blank paper where the test sheet will be: it takes the room left, `margin` in.
-pub(super) fn test_sheet_placeholder(margin: i32) -> gtk::DrawingArea {
-    let area = paper_area();
-    area.set_hexpand(true);
-    area.set_vexpand(true);
-    area.set_margin_top(margin);
-    area.set_margin_bottom(margin);
-    area.set_margin_start(margin);
-    area.set_margin_end(margin);
-    area
-}
-
-/// A drawing area shaped like a libadwaita card: its corners rounded, the paper clipped to them.
-fn paper_area() -> gtk::DrawingArea {
-    let area = grid_area();
-    area.add_css_class("card");
-    area.set_overflow(gtk::Overflow::Hidden);
-    area
-}
-
 /// A drawing area painted with gridded paper.
 fn grid_area() -> gtk::DrawingArea {
     let area = gtk::DrawingArea::builder()
@@ -66,10 +46,15 @@ fn grid_area() -> gtk::DrawingArea {
 pub(super) fn draw_grid(context: &cairo::Context, size: [f64; 2]) {
     set_colour(context, PAPER);
     let _ = context.paint();
+    draw_grid_lines(context, size, 1.0);
+}
+
+/// The two grids' lines alone, at `alpha`, over whatever is below them.
+pub(super) fn draw_grid_lines(context: &cairo::Context, size: [f64; 2], alpha: f64) {
     context.set_line_width(LINE_WIDTH);
-    for (step, colour) in [(MINOR_STEP, MINOR_LINE), (MAJOR_STEP, MAJOR_LINE)] {
+    for (step, [red, green, blue]) in [(MINOR_STEP, MINOR_LINE), (MAJOR_STEP, MAJOR_LINE)] {
         grid_lines(context, size, step);
-        set_colour(context, colour);
+        context.set_source_rgba(red, green, blue, alpha);
         let _ = context.stroke();
     }
 }

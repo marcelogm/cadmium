@@ -42,6 +42,15 @@ impl Editor {
     }
 }
 
+/// Says why `what` failed before the editor opened: a toast, or the GPU-lost dialog.
+pub(super) fn report(window: &CadmiumWindow, what: &str, error: &StudioError) {
+    let gpu_lost = window.state().borrow().gpu_is_lost();
+    match failure_toast(what, error, gpu_lost) {
+        Some(toast) => warn_and_toast(window, &toast),
+        None => window.announce_gpu_lost(),
+    }
+}
+
 fn warn_and_toast(window: &CadmiumWindow, toast: &str) {
     glib::g_warning!(LOG_DOMAIN, "{toast}");
     window.show_toast(toast);

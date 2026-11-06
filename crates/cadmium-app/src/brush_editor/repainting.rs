@@ -35,8 +35,10 @@ struct Painting {
 }
 
 impl Editor {
-    /// The draft changed: paints the examples again, at once or once it settles.
+    /// The draft changed: the sheet's next stroke takes it, and the examples are painted
+    /// again, at once or once it settles.
     pub(super) fn draft_changed(self: &Rc<Self>, change: Change) {
+        self.sheet_brush_changed();
         self.cancel_debounce();
         match change {
             Change::Immediate => self.paint_examples(),

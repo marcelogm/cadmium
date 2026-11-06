@@ -24,6 +24,20 @@ pub fn fit_view(canvas_size: (u32, u32), viewport_px: (f64, f64), margin_px: f64
     }
 }
 
+/// The canvas covering the whole viewport, centred: scaled by the larger of the two ratios,
+/// so it fills the viewport edge to edge and the overflow is cropped.
+pub fn cover_view(canvas_size: (u32, u32), viewport_px: (u32, u32)) -> ViewTransform {
+    let (canvas_width, canvas_height) = (f64::from(canvas_size.0), f64::from(canvas_size.1));
+    let (width, height) = (f64::from(viewport_px.0), f64::from(viewport_px.1));
+    let zoom = clamp_zoom((width / canvas_width).max(height / canvas_height) as f32);
+    let zoom_f64 = f64::from(zoom);
+    ViewTransform {
+        origin_x: (canvas_width / 2.0 - width / 2.0 / zoom_f64) as f32,
+        origin_y: (canvas_height / 2.0 - height / 2.0 / zoom_f64) as f32,
+        zoom,
+    }
+}
+
 pub fn viewport_to_canvas(view: ViewTransform, x_px: f64, y_px: f64) -> (f64, f64) {
     let zoom = f64::from(view.zoom);
     (

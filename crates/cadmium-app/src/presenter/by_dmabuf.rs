@@ -49,7 +49,7 @@ impl FramePresenter {
         let Some(pool) = self.pool.as_mut() else {
             return Ok(None);
         };
-        let source = self.source;
+        let source = self.source.clone();
         pool.present_with(&gpu, &display, |encoder, target| {
             source.encode(state, &gpu, target, encoder);
         })

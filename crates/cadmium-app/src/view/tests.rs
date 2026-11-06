@@ -50,3 +50,50 @@ fn tiny_viewport_still_produces_a_finite_view() {
     assert!(view.zoom >= MIN_ZOOM);
     assert!(view.origin_x.is_finite() && view.origin_y.is_finite());
 }
+
+fn inside(canvas: (u32, u32), (x, y): (f64, f64)) -> bool {
+    let (width, height) = (f64::from(canvas.0), f64::from(canvas.1));
+    (-TOLERANCE..=width + TOLERANCE).contains(&x) && (-TOLERANCE..=height + TOLERANCE).contains(&y)
+}
+
+#[test]
+fn a_cover_view_fills_a_tall_viewport_cropping_the_sides() {
+    let view = cover_view((1200, 900), (600, 900));
+    assert_eq!(view.zoom, 1.0);
+    assert!(close(
+        viewport_to_canvas(view, 300.0, 450.0),
+        (600.0, 450.0)
+    ));
+    assert!(close(viewport_to_canvas(view, 0.0, 0.0), (300.0, 0.0)));
+    assert!(close(
+        viewport_to_canvas(view, 600.0, 900.0),
+        (900.0, 900.0)
+    ));
+}
+
+#[test]
+fn a_cover_view_fills_a_wide_viewport_cropping_top_and_bottom() {
+    let view = cover_view((1200, 900), (1600, 900));
+    assert!((view.zoom - 4.0 / 3.0).abs() < 1e-6);
+    assert!(close(
+        viewport_to_canvas(view, 800.0, 450.0),
+        (600.0, 450.0)
+    ));
+    assert!(close(viewport_to_canvas(view, 0.0, 0.0), (0.0, 112.5)));
+    assert!(close(
+        viewport_to_canvas(view, 1600.0, 900.0),
+        (1200.0, 787.5)
+    ));
+}
+
+#[test]
+fn every_viewport_corner_lands_on_the_canvas() {
+    for viewport in [(432, 728), (728, 432), (1200, 900), (37, 1000)] {
+        let view = cover_view((1200, 900), viewport);
+        let (width, height) = (f64::from(viewport.0), f64::from(viewport.1));
+        for (x, y) in [(0.0, 0.0), (width, 0.0), (0.0, height), (width, height)] {
+            let point = viewport_to_canvas(view, x, y);
+            assert!(inside((1200, 900), point), "{viewport:?} {point:?}");
+        }
+    }
+}

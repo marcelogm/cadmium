@@ -3,8 +3,6 @@
 
 use adw::prelude::*;
 
-use super::paper;
-
 const DIALOG_SIZE: [i32; 2] = [1240, 840];
 /// The drawing column's width, its margins included: 312 for the schematic and examples.
 const DRAWING_WIDTH: i32 = 340;
@@ -22,9 +20,14 @@ pub(super) struct Columns {
     pub(super) controls: gtk::Box,
 }
 
-/// The dialog titled `title` under `header`. It never closes by itself (`can-close` false):
-/// every way out goes through the editor (`close-attempt`, `force_close`).
-pub(super) fn dialog(title: &str, header: &adw::HeaderBar) -> (adw::Dialog, Columns) {
+/// The dialog titled `title` under `header`, with `sheet` in the centre. It never closes by
+/// itself (`can-close` false): every way out goes through the editor (`close-attempt`,
+/// `force_close`).
+pub(super) fn dialog(
+    title: &str,
+    header: &adw::HeaderBar,
+    sheet: &gtk::Overlay,
+) -> (adw::Dialog, Columns) {
     let columns = Columns {
         drawing: drawing_column(),
         controls: controls_column(),
@@ -32,7 +35,8 @@ pub(super) fn dialog(title: &str, header: &adw::HeaderBar) -> (adw::Dialog, Colu
     let body = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     body.append(&columns.drawing);
     body.append(&gtk::Separator::new(gtk::Orientation::Vertical));
-    body.append(&paper::test_sheet_placeholder(SHEET_MARGIN));
+    place_sheet(sheet);
+    body.append(sheet);
     body.append(&gtk::Separator::new(gtk::Orientation::Vertical));
     body.append(&scrolling(&columns.controls));
     let content = adw::ToolbarView::new();
@@ -57,6 +61,14 @@ fn drawing_column() -> gtk::Box {
 
 fn controls_column() -> gtk::Box {
     margined(gtk::Box::new(gtk::Orientation::Vertical, CONTROLS_SPACING))
+}
+
+/// The test sheet takes the room left, `SHEET_MARGIN` in.
+fn place_sheet(sheet: &gtk::Overlay) {
+    sheet.set_margin_top(SHEET_MARGIN);
+    sheet.set_margin_bottom(SHEET_MARGIN);
+    sheet.set_margin_start(SHEET_MARGIN);
+    sheet.set_margin_end(SHEET_MARGIN);
 }
 
 /// The controls' column keeps its width: the entry row inside would otherwise make it share
