@@ -1,4 +1,5 @@
 use crate::engine::WetOilEngine;
+use crate::engine::pass::bristle_contact::BRISTLE_SEGMENTS;
 use crate::engine::shader::bristle_view_source;
 
 /// Read-only access to the live bristles, for rendering on the same device.
@@ -46,6 +47,12 @@ impl<'a> BristleView<'a> {
     /// stays the old layout's until the next dab.
     pub fn count(&self) -> u32 {
         self.count
+    }
+
+    /// Segments in each bristle's chain: one fewer than its vertices, the
+    /// `BRISTLE_SEGMENTS` of [`BristleView::wgsl`].
+    pub fn segments(&self) -> u32 {
+        BRISTLE_SEGMENTS as u32
     }
 
     /// Ferrule radius of the fitted layout, in px. Like [`BristleView::count`],

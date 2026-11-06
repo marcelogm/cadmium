@@ -1,8 +1,12 @@
-//! The 3D scene: the studio canvas as a plane, seen by the orbit camera.
+//! The 3D scene: the studio canvas as a plane and the brush painting on it,
+//! seen by the orbit camera.
 //!
 //! The scene renders into its own linear `Rgba16Float` target, supersampled,
 //! for the engine's presenter to downsample and encode for display.
 
+mod brush;
+mod hairs;
+mod meshes;
 mod plane;
 mod targets;
 mod view;
@@ -11,6 +15,7 @@ use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::{PresentRequest, ViewTransform};
 
 use crate::{OrbitCamera, StudioPlayer};
+use brush::BrushPass;
 use plane::PlanePass;
 use targets::Targets;
 use view::SceneView;
@@ -28,8 +33,7 @@ const CLEAR_COLOUR: wgpu::Color = wgpu::Color {
 /// What the scene draws besides the canvas.
 #[derive(Clone, Copy, Debug)]
 pub struct SceneLayers {
-    /// The brush's hairs, ferrule and handle: drawn from Task 8b; ignored by
-    /// the plane.
+    /// The brush's hairs, ferrule and handle, while the player shows it.
     pub brush: bool,
 }
 
@@ -124,6 +128,7 @@ pub struct SceneRenderer {
     targets: Targets,
     view: SceneView,
     plane: PlanePass,
+    brush: BrushPass,
 }
 
 impl SceneRenderer {
@@ -132,6 +137,7 @@ impl SceneRenderer {
         SceneRenderer {
             targets: Targets::new(gpu, (1, 1)),
             plane: PlanePass::new(gpu, &view),
+            brush: BrushPass::new(gpu, &view),
             view,
         }
     }
@@ -157,6 +163,7 @@ impl SceneRenderer {
             pass.set_bind_group(0, &view, &[]);
             self.plane
                 .draw(gpu, &mut pass, &request.player.session().canvas);
+            self.brush.draw(gpu, &mut pass, request);
         }
         drop(pass);
         SceneFrame {

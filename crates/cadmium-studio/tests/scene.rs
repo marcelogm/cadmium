@@ -5,7 +5,7 @@ use cadmium_engine::params::SimParams;
 use cadmium_engine::present::readback_rgba8;
 use cadmium_studio::{
     DemoStroke, OrbitCamera, Phase, PlayerRequest, SceneLayers, SceneRenderer, SceneRequest,
-    StudioPaint, StudioPlayer,
+    StudioPaint, StudioPlayer, samples,
 };
 
 /// Where eyeballing images go, if set; never into the repo.
@@ -33,9 +33,13 @@ fn brush() -> BrushSpec {
 }
 
 fn player(gpu: &GpuContext) -> StudioPlayer {
-    let (brush, paint) = (brush(), paint());
+    player_with(gpu, &brush())
+}
+
+fn player_with(gpu: &GpuContext, brush: &BrushSpec) -> StudioPlayer {
+    let paint = paint();
     let request = PlayerRequest {
-        brush: &brush,
+        brush,
         paint: &paint,
         stroke: DemoStroke::SCurve,
     };
@@ -47,6 +51,17 @@ fn painted(gpu: &GpuContext) -> StudioPlayer {
     let mut player = player(gpu);
     player.run_until(gpu, player.loop_ms()).unwrap();
     assert_eq!(player.phase(), Phase::Pause);
+    player
+}
+
+/// A player halfway through its stroke: the pen is down, brush in hand.
+fn mid_stroke(gpu: &GpuContext, brush: &BrushSpec) -> StudioPlayer {
+    let mut player = player_with(gpu, brush);
+    let stroke = samples(player.stroke(), player.stroke_box());
+    let stroke_ms = stroke.last().unwrap().time_ms;
+    player.run_until(gpu, f64::from(stroke_ms) / 2.0).unwrap();
+    assert_eq!(player.phase(), Phase::Stroke);
+    assert!(player.brush_visible());
     player
 }
 
@@ -179,4 +194,121 @@ fn the_scene_is_written_for_eyeballing() {
         (canvas.width, canvas.height),
         &flat,
     );
+}
+
+/// The request with the brush layer on or off.
+fn brush_layer(request: SceneRequest<'_>, brush: bool) -> SceneRequest<'_> {
+    SceneRequest {
+        layers: SceneLayers { brush },
+        ..request
+    }
+}
+
+/// The scene rendered with the brush layer and without it.
+fn with_and_without_brush(gpu: &GpuContext, request: SceneRequest<'_>) -> (Vec<u8>, Vec<u8>) {
+    let mut scene = SceneRenderer::new(gpu);
+    let on = render_rgba(gpu, &mut scene, brush_layer(request, true));
+    let off = render_rgba(gpu, &mut scene, brush_layer(request, false));
+    (on, off)
+}
+
+fn differs_at(a: &[u8], b: &[u8], width: u32, at: (u32, u32)) -> bool {
+    pixel(a, width, at) != pixel(b, width, at)
+}
+
+#[test]
+fn the_brush_covers_part_of_the_view_mid_stroke() {
+    let gpu = GpuContext::new().unwrap();
+    let size = (320, 200);
+    let player = mid_stroke(&gpu, &brush());
+    let camera = camera(&player, size);
+    let (on, off) = with_and_without_brush(&gpu, request(&player, &camera, size));
+    let differing = on
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(off.as_chunks::<4>().0)
+        .filter(|(a, b)| a != b)
+        .count();
+    let share = differing as f64 / f64::from(size.0 * size.1);
+    assert!((0.002..=0.5).contains(&share), "brush covers {share}");
+}
+
+#[test]
+fn the_brush_is_drawn_where_its_roots_project() {
+    let gpu = GpuContext::new().unwrap();
+    let size = (320, 200);
+    let player = mid_stroke(&gpu, &brush());
+    let camera = camera(&player, size);
+    let snapshot = player.session().engine.bristle_snapshot(&gpu).unwrap();
+    let roots: Vec<glam::Vec3> = snapshot
+        .chains_px
+        .iter()
+        .map(|chain| glam::Vec3::from(chain[0]))
+        .collect();
+    let centroid = roots.iter().sum::<glam::Vec3>() / roots.len() as f32;
+    let ndc = camera.view_proj().project_point3(centroid);
+    let (w, h) = (size.0 as f32, size.1 as f32);
+    let x = ((ndc.x + 1.0) / 2.0 * w) as i64;
+    let y = ((1.0 - ndc.y) / 2.0 * h) as i64;
+    let (on, off) = with_and_without_brush(&gpu, request(&player, &camera, size));
+    let near_roots = (-1..=1)
+        .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
+        .filter(|&(px, py)| {
+            (0..i64::from(size.0)).contains(&px) && (0..i64::from(size.1)).contains(&py)
+        })
+        .any(|(px, py)| differs_at(&on, &off, size.0, (px as u32, py as u32)));
+    assert!(near_roots, "nothing drawn around the roots at ({x}, {y})");
+}
+
+#[test]
+fn a_brush_off_show_is_not_drawn() {
+    let gpu = GpuContext::new().unwrap();
+    let size = (320, 200);
+    for player in [player(&gpu), painted(&gpu)] {
+        assert!(!player.brush_visible());
+        let camera = camera(&player, size);
+        let (on, off) = with_and_without_brush(&gpu, request(&player, &camera, size));
+        assert!(on == off, "a hidden brush is drawn at {:?}", player.phase());
+    }
+}
+
+#[test]
+fn the_brush_renders_the_same_bytes() {
+    let gpu = GpuContext::new().unwrap();
+    let size = (320, 200);
+    let player = mid_stroke(&gpu, &brush());
+    let camera = camera(&player, size);
+    let request = brush_layer(request(&player, &camera, size), true);
+    let mut scene = SceneRenderer::new(&gpu);
+    let first = render_rgba(&gpu, &mut scene, request);
+    let second = render_rgba(&gpu, &mut scene, request);
+    assert!(first == second, "a re-render differs");
+}
+
+#[test]
+fn the_brushes_are_written_for_eyeballing() {
+    let Ok(dir) = std::env::var(OUTPUT_DIR_VARIABLE) else {
+        return;
+    };
+    let dir = std::path::Path::new(&dir);
+    let gpu = GpuContext::new().unwrap();
+    let size = (640, 400);
+    let shown = [
+        ("round", "Round · Synthetic"),
+        ("flat", "Flat · Hog Bristle"),
+        ("fan", "Fan · Hog Bristle"),
+        ("mop", "Mop · Squirrel"),
+    ];
+    let mut scene = SceneRenderer::new(&gpu);
+    for (file, name) in shown {
+        let brush = factory_brushes()
+            .into_iter()
+            .find(|b| b.name == name)
+            .unwrap();
+        let player = mid_stroke(&gpu, &brush);
+        let camera = camera(&player, size);
+        let rgba = render_rgba(&gpu, &mut scene, request(&player, &camera, size));
+        write_png(dir, &format!("scene-{file}.png"), size, &rgba);
+    }
 }
