@@ -18,7 +18,7 @@ pub const THUMBNAIL_SIZE: (u32, u32) = (240, 72);
 const STUDIO_SCALE: u32 = 2;
 /// Small enough that a fan's splayed hairs stay inside the thumbnail.
 const STUDIO_MAX_SIZE_PX: f32 = 44.0;
-const STUDIO_PIGMENT: &str = "burnt_umber";
+const STUDIO_PIGMENT: &str = "ultramarine_blue";
 const STUDIO_MEDIUM: f32 = 0.1;
 const STUDIO_LOAD: f32 = 1.0;
 /// 15% of the canvas width (72 px at 480): room for a fan's splay at the 44 px cap.

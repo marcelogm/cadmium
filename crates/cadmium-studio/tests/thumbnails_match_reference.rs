@@ -56,7 +56,7 @@ fn reference_thumbnail(gpu: &GpuContext, brush: &BrushSpec) -> Vec<u8> {
         height: THUMBNAIL_SIZE.1 * 2,
         primer: Primer::WhiteGesso,
         weave: Weave::Smooth,
-        pigment_slots: vec!["burnt_umber".to_string()],
+        pigment_slots: vec!["ultramarine_blue".to_string()],
     };
     let mut session = PaintSession::headless(gpu, spec).unwrap();
 

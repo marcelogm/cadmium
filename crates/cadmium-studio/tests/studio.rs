@@ -11,6 +11,29 @@ fn ink_share(rgba: &[u8]) -> f64 {
     inked as f64 / pixels.len() as f64
 }
 
+/// How far a channel may stray from the paper before a pixel counts as inked: well above
+/// the smooth gesso's shading and sRGB rounding, well below even a thin glaze.
+const INK_STEP: i32 = 24;
+
+/// The pixels that differ from the paper, read at the top-left corner, which the stroke
+/// box's margins keep bare.
+fn inked_pixels(rgba: &[u8]) -> Vec<[u8; 4]> {
+    let (pixels, _) = rgba.as_chunks::<4>();
+    let paper = pixels[0];
+    pixels
+        .iter()
+        .filter(|p| (0..3).any(|c| (i32::from(p[c]) - i32::from(paper[c])).abs() > INK_STEP))
+        .copied()
+        .collect()
+}
+
+fn mean_colour(pixels: &[[u8; 4]]) -> [f64; 3] {
+    let sum = pixels.iter().fold([0.0; 3], |sum, p| {
+        [0, 1, 2].map(|c| sum[c] + f64::from(p[c]))
+    });
+    sum.map(|channel| channel / pixels.len() as f64)
+}
+
 fn brush_with(head: HeadSpec) -> BrushSpec {
     factory_brushes()
         .into_iter()
@@ -88,4 +111,18 @@ fn every_demo_stroke_paints() {
 fn thumbnails_are_rack_row_strokes_ten_by_three() {
     assert_eq!(THUMBNAIL_SIZE, (240, 72));
     assert_eq!(THUMBNAIL_SIZE.0 * 3, THUMBNAIL_SIZE.1 * 10);
+}
+
+#[test]
+fn a_thumbnail_is_painted_in_ultramarine() {
+    let gpu = GpuContext::new().unwrap();
+    let mut studio = BrushStudio::new(&gpu).unwrap();
+    let thumb = studio.thumbnail(&gpu, &factory_brushes()[0]).unwrap();
+    let inked = inked_pixels(&thumb.rgba);
+    assert!(!inked.is_empty());
+    let [r, g, b] = mean_colour(&inked);
+    assert!(
+        b > r + 20.0 && b > g + 20.0,
+        "mean inked colour {r} {g} {b}"
+    );
 }
