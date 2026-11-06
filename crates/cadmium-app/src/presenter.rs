@@ -37,8 +37,6 @@ pub enum PresentSource {
     #[default]
     Painting,
     Tray,
-    /// The brush studio's 3D scene; presented only while the studio is open.
-    Studio,
 }
 
 impl PresentSource {
@@ -69,7 +67,6 @@ impl PresentSource {
                     encoder,
                 );
             }
-            PresentSource::Studio => state.encode_studio_present(gpu, target, encoder),
         }
     }
 }

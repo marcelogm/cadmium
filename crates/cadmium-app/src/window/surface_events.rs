@@ -5,13 +5,11 @@ use adw::subclass::prelude::*;
 use gtk::glib;
 
 use super::CadmiumWindow;
-use crate::brush_editor::failure_toast;
 use crate::brush_panel::BrushPanel;
 use crate::canvas_widget::CadmiumCanvas;
 use crate::dialogs::announce_gpu_lost;
 use crate::lab_panel::LabPanel;
 use crate::state::SharedState;
-use crate::studio_view::StudioView;
 use crate::tray_view::TrayView;
 
 const ZOOM_PERCENT: f32 = 100.0;
@@ -144,41 +142,6 @@ impl CadmiumWindow {
         let enabled = self.state().borrow().history_is_enabled();
         if !enabled && !self.imp().history_disabled_announced.replace(true) {
             self.show_toast(HISTORY_DISABLED_TOAST);
-        }
-    }
-
-    /// Sends the editor's studio view's GPU loss and copy fallback where the
-    /// canvas's go, and closes the editor on a studio that failed.
-    pub fn follow_studio_view(&self, view: &StudioView) {
-        view.connect_gpu_lost(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_| window.announce_gpu_lost()
-        ));
-        view.connect_presentation_fallback(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_| window.announce_copy_presentation()
-        ));
-        view.connect_studio_failed(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_| window.after_studio_failure()
-        ));
-    }
-
-    /// Closes the editor on a studio that closed with an error and toasts why;
-    /// a lost GPU is left to the GPU-lost dialog.
-    pub fn after_studio_failure(&self) {
-        let toast = {
-            let state = self.state();
-            let mut state = state.borrow_mut();
-            let error = state.take_studio_error();
-            failure_toast(error.as_ref(), state.gpu_is_lost())
-        };
-        self.close_editor();
-        if let Some(toast) = toast {
-            self.show_toast(&toast);
         }
     }
 

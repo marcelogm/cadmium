@@ -1,11 +1,33 @@
 //! Wearing, importing and deleting brushes from the brush library.
 
+use cadmium_engine::brush::BrushSpec;
+
 use super::AppState;
 use crate::brush_library::{Imported, LibraryError, index_after_delete, worn_brush};
 
 const DEFAULT_BRUSH_INDEX: usize = 0;
+/// The name of a worn brush that is not in the library.
+const CURRENT_BRUSH_NAME: &str = "Current Brush";
 
 impl AppState {
+    /// The worn brush as a library brush at the current size.
+    pub fn worn_brush_spec(&self) -> BrushSpec {
+        let settings = &self.session.brush;
+        let size_px = settings.geometry.max_diameter_px;
+        match self.worn_library_brush().and_then(|i| self.brushes.get(i)) {
+            Some(brush) => BrushSpec {
+                size_px,
+                ..brush.clone()
+            },
+            None => BrushSpec {
+                name: CURRENT_BRUSH_NAME.into(),
+                size_px,
+                head: settings.head,
+                hair: settings.hair,
+            },
+        }
+    }
+
     /// The library brush being worn, preferring the one last picked over its twins.
     pub fn worn_library_brush(&self) -> Option<usize> {
         worn_brush(
