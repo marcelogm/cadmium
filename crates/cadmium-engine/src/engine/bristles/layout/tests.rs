@@ -139,3 +139,43 @@ fn reach_still_bounds_every_hair_of_a_shaped_head() {
         assert!(longest + PROFILE_RADIUS_PX <= bound, "{head:?}");
     }
 }
+
+fn outward(b: &super::BristleRest) -> f32 {
+    b.splay[0] * b.root_px[0] + b.splay[1] * b.root_px[1]
+}
+
+#[test]
+fn a_bellied_round_head_splays_its_hairs_outward() {
+    let laid = head_layout(HeadSpec {
+        belly: 1.0,
+        ..HeadSpec::ROUND
+    });
+    assert!(laid.bristles.iter().all(|b| outward(b) >= 0.0));
+    let rim: Vec<_> = laid
+        .bristles
+        .iter()
+        .filter(|b| b.root_px[0].hypot(b.root_px[1]) > 0.5 * PROFILE_RADIUS_PX)
+        .collect();
+    assert!(rim.iter().all(|b| outward(b) > 0.0));
+}
+
+#[test]
+fn a_bellied_fan_still_splays_sideways_only() {
+    let laid = head_layout(HeadSpec {
+        belly: 1.0,
+        ..HeadSpec::FAN
+    });
+    assert!(laid.bristles.iter().all(|b| b.splay[1] == 0.0));
+}
+
+#[test]
+fn a_head_without_belly_or_round_fan_keeps_todays_splay() {
+    for head in [HeadSpec::ROUND, HeadSpec::FLAT] {
+        assert!(
+            head_layout(head)
+                .bristles
+                .iter()
+                .all(|b| b.splay == [0.0, 0.0])
+        );
+    }
+}

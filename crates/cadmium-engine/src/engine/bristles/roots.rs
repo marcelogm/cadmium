@@ -81,10 +81,23 @@ pub(super) fn place_roots(
     (0..count)
         .map(|index| {
             let mut root = section_root(head, index, count, radius_px, random);
-            root.length_share = head.length_share(root.position_px.map(|v| v / radius_px));
+            let unit = root.position_px.map(|v| v / radius_px);
+            root.length_share = head.length_share(unit);
+            bulge(&mut root, head, unit);
             root
         })
         .collect()
+}
+
+fn bulge(root: &mut Root, head: &HeadSpec, unit: [f32; 2]) {
+    let amount = head.bulge();
+    if amount <= 0.0 {
+        return;
+    }
+    root.splay[0] += unit[0] * amount;
+    if head.section() != Section::Arc {
+        root.splay[1] += unit[1] * amount;
+    }
 }
 
 fn section_root(

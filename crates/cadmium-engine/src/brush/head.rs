@@ -4,8 +4,6 @@ use super::within;
 
 const ROUND_POINT_ONSET: f32 = 0.5;
 const FAN_POINT_FADE_DEG: f32 = 10.0;
-// used by the bristle layout in a later commit
-#[allow(dead_code)]
 const BELLY_SPLAY_SHARE: f32 = 0.35;
 pub(crate) const MIN_LENGTH_SHARE: f32 = 0.2;
 
@@ -137,8 +135,6 @@ impl HeadSpec {
         (domed * slanted).max(MIN_LENGTH_SHARE)
     }
 
-    // used by the bristle layout in a later commit
-    #[allow(dead_code)]
     /// Outward splay of the rest pose, per ferrule radius from the axis.
     pub(crate) fn bulge(&self) -> f32 {
         let fan = if self.section() == Section::Round {
