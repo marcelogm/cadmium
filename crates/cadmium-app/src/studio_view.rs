@@ -61,6 +61,22 @@ impl StudioView {
             .push(Box::new(handler));
     }
 
+    /// Runs when the studio closes on an error while presenting a frame;
+    /// `AppState::take_studio_error` says why.
+    pub fn connect_studio_closed(&self, handler: impl Fn(&StudioView) + 'static) {
+        self.imp()
+            .studio_closed_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
+    pub fn connect_presentation_fallback(&self, handler: impl Fn(&StudioView) + 'static) {
+        self.imp()
+            .fallback_handlers
+            .borrow_mut()
+            .push(Box::new(handler));
+    }
+
     fn device_scale(&self) -> f64 {
         device_scale(self)
     }
@@ -110,6 +126,7 @@ impl StudioView {
         let Some(state) = self.imp().state.get() else {
             return;
         };
+        // A move made while the state is busy is dropped; the next event moves again.
         let Ok(mut state) = state.try_borrow_mut() else {
             return;
         };

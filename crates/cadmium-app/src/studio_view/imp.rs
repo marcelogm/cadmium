@@ -12,6 +12,8 @@ pub struct StudioView {
     pub drag_offset: Cell<(f64, f64)>,
     pub presented_frames: Cell<u64>,
     pub gpu_lost_handlers: RefCell<Vec<StudioHandler>>,
+    pub studio_closed_handlers: RefCell<Vec<StudioHandler>>,
+    pub fallback_handlers: RefCell<Vec<StudioHandler>>,
     pub gpu_lost_announced: Cell<bool>,
 }
 

@@ -120,7 +120,8 @@ impl AppState {
         }
     }
 
-    /// Opens the studio on the worn brush; an error is kept for `take_studio_error`.
+    /// Opens the studio on the worn brush and wakes its views; an error is kept
+    /// for `take_studio_error`.
     pub fn open_studio(&mut self) {
         let brush = self.worn_brush_spec();
         let paint = self.studio_paint();
@@ -134,11 +135,13 @@ impl AppState {
             Ok(studio) => self.studio = Some(studio),
             Err(error) => self.fail_studio(error),
         }
+        self.wake();
     }
 
-    /// Closes the studio, freeing its canvas and scene.
+    /// Closes the studio, freeing its canvas and scene; its views drop their frame.
     pub fn close_studio(&mut self) {
         self.studio = None;
+        self.wake();
     }
 
     pub fn studio_open(&self) -> bool {

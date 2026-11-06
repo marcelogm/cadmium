@@ -1,3 +1,6 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use cadmium_engine::brush::BrushSpec;
 use cadmium_engine::brush::factory_brushes;
 use cadmium_engine::canvas::Primer;
@@ -146,6 +149,18 @@ fn the_studio_opens_and_closes() {
     state.close_studio();
     assert!(!state.studio_open());
     assert!(state.encode_studio_frame().is_ok());
+}
+
+#[test]
+fn opening_and_closing_the_studio_wake_its_views() {
+    let mut state = painting_state();
+    let wakes = Rc::new(Cell::new(0));
+    let counted = wakes.clone();
+    state.add_waker(Rc::new(move || counted.set(counted.get() + 1)));
+    state.open_studio();
+    assert_eq!(wakes.get(), 1);
+    state.close_studio();
+    assert_eq!(wakes.get(), 2);
 }
 
 #[test]

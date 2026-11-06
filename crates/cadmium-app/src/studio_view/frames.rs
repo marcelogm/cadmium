@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use super::StudioView;
-use crate::handlers::run_handlers;
+use crate::handlers::{announce_gpu_loss_once, run_handlers};
 use crate::presenter::FramePresenter;
 use crate::state::AppState;
 use crate::surface_scale::viewport_px;
@@ -62,43 +62,82 @@ impl StudioView {
 
     fn announce_if_gpu_lost(&self) {
         let imp = self.imp();
-        let lost = imp
-            .state
-            .get()
-            .and_then(|state| state.try_borrow().ok().map(|state| state.gpu_is_lost()))
-            .unwrap_or(false);
-        if lost && !imp.gpu_lost_announced.replace(true) {
-            run_handlers(&imp.gpu_lost_handlers, self);
-        }
+        announce_gpu_loss_once(
+            imp.state.get(),
+            &imp.gpu_lost_announced,
+            &imp.gpu_lost_handlers,
+            self,
+        );
     }
 
     fn present_if_needed(&self) {
-        self.present_texture();
+        match self.present_texture() {
+            Presented::Frame => self.announce_presented(),
+            Presented::StudioClosed => run_handlers(&self.imp().studio_closed_handlers, self),
+            Presented::Nothing => {}
+        }
+        self.drop_frame_if_closed();
         self.announce_if_gpu_lost();
     }
 
-    fn present_texture(&self) {
+    fn announce_presented(&self) {
+        let imp = self.imp();
+        let fell_back = imp.presenter.borrow_mut().take_fallback_notice();
+        if fell_back {
+            run_handlers(&imp.fallback_handlers, self);
+        }
+    }
+
+    /// Forgets the shown frame once the studio is closed, so a closed studio
+    /// shows nothing rather than its last frame.
+    fn drop_frame_if_closed(&self) {
+        let imp = self.imp();
+        let closed = imp
+            .state
+            .get()
+            .and_then(|state| state.try_borrow().ok().map(|state| !state.studio_open()))
+            .unwrap_or(false);
+        if closed && imp.texture.take().is_some() {
+            self.queue_draw();
+        }
+    }
+
+    fn present_texture(&self) -> Presented {
         let imp = self.imp();
         let Some(state) = imp.state.get() else {
-            return;
+            return Presented::Nothing;
         };
         let Some(native) = self.native() else {
-            return;
+            return Presented::Nothing;
         };
         let Ok(mut state) = state.try_borrow_mut() else {
-            return;
+            return Presented::Nothing;
         };
         let mut presenter = imp.presenter.borrow_mut();
         if !self.frame_needed(&state, &presenter) {
-            return;
+            return Presented::Nothing;
         }
         let (width_px, height_px) = viewport_px(self);
-        let Some(texture) = presenter.present(&mut state, &native, width_px, height_px) else {
-            return;
+        let texture = presenter.present(&mut state, &native, width_px, height_px);
+        if !state.studio_open() {
+            // The studio failed mid-frame: nothing was drawn into the texture.
+            return Presented::StudioClosed;
+        }
+        let Some(texture) = texture else {
+            return Presented::Nothing;
         };
         imp.needs_present.set(false);
         imp.texture.replace(Some(texture));
         imp.presented_frames.set(imp.presented_frames.get() + 1);
         self.queue_draw();
+        Presented::Frame
     }
+}
+
+/// What one present did.
+enum Presented {
+    Nothing,
+    Frame,
+    /// The studio closed on an error while presenting; nothing was shown.
+    StudioClosed,
 }
