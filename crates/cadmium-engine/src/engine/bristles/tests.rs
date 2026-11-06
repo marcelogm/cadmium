@@ -329,3 +329,17 @@ fn the_ferrule_radius_is_half_the_diameter_within_the_tip() {
     assert_eq!(ferrule_radius_for(0.0), MIN_DAB_RADIUS);
     assert_eq!(ferrule_radius_for(10.0 * TIP_SIZE as f32), MAX_TIP_RADIUS);
 }
+
+#[test]
+fn the_reach_of_an_out_of_range_head_is_the_reach_of_its_clamped_head() {
+    let wild = HeadSpec {
+        length: 1e3,
+        density_per_px: 1e3,
+        ..HeadSpec::ROUND
+    };
+    assert_eq!(
+        bristle_reach_px(20.0, &wild),
+        bristle_reach_px(20.0, &wild.clamped())
+    );
+    assert_ne!(wild, wild.clamped());
+}

@@ -100,11 +100,13 @@ pub(crate) fn reach_bound_px(request: &ReachRequest) -> f32 {
     radius_px + longest_px + widest_px
 }
 
-/// How far below and around the ferrule the hairs of `head` can reach, in px.
+/// How far from the ferrule centre the hairs of `head` can reach, in px, with
+/// the head clamped as the engine paints it. Excludes the safety margin the
+/// dab footprint adds on top.
 pub fn bristle_reach_px(ferrule_radius_px: f32, head: &HeadSpec) -> f32 {
     reach_bound_px(&ReachRequest {
         ferrule_radius_px,
-        head: *head,
+        head: head.clamped(),
     })
 }
 
