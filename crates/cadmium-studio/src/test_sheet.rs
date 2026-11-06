@@ -1,4 +1,4 @@
-//! The editor's test sheet: a canvas of plain paper the painter tries the draft brush on by
+//! The editor's test sheet: a canvas of ruled paper the painter tries the draft brush on by
 //! hand, with the painting's paint, in a private session of its own (no undo).
 //!
 //! A new brush waits for the next stroke, and every stroke begins with a fresh dip, so each
@@ -17,10 +17,12 @@ use crate::loading::{Loading, wear};
 use crate::paint::StudioPaint;
 use crate::studio::StudioError;
 
+mod ground;
+
 /// The editor's test sheet canvas, in canvas px: 4:3, filling whatever room the editor
 /// gives it (the overflow cropped).
 pub const TEST_SHEET_SIZE: (u32, u32) = (1200, 900);
-/// The sheet's ground: plain paper, whatever the painting is primed with.
+/// The sheet's ground: plain paper, whatever the painting is primed with, ruled with a grid.
 const GROUND: (Primer, Weave) = (Primer::Paper, Weave::Smooth);
 
 /// One frame of a test sheet: the clock it is shown at, and where its canvas sits in the
@@ -58,6 +60,7 @@ impl TestSheet {
             pigment_slots: paint.slots.clone(),
         };
         let mut session = PaintSession::headless(gpu, spec)?;
+        ground::rule(&mut session.canvas, gpu, &session.db);
         *session.engine.params_mut() = paint.params.clone();
         Ok(TestSheet {
             session,
@@ -101,13 +104,14 @@ impl TestSheet {
         self.session.end_stroke();
     }
 
-    /// A blank canvas again; the brush for the next stroke is kept. A failed swap may leave
-    /// a 1×1 canvas behind: the sheet is then of no further use.
+    /// A blank, ruled canvas again; the brush for the next stroke is kept. A failed swap may
+    /// leave a 1×1 canvas behind: the sheet is then of no further use.
     pub fn clear(&mut self, gpu: &GpuContext) -> Result<(), StudioError> {
         self.session.end_stroke();
         self.session.flush(gpu);
         let spec = self.session.canvas.spec.clone();
         replace_canvas(&mut self.session, gpu, spec)?;
+        ground::rule(&mut self.session.canvas, gpu, &self.session.db);
         Ok(())
     }
 

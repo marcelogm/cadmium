@@ -1,5 +1,5 @@
 use cadmium_engine::brush::{BrushSpec, HeadSpec, factory_brushes};
-use cadmium_engine::canvas::{Primer, Weave};
+use cadmium_engine::canvas::{Primer, StateTexture, Weave};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::params::SimParams;
 use cadmium_engine::present::{ViewTransform, readback_rgba8};
@@ -22,6 +22,16 @@ const ONE_TO_ONE: ViewTransform = ViewTransform {
 const DIP_TOLERANCE: f64 = 0.01;
 /// The darkest a bare paper pixel may present at (the ground alone is ≈ 247, 248, 244).
 const PAPER_FLOOR: u8 = 238;
+/// Canvas pixels off the lines, on a fine line and on a coarse one (the ground's grid).
+const OFF_LINE: (u32, u32) = (10, 10);
+const FINE_LINE: (u32, u32) = (20, 10);
+const COARSE_LINE: (u32, u32) = (100, 10);
+/// A wash of ultramarine over the whole sheet: its pigment share, and a thin and a thick coat.
+const WASH_SHARE: f32 = 0.5;
+const THIN_UM: f32 = 2.0;
+const THICK_UM: f32 = 400.0;
+/// How many 8-bit steps two pixels under the same paint may differ by (the present dithers).
+const SAME_PAINT_STEPS: i32 = 2;
 /// How many runs of `FRAMES` frames a stroke may take to settle.
 const SETTLE_RUNS: u32 = 10;
 
@@ -89,6 +99,27 @@ fn shown(gpu: &GpuContext, sheet: &mut TestSheet, clock_ms: &mut f64) -> Vec<u8>
     readback_rgba8(gpu, &target).unwrap()
 }
 
+fn rgb_at(pixels: &[u8], (x, y): (u32, u32)) -> [i32; 3] {
+    let start = ((y * SIZE.0 + x) * 4) as usize;
+    [0, 1, 2].map(|c| i32::from(pixels[start + c]))
+}
+
+/// How much darker the pixel at `line` shows than the one off the lines, summed over RGB.
+fn line_darkness(pixels: &[u8], line: (u32, u32)) -> i32 {
+    let (off, on) = (rgb_at(pixels, OFF_LINE), rgb_at(pixels, line));
+    (0..3).map(|c| off[c] - on[c]).sum()
+}
+
+/// Covers the whole sheet with an even coat of ultramarine `volume_um` thick.
+fn wash(gpu: &GpuContext, sheet: &mut TestSheet, volume_um: f32) {
+    let texels = (SIZE.0 * SIZE.1) as usize;
+    let canvas = &mut sheet.session.canvas;
+    canvas.write_f32(gpu, StateTexture::WetVol, &vec![volume_um; texels]);
+    let shares = [0.0, WASH_SHARE, 0.0, 0.0];
+    canvas.write_f32(gpu, StateTexture::WetPig0, &shares.repeat(texels));
+    canvas.dirty.mark_all();
+}
+
 fn wet_volume(gpu: &GpuContext, sheet: &TestSheet) -> f64 {
     sheet.session.canvas.wet_totals(gpu).unwrap().volume
 }
@@ -117,10 +148,10 @@ fn a_stroke_changes_the_sheet() {
     let mut sheet = round_sheet(&gpu);
     let mut clock_ms = 0.0;
     let blank = shown(&gpu, &mut sheet, &mut clock_ms);
+    let paper = rgb_at(&blank, OFF_LINE);
     assert!(
-        blank[..3].iter().all(|c| *c >= PAPER_FLOOR),
-        "{:?}",
-        &blank[..3]
+        paper.iter().all(|c| *c >= i32::from(PAPER_FLOOR)),
+        "{paper:?}"
     );
     stroke(&gpu, &mut sheet, &row(60.0));
     let painted = shown(&gpu, &mut sheet, &mut clock_ms);
@@ -250,4 +281,53 @@ fn a_stroke_needs_frames_until_it_settles() {
         !sheet.needs_frames(clock_ms)
     });
     assert!(settled, "still needs frames at {clock_ms} ms");
+}
+
+#[test]
+fn a_blank_sheet_is_ruled_with_fine_and_coarse_lines() {
+    let gpu = GpuContext::new().unwrap();
+    let mut sheet = round_sheet(&gpu);
+    let blank = shown(&gpu, &mut sheet, &mut 0.0);
+    let (fine, coarse) = (
+        line_darkness(&blank, FINE_LINE),
+        line_darkness(&blank, COARSE_LINE),
+    );
+    assert!(fine > 0, "fine line {fine}");
+    assert!(coarse > fine, "coarse line {coarse}, fine {fine}");
+}
+
+#[test]
+fn clearing_keeps_the_ruled_lines() {
+    let gpu = GpuContext::new().unwrap();
+    let mut sheet = round_sheet(&gpu);
+    let mut clock_ms = 0.0;
+    wash(&gpu, &mut sheet, THICK_UM);
+    shown(&gpu, &mut sheet, &mut clock_ms);
+    sheet.clear(&gpu).unwrap();
+    let cleared = shown(&gpu, &mut sheet, &mut clock_ms);
+    assert!(line_darkness(&cleared, FINE_LINE) > 0);
+    assert!(line_darkness(&cleared, COARSE_LINE) > line_darkness(&cleared, FINE_LINE));
+}
+
+#[test]
+fn thin_paint_shows_the_lines_and_thick_paint_hides_them() {
+    let gpu = GpuContext::new().unwrap();
+    let mut sheet = round_sheet(&gpu);
+    let mut clock_ms = 0.0;
+    wash(&gpu, &mut sheet, THIN_UM);
+    let thin = shown(&gpu, &mut sheet, &mut clock_ms);
+    wash(&gpu, &mut sheet, THICK_UM);
+    let thick = shown(&gpu, &mut sheet, &mut clock_ms);
+    assert!(
+        line_darkness(&thin, COARSE_LINE) > 3 * SAME_PAINT_STEPS,
+        "{:?}",
+        rgb_at(&thin, COARSE_LINE)
+    );
+    for line in [FINE_LINE, COARSE_LINE] {
+        let (off, on) = (rgb_at(&thick, OFF_LINE), rgb_at(&thick, line));
+        assert!(
+            (0..3).all(|c| (off[c] - on[c]).abs() <= SAME_PAINT_STEPS),
+            "{off:?} vs {on:?}"
+        );
+    }
 }
