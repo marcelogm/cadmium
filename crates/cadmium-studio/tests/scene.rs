@@ -234,31 +234,91 @@ fn the_brush_covers_part_of_the_view_mid_stroke() {
     assert!((0.002..=0.5).contains(&share), "brush covers {share}");
 }
 
+/// The scene mid-stroke with the brush and without it, and how it was seen.
+struct BrushShot {
+    camera: OrbitCamera,
+    size: (u32, u32),
+    on: Vec<u8>,
+    off: Vec<u8>,
+}
+
+impl BrushShot {
+    fn of(gpu: &GpuContext, player: &StudioPlayer) -> BrushShot {
+        let size = (320, 200);
+        let camera = camera(player, size);
+        let (on, off) = with_and_without_brush(gpu, request(player, &camera, size));
+        BrushShot {
+            camera,
+            size,
+            on,
+            off,
+        }
+    }
+
+    /// Whether the brush changed a pixel within one of where `point`
+    /// (canvas px) projects.
+    fn drawn_around(&self, point: glam::Vec3) -> bool {
+        let ndc = self.camera.view_proj().project_point3(point);
+        let (w, h) = (self.size.0 as f32, self.size.1 as f32);
+        let x = ((ndc.x + 1.0) / 2.0 * w) as i64;
+        let y = ((1.0 - ndc.y) / 2.0 * h) as i64;
+        let inside = |(px, py): &(i64, i64)| {
+            (0..i64::from(self.size.0)).contains(px) && (0..i64::from(self.size.1)).contains(py)
+        };
+        (-1..=1)
+            .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
+            .filter(inside)
+            .any(|(px, py)| differs_at(&self.on, &self.off, self.size.0, (px as u32, py as u32)))
+    }
+}
+
 #[test]
 fn the_brush_is_drawn_where_its_roots_project() {
     let gpu = GpuContext::new().unwrap();
-    let size = (320, 200);
     let player = mid_stroke(&gpu, &brush());
-    let camera = camera(&player, size);
     let snapshot = player.session().engine.bristle_snapshot(&gpu).unwrap();
-    let roots: Vec<glam::Vec3> = snapshot
+    let roots = snapshot
         .chains_px
         .iter()
-        .map(|chain| glam::Vec3::from(chain[0]))
-        .collect();
-    let centroid = roots.iter().sum::<glam::Vec3>() / roots.len() as f32;
-    let ndc = camera.view_proj().project_point3(centroid);
-    let (w, h) = (size.0 as f32, size.1 as f32);
-    let x = ((ndc.x + 1.0) / 2.0 * w) as i64;
-    let y = ((1.0 - ndc.y) / 2.0 * h) as i64;
-    let (on, off) = with_and_without_brush(&gpu, request(&player, &camera, size));
-    let near_roots = (-1..=1)
-        .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
-        .filter(|&(px, py)| {
-            (0..i64::from(size.0)).contains(&px) && (0..i64::from(size.1)).contains(&py)
-        })
-        .any(|(px, py)| differs_at(&on, &off, size.0, (px as u32, py as u32)));
-    assert!(near_roots, "nothing drawn around the roots at ({x}, {y})");
+        .map(|chain| glam::Vec3::from(chain[0]));
+    let centroid = roots.sum::<glam::Vec3>() / snapshot.chains_px.len() as f32;
+    assert!(BrushShot::of(&gpu, &player).drawn_around(centroid));
+}
+
+#[test]
+fn the_hairs_are_drawn_out_to_their_tips() {
+    let gpu = GpuContext::new().unwrap();
+    let player = mid_stroke(&gpu, &brush());
+    let snapshot = player.session().engine.bristle_snapshot(&gpu).unwrap();
+    let shot = BrushShot::of(&gpu, &player);
+    let tips = &snapshot.chains_px;
+    let drawn = tips
+        .iter()
+        .filter(|chain| shot.drawn_around(glam::Vec3::from(*chain.last().unwrap())))
+        .count();
+    assert!(
+        drawn * 2 > tips.len(),
+        "{drawn} of {} tips drawn",
+        tips.len()
+    );
+}
+
+#[test]
+fn the_handle_rises_up_the_brush_axis() {
+    let gpu = GpuContext::new().unwrap();
+    let player = mid_stroke(&gpu, &brush());
+    let snapshot = player.session().engine.bristle_snapshot(&gpu).unwrap();
+    let radius = player.session().engine.bristle_view().ferrule_radius_px();
+    let ferrule = glam::Vec3::from(snapshot.ferrule_px);
+    // 4.5 ferrule radii up the axis is inside the handle (1.5 to 5.5); as far
+    // down it lies under the canvas, clear of the hairs, where nothing shows.
+    let reach = glam::Vec3::from(snapshot.axis) * (4.5 * radius);
+    let shot = BrushShot::of(&gpu, &player);
+    assert!(shot.drawn_around(ferrule + reach), "no handle up the axis");
+    assert!(
+        !shot.drawn_around(ferrule - reach),
+        "a handle down the axis"
+    );
 }
 
 #[test]
