@@ -24,8 +24,6 @@ mod imp;
 
 const CURSOR: &str = "crosshair";
 const DESCRIPTION: &str = "Test sheet: paint on it to try the brush";
-/// How strongly the grid's lines show over the paint: like printed lines under ink.
-const GRID_ALPHA: f64 = 0.5;
 
 /// What the widget paints on and presents with.
 struct Link {

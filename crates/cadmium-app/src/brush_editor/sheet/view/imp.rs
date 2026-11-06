@@ -4,8 +4,8 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene};
 
-use super::{CURSOR, DESCRIPTION, GRID_ALPHA, Link, append_sheet};
-use crate::brush_editor::paper::{draw_grid, draw_grid_lines};
+use super::{CURSOR, DESCRIPTION, Link, append_sheet};
+use crate::brush_editor::paper::draw_grid;
 use crate::handlers::Handler;
 use crate::presenter::FramePresenter;
 use crate::surface_scale::{SurfaceScaleWatch, device_scale};
@@ -74,18 +74,16 @@ impl WidgetImpl for TestSheetView {
         self.obj().queue_present();
     }
 
-    /// The presented canvas with the grid's faint lines over it; plain gridded paper until
-    /// the first frame.
+    /// The presented sheet, its grid ruled into its ground under the paint; until the first
+    /// frame, gridded paper drawn alike, so the card is never blank.
     fn snapshot(&self, snapshot: &gtk::Snapshot) {
         let view = self.obj();
+        if let Some(texture) = self.texture.borrow().as_ref() {
+            append_sheet(snapshot, texture, device_scale(&*view));
+            return;
+        }
         let size = [f64::from(view.width()), f64::from(view.height())];
         let bounds = graphene::Rect::new(0.0, 0.0, size[0] as f32, size[1] as f32);
-        let texture = self.texture.borrow();
-        let Some(texture) = texture.as_ref() else {
-            draw_grid(&snapshot.append_cairo(&bounds), size);
-            return;
-        };
-        append_sheet(snapshot, texture, device_scale(&*view));
-        draw_grid_lines(&snapshot.append_cairo(&bounds), size, GRID_ALPHA);
+        draw_grid(&snapshot.append_cairo(&bounds), size);
     }
 }

@@ -1,5 +1,5 @@
-//! Gridded paper: under the example strokes until they are first painted, and round the
-//! test sheet's canvas.
+//! Gridded paper: under the example strokes until they are first painted, and on the test
+//! sheet until its first frame (the sheet's own ground is ruled alike).
 
 use adw::prelude::*;
 use gtk::cairo;
@@ -46,15 +46,10 @@ fn grid_area() -> gtk::DrawingArea {
 pub(super) fn draw_grid(context: &cairo::Context, size: [f64; 2]) {
     set_colour(context, PAPER);
     let _ = context.paint();
-    draw_grid_lines(context, size, 1.0);
-}
-
-/// The two grids' lines alone, at `alpha`, over whatever is below them.
-pub(super) fn draw_grid_lines(context: &cairo::Context, size: [f64; 2], alpha: f64) {
     context.set_line_width(LINE_WIDTH);
-    for (step, [red, green, blue]) in [(MINOR_STEP, MINOR_LINE), (MAJOR_STEP, MAJOR_LINE)] {
+    for (step, colour) in [(MINOR_STEP, MINOR_LINE), (MAJOR_STEP, MAJOR_LINE)] {
         grid_lines(context, size, step);
-        context.set_source_rgba(red, green, blue, alpha);
+        set_colour(context, colour);
         let _ = context.stroke();
     }
 }
