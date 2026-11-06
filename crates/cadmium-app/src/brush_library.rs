@@ -18,7 +18,7 @@ impl std::fmt::Display for LibraryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LibraryError::Unreadable(error) => write!(f, "{error}"),
-            LibraryError::NotAUserBrush => write!(f, "factory brushes can't be deleted"),
+            LibraryError::NotAUserBrush => write!(f, "that brush is a factory brush"),
             LibraryError::Changed => write!(f, "the brush changed while it was being edited"),
             LibraryError::Io(error) => write!(f, "{error}"),
         }

@@ -1,7 +1,7 @@
 //! The brush editor: edits the worn brush as a draft, then saves it to the library.
 //!
 //! Three columns (D2): the tip's drawing with the example strokes under it, the test sheet,
-//! and the controls. Until stages 7b and 7c, the examples and the test sheet are blank paper.
+//! and the controls. The examples and the test sheet are blank paper for now.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};

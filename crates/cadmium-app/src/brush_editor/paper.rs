@@ -1,5 +1,5 @@
-//! Gridded paper: the example strokes (stage 7b) and the test sheet (stage 7c) are painted on
-//! it. Until then it stands in for both, blank.
+//! Gridded paper: the example strokes and the test sheet will be painted on it. For now it
+//! stands in for both, blank.
 
 use adw::prelude::*;
 use gtk::cairo;
@@ -11,7 +11,8 @@ const MAJOR_LINE: [f64; 3] = rgb(0xcfd5dc);
 const MINOR_STEP: f64 = 16.0;
 const MAJOR_STEP: f64 = 80.0;
 const LINE_WIDTH: f64 = 1.0;
-/// Where the example strokes go under the schematic: 7b's 910 × 440 sheet at the column's width.
+/// Where the example strokes go under the schematic: the example sheet's 910 × 440 at the
+/// column's width.
 const EXAMPLES_SIZE: [i32; 2] = [312, 151];
 
 pub(super) const fn rgb(hex: u32) -> [f64; 3] {
