@@ -57,3 +57,12 @@ fn the_stroke_box_sits_two_reaches_in_and_spans_six_by_two() {
     assert!(area.x + area.width + MARGIN_REACHES * reach <= f64::from(fit.canvas.0));
     assert!(area.y + area.height + MARGIN_REACHES * reach <= f64::from(fit.canvas.1));
 }
+
+#[test]
+fn a_brush_of_no_real_size_gets_the_smallest_size() {
+    for size_px in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let fit = StudioFit::of(&sized(size_px)[0]);
+        assert_eq!(fit.brush.size_px, BrushSpec::SIZE_RANGE_PX[0], "{size_px}");
+        assert_eq!(fit.canvas, canvas_for(fit.reach_px));
+    }
+}

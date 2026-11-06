@@ -49,13 +49,22 @@ fn largest_fitting_size(brush: &BrushSpec) -> f32 {
 }
 
 impl StudioFit {
-    /// `brush` as it is if its canvas fits, or scaled down until it does.
+    /// `brush` as it is if its canvas fits, or scaled down until it does; a
+    /// non-finite size becomes the smallest brush size.
+    ///
+    /// The smallest ferrule radius always fits: its reach is a few pixels for
+    /// any clamped head. Were it ever not to, the brush would shrink to that
+    /// radius and the canvas would be too big for the studio.
     pub fn of(brush: &BrushSpec) -> StudioFit {
         let mut brush = brush.clone();
+        if !brush.size_px.is_finite() {
+            brush.size_px = BrushSpec::SIZE_RANGE_PX[0];
+        }
         if !fits(canvas_for(reach_for(&brush, brush.size_px))) {
             brush.size_px = largest_fitting_size(&brush);
         }
         let reach_px = reach_for(&brush, brush.size_px);
+        debug_assert!(fits(canvas_for(reach_px)), "{brush:?} does not fit");
         StudioFit {
             canvas: canvas_for(reach_px),
             reach_px,

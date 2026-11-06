@@ -19,8 +19,9 @@ use crate::studio::StudioError;
 pub const LOOP_PAUSE_MS: f64 = 700.0;
 /// The slow-motion replay speed.
 pub const SLOW_MOTION: f64 = 0.25;
-/// The most quanta one `advance` replays; a longer stall drops the rest.
-pub(crate) const MAX_QUANTA_PER_ADVANCE: u32 = 32;
+/// The most quanta one `advance` replays; a longer stall drops the rest, so a
+/// slow machine plays in slow motion rather than in jumps.
+pub(crate) const MAX_QUANTA_PER_ADVANCE: u32 = 8;
 
 /// What the studio canvas is made of and what the brush is loaded with.
 #[derive(Clone, Debug, PartialEq)]

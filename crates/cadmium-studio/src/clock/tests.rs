@@ -14,13 +14,13 @@ fn play(steps: &[f64], speed: f64) -> (u32, f64) {
 
 #[test]
 fn any_split_of_the_same_time_gives_the_same_quanta_and_remainder() {
-    let total = play(&[100.5], 1.0);
-    assert_eq!(total, (16, 4.5));
+    let total = play(&[40.5], 1.0);
+    assert_eq!(total, (6, 4.5));
     for split in [
-        &[50.25, 50.25][..],
-        &[0.5; 201][..],
-        &[1.0, 2.0, 3.0, 4.0, 5.5, 85.0],
-        &[6.0, 0.0, 94.5],
+        &[20.25, 20.25][..],
+        &[0.5; 81][..],
+        &[1.0, 2.0, 3.0, 4.0, 5.5, 25.0],
+        &[6.0, 0.0, 34.5],
     ] {
         assert_eq!(play(split, 1.0), total, "{split:?}");
     }
@@ -52,4 +52,15 @@ fn a_stall_past_the_cap_drops_the_excess_time() {
     let (due, rest) = quanta_due(3.0, 6.0 * f64::from(CAP) + 3.0, 1.0, QUANTUM, CAP);
     assert_eq!(due, CAP);
     assert!(rest < QUANTUM, "{rest}");
+}
+
+#[test]
+fn non_finite_time_counts_as_none() {
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -5.0] {
+        assert_eq!(quanta_due(3.0, bad, 1.0, QUANTUM, CAP), (0, 3.0), "{bad}");
+        assert_eq!(quanta_due(3.0, 12.0, bad, QUANTUM, CAP), (0, 3.0), "{bad}");
+        assert_eq!(quanta_due(bad, 12.0, 1.0, QUANTUM, CAP), (2, 0.0), "{bad}");
+    }
+    let (due, rest) = quanta_due(0.0, f64::MAX, f64::MAX, QUANTUM, CAP);
+    assert_eq!((due, rest), (CAP, 0.0));
 }
