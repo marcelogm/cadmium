@@ -29,13 +29,13 @@ fn figures(tip: &TipGeometry) -> Figures {
 }
 
 #[test]
-fn a_round_and_the_factory_fan_draw_at_the_mockups_full_scale() {
+fn a_round_and_the_factory_fan_draw_at_full_scale() {
     assert_eq!(laid_out(HeadSpec::ROUND).1.scale, 46.0);
     assert_eq!(laid_out(HeadSpec::FAN).1.scale, 46.0);
 }
 
 #[test]
-fn a_rigger_is_fitted_to_the_height_as_in_the_mockup() {
+fn a_rigger_is_fitted_to_the_height() {
     let (_, sheet) = laid_out(HeadSpec::RIGGER);
     assert!(
         (sheet.scale - 300.0 / (6.0 + 2.6)).abs() < CLOSE,
@@ -116,7 +116,7 @@ fn a_wide_tip_keeps_its_width_figure_above_the_footprints_caption() {
 }
 
 #[test]
-fn a_narrow_tip_leaves_the_footprint_where_the_mockup_has_it() {
+fn a_narrow_tip_leaves_the_footprint_under_its_views() {
     let (_, sheet) = laid_out(HeadSpec::ROUND);
     let deepest = sheet.roots_y + 2.5 * sheet.scale;
     assert!(

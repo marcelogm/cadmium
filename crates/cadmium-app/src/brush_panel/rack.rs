@@ -132,6 +132,7 @@ fn scroll_once_laid_out(
 
 fn menu_button() -> gtk::MenuButton {
     let menu = gio::Menu::new();
+    menu.append(Some("New Brush…"), Some("win.new-brush"));
     menu.append(Some("Edit…"), Some("win.edit-brush"));
     menu.append(Some("Import…"), Some("win.import-brush"));
     menu.append(Some("Export…"), Some("win.export-brush"));

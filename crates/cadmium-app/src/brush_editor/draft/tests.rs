@@ -251,3 +251,39 @@ fn a_brush_dragged_onto_a_presets_values_opens_on_that_preset() {
     let reopened = Draft::open(draft.saved_brush(), Origin::Factory);
     assert_eq!(reopened.head_preset(), Some(HeadPreset::Round));
 }
+
+#[test]
+fn a_new_brush_starts_as_the_round_synthetic_at_its_size_with_both_parts_custom() {
+    let draft = Draft::new_brush();
+    let round = factory_brushes()
+        .into_iter()
+        .find(|brush| brush.name == "Round · Synthetic")
+        .unwrap();
+    let current = draft.current();
+    assert_eq!(current.name, "New Brush");
+    assert_eq!(
+        (current.head, current.hair, current.size_px),
+        (round.head, round.hair, round.size_px)
+    );
+    assert_eq!((draft.head_preset(), draft.hair_preset()), (None, None));
+    assert!(draft.is_custom(Part::Head) && draft.is_custom(Part::Hair));
+}
+
+#[test]
+fn an_untouched_new_brush_closes_without_asking_and_a_changed_one_asks() {
+    let mut draft = Draft::new_brush();
+    assert!(!draft.asks_before(Closing::Cancel));
+    assert!(draft.set(Control::Thickness, 0.5));
+    assert!(draft.asks_before(Closing::Cancel));
+}
+
+#[test]
+fn a_new_brush_is_saved_as_a_new_brush_under_its_own_name() {
+    let mut draft = Draft::new_brush();
+    assert_eq!(added(draft.save_plan()).name, "New Brush");
+    draft.set_name("Wide wash");
+    assert_eq!(added(draft.save_plan()).name, "Wide wash");
+    assert_eq!(draft.deletable(), None);
+    assert!(!draft.copyable());
+    assert!(factory().copyable() && user().copyable());
+}

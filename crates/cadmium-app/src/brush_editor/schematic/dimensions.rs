@@ -54,8 +54,8 @@ fn length(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {
     );
 }
 
-/// W, under the front view's deepest point (the mockup put it under the tip's corners, which
-/// ran it through a domed tip).
+/// W, under the front view's deepest point (under the tip's corners it would run through a
+/// domed tip).
 fn tip_width(canvas: &Canvas, tip: &TipGeometry, sheet: &Sheet) {
     let edge = tip.front.tip_edge();
     let (Some(&left), Some(&right)) = (edge.first(), edge.last()) else {

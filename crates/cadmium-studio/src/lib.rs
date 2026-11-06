@@ -15,5 +15,8 @@ pub use example::{EXAMPLE_SHEET_SIZE, ExampleRequest, ExampleSheet};
 pub use look::{HairPreset, HeadPreset, hair_name, head_name};
 pub use paint::{DEMO_PIGMENT, StudioPaint};
 pub use studio::{BrushStudio, StudioError, THUMBNAIL_SIZE, Thumbnail};
-pub use test_sheet::{SheetFrame, TEST_SHEET_SIZE, TestSheet};
+pub use test_sheet::{
+    GROUND_COARSE_STEP_PX, GROUND_FINE_STEP_PX, GROUND_LINE_PX, SheetFrame, TEST_SHEET_SIZE,
+    TestSheet,
+};
 pub use tip::{Dimensions, Ferrule, TipGeometry, TipView};

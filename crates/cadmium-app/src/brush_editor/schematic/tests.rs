@@ -189,7 +189,7 @@ fn overlap(a: Bounds, b: Bounds) -> bool {
 }
 
 /// Whether two marks must stay apart: a figure or caption from anything else, but the fan's
-/// angle may sit on the front view (it is drawn on it, as in the mockup).
+/// angle may sit on the front view (it is drawn on it).
 fn kept_apart(a: &Mark, b: &Mark) -> bool {
     let lettered =
         |mark: &Mark| matches!(mark.part, Part::Caption | Part::Dimension | Part::FanAngle);

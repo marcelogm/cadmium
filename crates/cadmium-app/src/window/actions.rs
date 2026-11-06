@@ -27,6 +27,7 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("save", CadmiumWindow::save),
     ("save-as", CadmiumWindow::save_as),
     ("export", CadmiumWindow::export),
+    ("new-brush", CadmiumWindow::new_brush),
     ("edit-brush", CadmiumWindow::edit_brush),
     ("import-brush", CadmiumWindow::import_brush),
     ("export-brush", CadmiumWindow::export_brush),
@@ -89,6 +90,10 @@ impl CadmiumWindow {
     fn clear_tray(&self) {
         self.state().borrow_mut().clear_tray();
         self.after_contact();
+    }
+
+    fn new_brush(&self) {
+        brush_editor::open_new(self);
     }
 
     fn edit_brush(&self) {

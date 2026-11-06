@@ -8,6 +8,8 @@ use crate::LOG_DOMAIN;
 use crate::brush_editor;
 use crate::window::CadmiumWindow;
 
+const NEW_BRUSH_ACTION: &str = "win.new-brush";
+
 /// How much of the editor the screenshot step can see.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EditorShown {
@@ -31,6 +33,19 @@ enum Readiness {
 /// screenshot would lie.
 pub(super) fn open(window: &CadmiumWindow) {
     brush_editor::open(window);
+    expect_editor(window);
+}
+
+/// Opens the brush editor on a new brush through the rack menu's action, as "New Brush…"
+/// does. An editor that does not open ends the run.
+pub(super) fn open_new(window: &CadmiumWindow) {
+    if let Err(error) = WidgetExt::activate_action(window, NEW_BRUSH_ACTION, None) {
+        fail(&format!("could not run {NEW_BRUSH_ACTION}: {error}"));
+    }
+    expect_editor(window);
+}
+
+fn expect_editor(window: &CadmiumWindow) {
     if !window.has_editor() {
         fail("the brush editor did not open");
     }

@@ -19,6 +19,11 @@ use crate::studio::StudioError;
 
 mod ground;
 
+pub use ground::{
+    COARSE_STEP_PX as GROUND_COARSE_STEP_PX, FINE_STEP_PX as GROUND_FINE_STEP_PX,
+    LINE_PX as GROUND_LINE_PX,
+};
+
 /// The editor's test sheet canvas, in canvas px: 4:3, filling whatever room the editor
 /// gives it (the overflow cropped).
 pub const TEST_SHEET_SIZE: (u32, u32) = (1200, 900);

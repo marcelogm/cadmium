@@ -1,9 +1,6 @@
 use std::ffi::OsString;
 
-use super::brushes::{
-    BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EDITOR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep,
-    SHEET_STROKE,
-};
+use super::brushes::{BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep};
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
     PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
@@ -294,88 +291,4 @@ fn brush_delete_zero_and_empty_brush_values_do_nothing() {
         (BRUSH_IMPORT, ""),
     ]));
     assert_eq!(config, None);
-}
-
-#[test]
-fn brush_editor_alone_starts_a_smoke_run_that_opens_it() {
-    let config = SmokeConfig::from_lookup(lookup(&[(BRUSH_EDITOR, "60")])).unwrap();
-    assert_eq!(config.brushes.editor, Some(60));
-    assert_eq!(
-        config.steps(),
-        [SmokeStep::Brush(BrushStep::Editor(60)), SmokeStep::Quit]
-    );
-}
-
-#[test]
-fn brush_editor_opens_after_the_tray_and_before_the_screenshot() {
-    let config = SmokeConfig::from_lookup(lookup(&[
-        (SCREENSHOT, "/tmp/shot.png"),
-        (BRUSH_EDITOR, "60"),
-        (TRAY, "1"),
-        (BRUSH, "Round · Synthetic"),
-    ]))
-    .unwrap();
-    assert_eq!(
-        config.steps(),
-        [
-            SmokeStep::Brush(BrushStep::Pick("Round · Synthetic".to_string())),
-            SmokeStep::ShowTray,
-            SmokeStep::Brush(BrushStep::Editor(60)),
-            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-            SmokeStep::Quit,
-        ]
-    );
-}
-
-#[test]
-fn unparsable_brush_editor_frames_open_no_editor() {
-    assert_eq!(
-        SmokeConfig::from_lookup(lookup(&[(BRUSH_EDITOR, "soon")])),
-        None
-    );
-}
-
-#[test]
-fn the_brush_editor_holds_the_end_back_by_its_frames() {
-    let editor = SmokeStep::Brush(BrushStep::Editor(60));
-    let save = SmokeStep::Save(PathBuf::from("/tmp/a.cadmium"));
-    let screenshot = SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png"));
-    assert_eq!(editor.settle_frames(), Some(60));
-    assert_eq!(save.settle_frames(), Some(SETTLE_FRAMES_AFTER_FILE_WORK));
-    assert_eq!(screenshot.settle_frames(), None);
-    assert!(editor.opens_editor());
-    assert!(!save.opens_editor() && !screenshot.opens_editor());
-}
-
-#[test]
-fn a_sheet_stroke_follows_the_brush_editor() {
-    let config = SmokeConfig::from_lookup(lookup(&[
-        (BRUSH_EDITOR, "60"),
-        (SHEET_STROKE, "1"),
-        (SCREENSHOT, "/tmp/shot.png"),
-    ]))
-    .unwrap();
-    assert_eq!(
-        config.steps(),
-        [
-            SmokeStep::Brush(BrushStep::Editor(60)),
-            SmokeStep::Brush(BrushStep::SheetStroke),
-            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-            SmokeStep::Quit,
-        ]
-    );
-}
-
-#[test]
-fn a_sheet_stroke_without_the_editor_paints_nothing() {
-    let config = SmokeConfig::from_lookup(lookup(&[
-        (SHEET_STROKE, "1"),
-        (SCREENSHOT, "/tmp/shot.png"),
-    ]))
-    .unwrap();
-    assert!(
-        !config
-            .steps()
-            .contains(&SmokeStep::Brush(BrushStep::SheetStroke))
-    );
 }

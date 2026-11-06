@@ -20,6 +20,7 @@ pub(super) const BRUSH_EXPORT: &str = "CADMIUM_SMOKE_BRUSH_EXPORT";
 pub(super) const BRUSH_DELETE: &str = "CADMIUM_SMOKE_BRUSH_DELETE";
 pub(super) const BRUSH_EDITOR: &str = "CADMIUM_SMOKE_BRUSH_EDITOR";
 pub(super) const SHEET_STROKE: &str = "CADMIUM_SMOKE_SHEET_STROKE";
+pub(super) const NEW_BRUSH: &str = "CADMIUM_SMOKE_NEW_BRUSH";
 
 /// What a smoke run does with the brush library.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -33,6 +34,8 @@ pub(super) struct SmokeBrushes {
     pub(super) editor: Option<u32>,
     /// Whether a stroke is painted on the editor's test sheet once it shows.
     pub(super) sheet_stroke: bool,
+    /// Whether the editor opens on a brush made from scratch, through "New Brush…".
+    pub(super) new_brush: bool,
 }
 
 impl SmokeBrushes {
@@ -47,6 +50,7 @@ impl SmokeBrushes {
             delete: lookup_flag(lookup, BRUSH_DELETE),
             editor: lookup(BRUSH_EDITOR).and_then(|value| parse_or_warn(BRUSH_EDITOR, &value)),
             sheet_stroke: lookup_flag(lookup, SHEET_STROKE),
+            new_brush: lookup_flag(lookup, NEW_BRUSH),
         }
     }
 
@@ -66,9 +70,15 @@ impl SmokeBrushes {
         export.into_iter().chain(delete).map(SmokeStep::Brush)
     }
 
-    /// The editor, then a stroke on its test sheet when asked for.
+    /// The editor (on the worn brush, or on a new one), then a stroke on its test sheet when
+    /// asked for.
     pub(super) fn editor_steps(&self) -> impl Iterator<Item = SmokeStep> {
-        let editor = self.editor.map(BrushStep::Editor);
+        let open = if self.new_brush {
+            BrushStep::NewBrushEditor
+        } else {
+            BrushStep::Editor
+        };
+        let editor = self.editor.map(open);
         let stroke = self
             .editor
             .and(self.sheet_stroke.then_some(BrushStep::SheetStroke));
@@ -91,6 +101,9 @@ pub(super) enum BrushStep {
     Delete,
     /// Opens the brush editor, on show for this many frames.
     Editor(u32),
+    /// Opens the brush editor on a new brush, as "New Brush…" does, on show for this many
+    /// frames.
+    NewBrushEditor(u32),
     /// Paints a stroke on the open editor's test sheet.
     SheetStroke,
 }
@@ -100,7 +113,7 @@ impl BrushStep {
     /// waits for the sheet's first frame.
     pub(super) fn is_ready(&self, window: &CadmiumWindow) -> bool {
         match self {
-            BrushStep::Editor(_) => !window.thumbnails_pending(),
+            BrushStep::Editor(_) | BrushStep::NewBrushEditor(_) => !window.thumbnails_pending(),
             BrushStep::SheetStroke => editor::sheet_shown(window),
             _ => true,
         }
@@ -113,6 +126,7 @@ impl BrushStep {
             BrushStep::Export(path) => window.export_brush_to(path),
             BrushStep::Delete => window.delete_worn_brush_now(),
             BrushStep::Editor(_) => editor::open(window),
+            BrushStep::NewBrushEditor(_) => editor::open_new(window),
             BrushStep::SheetStroke => editor::paint_on_sheet(window),
         }
     }
@@ -144,3 +158,6 @@ fn rack_entry(widget: &gtk::Widget, name: &str) -> Option<(gtk::ListBox, gtk::Li
     }
     None
 }
+
+#[cfg(test)]
+mod tests;

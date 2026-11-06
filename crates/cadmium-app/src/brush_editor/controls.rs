@@ -38,7 +38,7 @@ pub(super) enum Control {
     Wicking,
 }
 
-/// A slider's label, range and step (the steps are the approved mockup's).
+/// A slider's label, range and step.
 struct Spec {
     control: Control,
     label: &'static str,

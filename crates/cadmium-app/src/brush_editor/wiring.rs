@@ -8,6 +8,7 @@ use gtk::gio;
 
 use super::brush_group::changes_size;
 use super::controls::preset_at;
+use super::draft::Draft;
 use super::header::{ACTION_GROUP, Header};
 use super::parts::ControlRow;
 use super::repainting::Change;
@@ -15,10 +16,11 @@ use super::{Editor, with_editor};
 
 type Run = fn(&Rc<Editor>);
 
+const SAVE_COPY: &str = "save-copy";
 const DELETE: &str = "delete";
 /// The ⋯ menu's actions, as `editor.<name>`.
 const MENU_ACTIONS: [(&str, Run); 3] = [
-    ("save-copy", Editor::save_copy),
+    (SAVE_COPY, Editor::save_copy),
     ("export", Editor::export),
     (DELETE, Editor::delete),
 ];
@@ -35,13 +37,14 @@ impl Editor {
         self.connect_parts();
     }
 
-    /// The ⋯ menu's actions; Delete only for a user brush.
+    /// The ⋯ menu's actions: Save as Copy once there is a brush to copy, Delete only for a
+    /// user brush.
     fn install_menu(self: &Rc<Self>) {
-        let deletable = self.draft.borrow().deletable().is_some();
+        let menu = MenuState::of(&self.draft.borrow());
         let group = gio::SimpleActionGroup::new();
         for (name, run) in MENU_ACTIONS {
             let action = menu_action(self, name, run);
-            action.set_enabled(name != DELETE || deletable);
+            action.set_enabled(menu.enables(name));
             group.add_action(&action);
         }
         self.dialog.insert_action_group(ACTION_GROUP, Some(&group));
@@ -133,9 +136,36 @@ impl Editor {
     }
 }
 
+/// Which of the ⋯ menu's actions the draft allows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MenuState {
+    copyable: bool,
+    deletable: bool,
+}
+
+impl MenuState {
+    fn of(draft: &Draft) -> MenuState {
+        MenuState {
+            copyable: draft.copyable(),
+            deletable: draft.deletable().is_some(),
+        }
+    }
+
+    fn enables(self, name: &str) -> bool {
+        match name {
+            SAVE_COPY => self.copyable,
+            DELETE => self.deletable,
+            _ => true,
+        }
+    }
+}
+
 fn menu_action(editor: &Rc<Editor>, name: &str, run: Run) -> gio::SimpleAction {
     let action = gio::SimpleAction::new(name, None);
     let editor = Rc::downgrade(editor);
     action.connect_activate(move |_, _| with_editor(&editor, run));
     action
 }
+
+#[cfg(test)]
+mod tests;

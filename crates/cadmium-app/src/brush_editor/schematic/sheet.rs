@@ -1,8 +1,8 @@
-//! Where the schematic puts each part, in sheet units: the mockup's layout rules.
+//! Where the schematic puts each part, in sheet units.
 
 use cadmium_studio::TipGeometry;
 
-/// The sheet: the mockup's 320 × 560, and 22 more for the title block's name row.
+/// The sheet: 320 × 560 sheet units, and 22 more for the title block's name row.
 pub(super) const SHEET: [f64; 2] = [320.0, 582.0];
 /// Nothing is drawn closer than this to the sheet's edge but the paper, grid and frame.
 pub(super) const SHEET_MARGIN: f64 = 10.0;
@@ -10,21 +10,21 @@ pub(super) const FRONT_X: f64 = 96.0;
 pub(super) const SIDE_X: f64 = 246.0;
 pub(super) const FOOTPRINT_X: f64 = 160.0;
 pub(super) const TITLE_TOP: f64 = 488.0;
-/// Sheet units per root half-width, at most (the mockup's 46).
+/// Sheet units per root half-width, at most.
 const MAX_SCALE: f64 = 46.0;
 /// The height the views share, and the ferrule-and-handle part of it, in root half-widths.
 const VIEW_HEIGHT: f64 = 300.0;
 const ABOVE_ROOTS: f64 = 2.6;
-/// The mockup's width rule: 118 units for the front view, fitted to at least 1.15 half-widths.
+/// The width rule: 118 units for the front view, fitted to at least 1.15 half-widths.
 const VIEW_WIDTH: f64 = 118.0;
 const MIN_FITTED_HALF_WIDTH: f64 = 1.15;
 const WIDTH_SLACK: f64 = 1.1;
-/// Room left of the front view's axis and right of the side view's (not in the mockup:
-/// extreme fans and bellies spilled off its sheet).
+/// Room left of the front view's axis and right of the side view's, so extreme fans and
+/// bellies stay on the sheet.
 const LEFT_ROOM: f64 = FRONT_X - SHEET_MARGIN;
 const RIGHT_ROOM: f64 = SHEET[0] - SHEET_MARGIN - SIDE_X;
-/// Room kept between the front view and the side view, for the length's dimension (not in
-/// the mockup: a wide fan beside a full belly ran them together).
+/// Room kept between the front view and the side view, for the length's dimension, so a
+/// wide fan beside a full belly stays apart.
 pub(super) const BETWEEN_VIEWS: f64 = 32.0;
 /// Where the handle is cut, and the ferrule (1.55) plus handle (0.9) below it, in half-widths.
 const HANDLE_TOP: f64 = 40.0;
@@ -105,8 +105,7 @@ impl Sheet {
 
 /// The footprint's centre line, scale and caption's baseline, under views ending at `bottom`;
 /// `clear`, when W's figure is in the caption's way, is the highest the caption's baseline
-/// may sit. Lowered for it, the footprint stops above the title block; past that, it shrinks
-/// (not in the mockup).
+/// may sit. Lowered for it, the footprint stops above the title block; past that, it shrinks.
 fn footprint_layout(tip: &TipGeometry, bottom: f64, clear: Option<f64>) -> [f64; 3] {
     let reach = reach_x(tip.footprint_bounds()).max(MIN_FOOTPRINT_REACH);
     let scale = FOOTPRINT_MAX_SCALE.min(FOOTPRINT_ROOM / reach);
@@ -129,8 +128,8 @@ fn footprint_layout(tip: &TipGeometry, bottom: f64, clear: Option<f64>) -> [f64;
     [y, shrunk, y - shrunk_rise]
 }
 
-/// Whether W's dimension, at `scale`, reaches under the footprint's caption (not in the
-/// mockup: a wide tip's figure ran into it).
+/// Whether W's dimension, at `scale`, reaches under the footprint's caption, where a wide
+/// tip's figure would run into it.
 fn width_figure_under_caption(tip: &TipGeometry, scale: f64, figures: &Figures) -> bool {
     let edge = tip.front.tip_edge();
     let (Some(left), Some(right)) = (edge.first(), edge.last()) else {
