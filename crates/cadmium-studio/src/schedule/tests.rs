@@ -12,11 +12,6 @@ const AREA: StrokeBox = StrokeBox {
     height: 100.0,
 };
 
-/// `StrokeSample` has no `PartialEq`; its debug text compares every field exactly.
-fn text<T: std::fmt::Debug>(items: &[T]) -> Vec<String> {
-    items.iter().map(|e| format!("{e:?}")).collect()
-}
-
 fn frames(events: &[StudioEvent]) -> Vec<f64> {
     events
         .iter()
@@ -54,7 +49,7 @@ fn the_thumbnail_schedule_feeds_samples_with_a_frame_every_few() {
     for stroke in DemoStroke::ALL {
         let schedule = StrokeSchedule::thumbnail(stroke, AREA);
         let want = expected_thumbnail(stroke);
-        assert_eq!(text(schedule.events()), text(&want), "{stroke:?}");
+        assert_eq!(schedule.events(), want.as_slice(), "{stroke:?}");
         let settled = last_ms(stroke) + f64::from(SETTLE_FRAMES) * SETTLE_STEP_MS;
         assert_eq!(schedule.duration_ms(), settled, "{stroke:?}");
     }
@@ -96,7 +91,7 @@ fn the_animated_schedule_feeds_each_sample_before_its_frame() {
             assert!(*next >= due, "{stroke:?} {due}");
         }
         let fed: Vec<StrokeSample> = fed.into_iter().map(|(s, _, _)| s).collect();
-        assert_eq!(text(&fed), text(&samples(stroke, AREA)), "{stroke:?}");
+        assert_eq!(fed, samples(stroke, AREA), "{stroke:?}");
     }
 }
 
@@ -117,4 +112,35 @@ fn the_animated_schedule_ends_after_the_last_sample_then_settles() {
         assert!(duration >= settled_ms && duration < settled_ms + QUANTUM_MS);
         assert_eq!(duration, *frames(events).last().unwrap(), "{stroke:?}");
     }
+}
+
+#[test]
+fn a_cut_at_a_clock_falls_just_after_the_last_frame_shown_by_then() {
+    let schedule = StrokeSchedule::animated(DemoStroke::SCurve, AREA);
+    let events = schedule.events();
+    assert_eq!(schedule.events_until(-1.0), 0);
+    for clock_ms in [0.0, 5.9, 6.0, 100.0, 1e9] {
+        let cut = schedule.events_until(clock_ms);
+        let shown = frames(&events[..cut]);
+        assert_eq!(
+            shown.last(),
+            frames(events).iter().rfind(|c| **c <= clock_ms)
+        );
+        assert!(
+            matches!(events[cut - 1], StudioEvent::Frame(_)),
+            "{clock_ms}"
+        );
+    }
+    assert_eq!(schedule.events_until(5.9), schedule.events_until(0.0));
+    assert_eq!(schedule.events_until(1e9), events.len());
+}
+
+#[test]
+fn a_cut_works_on_the_thumbnail_schedule_too() {
+    let schedule = StrokeSchedule::thumbnail(DemoStroke::TapAndLift, AREA);
+    let events = schedule.events();
+    assert_eq!(schedule.events_until(0.0), 2);
+    assert_eq!(schedule.events_until(schedule.duration_ms()), events.len());
+    let before_settle = schedule.events_until(schedule.duration_ms() - 1.0);
+    assert_eq!(before_settle, events.len() - 1);
 }

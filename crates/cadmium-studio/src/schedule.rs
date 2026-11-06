@@ -5,10 +5,10 @@ use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::StrokeSample;
 
-use crate::demo::{DemoStroke, StrokeBox, samples};
+use crate::demo::{DemoStroke, SAMPLE_INTERVAL_MS, StrokeBox, samples};
 
 /// The animated clock's step: one frame per demo sample interval.
-pub const QUANTUM_MS: f64 = 6.0;
+pub const QUANTUM_MS: f64 = SAMPLE_INTERVAL_MS as f64;
 /// How long the animated stroke keeps showing frames after the lift.
 pub const SETTLE_MS: f64 = BRISTLE_SETTLE_MS as f64;
 const FRAME_EVERY_SAMPLES: usize = 3;
@@ -16,7 +16,7 @@ const SETTLE_FRAMES: u32 = 20;
 const SETTLE_STEP_MS: f64 = 60.0;
 
 /// One step of a studio stroke.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum StudioEvent {
     Begin(StrokeSample),
     Add(StrokeSample),
@@ -106,8 +106,18 @@ impl StrokeSchedule {
         StrokeSchedule { events }
     }
 
+    /// Every event in the order it is played; frame clocks never decrease.
     pub fn events(&self) -> &[StudioEvent] {
         &self.events
+    }
+
+    /// Where to cut the events to have played everything shown by `clock_ms`:
+    /// just after the last frame at or before it, or 0 if there is none.
+    pub fn events_until(&self, clock_ms: f64) -> usize {
+        self.events
+            .iter()
+            .rposition(|event| matches!(*event, StudioEvent::Frame(at) if at <= clock_ms))
+            .map_or(0, |at| at + 1)
     }
 
     /// The clock of the last frame.
