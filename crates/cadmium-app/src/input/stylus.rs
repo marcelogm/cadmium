@@ -86,7 +86,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         return;
     };
     if !is_primary_contact(&event)
-        || !stroke_may_begin(contact.drags.any() || widget.holds_navigation())
+        || !stroke_may_begin(contact.drags.any() || widget.holds_navigation(event.modifier_state()))
         || !widget.accepts_point(x, y)
     {
         return;

@@ -7,7 +7,7 @@ fn press(button: NavButton) -> NavPress {
     NavPress {
         button,
         from_pen: true,
-        space: None,
+        held: None,
         tool_pans: false,
         stroking: false,
         pen_buttons: PenButtons::Other,
@@ -15,9 +15,9 @@ fn press(button: NavButton) -> NavPress {
 }
 
 #[test]
-fn space_picks_the_mode_for_the_primary_contact() {
-    let held = |space| NavPress {
-        space: Some(space),
+fn held_keys_pick_the_mode_for_the_primary_contact() {
+    let held = |mode| NavPress {
+        held: Some(mode),
         ..press(NavButton::Primary)
     };
     let settings = Settings::default();
@@ -30,7 +30,7 @@ fn space_picks_the_mode_for_the_primary_contact() {
 }
 
 #[test]
-fn the_primary_contact_paints_unless_space_or_the_move_tool_says_otherwise() {
+fn the_primary_contact_paints_unless_a_held_key_or_the_move_tool_says_otherwise() {
     let settings = Settings::default();
     assert_eq!(nav_mode(press(NavButton::Primary), settings), None);
     let move_tool = NavPress {
@@ -128,7 +128,7 @@ fn mouse_buttons_ignore_the_pen_bindings() {
 fn nothing_navigates_mid_stroke() {
     let stroking = |button| NavPress {
         stroking: true,
-        space: Some(NavMode::Pan),
+        held: Some(NavMode::Pan),
         ..press(button)
     };
     let settings = Settings::default();
@@ -138,10 +138,28 @@ fn nothing_navigates_mid_stroke() {
 }
 
 #[test]
-fn space_modifiers_choose_zoom_or_rotate() {
-    assert_eq!(space_mode(gdk::ModifierType::empty()), NavMode::Pan);
-    assert_eq!(space_mode(gdk::ModifierType::CONTROL_MASK), NavMode::Zoom);
-    assert_eq!(space_mode(gdk::ModifierType::SHIFT_MASK), NavMode::Rotate);
+fn space_pans_ctrl_zooms_and_shift_rotates() {
+    let none = gdk::ModifierType::empty();
+    let ctrl = gdk::ModifierType::CONTROL_MASK;
+    let shift = gdk::ModifierType::SHIFT_MASK;
+    assert_eq!(held_mode(false, none), None);
+    assert_eq!(held_mode(true, none), Some(NavMode::Pan));
+    assert_eq!(held_mode(false, ctrl), Some(NavMode::Zoom));
+    assert_eq!(held_mode(false, shift), Some(NavMode::Rotate));
+}
+
+#[test]
+fn ctrl_and_shift_win_over_space_and_ctrl_wins_over_shift() {
+    let ctrl = gdk::ModifierType::CONTROL_MASK;
+    let shift = gdk::ModifierType::SHIFT_MASK;
+    assert_eq!(held_mode(true, ctrl), Some(NavMode::Zoom));
+    assert_eq!(held_mode(true, shift), Some(NavMode::Rotate));
+    assert_eq!(held_mode(false, ctrl | shift), Some(NavMode::Zoom));
+}
+
+#[test]
+fn other_modifiers_hold_nothing() {
+    assert_eq!(held_mode(false, gdk::ModifierType::ALT_MASK), None);
 }
 
 #[test]

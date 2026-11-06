@@ -20,7 +20,7 @@ pub(crate) enum NavMode {
 }
 
 impl NavMode {
-    /// The pointer shown while Space holds this mode ready.
+    /// The pointer shown while held keys have this mode ready.
     pub(crate) fn cursor_name(self) -> &'static str {
         match self {
             NavMode::Pan => "grab",
@@ -96,8 +96,9 @@ impl PenButtons {
 pub(super) struct NavPress {
     pub(super) button: NavButton,
     pub(super) from_pen: bool,
-    /// The mode Space holds ready, while it is held. It steers only the primary contact.
-    pub(super) space: Option<NavMode>,
+    /// The mode held keys (Space, Ctrl or Shift) have ready for the primary contact, if any.
+    /// It steers only the primary contact.
+    pub(super) held: Option<NavMode>,
     /// Whether the current tool pans with the primary contact (the Move tool).
     pub(super) tool_pans: bool,
     pub(super) stroking: bool,
@@ -110,7 +111,7 @@ pub(super) fn nav_mode(press: NavPress, settings: Settings) -> Option<NavMode> {
         return None;
     }
     match (press.button, press.from_pen) {
-        (NavButton::Primary, _) => press.space.or(press.tool_pans.then_some(NavMode::Pan)),
+        (NavButton::Primary, _) => press.held.or(press.tool_pans.then_some(NavMode::Pan)),
         (button, true) => press
             .pen_buttons
             .action(button, settings)
@@ -129,19 +130,20 @@ fn bound_mode(action: PenButtonAction) -> Option<NavMode> {
     }
 }
 
-/// The mode Space holds ready under `modifiers`.
-pub(crate) fn space_mode(modifiers: gdk::ModifierType) -> NavMode {
+/// The mode the held keys have ready for the primary contact: Ctrl zooms, else Shift
+/// rotates, else Space pans; `None` when none of them is held.
+pub(crate) fn held_mode(space_held: bool, modifiers: gdk::ModifierType) -> Option<NavMode> {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-        NavMode::Zoom
+        Some(NavMode::Zoom)
     } else if modifiers.contains(gdk::ModifierType::SHIFT_MASK) {
-        NavMode::Rotate
+        Some(NavMode::Rotate)
     } else {
-        NavMode::Pan
+        space_held.then_some(NavMode::Pan)
     }
 }
 
 /// The modifiers in force once `key` is pressed or released, given the `before` state
-/// that key events carry. Only Ctrl and Shift matter to a Space drag; other keys change nothing.
+/// that key events carry. Only Ctrl and Shift steer a navigation drag; other keys change nothing.
 pub(crate) fn modifiers_after(
     key: gdk::Key,
     pressed: bool,
