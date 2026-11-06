@@ -3,6 +3,7 @@ use std::f64::consts::{PI, TAU};
 use gtk::gdk;
 
 use crate::settings::{PenButtonAction, Settings};
+use crate::view::ViewStep;
 
 /// How far, in widget px, a zoom drag goes for the view to zoom by a factor of e.
 const ZOOM_DRAG_PX_PER_E: f64 = 100.0;
@@ -197,14 +198,6 @@ pub(super) fn picks_colour(
         (button == NavButton::Secondary).then_some(PenButtonAction::PickColour)
     };
     action == Some(PenButtonAction::PickColour)
-}
-
-/// One change a navigation drag makes to the view, in widget px.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum ViewStep {
-    Pan { dx: f64, dy: f64 },
-    Zoom { anchor: (f64, f64), factor: f32 },
-    Rotate { centre: (f64, f64), delta: f32 },
 }
 
 /// A navigation drag in progress: where it started and the offset it last stepped to.

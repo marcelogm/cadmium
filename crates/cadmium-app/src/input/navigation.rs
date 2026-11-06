@@ -6,13 +6,11 @@ use gtk::{gdk, glib};
 
 use super::nav_drag::{NavButton, NavDrag, NavPress, held_mode, nav_mode};
 use super::samples::{comes_from_a_pen, pen_buttons_of};
+use super::scroll::{ScrollAction, ScrollUnit, pinch_factor, scroll_action};
 use super::{Contact, PaintSurfaceWidget};
 use crate::canvas_widget::CadmiumCanvas;
 use crate::tools::Press;
-
-const ZOOM_PER_SCROLL_STEP: f32 = 1.1;
-const SURFACE_SCROLL_PER_STEP: f64 = 15.0;
-const WHEEL_PAN_STEP: f64 = 48.0;
+use crate::view::ViewStep;
 
 /// The drag that navigates the view from `button`, when the press calls for it.
 pub(super) fn nav_gesture(
@@ -87,13 +85,6 @@ fn continue_nav(canvas: &CadmiumCanvas, contact: &Contact, button: NavButton, of
     }
 }
 
-fn scroll_steps(controller: &gtk::EventControllerScroll, delta: f64) -> f64 {
-    match controller.unit() {
-        gdk::ScrollUnit::Wheel => delta,
-        _ => delta / SURFACE_SCROLL_PER_STEP,
-    }
-}
-
 pub(super) fn scroll_controller(canvas: &CadmiumCanvas) -> gtk::EventControllerScroll {
     let scroll = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
     scroll.connect_scroll(glib::clone!(
@@ -112,38 +103,25 @@ fn scroll_view(
     dx: f64,
     dy: f64,
 ) -> glib::Propagation {
+    let unit = match controller.unit() {
+        gdk::ScrollUnit::Wheel => ScrollUnit::Wheel,
+        _ => ScrollUnit::Surface,
+    };
     let shift = controller
         .current_event_state()
         .contains(gdk::ModifierType::SHIFT_MASK);
-    if shift {
-        pan_by_scroll(canvas, controller, dx, dy);
-        return glib::Propagation::Stop;
+    match scroll_action(unit, shift, dx, dy) {
+        ScrollAction::Pan { dx, dy } => {
+            canvas.pan_by(dx, dy);
+            glib::Propagation::Stop
+        }
+        ScrollAction::Zoom { factor } => {
+            let anchor = canvas.hover().unwrap_or(canvas.widget_centre());
+            canvas.apply_view_step(ViewStep::Zoom { anchor, factor });
+            glib::Propagation::Stop
+        }
+        ScrollAction::Pass => glib::Propagation::Proceed,
     }
-    if dy == 0.0 {
-        return glib::Propagation::Proceed;
-    }
-    let (x, y) = canvas.hover().unwrap_or((
-        f64::from(canvas.width()) / 2.0,
-        f64::from(canvas.height()) / 2.0,
-    ));
-    let factor = ZOOM_PER_SCROLL_STEP.powf(-scroll_steps(controller, dy) as f32);
-    canvas.set_zoom_around(x, y, canvas.zoom() * factor);
-    glib::Propagation::Stop
-}
-
-fn pan_by_scroll(
-    canvas: &CadmiumCanvas,
-    controller: &gtk::EventControllerScroll,
-    dx: f64,
-    dy: f64,
-) {
-    let step = match controller.unit() {
-        gdk::ScrollUnit::Wheel => WHEEL_PAN_STEP,
-        _ => 1.0,
-    };
-    let horizontal = if dx == 0.0 { dy } else { dx };
-    let vertical = if dx == 0.0 { 0.0 } else { dy };
-    canvas.pan_by(-horizontal * step, -vertical * step);
 }
 
 pub(super) fn pinch_gesture(canvas: &CadmiumCanvas) -> gtk::GestureZoom {
@@ -169,10 +147,9 @@ fn pinch_zoom(
     scale: f64,
 ) {
     let previous = last_scale.replace(scale);
-    if previous <= 0.0 || scale <= 0.0 {
-        return;
-    }
-    if let Some((x, y)) = pinch.bounding_box_center() {
-        canvas.set_zoom_around(x, y, canvas.zoom() * (scale / previous) as f32);
+    if let Some(factor) = pinch_factor(previous, scale)
+        && let Some(anchor) = pinch.bounding_box_center()
+    {
+        canvas.apply_view_step(ViewStep::Zoom { anchor, factor });
     }
 }

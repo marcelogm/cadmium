@@ -19,6 +19,7 @@ const CANVAS_CURSOR: &str = "crosshair";
 type CanvasHandler = Box<dyn Fn(&CadmiumCanvas)>;
 type PickHandler = Box<dyn Fn(&CadmiumCanvas, bool)>;
 
+mod auto_fit;
 mod frames;
 mod imp;
 mod zoom;
@@ -49,6 +50,15 @@ impl CadmiumCanvas {
             .get()
             .expect("canvas is created with its state")
             .clone()
+    }
+
+    /// Whether a stroke is running; a borrowed or missing state counts as one.
+    fn stroking(&self) -> bool {
+        self.imp()
+            .state
+            .get()
+            .and_then(|state| state.try_borrow().ok().map(|state| state.is_stroking()))
+            .unwrap_or(true)
     }
 
     pub fn presented_frames(&self) -> u64 {

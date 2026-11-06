@@ -9,8 +9,10 @@ use super::samples::{
     comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples, pen_buttons_of,
     tilt_onto_canvas,
 };
-use super::{Contact, PaintSurfaceWidget, release, side_button_may_act, stroke_may_begin};
-use crate::tools::Press;
+use super::{
+    Contact, DownOutcome, PaintSurfaceWidget, down_outcome, release, side_button_may_act,
+    stroke_may_begin,
+};
 
 pub(super) fn stylus_gesture<W: PaintSurfaceWidget>(
     widget: &W,
@@ -94,12 +96,13 @@ fn stylus_down<W: PaintSurfaceWidget>(
     let state = widget.state();
     let press = state.borrow().ui_tool.profile().press_on(widget.surface());
     let eraser = is_eraser(&event);
-    if press == Press::Pan {
-        return;
-    }
-    if !eraser && press == Press::PickColour {
-        widget.pick_colour_at(x, y);
-        return;
+    match down_outcome(press, eraser) {
+        DownOutcome::Ignore => return,
+        DownOutcome::PickColour => {
+            widget.pick_colour_at(x, y);
+            return;
+        }
+        DownOutcome::Press => {}
     }
     let sample = widget_sample(widget, &event, x, y);
     if !state.borrow_mut().press(widget.surface(), sample, eraser) {

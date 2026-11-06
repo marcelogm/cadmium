@@ -173,3 +173,105 @@ fn rotation_stays_within_half_a_turn_either_way() {
 fn fitting_straightens_the_view() {
     assert_eq!(fit_view((800, 600), (1000.0, 700.0), 24.0).rotation, 0.0);
 }
+
+#[test]
+fn a_pan_step_moves_by_device_px() {
+    let view = ViewTransform {
+        origin_x: 10.0,
+        origin_y: 20.0,
+        zoom: 2.0,
+        rotation: 0.0,
+    };
+    let stepped = step(view, ViewStep::Pan { dx: 4.0, dy: -6.0 }, 2.0);
+    assert_eq!(
+        stepped,
+        ViewTransform {
+            origin_x: 6.0,
+            origin_y: 26.0,
+            ..view
+        }
+    );
+}
+
+#[test]
+fn a_zoom_step_multiplies_the_zoom_about_its_anchor() {
+    let view = ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom: 2.0,
+        rotation: 0.0,
+    };
+    let anchor = (5.0, 7.0);
+    let stepped = step(
+        view,
+        ViewStep::Zoom {
+            anchor,
+            factor: 1.5,
+        },
+        2.0,
+    );
+    assert_eq!(stepped.zoom, 3.0);
+    assert!(close(viewport_to_canvas(stepped, 10.0, 14.0), (5.0, 7.0)));
+    // Pins the old composition bit for bit.
+    assert_eq!(stepped, settle(zoom_around(view, 10.0, 14.0, 3.0)));
+}
+
+#[test]
+fn a_rotate_step_turns_about_its_centre() {
+    let view = ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom: 1.0,
+        rotation: 0.0,
+    };
+    let centre = (50.0, 40.0);
+    let stepped = step(
+        view,
+        ViewStep::Rotate {
+            centre,
+            delta: 0.25,
+        },
+        1.5,
+    );
+    assert_eq!(stepped.rotation, 0.25);
+    assert!(close(viewport_to_canvas(stepped, 75.0, 60.0), (75.0, 60.0)));
+    // Pins the old composition bit for bit.
+    assert_eq!(stepped, settle(rotate_around(view, 75.0, 60.0, 0.25)));
+}
+
+#[test]
+fn a_zoom_step_stops_at_the_zoom_limits() {
+    let view = ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom: MAX_ZOOM,
+        rotation: 0.0,
+    };
+    let zoom = |factor| {
+        step(
+            view,
+            ViewStep::Zoom {
+                anchor: (0.0, 0.0),
+                factor,
+            },
+            1.0,
+        )
+        .zoom
+    };
+    assert_eq!(zoom(4.0), MAX_ZOOM);
+    assert_eq!(zoom(1.0e-6), MIN_ZOOM);
+}
+
+#[test]
+fn a_settled_view_has_a_sane_zoom_and_rotation() {
+    let wild = ViewTransform {
+        origin_x: 1.0,
+        origin_y: 2.0,
+        zoom: f32::NAN,
+        rotation: 7.0,
+    };
+    let settled = settle(wild);
+    assert_eq!(settled.zoom, 1.0);
+    assert!((f64::from(settled.rotation) - 0.71681).abs() < TOLERANCE);
+    assert_eq!((settled.origin_x, settled.origin_y), (1.0, 2.0));
+}
