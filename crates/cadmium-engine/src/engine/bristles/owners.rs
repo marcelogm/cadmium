@@ -223,7 +223,7 @@ fn lane_of(
             start[0] + (end[0] - start[0]) * LANE_SHRINK,
             start[1] + (end[1] - start[1]) * LANE_SHRINK,
         ];
-        if (end[0] - start[0]).hypot(end[1] - start[1]) < LANE_MIN_LENGTH_PX {
+        if libm::hypotf(end[0] - start[0], end[1] - start[1]) < LANE_MIN_LENGTH_PX {
             return (start, start);
         }
     }

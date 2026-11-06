@@ -189,11 +189,6 @@ fn row_ends_px(volume: &[f32], rows: &[usize]) -> Vec<f64> {
         .collect()
 }
 
-fn painted_rows(volume: &[f32], x: usize) -> Vec<usize> {
-    let painted = column(&painted(volume), x);
-    (0..HEIGHT).filter(|&y| painted[y]).collect()
-}
-
 #[test]
 fn a_stroke_running_dry_ends_in_threads_of_different_lengths() {
     let gpu = GpuContext::new().unwrap();
@@ -204,8 +199,13 @@ fn a_stroke_running_dry_ends_in_threads_of_different_lengths() {
     drag(&gpu, &mut painting, &straight(ROW, |_| DRY_RUN_PRESSURE));
     write_preview(&gpu, &painting, "bristle-runs-dry.png");
     let volume = volume(&gpu, &painting);
-    let rows = painted_rows(&volume, ((FROM_X + TO_X) / 2.0) as usize);
-    let ends = row_ends_px(&volume, &rows);
+    // Rows the stroke carried past its middle, wherever a thread leaves a gap.
+    let middle = (FROM_X + TO_X) / 2.0;
+    let rows: Vec<usize> = (0..HEIGHT).collect();
+    let ends: Vec<f64> = row_ends_px(&volume, &rows)
+        .into_iter()
+        .filter(|&end| end > middle)
+        .collect();
     let first = ends.iter().cloned().fold(f64::INFINITY, f64::min);
     let last = ends.iter().cloned().fold(0.0, f64::max);
     let spread = (last - first) / (TO_X - FROM_X);
