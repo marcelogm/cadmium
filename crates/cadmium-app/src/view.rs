@@ -49,8 +49,8 @@ fn unturn(rotation: f32, x: f64, y: f64) -> (f64, f64) {
     (c * x + s * y, -s * x + c * y)
 }
 
-#[cfg(test)]
 /// The screen offset a canvas offset (`x`, `y`) appears at: `R(rotation)` applied to it.
+#[cfg(test)]
 fn turn(rotation: f32, x: f64, y: f64) -> (f64, f64) {
     let (s, c) = f64::from(rotation).sin_cos();
     (c * x - s * y, s * x + c * y)
@@ -65,14 +65,16 @@ pub fn normalise_rotation(rotation: f32) -> f32 {
     (if turned > PI { turned - TAU } else { turned }) as f32
 }
 
+/// The canvas point screen px (`x_px`, `y_px`) shows.
 pub fn viewport_to_canvas(view: ViewTransform, x_px: f64, y_px: f64) -> (f64, f64) {
     let zoom = f64::from(view.zoom);
     let (dx, dy) = unturn(view.rotation, x_px / zoom, y_px / zoom);
     (f64::from(view.origin_x) + dx, f64::from(view.origin_y) + dy)
 }
 
+/// The screen px where canvas point (`x`, `y`) appears; the inverse of `viewport_to_canvas`.
 #[cfg(test)]
-pub fn canvas_to_viewport(view: ViewTransform, x: f64, y: f64) -> (f64, f64) {
+fn canvas_to_viewport(view: ViewTransform, x: f64, y: f64) -> (f64, f64) {
     let zoom = f64::from(view.zoom);
     let (dx, dy) = turn(
         view.rotation,
@@ -95,6 +97,7 @@ fn anchored(anchor: (f64, f64), x_px: f64, y_px: f64, zoom: f32, rotation: f32) 
     }
 }
 
+/// The view at `zoom` that keeps the canvas point under screen px (`x_px`, `y_px`) in place.
 pub fn zoom_around(view: ViewTransform, x_px: f64, y_px: f64, zoom: f32) -> ViewTransform {
     let anchor = viewport_to_canvas(view, x_px, y_px);
     anchored(anchor, x_px, y_px, clamp_zoom(zoom), view.rotation)
@@ -107,6 +110,7 @@ pub fn rotate_around(view: ViewTransform, x_px: f64, y_px: f64, delta: f32) -> V
     anchored(anchor, x_px, y_px, view.zoom, rotation)
 }
 
+/// The view moved by a screen-px drag, so the canvas follows the pointer.
 pub fn pan(view: ViewTransform, dx_px: f64, dy_px: f64) -> ViewTransform {
     let zoom = f64::from(view.zoom);
     let (dx, dy) = unturn(view.rotation, dx_px / zoom, dy_px / zoom);
