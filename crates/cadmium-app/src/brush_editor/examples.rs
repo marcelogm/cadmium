@@ -4,6 +4,7 @@
 use std::cell::RefCell;
 
 use cadmium_studio::StudioError;
+use gtk::glib;
 
 mod job;
 mod queue;
@@ -20,6 +21,8 @@ pub(super) struct Examples {
     pub(super) view: ExamplesView,
     pub(super) job: RefCell<ExampleJob>,
     pub(super) queue: RefCell<ExampleQueue>,
+    /// The debounce running for a settling change; its callback clears it as it fires.
+    pub(super) debounce: RefCell<Option<glib::SourceId>>,
 }
 
 impl Examples {
@@ -28,6 +31,7 @@ impl Examples {
             view: ExamplesView::new(),
             job: RefCell::new(job),
             queue: RefCell::new(ExampleQueue::default()),
+            debounce: RefCell::new(None),
         }
     }
 }

@@ -52,6 +52,7 @@ impl Editor {
     /// From here on neither its widgets nor its example painting reach the editor. The
     /// window calls it too, as it closes the editor itself.
     pub(super) fn stop(&self) {
+        self.cancel_debounce();
         self.listening.stop();
     }
 
