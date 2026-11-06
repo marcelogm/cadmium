@@ -22,7 +22,7 @@ pub(super) fn attach(view: &TestSheetView) {
     stylus.connect_up(glib::clone!(
         #[weak]
         view,
-        move |_, _, _| view.finish_stroke()
+        move |stylus, _, _| up(&view, stylus)
     ));
     stylus.connect_cancel(glib::clone!(
         #[weak]
@@ -34,7 +34,7 @@ pub(super) fn attach(view: &TestSheetView) {
     pointer.connect_leave(glib::clone!(
         #[weak]
         view,
-        move |_| view.finish_stroke()
+        move |pointer| view.finish_stroke_of(pointer.current_event_device().as_ref())
     ));
     view.add_controller(pointer);
 }
@@ -44,7 +44,18 @@ fn down(view: &TestSheetView, stylus: &gtk::GestureStylus, x: f64, y: f64) {
         return;
     };
     if is_primary_contact(&event) {
-        view.begin_stroke(event_sample(&event, x, y, |x, y| view.canvas_point(x, y)));
+        let sample = event_sample(&event, x, y, |x, y| view.canvas_point(x, y));
+        view.begin_stroke(sample, stylus.current_event_device());
+    }
+}
+
+/// Only the primary contact lifting ends the stroke, as on the canvas.
+fn up(view: &TestSheetView, stylus: &gtk::GestureStylus) {
+    if stylus
+        .current_event()
+        .is_some_and(|event| is_primary_contact(&event))
+    {
+        view.finish_stroke();
     }
 }
 

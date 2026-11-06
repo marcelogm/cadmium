@@ -20,7 +20,8 @@ use view::TestSheetView;
 /// What the toast says when the test sheet can't be shown.
 pub(super) const SHEET_FAILED: &str = "Can't show the test sheet";
 
-/// The editor's test sheet: its canvas, the widget showing it, and the widget's frame.
+/// The editor's test sheet: its canvas, the widget showing it, and the overlay round it
+/// (for the hint and Clear).
 pub(super) struct Sheet {
     /// The sheet's canvas; the widget holds it weakly.
     pub(super) shared: Rc<RefCell<TestSheet>>,

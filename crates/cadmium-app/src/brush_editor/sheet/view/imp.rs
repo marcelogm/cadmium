@@ -20,6 +20,8 @@ pub struct TestSheetView {
     pub(super) scale_watch: SurfaceScaleWatch,
     /// A stroke is under way on the sheet.
     pub(super) stroking: Cell<bool>,
+    /// The device painting the stroke under way, when known.
+    pub(super) stroking_device: RefCell<Option<gdk::Device>>,
     pub(super) gpu_lost_announced: Cell<bool>,
     pub(super) gpu_lost_handlers: RefCell<Vec<Handler<super::TestSheetView>>>,
     pub(super) fallback_handlers: RefCell<Vec<Handler<super::TestSheetView>>>,

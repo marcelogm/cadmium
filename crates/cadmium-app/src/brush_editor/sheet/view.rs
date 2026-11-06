@@ -12,6 +12,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
+use crate::input::event_belongs_to_stroke;
 use crate::presenter::{FramePresenter, PresentSource, SheetLink};
 use crate::state::SharedState;
 use crate::surface_scale::{device_scale, viewport_px};
@@ -94,7 +95,7 @@ impl TestSheetView {
         self.imp().link.get()?.sheet.upgrade()
     }
 
-    /// Where a widget point lands on the sheet's canvas: through the fit it is shown with.
+    /// Where a widget point lands on the sheet's canvas: through the cover it is shown with.
     fn canvas_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64) {
         let size = self.imp().link.get().map_or((1, 1), |link| link.size);
         let scale = device_scale(self);
@@ -102,14 +103,15 @@ impl TestSheetView {
         viewport_to_canvas(view, widget_x * scale, widget_y * scale)
     }
 
-    /// Starts a stroke at `sample`; the sheet dips the brush afresh first.
-    fn begin_stroke(&self, sample: StrokeSample) {
+    /// Starts a stroke at `sample`, painted by `device`; the sheet dips the brush afresh first.
+    fn begin_stroke(&self, sample: StrokeSample, device: Option<gdk::Device>) {
         let imp = self.imp();
         let (Some(link), Some(sheet)) = (imp.link.get(), self.sheet()) else {
             return;
         };
         sheet.borrow_mut().begin_stroke(&link.gpu, sample);
         imp.stroking.set(true);
+        imp.stroking_device.replace(device);
         self.request_frame();
     }
 
@@ -125,13 +127,23 @@ impl TestSheetView {
 
     /// Ends the stroke under way, if any.
     fn finish_stroke(&self) {
-        if !self.imp().stroking.replace(false) {
+        let imp = self.imp();
+        imp.stroking_device.replace(None);
+        if !imp.stroking.replace(false) {
             return;
         }
         if let Some(sheet) = self.sheet() {
             sheet.borrow_mut().end_stroke();
         }
         self.request_frame();
+    }
+
+    /// Ends the stroke under way if `device` paints it: another pointer leaving leaves it be.
+    fn finish_stroke_of(&self, device: Option<&gdk::Device>) {
+        let stroking = self.imp().stroking_device.borrow().clone();
+        if event_belongs_to_stroke(stroking.as_ref(), device) {
+            self.finish_stroke();
+        }
     }
 }
 
