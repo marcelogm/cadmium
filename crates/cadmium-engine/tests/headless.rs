@@ -16,6 +16,7 @@ fn a_headless_session_paints_without_recording_undo() {
     without_wgpu_errors(&gpu, || stroke(&gpu, &mut s, 128.0, 40.0, 470.0));
     assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
     assert!(!s.history.is_enabled());
+    assert_eq!(s.history.slot_capacity(), 0);
     assert!(!s.undo(&gpu));
 }
 

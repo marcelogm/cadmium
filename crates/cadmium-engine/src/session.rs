@@ -27,6 +27,11 @@ const HISTORY_MAX_STEPS: usize = 100;
 const HISTORY_PAINTING_COPIES: u64 = 4;
 const HISTORY_TRAY_COPIES: u64 = 1;
 
+struct UndoLimits {
+    budget_bytes: u64,
+    max_steps: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClearOutcome {
     NothingWet,
@@ -56,27 +61,35 @@ pub struct PaintSession {
 
 impl PaintSession {
     pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
-        let history = History::new(gpu, history_budget(&spec), HISTORY_MAX_STEPS);
         let tray = tray_spec(&spec.pigment_slots);
-        PaintSession::assemble(gpu, spec, tray, history)
+        let undo = UndoLimits {
+            budget_bytes: history_budget(&spec),
+            max_steps: HISTORY_MAX_STEPS,
+        };
+        PaintSession::assemble(gpu, spec, tray, undo)
     }
 
     /// A session for previews: the same simulation, but no undo history and a
-    /// one-tile tray, so it costs little more than its canvas.
+    /// one-tile tray, so it costs little more than its canvas. Replacing its
+    /// document gives a normal session, with a full tray and undo history.
     pub fn headless(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
         let tray = CanvasSpec {
             width: TILE_SIZE,
             height: TILE_SIZE,
             ..tray_spec(&spec.pigment_slots)
         };
-        PaintSession::assemble(gpu, spec, tray, History::new(gpu, 0, 0))
+        let undo = UndoLimits {
+            budget_bytes: 0,
+            max_steps: 0,
+        };
+        PaintSession::assemble(gpu, spec, tray, undo)
     }
 
     fn assemble(
         gpu: &GpuContext,
         spec: CanvasSpec,
         tray: CanvasSpec,
-        history: History,
+        undo: UndoLimits,
     ) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
         let tray = Canvas::new(gpu, &db, tray)?;
@@ -87,7 +100,8 @@ impl PaintSession {
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
-            history,
+            // After the canvases: the undo atlas shrinks to fit what they leave.
+            history: History::new(gpu, undo.budget_bytes, undo.max_steps),
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
             db,
