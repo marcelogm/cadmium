@@ -17,7 +17,7 @@ const MIN_SIZE: f32 = 1e-3;
 /// thickness, z up the brush axis), in px; `normal` has unit length.
 #[repr(C)]
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
-pub struct MeshVertex {
+pub(crate) struct MeshVertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
 }
@@ -26,7 +26,7 @@ pub struct MeshVertex {
 /// its thickness, z up the brush axis), in px, wound counter-clockwise seen
 /// from outside.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Mesh {
+pub(crate) struct Mesh {
     pub vertices: Vec<MeshVertex>,
     pub indices: Vec<u32>,
 }
@@ -69,7 +69,7 @@ fn stitch(indices: &mut Vec<u32>, a: u32, b: u32) {
 /// Its half-axes are the roots' half extents plus a wall margin; it spans
 /// z = 0 to 1.5 ferrule radii. Non-finite or non-positive sizes are raised to
 /// a tiny minimum.
-pub fn ferrule_mesh(root_half_extent_px: [f32; 2], ferrule_radius_px: f32) -> Mesh {
+pub(crate) fn ferrule_mesh(root_half_extent_px: [f32; 2], ferrule_radius_px: f32) -> Mesh {
     let r = sanitised(ferrule_radius_px);
     let a = sanitised(root_half_extent_px[0]) + FERRULE_MARGIN * r;
     let b = sanitised(root_half_extent_px[1]) + FERRULE_MARGIN * r;
@@ -92,7 +92,7 @@ pub fn ferrule_mesh(root_half_extent_px: [f32; 2], ferrule_radius_px: f32) -> Me
 ///
 /// It spans z = 1.5 to 5.5 ferrule radii. Non-finite or non-positive radii
 /// are raised to a tiny minimum.
-pub fn handle_mesh(ferrule_radius_px: f32) -> Mesh {
+pub(crate) fn handle_mesh(ferrule_radius_px: f32) -> Mesh {
     let r = sanitised(ferrule_radius_px);
     let z0 = FERRULE_LENGTH * r;
     let rise = HANDLE_CLEARANCE * r;

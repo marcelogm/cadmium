@@ -16,7 +16,7 @@ use crate::schedule::{QUANTUM_MS, StrokeSchedule, StudioEvent, replay};
 use crate::studio::StudioError;
 
 /// How long the finished stroke stays on show before the next loop.
-pub const LOOP_PAUSE_MS: f64 = 700.0;
+pub(crate) const LOOP_PAUSE_MS: f64 = 700.0;
 /// The slow-motion replay speed.
 pub const SLOW_MOTION: f64 = 0.25;
 /// The most quanta one `advance` replays; a longer stall drops the rest, so a

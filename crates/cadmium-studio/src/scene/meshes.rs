@@ -7,7 +7,7 @@ use wgpu::util::DeviceExt;
 use super::brush::{BrushShader, brush_pipeline, buffer_entry, storage_entry};
 use super::view::SceneView;
 use super::{layout_entry, uniform_binding};
-use crate::{Mesh, MeshVertex, ferrule_mesh, handle_mesh};
+use crate::mesh::{Mesh, MeshVertex, ferrule_mesh, handle_mesh};
 
 /// Metallic grey with a tight, bright highlight.
 const FERRULE: MeshParams = MeshParams {

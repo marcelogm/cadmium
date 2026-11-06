@@ -12,7 +12,8 @@ use super::hairs::HairPass;
 use super::meshes::MeshPass;
 use super::view::SceneView;
 use super::{COLOUR_FORMAT, layout_entry};
-use crate::{SceneRequest, hair_tint};
+use crate::SceneRequest;
+use crate::look::hair_tint;
 
 /// Draws the brush.
 pub(super) struct BrushPass {

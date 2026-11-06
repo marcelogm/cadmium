@@ -39,7 +39,7 @@ pub fn hair_name(hair: &HairSpec) -> Option<&'static str> {
 /// Linear-light bristle colour for the factory hair nearest in stiffness; a
 /// tie goes to the earlier one in `FACTORY_HAIRS` (synthetic, hog, sable,
 /// mongoose, squirrel).
-pub fn hair_tint(hair: &HairSpec) -> [f32; 3] {
+pub(crate) fn hair_tint(hair: &HairSpec) -> [f32; 3] {
     let distance = |h: &HairSpec| (h.stiffness - hair.stiffness).abs();
     FACTORY_HAIRS
         .iter()

@@ -10,14 +10,14 @@ use crate::demo::{DemoStroke, SAMPLE_INTERVAL_MS, StrokeBox, samples};
 /// The animated clock's step: one frame per demo sample interval.
 pub const QUANTUM_MS: f64 = SAMPLE_INTERVAL_MS as f64;
 /// How long the animated stroke keeps showing frames after the lift.
-pub const SETTLE_MS: f64 = BRISTLE_SETTLE_MS as f64;
+pub(crate) const SETTLE_MS: f64 = BRISTLE_SETTLE_MS as f64;
 const FRAME_EVERY_SAMPLES: usize = 3;
 const SETTLE_FRAMES: u32 = 20;
 const SETTLE_STEP_MS: f64 = 60.0;
 
 /// One step of a studio stroke.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum StudioEvent {
+pub(crate) enum StudioEvent {
     Begin(StrokeSample),
     Add(StrokeSample),
     /// Shows a frame at this clock, in milliseconds.
@@ -27,7 +27,7 @@ pub enum StudioEvent {
 
 /// A demo stroke as the ordered events that paint it.
 #[derive(Clone, Debug)]
-pub struct StrokeSchedule {
+pub(crate) struct StrokeSchedule {
     events: Vec<StudioEvent>,
 }
 
