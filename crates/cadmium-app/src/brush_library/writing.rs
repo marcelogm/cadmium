@@ -1,4 +1,4 @@
-//! Brush files in the library folder: fresh names, safe writes and removal.
+//! Brush files in the library folder: fresh names, safe writes, safe rewrites and removal.
 
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -23,6 +23,27 @@ pub(super) fn write(dir: Option<&Path>, brush: &BrushSpec) -> std::io::Result<Pa
         }
     }
     unreachable!("some number is free")
+}
+
+/// Rewrites the brush file at `path` with `brush`, never leaving it half-written: the text goes
+/// to a hidden file beside it (`.<file name>.tmp`, which the library never reads), is synced,
+/// then renamed over the file. A temporary file left by a crash is replaced.
+pub(super) fn replace(path: &Path, brush: &BrushSpec) -> std::io::Result<()> {
+    let temp = temp_path(path);
+    let _ = std::fs::remove_file(&temp);
+    write_new(&temp, &brush_to_json(brush))?;
+    std::fs::rename(&temp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&temp);
+    })
+}
+
+/// `.<file name>.tmp` beside `path`: hidden, and never ending in `.cadbrush`.
+fn temp_path(path: &Path) -> PathBuf {
+    let name = path.file_name().map_or_else(
+        || FALLBACK_SLUG.into(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    path.with_file_name(format!(".{name}.tmp"))
 }
 
 /// Removes a brush file; one that is already gone counts as removed.

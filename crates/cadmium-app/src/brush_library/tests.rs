@@ -1,45 +1,7 @@
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
 use cadmium_engine::brush::{BrushSettings, BrushSpec, HeadSpec, brush_to_json, factory_brushes};
 
+use super::test_dir::TempDir;
 use super::{BrushLibrary, LibraryError, export_name, file_name_for};
-
-static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
-
-/// A fresh folder under the system temp dir, removed again when dropped.
-struct TempDir(PathBuf);
-
-impl TempDir {
-    fn new() -> TempDir {
-        let dir = std::env::temp_dir().join(format!(
-            "cadmium-brushes-{}-{}",
-            std::process::id(),
-            NEXT_DIR.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        TempDir(dir)
-    }
-
-    fn path(&self) -> PathBuf {
-        self.0.clone()
-    }
-
-    fn files(&self) -> Vec<String> {
-        let mut names: Vec<String> = std::fs::read_dir(&self.0)
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        names.sort();
-        names
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 
 fn names(library: &BrushLibrary) -> Vec<String> {
     library.all().map(|brush| brush.name.clone()).collect()

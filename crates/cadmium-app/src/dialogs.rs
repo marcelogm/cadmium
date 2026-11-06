@@ -104,6 +104,7 @@ const DISCARD_RESPONSE: &str = "discard";
 const CANCEL_RESPONSE: &str = "cancel";
 const DISCARD_PAINTING_HEADING: &str = "Discard the Current Painting?";
 const DISCARD_UNSAVED_HEADING: &str = "Discard Unsaved Changes?";
+const DISCARD_BRUSH_HEADING: &str = "Discard Changes?";
 
 fn discard_alert(heading: &str) -> adw::AlertDialog {
     let alert = adw::AlertDialog::builder()
@@ -118,7 +119,25 @@ fn discard_alert(heading: &str) -> adw::AlertDialog {
 }
 
 pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + 'static) {
-    discard_alert(DISCARD_PAINTING_HEADING).choose(
+    ask_to_discard(DISCARD_PAINTING_HEADING, parent, on_discard);
+}
+
+/// Asks before the brush editor drops its changes (C6); runs `on_discard` if the painter agrees.
+/// Returns the alert, so the editor can close it if it is closed meanwhile.
+pub fn confirm_discard_brush_changes(
+    parent: &impl IsA<gtk::Widget>,
+    on_discard: impl Fn() + 'static,
+) -> adw::AlertDialog {
+    ask_to_discard(DISCARD_BRUSH_HEADING, parent, on_discard)
+}
+
+fn ask_to_discard(
+    heading: &str,
+    parent: &impl IsA<gtk::Widget>,
+    on_discard: impl Fn() + 'static,
+) -> adw::AlertDialog {
+    let alert = discard_alert(heading);
+    alert.clone().choose(
         Some(parent),
         None::<&gtk::gio::Cancellable>,
         move |response: glib::GString| {
@@ -127,6 +146,7 @@ pub fn confirm_discard(parent: &impl IsA<gtk::Widget>, on_discard: impl Fn() + '
             }
         },
     );
+    alert
 }
 
 pub async fn painting_discard_confirmed(parent: &impl IsA<gtk::Widget>) -> bool {
@@ -165,6 +185,16 @@ pub async fn overwrite_confirmed(parent: &impl IsA<gtk::Widget>, file_name: &str
 const DELETE_RESPONSE: &str = "delete";
 
 pub async fn delete_brush_confirmed(parent: &impl IsA<gtk::Widget>, name: &str) -> bool {
+    deletion_confirmed(delete_brush_alert(name), parent).await
+}
+
+/// Presents `alert` (from `delete_brush_alert`) on `parent`; true when the painter deletes.
+pub async fn deletion_confirmed(alert: adw::AlertDialog, parent: &impl IsA<gtk::Widget>) -> bool {
+    alert.choose_future(Some(parent)).await == DELETE_RESPONSE
+}
+
+/// "Delete <name>?", not yet presented.
+pub fn delete_brush_alert(name: &str) -> adw::AlertDialog {
     let alert = adw::AlertDialog::builder()
         .heading(format!("Delete {name}?"))
         .body("The brush is removed from your brush library. This can't be undone.")
@@ -173,7 +203,7 @@ pub async fn delete_brush_confirmed(parent: &impl IsA<gtk::Widget>, name: &str) 
         .build();
     alert.add_responses(&[(CANCEL_RESPONSE, "Cancel"), (DELETE_RESPONSE, "Delete")]);
     alert.set_response_appearance(DELETE_RESPONSE, adw::ResponseAppearance::Destructive);
-    alert.choose_future(Some(parent)).await == DELETE_RESPONSE
+    alert
 }
 
 const CLOSE_RESPONSE: &str = "close";

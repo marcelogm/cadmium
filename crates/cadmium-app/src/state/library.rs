@@ -1,9 +1,9 @@
-//! Wearing, importing and deleting brushes from the brush library.
+//! Wearing, importing, saving and deleting brushes from the brush library.
 
 use cadmium_engine::brush::BrushSpec;
 
 use super::AppState;
-use crate::brush_library::{Imported, LibraryError, index_after_delete, worn_brush};
+use crate::brush_library::{Imported, LibraryError, Saved, index_after_delete, worn_brush};
 
 const DEFAULT_BRUSH_INDEX: usize = 0;
 /// The name of a worn brush that is not in the library.
@@ -52,6 +52,25 @@ impl AppState {
         let imported = self.brushes.import(text)?;
         self.wear_library_brush(imported.index);
         Ok(imported)
+    }
+
+    /// Saves an edited user brush over itself, then wears it at its suggested size (C1).
+    pub fn save_library_brush(
+        &mut self,
+        index: usize,
+        original: &BrushSpec,
+        brush: &BrushSpec,
+    ) -> Result<Saved, LibraryError> {
+        let saved = self.brushes.save(index, original, brush)?;
+        self.wear_library_brush(saved.index);
+        Ok(saved)
+    }
+
+    /// Adds an edited brush as a new user brush, then wears it at its suggested size (C1).
+    pub fn add_library_brush(&mut self, brush: BrushSpec) -> Saved {
+        let saved = self.brushes.add_new(brush);
+        self.wear_library_brush(saved.index);
+        saved
     }
 
     /// Deletes a user brush; wearing it falls back to the default brush.

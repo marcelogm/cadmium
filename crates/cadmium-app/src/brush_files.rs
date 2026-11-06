@@ -48,6 +48,11 @@ impl CadmiumWindow {
 
     pub fn export_brush(&self) {
         let (spec, _) = worn_brush_spec(self);
+        self.export_brush_spec(spec);
+    }
+
+    /// Asks where to export `spec` (named after it), then writes it there.
+    pub(crate) fn export_brush_spec(&self, spec: BrushSpec) {
         let dialog = file_dialog(EXPORT_TITLE, &brush_filter(), None);
         dialog.set_initial_name(Some(&file_name_for(&spec.name)));
         glib::spawn_future_local(export_chosen(self.downgrade(), dialog, spec));
@@ -117,7 +122,7 @@ impl CadmiumWindow {
         }
     }
 
-    fn delete_library_brush(&self, name: &str, index: usize) {
+    pub(crate) fn delete_library_brush(&self, name: &str, index: usize) {
         let state = self.state();
         let still_there = state
             .borrow()
@@ -139,13 +144,13 @@ impl CadmiumWindow {
         }
     }
 
-    fn after_library_change(&self, toast: &str) {
+    pub(crate) fn after_library_change(&self, toast: &str) {
         self.show_toast(toast);
         self.canvas().queue_draw();
         self.refresh_panels();
     }
 
-    fn report_brush_error(&self, failed: &str, error: &dyn Display) {
+    pub(crate) fn report_brush_error(&self, failed: &str, error: &dyn Display) {
         let message = format!("{failed}: {error}");
         glib::g_warning!(LOG_DOMAIN, "{message}");
         self.show_toast(&message);

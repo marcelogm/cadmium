@@ -10,6 +10,7 @@ use cadmium_engine::brush::{
 pub enum LibraryError {
     Unreadable(BrushFileError),
     NotAUserBrush,
+    Changed,
     Io(std::io::Error),
 }
 
@@ -18,6 +19,7 @@ impl std::fmt::Display for LibraryError {
         match self {
             LibraryError::Unreadable(error) => write!(f, "{error}"),
             LibraryError::NotAUserBrush => write!(f, "factory brushes can't be deleted"),
+            LibraryError::Changed => write!(f, "the brush changed while it was being edited"),
             LibraryError::Io(error) => write!(f, "{error}"),
         }
     }
@@ -98,20 +100,12 @@ impl BrushLibrary {
 
     pub fn import(&mut self, text: &str) -> Result<Imported, LibraryError> {
         let read = brush_from_json(text).map_err(LibraryError::Unreadable)?;
-        let mut brush = read.brush;
-        let name = self.unique_name(&brush.name);
-        let renamed = name != brush.name;
-        brush.name = name;
-        let (path, save_error) = match writing::write(self.dir.as_deref(), &brush) {
-            Ok(path) => (Some(path), None),
-            Err(error) => (None, Some(error)),
-        };
-        self.user.push(UserBrush { brush, path });
+        let saved = self.add_new(read.brush);
         Ok(Imported {
-            index: self.factory.len() + self.user.len() - 1,
-            renamed,
+            index: saved.index,
+            renamed: saved.renamed,
             adjusted: read.adjusted,
-            save_error,
+            save_error: saved.save_error,
         })
     }
 
@@ -135,7 +129,16 @@ impl BrushLibrary {
     }
 
     fn unique_name(&self, wanted: &str) -> String {
-        let taken = |name: &str| self.all().any(|brush| brush.name == name);
+        self.unique_name_except(wanted, None)
+    }
+
+    /// `wanted`, or `wanted (n)` with the first free number; the brush at `skip` doesn't count.
+    fn unique_name_except(&self, wanted: &str, skip: Option<usize>) -> String {
+        let taken = |name: &str| {
+            self.all()
+                .enumerate()
+                .any(|(index, brush)| Some(index) != skip && brush.name == name)
+        };
         if !taken(wanted) {
             return wanted.to_string();
         }
@@ -165,14 +168,18 @@ fn read_brush(path: &Path) -> Result<BrushSpec, String> {
         .map_err(|error| error.to_string())
 }
 
+mod saving;
 mod worn;
 mod writing;
 
+pub(crate) use saving::Saved;
 pub(crate) use worn::{export_name, index_after_delete, worn_brush};
 
 #[cfg(test)]
 use writing::MAX_SLUG_CHARS;
 pub(crate) use writing::file_name_for;
 
+#[cfg(test)]
+mod test_dir;
 #[cfg(test)]
 mod tests;

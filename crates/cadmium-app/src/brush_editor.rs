@@ -1,42 +1,123 @@
-//! The brush editor: a read-only summary of the worn brush.
+//! The brush editor: edits the worn brush as a draft, then saves it to the library.
+//!
+//! Three columns (D2): the tip's drawing with the example strokes under it, the test sheet,
+//! and the controls. Until stages 7b and 7c, the examples and the test sheet are blank paper.
+
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
-use cadmium_engine::brush::BrushSpec;
-use cadmium_studio::{hair_name, head_name};
 use gtk::glib;
 
+use crate::state::AppState;
 use crate::window::CadmiumWindow;
 
-mod build;
+mod brush_group;
+mod closing;
+mod draft;
+mod header;
+mod layout;
+mod paper;
+mod saving;
+mod wiring;
 
-/// What the summary calls a head or hair that is no longer a factory one.
-const CUSTOM: &str = "Custom";
+use brush_group::BrushGroup;
+use draft::{Draft, Origin};
+
+/// The open editor. Signal handlers hold it weakly; the dialog's `closed` handler holds the
+/// one strong reference, and lets go of it there.
+struct Editor {
+    window: glib::WeakRef<CadmiumWindow>,
+    dialog: adw::Dialog,
+    draft: RefCell<Draft>,
+    /// Set while the widgets are filled from the draft, so their signals don't feed back.
+    syncing: Cell<bool>,
+    /// The alert asking about the editor ("Discard Changes?", "Delete …?"), while it is open.
+    alert: RefCell<Option<adw::AlertDialog>>,
+    brush: BrushGroup,
+}
 
 /// Shows the editor on the worn brush; while one is open, does nothing.
 pub fn open(window: &CadmiumWindow) {
     if window.has_editor() {
         return;
     }
-    let state = window.state();
-    let brush = state.borrow().worn_brush_spec();
-    let dialog = build::dialog(&brush);
-    dialog.connect_closed(glib::clone!(
-        #[weak]
-        window,
-        move |_| window.after_editor_closed()
-    ));
-    window.keep_editor(&dialog);
-    dialog.present(Some(window));
+    let draft = draft_for(&window.state().borrow());
+    let editor = Editor::new(window, draft);
+    window.keep_editor(&editor.dialog);
+    editor.dialog.present(Some(window));
 }
 
-/// The read-only rows describing `brush`, as (title, value).
-fn summary_rows(brush: &BrushSpec) -> [(&'static str, String); 4] {
-    [
-        ("Name", brush.name.clone()),
-        ("Head", head_name(&brush.head).unwrap_or(CUSTOM).to_owned()),
-        ("Hair", hair_name(&brush.hair).unwrap_or(CUSTOM).to_owned()),
-        ("Size", format!("{:.0} px", brush.size_px)),
-    ]
+/// C3: the worn library brush as the library holds it (at its suggested size, whatever size
+/// the painting uses now); a worn brush in no library is edited like a factory one.
+fn draft_for(state: &AppState) -> Draft {
+    let worn = state
+        .worn_library_brush()
+        .and_then(|index| Some((index, state.brushes.get(index)?.clone())));
+    match worn {
+        Some((index, brush)) if state.brushes.is_user(index) => {
+            Draft::open(brush, Origin::User(index))
+        }
+        Some((_, brush)) => Draft::open(brush, Origin::Factory),
+        None => Draft::open(state.worn_brush_spec(), Origin::Factory),
+    }
+}
+
+impl Editor {
+    fn new(window: &CadmiumWindow, draft: Draft) -> Rc<Editor> {
+        let header = header::header();
+        let (dialog, columns) = layout::dialog(&draft.chosen_name(), &header.bar);
+        let brush = brush_group::brush_group();
+        columns.controls.append(&brush.group);
+        let editor = Rc::new(Editor {
+            window: window.downgrade(),
+            dialog,
+            draft: RefCell::new(draft),
+            syncing: Cell::new(false),
+            alert: RefCell::new(None),
+            brush,
+        });
+        editor.connect(&header);
+        editor.sync();
+        editor.keep_until_closed();
+        editor
+    }
+
+    /// Fills every widget from the draft.
+    fn sync(&self) {
+        self.syncing.set(true);
+        self.brush.show(self.draft.borrow().current());
+        self.syncing.set(false);
+    }
+
+    /// Keeps the editor alive while its dialog is open; once closed, closes an alert still
+    /// asking about it and lets the window know.
+    fn keep_until_closed(self: &Rc<Self>) {
+        let keeper = RefCell::new(Some(Rc::clone(self)));
+        let window = self.window.clone();
+        self.dialog
+            .connect_closed(move |_| after_closed(&keeper, &window));
+    }
+}
+
+/// The closed editor's last act: closes an alert still asking about it, lets go of it, and
+/// tells the window.
+fn after_closed(keeper: &RefCell<Option<Rc<Editor>>>, window: &glib::WeakRef<CadmiumWindow>) {
+    if let Some(editor) = keeper.take() {
+        editor.dismiss_alert();
+    }
+    if let Some(window) = window.upgrade() {
+        window.after_editor_closed();
+    }
+}
+
+/// Runs `action` on the editor while it is open and not filling its widgets.
+fn with_editor(editor: &Weak<Editor>, action: impl FnOnce(&Rc<Editor>)) {
+    if let Some(editor) = editor.upgrade()
+        && !editor.syncing.get()
+    {
+        action(&editor);
+    }
 }
 
 #[cfg(test)]
