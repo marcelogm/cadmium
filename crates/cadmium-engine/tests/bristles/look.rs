@@ -189,7 +189,6 @@ fn row_ends_px(volume: &[f32], rows: &[usize]) -> Vec<f64> {
         .collect()
 }
 
-
 #[test]
 fn a_stroke_running_dry_ends_in_threads_of_different_lengths() {
     let gpu = GpuContext::new().unwrap();
