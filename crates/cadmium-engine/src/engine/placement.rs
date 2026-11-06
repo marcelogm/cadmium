@@ -3,7 +3,7 @@ use super::dab_record::{
 };
 use super::footprint::Footprint;
 use super::{MAX_TIP_RADIUS, TIP_HALF, WetOilEngine};
-use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING};
+use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING, HairSpec};
 use crate::canvas::Canvas;
 use crate::compute::WORKGROUP_SIZE;
 use crate::region::clamped_region;
@@ -197,8 +197,12 @@ impl WetOilEngine {
         regions: &DabRegions,
     ) -> DabRecord {
         let params = &self.params;
-        let hair = brush.hair.clamped();
         let profile = brush.tool.profile();
+        let hair = if profile.has_bristle_footprint() {
+            brush.hair.clamped()
+        } else {
+            HairSpec::default()
+        };
         let spreading = profile.spreading.rates(params);
         DabRecord {
             transfer_fraction: params.get("transfer_fraction"),
