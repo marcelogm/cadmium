@@ -49,3 +49,30 @@ fn wearing_a_brush_from_elsewhere_forgets_the_picked_one() {
     state.wear_brush(&large);
     assert_eq!(state.worn_library_brush(), Some(2));
 }
+
+#[test]
+fn the_worn_library_brush_is_shown_at_the_current_size() {
+    let mut state = painting_state();
+    assert!(state.wear_library_brush(2));
+    state.session.brush.geometry.max_diameter_px = 33.0;
+    let expected = BrushSpec {
+        size_px: 33.0,
+        ..state.brushes.get(2).unwrap().clone()
+    };
+    assert_eq!(state.worn_brush_spec(), expected);
+}
+
+#[test]
+fn a_brush_outside_the_library_is_the_current_brush() {
+    let mut state = painting_state();
+    state.session.brush.head.thickness += 0.123;
+    assert_eq!(state.worn_library_brush(), None);
+    let settings = &state.session.brush;
+    let expected = BrushSpec {
+        name: "Current Brush".into(),
+        size_px: settings.geometry.max_diameter_px,
+        head: settings.head,
+        hair: settings.hair,
+    };
+    assert_eq!(state.worn_brush_spec(), expected);
+}

@@ -19,9 +19,9 @@ pub(super) enum ThumbnailJob {
 
 impl ThumbnailJob {
     /// Whether a refresh that finds a thumbnail missing starts the idle job;
-    /// never while the studio is open, which pauses the job.
-    fn starts(self, anything_missing: bool, studio_open: bool) -> bool {
-        self == ThumbnailJob::Idle && anything_missing && !studio_open
+    /// never while the brush editor is open, which pauses the job.
+    fn starts(self, anything_missing: bool, editor_open: bool) -> bool {
+        self == ThumbnailJob::Idle && anything_missing && !editor_open
     }
 
     fn keeps_running(self) -> bool {
@@ -35,7 +35,7 @@ enum TickOutcome {
     NothingMissing,
     Painted,
     Failed,
-    /// The studio is open; the job waits for it to close.
+    /// The brush editor is open; the job waits for it to close.
     Paused,
 }
 
@@ -62,11 +62,10 @@ impl BrushPanel {
             let cache = self.thumbnails.borrow();
             keys.iter().any(|key| cache.get(key).is_none())
         };
-        let studio_open = self.state.borrow().studio_open();
         if !self
             .thumbnail_job
             .get()
-            .starts(anything_missing, studio_open)
+            .starts(anything_missing, self.editor_open())
         {
             return;
         }
@@ -75,13 +74,20 @@ impl BrushPanel {
         glib::idle_add_local(move || thumbnail_tick(&panel));
     }
 
-    /// Pauses while the studio is open; closing it refreshes the panels, which
-    /// starts the job again.
+    /// Pauses while the brush editor is open; closing it refreshes the panels,
+    /// which starts the job again.
     fn tick(&self) -> TickOutcome {
-        if self.state.borrow().studio_open() {
+        if self.editor_open() {
             return TickOutcome::Paused;
         }
         self.paint_next_thumbnail()
+    }
+
+    /// Whether the brush editor dialog is open; false once the window is gone.
+    fn editor_open(&self) -> bool {
+        self.window
+            .upgrade()
+            .is_some_and(|window| window.has_editor())
     }
 
     /// Paints one missing thumbnail; holds no borrow of the state or the cache meanwhile.

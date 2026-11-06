@@ -1,5 +1,5 @@
 use super::handle::{HandleClock, HandleGauge, ferrule_over_nib, substeps};
-use super::layout::{BristleLayout, BristleRest, LayoutRequest, layout};
+use super::layout::{BristleLayout, LayoutRequest, layout};
 use super::state::BristleBuffers;
 use crate::brush::{HairSpec, HeadSpec};
 use crate::engine::dab_record::DabRecord;
@@ -43,7 +43,6 @@ pub(crate) struct BristleRig {
     mean_radius_px: f32,
     reach_px: f32,
     ferrule_radius_px: f32,
-    root_half_extent_px: [f32; 2],
     head: HeadSpec,
     hair: HairSpec,
     tool: Option<Tool>,
@@ -66,7 +65,6 @@ impl BristleRig {
             mean_radius_px: 0.0,
             reach_px: 0.0,
             ferrule_radius_px: 0.0,
-            root_half_extent_px: [0.0; 2],
             head: HeadSpec::ROUND,
             hair: HairSpec::default(),
             tool: None,
@@ -82,22 +80,6 @@ impl BristleRig {
 
     pub(crate) fn radii_px(&self) -> &[f32] {
         &self.radii_px
-    }
-
-    pub(crate) fn in_hand(&self) -> bool {
-        self.tool.is_some()
-    }
-
-    pub(crate) fn count(&self) -> u32 {
-        self.count
-    }
-
-    pub(crate) fn ferrule_radius_px(&self) -> f32 {
-        self.ferrule_radius_px
-    }
-
-    pub(crate) fn root_half_extent_px(&self) -> [f32; 2] {
-        self.root_half_extent_px
     }
 
     pub(crate) fn head(&self) -> HeadSpec {
@@ -181,7 +163,6 @@ impl BristleRig {
             .map(|bristle| bristle.length_px)
             .fold(0.0, f32::max);
         self.ferrule_radius_px = ferrule_radius_px;
-        self.root_half_extent_px = [0, 1].map(|axis| widest_root_px(bristles, axis));
     }
 
     pub(crate) fn advance(&mut self, record: &mut DabRecord, dab: &Dab, params: &SimParams) {
@@ -242,13 +223,6 @@ impl BristleRig {
         self.previous_orientation = Some(continuous);
         continuous
     }
-}
-
-fn widest_root_px(bristles: &[BristleRest], axis: usize) -> f32 {
-    bristles
-        .iter()
-        .map(|bristle| bristle.root_px[axis].abs())
-        .fold(0.0, f32::max)
 }
 
 #[cfg(test)]

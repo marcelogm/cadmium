@@ -92,17 +92,12 @@ impl CadmiumWindow {
         }
     }
 
-    /// Closes the editor's studio and refreshes the panels, which restarts the
+    /// Forgets the closed editor and refreshes the panels, which restarts the
     /// thumbnails it paused; on a lost GPU the panels are left alone, so the
     /// thumbnail job does not start on a dead device.
     pub fn after_editor_closed(&self) {
         self.imp().editor.take();
-        let gpu_lost = {
-            let state = self.state();
-            let mut state = state.borrow_mut();
-            state.close_studio();
-            state.gpu_is_lost()
-        };
+        let gpu_lost = self.state().borrow().gpu_is_lost();
         if !gpu_lost {
             self.refresh_panels();
         }

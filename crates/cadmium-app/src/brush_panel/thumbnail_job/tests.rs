@@ -31,7 +31,7 @@ fn a_failed_job_stops_and_never_restarts() {
 }
 
 #[test]
-fn an_open_studio_pauses_the_job_until_it_closes() {
+fn an_open_editor_pauses_the_job_until_it_closes() {
     let job = TickOutcome::Paused.job_after();
     assert_eq!(job, ThumbnailJob::Idle);
     assert!(!job.keeps_running());

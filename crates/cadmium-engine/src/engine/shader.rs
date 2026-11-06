@@ -77,11 +77,6 @@ pub(super) const BRISTLE_SNIPPETS: [&str; 10] = [
     include_str!("../shaders/bristle_point.wgsl"),
     include_str!("../shaders/bristle_clump.wgsl"),
 ];
-const BRISTLE_VIEW_SNIPPETS: [&str; 3] = [
-    include_str!("../shaders/bristle_rest.wgsl"),
-    include_str!("../shaders/bristle_frame.wgsl"),
-    include_str!("../shaders/bristle_view.wgsl"),
-];
 pub(super) const EYEDROPPER_SNIPPETS: [&str; 2] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/slot_lane.wgsl"),
@@ -163,8 +158,4 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
     }
     source.push_str(body);
     source
-}
-
-pub(crate) fn bristle_view_source() -> String {
-    shader_source(&BRISTLE_VIEW_SNIPPETS, "")
 }
