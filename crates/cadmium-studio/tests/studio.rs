@@ -83,3 +83,9 @@ fn every_demo_stroke_paints() {
         assert!(share > ink_floor(stroke), "{stroke:?} {share}");
     }
 }
+
+#[test]
+fn thumbnails_are_rack_row_strokes_ten_by_three() {
+    assert_eq!(THUMBNAIL_SIZE, (240, 72));
+    assert_eq!(THUMBNAIL_SIZE.0 * 3, THUMBNAIL_SIZE.1 * 10);
+}

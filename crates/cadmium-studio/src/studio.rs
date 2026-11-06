@@ -12,7 +12,9 @@ use crate::demo::{DemoStroke, StrokeBox};
 use crate::loading::{Loading, wear};
 use crate::schedule::{StrokeSchedule, replay};
 
-pub const THUMBNAIL_SIZE: (u32, u32) = (192, 64);
+/// A rack row's stroke (10:3), shown 153x46 px: about 1.5x device pixels for a
+/// sharp HiDPI row. Unrelated to `STUDIO_SCALE`, the supersampling factor.
+pub const THUMBNAIL_SIZE: (u32, u32) = (240, 72);
 const STUDIO_SCALE: u32 = 2;
 /// Small enough that a fan's splayed hairs stay inside the thumbnail.
 const STUDIO_MAX_SIZE_PX: f32 = 44.0;
