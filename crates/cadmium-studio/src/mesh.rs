@@ -53,11 +53,12 @@ fn ring_angles() -> impl Iterator<Item = (f32, f32)> {
     (0..=SEGMENTS).map(|i| (i as f32 / SEGMENTS as f32 * TAU).sin_cos())
 }
 
-/// Links ring `a` to the ring `b` that follows it (each `SEGMENTS + 1` long).
+/// Links ring `a` to the ring `b` above it (each `SEGMENTS + 1` long), with
+/// triangles counter-clockwise seen from outside.
 fn stitch(indices: &mut Vec<u32>, a: u32, b: u32) {
     for i in 0..SEGMENTS {
         let (a0, a1, b0, b1) = (a + i, a + i + 1, b + i, b + i + 1);
-        indices.extend([a0, b0, a1, a1, b0, b1]);
+        indices.extend([a0, a1, b0, a1, b1, b0]);
     }
 }
 
@@ -134,7 +135,9 @@ fn add_top_cap(mesh: &mut Mesh, (z, radius): (f32, f32)) {
     }
 }
 
-/// Linear-light bristle colour for the factory hair nearest in stiffness.
+/// Linear-light bristle colour for the factory hair nearest in stiffness; a
+/// tie goes to the earlier factory hair (synthetic, hog, sable, mongoose,
+/// squirrel).
 pub fn hair_tint(hair: &HairSpec) -> [f32; 3] {
     let distance = |h: &HairSpec| (h.stiffness - hair.stiffness).abs();
     TINTS

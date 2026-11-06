@@ -84,3 +84,79 @@ fn custom_hair_takes_the_nearest_stiffness() {
     };
     assert_eq!(hair_tint(&stiff), hair_tint(&HairSpec::HOG));
 }
+
+fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn assert_wound_outward(mesh: &Mesh) {
+    for tri in mesh.indices.chunks(3) {
+        let [a, b, c] = [0, 1, 2].map(|k| mesh.vertices[tri[k] as usize]);
+        let face = cross(sub(b.position, a.position), sub(c.position, a.position));
+        let average = [0, 1, 2].map(|k| a.normal[k] + b.normal[k] + c.normal[k]);
+        assert!(dot(face, average) > 0.0, "inward triangle {tri:?}");
+    }
+}
+
+#[test]
+fn triangles_wind_outward() {
+    assert_wound_outward(&ferrule_mesh([R, 0.25 * R], R));
+    assert_wound_outward(&ferrule_mesh([R, R], R));
+    assert_wound_outward(&handle_mesh(R));
+}
+
+#[test]
+fn ferrule_vertices_lie_on_the_ellipse() {
+    let (a, b) = (R + 0.08 * R, 0.25 * R + 0.08 * R);
+    for v in &ferrule_mesh([R, 0.25 * R], R).vertices {
+        let [x, y, _] = v.position;
+        assert!(((x / a).powi(2) + (y / b).powi(2) - 1.0).abs() < EPS);
+    }
+}
+
+#[test]
+fn ferrule_normals_are_perpendicular_to_the_ellipse_and_outward() {
+    let (a, b) = (R + 0.08 * R, 0.25 * R + 0.08 * R);
+    for v in &ferrule_mesh([R, 0.25 * R], R).vertices {
+        let [x, y, _] = v.position;
+        let tangent = [-a * (y / b), b * (x / a), 0.0];
+        assert!(dot(v.normal, tangent).abs() < EPS * a);
+        assert!(dot(v.normal, [x, y, 0.0]) > 0.0);
+    }
+}
+
+#[test]
+fn handle_side_normals_point_away_from_the_axis() {
+    let mesh = handle_mesh(R);
+    let side = mesh.vertices.len() - 34;
+    for v in &mesh.vertices[..side] {
+        assert!(dot(v.normal, [v.position[0], v.position[1], 0.0]) > 0.0);
+    }
+}
+
+#[test]
+fn a_stiffness_tie_goes_to_the_earlier_factory_hair() {
+    let (early, late) = (HairSpec::SABLE, HairSpec::SQUIRREL);
+    let middle = (early.stiffness + late.stiffness) / 2.0;
+    let hair = HairSpec {
+        stiffness: middle,
+        ..early
+    };
+    assert_eq!(
+        (early.stiffness - middle).abs(),
+        (late.stiffness - middle).abs()
+    );
+    assert_eq!(hair_tint(&hair), hair_tint(&early));
+}
