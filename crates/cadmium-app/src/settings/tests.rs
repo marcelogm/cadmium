@@ -68,3 +68,15 @@ fn every_action_has_a_label_in_menu_order() {
         .collect();
     assert_eq!(labels, ["Move", "Zoom", "Rotate", "Pick Colour", "Nothing"]);
 }
+
+#[test]
+fn menu_positions_map_to_actions_and_back() {
+    for (index, action) in PenButtonAction::ALL.iter().enumerate() {
+        assert_eq!(action.menu_index(), index as u32);
+        assert_eq!(PenButtonAction::at_menu_index(index as u32), Some(*action));
+    }
+    assert_eq!(
+        PenButtonAction::at_menu_index(PenButtonAction::ALL.len() as u32),
+        None
+    );
+}

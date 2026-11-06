@@ -260,6 +260,10 @@
     </section>
     <section>
       <item>
+        <attribute name="label">Preferences</attribute>
+        <attribute name="action">win.preferences</attribute>
+      </item>
+      <item>
         <attribute name="label">Keyboard Shortcuts</attribute>
         <attribute name="action">app.shortcuts</attribute>
       </item>

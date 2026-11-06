@@ -33,6 +33,7 @@ pub(super) enum SmokeDialog {
     NewPainting,
     About,
     Shortcuts,
+    Preferences,
 }
 
 impl std::str::FromStr for SmokeDialog {
@@ -43,6 +44,7 @@ impl std::str::FromStr for SmokeDialog {
             "new" => Ok(SmokeDialog::NewPainting),
             "about" => Ok(SmokeDialog::About),
             "shortcuts" => Ok(SmokeDialog::Shortcuts),
+            "preferences" => Ok(SmokeDialog::Preferences),
             _ => Err(()),
         }
     }
@@ -54,6 +56,7 @@ impl SmokeDialog {
             SmokeDialog::NewPainting => "win.new",
             SmokeDialog::About => "app.about",
             SmokeDialog::Shortcuts => "app.shortcuts",
+            SmokeDialog::Preferences => "win.preferences",
         }
     }
 

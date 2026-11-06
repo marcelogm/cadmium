@@ -19,6 +19,7 @@ mod ink;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;
+mod preferences_dialog;
 mod presenter;
 mod presets;
 mod settings;

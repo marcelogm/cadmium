@@ -32,6 +32,19 @@ impl PenButtonAction {
         PenButtonAction::Nothing,
     ];
 
+    /// Where this action sits in the Preferences menu.
+    pub fn menu_index(self) -> u32 {
+        Self::ALL
+            .iter()
+            .position(|action| *action == self)
+            .map_or(0, |index| index as u32)
+    }
+
+    /// The action at a Preferences menu position, if there is one.
+    pub fn at_menu_index(index: u32) -> Option<PenButtonAction> {
+        Self::ALL.get(index as usize).copied()
+    }
+
     /// The name the Preferences menu shows for this action.
     pub fn label(self) -> &'static str {
         match self {

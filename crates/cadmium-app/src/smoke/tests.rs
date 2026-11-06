@@ -237,8 +237,14 @@ fn nodcc_present_mode_keeps_the_dmabuf_selftest_off_compressed_modifiers() {
 
 #[test]
 fn unknown_dialog_is_ignored() {
-    let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "preferences")])).unwrap();
+    let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "settings-sync")])).unwrap();
     assert_eq!(config.dialog, None);
+}
+
+#[test]
+fn the_preferences_dialog_is_recognised() {
+    let config = SmokeConfig::from_lookup(lookup(&[(DIALOG, "preferences")])).unwrap();
+    assert_eq!(config.dialog, Some(SmokeDialog::Preferences));
 }
 
 #[test]

@@ -45,6 +45,7 @@ pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
             ("Rotate Left", "win.rotate-left"),
             ("Rotate Right", "win.rotate-right"),
             ("Show or Hide Sidebar", "win.toggle-sidebar"),
+            ("Preferences", "win.preferences"),
             ("Keyboard Shortcuts", "app.shortcuts"),
         ],
     ),
