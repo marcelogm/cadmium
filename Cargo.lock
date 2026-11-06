@@ -125,6 +125,7 @@ dependencies = [
  "ash",
  "async-channel",
  "cadmium-engine",
+ "cadmium-studio",
  "drm-fourcc",
  "embed-resource",
  "glib-build-tools",
@@ -150,6 +151,13 @@ dependencies = [
  "wgpu-hal",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "cadmium-studio"
+version = "0.0.1"
+dependencies = [
+ "cadmium-engine",
 ]
 
 [[package]]

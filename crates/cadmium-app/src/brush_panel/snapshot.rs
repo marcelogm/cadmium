@@ -4,6 +4,7 @@ use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 
 use super::presentation::{PLATE_GAP_KEY, PanelTool, panel_tool};
 use crate::state::AppState;
+use crate::thumbnails::ThumbnailKey;
 
 pub(super) struct PigmentChoice {
     pub(super) id: &'static str,
@@ -30,6 +31,7 @@ pub(super) struct Snapshot {
     pub(super) plate_gap: f32,
     pub(super) medium: f32,
     pub(super) brush_names: Vec<String>,
+    pub(super) brush_keys: Vec<ThumbnailKey>,
     pub(super) brush_index: Option<usize>,
     pub(super) brush_is_user: bool,
     pub(super) reload_each_stroke: bool,
@@ -70,6 +72,7 @@ impl Snapshot {
                 .all()
                 .map(|brush| brush.name.clone())
                 .collect(),
+            brush_keys: state.brushes.all().map(ThumbnailKey::of).collect(),
             brush_index: worn,
             brush_is_user: worn.is_some_and(|index| state.brushes.is_user(index)),
             reload_each_stroke: state.reload_each_stroke,

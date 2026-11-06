@@ -94,7 +94,8 @@ impl SmokeStep {
             | SmokeStep::Brush(_) => true,
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
-            SmokeStep::Screenshot(_) | SmokeStep::Quit => frame >= earliest_end_frame,
+            SmokeStep::Screenshot(_) => frame >= earliest_end_frame && !window.thumbnails_pending(),
+            SmokeStep::Quit => frame >= earliest_end_frame,
         }
     }
 

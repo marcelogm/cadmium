@@ -28,6 +28,7 @@ mod smoke;
 mod state;
 mod surface_scale;
 mod swatch;
+mod thumbnails;
 mod tools;
 mod tray_view;
 mod view;
