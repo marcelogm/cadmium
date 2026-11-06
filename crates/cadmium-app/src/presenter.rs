@@ -1,8 +1,11 @@
+use std::cell::RefCell;
+use std::rc::Weak;
 use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::{PresentRequest, ViewTransform};
 use cadmium_engine::surface::{TRAY_HEIGHT, TRAY_WIDTH};
+use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
@@ -12,7 +15,7 @@ use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
 use crate::state::AppState;
-use crate::view::clamp_zoom;
+use crate::view::{clamp_zoom, cover_view};
 
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
 const DEBUG_ENABLED: &str = "1";
@@ -32,16 +35,21 @@ pub fn tray_view(viewport_px: (u32, u32)) -> ViewTransform {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The brush editor's test sheet, which the editor owns: presented only while it is there.
+pub type SheetLink = Weak<RefCell<TestSheet>>;
+
+#[derive(Clone, Debug, Default)]
 pub enum PresentSource {
     #[default]
     Painting,
     Tray,
+    /// The brush editor's test sheet, its canvas covering the target.
+    TestSheet(SheetLink),
 }
 
 impl PresentSource {
     fn encode(
-        self,
+        &self,
         state: &mut AppState,
         gpu: &GpuContext,
         target: &wgpu::Texture,
@@ -67,8 +75,28 @@ impl PresentSource {
                     encoder,
                 );
             }
+            PresentSource::TestSheet(sheet) => {
+                encode_test_sheet(sheet, state.now_ms(), gpu, target, encoder);
+            }
         }
     }
+}
+
+/// Paints and presents the test sheet at `clock_ms`, its canvas covering `target`;
+/// a sheet the editor let go leaves `target` untouched (its view no longer presents).
+fn encode_test_sheet(
+    sheet: &SheetLink,
+    clock_ms: f64,
+    gpu: &GpuContext,
+    target: &wgpu::Texture,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    let Some(sheet) = sheet.upgrade() else {
+        return;
+    };
+    let mut sheet = sheet.borrow_mut();
+    let view = cover_view(sheet.size(), (target.width(), target.height()));
+    sheet.encode_present(gpu, SheetFrame { clock_ms, view }, target, encoder);
 }
 
 pub struct FramePresenter {
@@ -141,7 +169,7 @@ impl FramePresenter {
         height_px: u32,
     ) -> Option<gdk::Texture> {
         let started = Instant::now();
-        if self.source == PresentSource::Painting {
+        if matches!(self.source, PresentSource::Painting) {
             state.view.zoom = clamp_zoom(state.view.zoom);
         }
         let mode = match self.mode {

@@ -91,6 +91,7 @@ impl BrushPanel {
     }
 
     pub fn refresh(self: &Rc<Self>) {
+        self.release_studio_while_editing();
         let snapshot = Snapshot::of(&self.state.borrow());
         self.syncing.set(true);
         if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {

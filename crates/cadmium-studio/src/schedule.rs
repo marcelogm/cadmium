@@ -1,5 +1,6 @@
 //! When the studio feeds each pen sample and shows each frame, as plain data.
-//! The only schedule today is the thumbnail cadence.
+//! The one cadence is the thumbnails' — a frame every few samples, then a fixed settle —
+//! which the example sheet plays twice on one clock.
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
@@ -21,8 +22,7 @@ pub(crate) enum StudioEvent {
     End,
 }
 
-/// A demo stroke as the ordered events that paint it; today only the
-/// thumbnail cadence builds one.
+/// A demo stroke as the ordered events that paint it.
 #[derive(Clone, Debug)]
 pub(crate) struct StrokeSchedule {
     events: Vec<StudioEvent>,
@@ -48,6 +48,19 @@ fn last_time_ms(strokes: &[StrokeSample]) -> f64 {
     strokes.last().map_or(0.0, |s| f64::from(s.time_ms))
 }
 
+fn shift(event: StudioEvent, by_ms: u32) -> StudioEvent {
+    let later = |sample: StrokeSample| StrokeSample {
+        time_ms: sample.time_ms + by_ms,
+        ..sample
+    };
+    match event {
+        StudioEvent::Begin(sample) => StudioEvent::Begin(later(sample)),
+        StudioEvent::Add(sample) => StudioEvent::Add(later(sample)),
+        StudioEvent::Frame(clock_ms) => StudioEvent::Frame(clock_ms + f64::from(by_ms)),
+        StudioEvent::End => StudioEvent::End,
+    }
+}
+
 impl StrokeSchedule {
     /// The thumbnail cadence: a frame every few samples, then a fixed settle.
     pub fn thumbnail(stroke: DemoStroke, area: StrokeBox) -> StrokeSchedule {
@@ -70,6 +83,28 @@ impl StrokeSchedule {
     /// Every event in the order it is played; frame clocks never decrease.
     pub fn events(&self) -> &[StudioEvent] {
         &self.events
+    }
+
+    /// The same events `by_ms` later: every sample and every frame clock moves together.
+    pub fn shifted(&self, by_ms: u32) -> StrokeSchedule {
+        let events = self
+            .events
+            .iter()
+            .map(|event| shift(*event, by_ms))
+            .collect();
+        StrokeSchedule { events }
+    }
+
+    /// The clock of the last frame shown; 0 with no frame.
+    pub fn last_clock_ms(&self) -> f64 {
+        self.events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                StudioEvent::Frame(clock_ms) => Some(*clock_ms),
+                _ => None,
+            })
+            .unwrap_or(0.0)
     }
 }
 

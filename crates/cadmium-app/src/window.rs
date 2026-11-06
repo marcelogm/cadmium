@@ -72,23 +72,44 @@ impl CadmiumWindow {
         self.imp().thumbnails_pending.set(pending);
     }
 
+    /// Whether the brush editor is still painting its example strokes; smoke screenshots
+    /// wait for it.
+    pub fn examples_pending(&self) -> bool {
+        self.imp().examples_pending.get()
+    }
+
+    /// Set by the brush editor while it paints its example strokes.
+    pub fn set_examples_pending(&self, pending: bool) {
+        self.imp().examples_pending.set(pending);
+    }
+
     pub fn has_editor(&self) -> bool {
         self.imp().editor.borrow().is_some()
     }
 
     /// The open brush editor, if any.
     pub fn editor(&self) -> Option<adw::Dialog> {
-        self.imp().editor.borrow().clone()
+        self.imp()
+            .editor
+            .borrow()
+            .as_ref()
+            .map(|kept| kept.dialog.clone())
     }
 
-    pub fn keep_editor(&self, editor: &adw::Dialog) {
-        self.imp().editor.replace(Some(editor.clone()));
+    /// Keeps the open editor; `stop` stops it before the window closes it itself.
+    pub fn keep_editor(&self, editor: &adw::Dialog, stop: impl Fn() + 'static) {
+        let kept = imp::KeptEditor {
+            dialog: editor.clone(),
+            stop: Box::new(stop),
+        };
+        self.imp().editor.replace(Some(kept));
     }
 
     fn close_editor(&self) {
-        let editor = self.imp().editor.take();
-        if let Some(editor) = editor {
-            editor.force_close();
+        let kept = self.imp().editor.take();
+        if let Some(kept) = kept {
+            (kept.stop)();
+            kept.dialog.force_close();
         }
     }
 
@@ -97,6 +118,7 @@ impl CadmiumWindow {
     /// thumbnail job does not start on a dead device.
     pub fn after_editor_closed(&self) {
         self.imp().editor.take();
+        self.imp().examples_pending.set(false);
         let gpu_lost = self.state().borrow().gpu_is_lost();
         if !gpu_lost {
             self.refresh_panels();

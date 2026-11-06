@@ -9,7 +9,7 @@ mod library;
 pub use file::{BRUSH_EXTENSION, BrushFileError, ReadBrush, brush_from_json, brush_to_json};
 pub use hair::HairSpec;
 pub use head::HeadSpec;
-pub(crate) use head::Section;
+pub(crate) use head::{Section, SectionMix};
 pub use library::{BrushSpec, default_brush, factory_brushes};
 
 pub(crate) fn within(value: f32, [min, max]: [f32; 2], fallback: f32) -> f32 {

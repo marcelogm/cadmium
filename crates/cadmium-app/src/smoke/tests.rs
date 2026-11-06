@@ -2,6 +2,7 @@ use std::ffi::OsString;
 
 use super::brushes::{
     BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EDITOR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep,
+    SHEET_STROKE,
 };
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
@@ -344,4 +345,37 @@ fn the_brush_editor_holds_the_end_back_by_its_frames() {
     assert_eq!(screenshot.settle_frames(), None);
     assert!(editor.opens_editor());
     assert!(!save.opens_editor() && !screenshot.opens_editor());
+}
+
+#[test]
+fn a_sheet_stroke_follows_the_brush_editor() {
+    let config = SmokeConfig::from_lookup(lookup(&[
+        (BRUSH_EDITOR, "60"),
+        (SHEET_STROKE, "1"),
+        (SCREENSHOT, "/tmp/shot.png"),
+    ]))
+    .unwrap();
+    assert_eq!(
+        config.steps(),
+        [
+            SmokeStep::Brush(BrushStep::Editor(60)),
+            SmokeStep::Brush(BrushStep::SheetStroke),
+            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+            SmokeStep::Quit,
+        ]
+    );
+}
+
+#[test]
+fn a_sheet_stroke_without_the_editor_paints_nothing() {
+    let config = SmokeConfig::from_lookup(lookup(&[
+        (SHEET_STROKE, "1"),
+        (SCREENSHOT, "/tmp/shot.png"),
+    ]))
+    .unwrap();
+    assert!(
+        !config
+            .steps()
+            .contains(&SmokeStep::Brush(BrushStep::SheetStroke))
+    );
 }

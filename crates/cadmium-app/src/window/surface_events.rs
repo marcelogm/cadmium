@@ -119,7 +119,7 @@ impl CadmiumWindow {
         tray
     }
 
-    fn announce_copy_presentation(&self) {
+    pub(crate) fn announce_copy_presentation(&self) {
         if !self.imp().copy_presentation_announced.replace(true) {
             self.show_toast(COPY_PRESENTATION_TOAST);
         }
@@ -146,8 +146,9 @@ impl CadmiumWindow {
     }
 
     /// Announces a lost GPU once, however many views see it, closing the
-    /// editor first so the alert is not stacked on it.
-    fn announce_gpu_lost(&self) {
+    /// editor first so the alert is not stacked on it. The brush editor calls it too: its
+    /// example sheet has no view whose tick would see the loss.
+    pub(crate) fn announce_gpu_lost(&self) {
         if self.imp().gpu_lost_announced.replace(true) {
             return;
         }

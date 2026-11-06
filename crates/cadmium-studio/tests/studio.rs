@@ -78,7 +78,7 @@ fn brush_with(head: HeadSpec) -> BrushSpec {
 fn ink_floor(stroke: DemoStroke) -> f64 {
     match stroke {
         DemoStroke::SCurve => 0.12,
-        DemoStroke::RisingLine => 0.1,
+        DemoStroke::PressureRamp => 0.1,
     }
 }
 
@@ -133,7 +133,7 @@ fn a_fine_brush_inks_less_than_a_broad_one() {
 fn every_demo_stroke_paints() {
     let gpu = GpuContext::new().unwrap();
     let mut studio = BrushStudio::new(&gpu).unwrap();
-    for stroke in [DemoStroke::SCurve, DemoStroke::RisingLine] {
+    for stroke in [DemoStroke::SCurve, DemoStroke::PressureRamp] {
         studio.run(&gpu, &factory_brushes()[0], stroke).unwrap();
         let share = ink_share(&studio.rgba(&gpu).unwrap());
         assert!(share > ink_floor(stroke), "{stroke:?} {share}");

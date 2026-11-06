@@ -11,8 +11,8 @@ use adw::prelude::*;
 use cadmium_studio::THUMBNAIL_SIZE;
 use gtk::{cairo, gdk, glib};
 
-use super::fit::contain;
 use crate::LOG_DOMAIN;
+use crate::ink::contain;
 
 const STROKE_HEIGHT: u32 = 46;
 /// The thumbnail at `STROKE_HEIGHT`, keeping its aspect: 153 × 46 for 240 × 72, the width

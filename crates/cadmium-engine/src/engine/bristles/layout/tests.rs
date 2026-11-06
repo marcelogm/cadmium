@@ -70,6 +70,45 @@ fn todays_round_flat_and_fan_layouts_stay_bit_identical() {
     assert_eq!(prints, REFERENCE_FINGERPRINTS, "{prints:#x?}");
 }
 
+/// The other six factory heads, fingerprinted before the head sections were blended.
+const SHAPED_HEADS: [HeadSpec; 6] = [
+    HeadSpec::BRIGHT,
+    HeadSpec::FILBERT,
+    HeadSpec::RIGGER,
+    HeadSpec::ANGULAR,
+    HeadSpec::DAGGER,
+    HeadSpec::MOP,
+];
+const SHAPED_FINGERPRINTS: [u64; 12] = [
+    0x6279_b06d_79d0_d573,
+    0x48e5_e12d_12f8_bac8,
+    0x3cef_2cd3_0407_3fa3,
+    0x998a_943a_9766_76a5,
+    0x860e_2199_54e4_6fd4,
+    0x75d0_98ac_0a45_f6fd,
+    0xadf6_b075_cd0d_1fa1,
+    0x17f6_f20e_5d08_971a,
+    0xe889_9493_34db_2dc0,
+    0x74b6_9374_5f1f_40bf,
+    0xab7b_54ef_9f7f_1ffd,
+    0xa32f_bcbe_8db6_09a2,
+];
+
+fn shaped_fingerprints() -> Vec<u64> {
+    REFERENCE_RADII_PX
+        .iter()
+        .flat_map(|&radius_px| {
+            SHAPED_HEADS.map(|head| fingerprint(&reference_layout(head, radius_px)))
+        })
+        .collect()
+}
+
+#[test]
+fn the_six_shaped_factory_layouts_stay_bit_identical() {
+    let prints = shaped_fingerprints();
+    assert_eq!(prints, SHAPED_FINGERPRINTS, "{prints:#x?}");
+}
+
 const PROFILE_RADIUS_PX: f32 = 40.0;
 
 fn head_layout(head: HeadSpec) -> BristleLayout {
@@ -208,4 +247,71 @@ fn a_head_without_belly_or_round_fan_keeps_todays_splay() {
                 .all(|b| b.splay == [0.0, 0.0])
         );
     }
+}
+
+#[test]
+fn a_domed_fan_shortens_the_hairs_at_its_edges() {
+    let laid = head_layout(HeadSpec {
+        dome: 1.0,
+        ..HeadSpec::FAN
+    });
+    let centre = mean_length_px(&laid, |x| x.abs() < 0.1);
+    let edge = mean_length_px(&laid, |x| x.abs() > 0.35);
+    assert!(edge < 0.6 * centre, "edge {edge} centre {centre}");
+}
+
+#[test]
+fn a_slanted_fan_grows_its_hairs_across_its_spread() {
+    let plain = head_layout(HeadSpec::FAN);
+    let slanted = head_layout(HeadSpec {
+        slant: 1.0,
+        ..HeadSpec::FAN
+    });
+    assert_eq!(plain.bristles.len(), slanted.bristles.len());
+    let pairs: Vec<(f32, f32)> = plain
+        .bristles
+        .iter()
+        .zip(&slanted.bristles)
+        .map(|(p, s)| {
+            assert_eq!(p.root_px, s.root_px);
+            (p.root_px[0] / PROFILE_RADIUS_PX, s.length_px / p.length_px)
+        })
+        .collect();
+    let left = mean_ratio(&pairs, |x| x < -0.3);
+    let right = mean_ratio(&pairs, |x| x >= 0.3);
+    assert!(left < 0.3 * right, "left {left} right {right}");
+    assert!(right > 0.85, "right {right}");
+}
+
+#[test]
+fn a_thick_domed_fan_shortens_the_hairs_at_both_edges_of_its_band() {
+    // The fan's arc: radius 0.6 R about a centre shifted back by the arc's centroid. Only
+    // hairs near the middle of the spread count, so the band alone sets their dome.
+    let arc_radius = 0.6;
+    let spread = HeadSpec::FAN.fan_deg.to_radians();
+    let centre_y = -arc_radius * spread.sin() / spread;
+    let laid = head_layout(HeadSpec {
+        thickness: 0.6,
+        dome: 1.0,
+        ..HeadSpec::FAN
+    });
+    let mean = |keep: &dyn Fn(f32) -> bool| {
+        let kept: Vec<f32> = laid
+            .bristles
+            .iter()
+            .filter(|b| {
+                let [x, y] = b.root_px.map(|v| v / PROFILE_RADIUS_PX);
+                let across = x.atan2(y - centre_y) / spread;
+                across.abs() < 0.3 && keep(x.hypot(y - centre_y) - arc_radius)
+            })
+            .map(|b| b.length_px)
+            .collect();
+        assert!(!kept.is_empty());
+        kept.iter().sum::<f32>() / kept.len() as f32
+    };
+    let middle = mean(&|band: f32| band.abs() < 0.15);
+    let inner = mean(&|band: f32| band < -0.45);
+    let outer = mean(&|band: f32| band > 0.45);
+    assert!(inner < 0.95 * middle, "inner {inner} middle {middle}");
+    assert!(outer < 0.95 * middle, "outer {outer} middle {middle}");
 }

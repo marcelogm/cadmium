@@ -159,6 +159,7 @@ version = "0.0.1"
 dependencies = [
  "cadmium-engine",
  "png",
+ "wgpu",
 ]
 
 [[package]]

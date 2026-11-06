@@ -19,6 +19,7 @@ pub(super) const BRUSH: &str = "CADMIUM_SMOKE_BRUSH";
 pub(super) const BRUSH_EXPORT: &str = "CADMIUM_SMOKE_BRUSH_EXPORT";
 pub(super) const BRUSH_DELETE: &str = "CADMIUM_SMOKE_BRUSH_DELETE";
 pub(super) const BRUSH_EDITOR: &str = "CADMIUM_SMOKE_BRUSH_EDITOR";
+pub(super) const SHEET_STROKE: &str = "CADMIUM_SMOKE_SHEET_STROKE";
 
 /// What a smoke run does with the brush library.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -30,6 +31,8 @@ pub(super) struct SmokeBrushes {
     pub(super) delete: bool,
     /// How many frames the brush editor stays on show.
     pub(super) editor: Option<u32>,
+    /// Whether a stroke is painted on the editor's test sheet once it shows.
+    pub(super) sheet_stroke: bool,
 }
 
 impl SmokeBrushes {
@@ -43,6 +46,7 @@ impl SmokeBrushes {
             export: lookup_path(lookup, BRUSH_EXPORT),
             delete: lookup_flag(lookup, BRUSH_DELETE),
             editor: lookup(BRUSH_EDITOR).and_then(|value| parse_or_warn(BRUSH_EDITOR, &value)),
+            sheet_stroke: lookup_flag(lookup, SHEET_STROKE),
         }
     }
 
@@ -62,9 +66,13 @@ impl SmokeBrushes {
         export.into_iter().chain(delete).map(SmokeStep::Brush)
     }
 
-    pub(super) fn editor_step(&self) -> Option<SmokeStep> {
-        self.editor
-            .map(|frames| SmokeStep::Brush(BrushStep::Editor(frames)))
+    /// The editor, then a stroke on its test sheet when asked for.
+    pub(super) fn editor_steps(&self) -> impl Iterator<Item = SmokeStep> {
+        let editor = self.editor.map(BrushStep::Editor);
+        let stroke = self
+            .editor
+            .and(self.sheet_stroke.then_some(BrushStep::SheetStroke));
+        editor.into_iter().chain(stroke).map(SmokeStep::Brush)
     }
 }
 
@@ -83,13 +91,17 @@ pub(super) enum BrushStep {
     Delete,
     /// Opens the brush editor, on show for this many frames.
     Editor(u32),
+    /// Paints a stroke on the open editor's test sheet.
+    SheetStroke,
 }
 
 impl BrushStep {
-    /// The editor waits for the rack's thumbnails: opening it pauses them.
+    /// The editor waits for the rack's thumbnails (opening it pauses them); the sheet stroke
+    /// waits for the sheet's first frame.
     pub(super) fn is_ready(&self, window: &CadmiumWindow) -> bool {
         match self {
             BrushStep::Editor(_) => !window.thumbnails_pending(),
+            BrushStep::SheetStroke => editor::sheet_shown(window),
             _ => true,
         }
     }
@@ -101,6 +113,7 @@ impl BrushStep {
             BrushStep::Export(path) => window.export_brush_to(path),
             BrushStep::Delete => window.delete_worn_brush_now(),
             BrushStep::Editor(_) => editor::open(window),
+            BrushStep::SheetStroke => editor::paint_on_sheet(window),
         }
     }
 }

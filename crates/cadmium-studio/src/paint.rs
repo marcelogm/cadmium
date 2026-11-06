@@ -3,6 +3,10 @@
 use cadmium_engine::canvas::{Primer, Weave};
 use cadmium_engine::params::SimParams;
 
+/// What brushes are shown in when the paint at hand would show nothing: the rack's
+/// thumbnails always, the editor's examples when the painting's brush is empty or white.
+pub const DEMO_PIGMENT: &str = "ultramarine_blue";
+
 /// What the studio canvas is made of and what the brush is loaded with.
 #[derive(Clone, Debug, PartialEq)]
 pub struct StudioPaint {

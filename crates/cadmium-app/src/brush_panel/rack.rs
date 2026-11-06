@@ -8,7 +8,6 @@ use gtk::{gdk, gio, glib};
 
 use super::presentation::RackEntry;
 
-mod fit;
 mod row;
 mod stroke;
 mod tip_icon;

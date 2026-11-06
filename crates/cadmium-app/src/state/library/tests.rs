@@ -76,3 +76,32 @@ fn a_brush_outside_the_library_is_the_current_brush() {
     };
     assert_eq!(state.worn_brush_spec(), expected);
 }
+
+#[test]
+fn a_brush_saved_over_itself_is_worn_at_its_new_size() {
+    let mut state = painting_state();
+    let index = state.import_brush(&sized(20.0, "Small")).unwrap().index;
+    let original = state.brushes.get(index).unwrap().clone();
+    let edited = BrushSpec {
+        size_px: 64.0,
+        ..original.clone()
+    };
+    state.set_brush_size(30.0);
+    let saved = state.save_library_brush(index, &original, &edited).unwrap();
+    assert_eq!(state.worn_library_brush(), Some(saved.index));
+    assert_eq!(state.session.brush.geometry.max_diameter_px, 64.0);
+}
+
+#[test]
+fn a_brush_added_from_the_editor_is_worn() {
+    let mut state = painting_state();
+    let brush = BrushSpec {
+        name: "Mine".into(),
+        size_px: 33.0,
+        ..factory_brushes()[3].clone()
+    };
+    let saved = state.add_library_brush(brush);
+    assert!(state.brushes.is_user(saved.index));
+    assert_eq!(state.worn_library_brush(), Some(saved.index));
+    assert_eq!(state.session.brush.geometry.max_diameter_px, 33.0);
+}

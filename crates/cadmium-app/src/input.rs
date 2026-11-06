@@ -14,7 +14,7 @@ use crate::state::SharedState;
 const PAN_BUTTON: u32 = gdk::BUTTON_MIDDLE;
 
 mod navigation;
-mod samples;
+pub(crate) mod samples;
 mod stylus;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,7 +107,12 @@ pub fn attach(canvas: &CadmiumCanvas) {
     canvas.add_controller(pinch_gesture(canvas));
 }
 
-fn event_belongs_to_stroke<D: PartialEq>(stroking: Option<&D>, event: Option<&D>) -> bool {
+/// Whether an event from `event`'s device belongs to the stroke `stroking` paints; with
+/// either device unknown, it does.
+pub(crate) fn event_belongs_to_stroke<D: PartialEq>(
+    stroking: Option<&D>,
+    event: Option<&D>,
+) -> bool {
     match (stroking, event) {
         (Some(stroking), Some(event)) => stroking == event,
         _ => true,

@@ -39,6 +39,7 @@ pub struct SmokeConfig {
 
 impl SmokeConfig {
     pub fn run(self, app: &adw::Application, window: &CadmiumWindow) {
+        turn_animations_off();
         if let Some(policy) = self.dmabuf_selftest {
             run_dmabuf_selftest(app, window, policy);
             return;
@@ -54,6 +55,14 @@ impl SmokeConfig {
             file_work: FileWork::default(),
         };
         window.add_tick_callback(move |window, _| run.tick(window));
+    }
+}
+
+/// A smoke run shows every widget at rest: a screenshot never catches a dialog part-way
+/// through its open animation.
+fn turn_animations_off() {
+    if let Some(settings) = gtk::Settings::default() {
+        settings.set_gtk_enable_animations(false);
     }
 }
 

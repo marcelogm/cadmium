@@ -1,27 +1,42 @@
-use cadmium_engine::brush::{BrushSpec, factory_brushes};
+use cadmium_engine::brush::{BrushSpec, brush_to_json, factory_brushes};
 
-use super::{CUSTOM, summary_rows};
+use super::draft::SavePlan;
+use super::draft_for;
+use crate::state::test_support::painting_state;
 
 #[test]
-fn the_summary_names_a_factory_brush() {
-    let brush = factory_brushes().into_iter().next().unwrap();
-    let rows = summary_rows(&brush);
-    let head = cadmium_studio::head_name(&brush.head).unwrap();
-    let hair = cadmium_studio::hair_name(&brush.hair).unwrap();
-    assert_eq!(rows[0], ("Name", brush.name.clone()));
-    assert_eq!(rows[1], ("Head", head.to_owned()));
-    assert_eq!(rows[2], ("Hair", hair.to_owned()));
-    assert_eq!(rows[3], ("Size", format!("{:.0} px", brush.size_px)));
+fn a_worn_factory_brush_is_edited_at_its_suggested_size() {
+    let mut state = painting_state();
+    state.wear_library_brush(3);
+    state.set_brush_size(17.0);
+    let draft = draft_for(&state);
+    assert_eq!(draft.original(), &factory_brushes()[3]);
+    assert_eq!(draft.deletable(), None);
 }
 
 #[test]
-fn the_summary_calls_changed_parts_custom() {
-    let mut brush: BrushSpec = factory_brushes().into_iter().next().unwrap();
-    brush.head.thickness += 0.123;
-    brush.hair.stiffness += 0.123;
-    brush.size_px = 23.6;
-    let rows = summary_rows(&brush);
-    assert_eq!(rows[1].1, CUSTOM);
-    assert_eq!(rows[2].1, CUSTOM);
-    assert_eq!(rows[3].1, "24 px");
+fn a_worn_user_brush_is_saved_over_itself() {
+    let mut state = painting_state();
+    let mine = BrushSpec {
+        name: "Mine".into(),
+        ..factory_brushes()[3].clone()
+    };
+    let index = state.import_brush(&brush_to_json(&mine)).unwrap().index;
+    let draft = draft_for(&state);
+    assert_eq!(draft.save_plan(), SavePlan::Replace(index));
+    assert_eq!(draft.deletable(), Some(index));
+}
+
+#[test]
+fn a_brush_in_no_library_is_edited_as_the_current_brush() {
+    let mut state = painting_state();
+    state.session.brush.head.dome = 0.37;
+    let draft = draft_for(&state);
+    assert_eq!(draft.original().name, "Current Brush");
+    assert_eq!(draft.deletable(), None);
+    let plan = draft.save_plan();
+    assert!(
+        matches!(&plan, SavePlan::AddNew(brush) if brush.name == "Current Brush (copy)"),
+        "{plan:?}"
+    );
 }
