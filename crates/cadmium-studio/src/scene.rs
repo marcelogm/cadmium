@@ -5,6 +5,7 @@
 
 mod plane;
 mod targets;
+mod view;
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::{PresentRequest, ViewTransform};
@@ -12,6 +13,7 @@ use cadmium_engine::present::{PresentRequest, ViewTransform};
 use crate::{OrbitCamera, StudioPlayer};
 use plane::PlanePass;
 use targets::Targets;
+use view::SceneView;
 
 const COLOUR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -62,6 +64,38 @@ impl<'a> SceneFrame<'a> {
     }
 }
 
+/// Bind group 0 is the camera (`SceneView`), shared by every pass; each pass
+/// keeps its own resources in group 1.
+fn pipeline_layout(
+    gpu: &GpuContext,
+    view: &SceneView,
+    pass: &wgpu::BindGroupLayout,
+) -> wgpu::PipelineLayout {
+    gpu.device
+        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("scene"),
+            bind_group_layouts: &[Some(view.layout()), Some(pass)],
+            immediate_size: 0,
+        })
+}
+
+fn layout_entry(binding: u32, ty: wgpu::BindingType) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+        ty,
+        count: None,
+    }
+}
+
+fn uniform_binding() -> wgpu::BindingType {
+    wgpu::BindingType::Buffer {
+        ty: wgpu::BufferBindingType::Uniform,
+        has_dynamic_offset: false,
+        min_binding_size: None,
+    }
+}
+
 /// Triangle lists, both faces drawn: the camera's mirror flips the winding.
 fn primitive() -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
@@ -88,14 +122,17 @@ fn depth_state() -> wgpu::DepthStencilState {
 /// Renders the studio scene into a supersampled linear target.
 pub struct SceneRenderer {
     targets: Targets,
+    view: SceneView,
     plane: PlanePass,
 }
 
 impl SceneRenderer {
     pub fn new(gpu: &GpuContext) -> SceneRenderer {
+        let view = SceneView::new(gpu);
         SceneRenderer {
             targets: Targets::new(gpu, (1, 1)),
-            plane: PlanePass::new(gpu),
+            plane: PlanePass::new(gpu, &view),
+            view,
         }
     }
 
@@ -116,9 +153,10 @@ impl SceneRenderer {
         }
         let mut pass = self.begin_pass(encoder);
         if request.player.is_ready() {
-            let canvas = &request.player.session().canvas;
-            let view_proj = request.camera.view_proj();
-            self.plane.draw(gpu, &mut pass, canvas, view_proj);
+            let view = self.view.bind_group(gpu, request.camera);
+            pass.set_bind_group(0, &view, &[]);
+            self.plane
+                .draw(gpu, &mut pass, &request.player.session().canvas);
         }
         drop(pass);
         SceneFrame {

@@ -2,8 +2,13 @@
 // its four sides are a thin dark body. The geometry comes from the vertex
 // index: six vertices for the top face, then six per side.
 
-struct PlaneParams {
+struct ViewParams {
     view_proj: mat4x4<f32>,
+    eye: vec4<f32>,
+    toward_light: vec4<f32>,
+};
+
+struct PlaneParams {
     // The canvas rectangle: min x, min y, max x, max y, in canvas px.
     rect: vec4<f32>,
     // x: the body's depth below the canvas, in px (z = -x); yzw unused.
@@ -20,9 +25,10 @@ const EDGE_COLOUR: vec4<f32> = vec4<f32>(0.035, 0.03, 0.028, 1.0);
 const TOP_VERTICES: u32 = 6u;
 const VERTICES_PER_SIDE: u32 = 6u;
 
-@group(0) @binding(0) var<uniform> params: PlaneParams;
-@group(0) @binding(1) var canvas: texture_2d<f32>;
-@group(0) @binding(2) var canvas_sampler: sampler;
+@group(0) @binding(0) var<uniform> view: ViewParams;
+@group(1) @binding(0) var<uniform> params: PlaneParams;
+@group(1) @binding(1) var canvas: texture_2d<f32>;
+@group(1) @binding(2) var canvas_sampler: sampler;
 
 // The two triangles of a quad, as (along, across) corner weights.
 fn quad_corner(index: u32) -> vec2<f32> {
@@ -66,13 +72,14 @@ fn vs_main(@builtin(vertex_index) index: u32) -> PlaneVertex {
         out.uv = vec2<f32>(0.0);
         out.side = 1u;
     }
-    out.clip = params.view_proj * vec4<f32>(position, 1.0);
+    out.clip = view.view_proj * vec4<f32>(position, 1.0);
     return out;
 }
 
 @fragment
 fn fs_main(in: PlaneVertex) -> @location(0) vec4<f32> {
-    // Sampled outside the branch: textureSample needs uniform control flow.
+    // Sampled outside the branch, as textureSample needs uniform control
+    // flow; the side faces discard the sample and show the body colour.
     let colour = vec4<f32>(textureSample(canvas, canvas_sampler, in.uv).rgb, 1.0);
     if (in.side != 0u) {
         return EDGE_COLOUR;
