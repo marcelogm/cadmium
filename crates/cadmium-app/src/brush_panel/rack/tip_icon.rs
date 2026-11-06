@@ -87,3 +87,6 @@ fn set_ink(context: &cairo::Context, ink: &gdk::RGBA, alpha: f32) {
         f64::from(ink.alpha() * alpha),
     );
 }
+
+#[cfg(test)]
+mod tests;
