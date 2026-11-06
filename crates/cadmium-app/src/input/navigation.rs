@@ -9,6 +9,7 @@ use super::samples::{comes_from_a_pen, pen_buttons_of};
 use super::{Contact, PaintSurfaceWidget};
 use crate::canvas_widget::CadmiumCanvas;
 use crate::tools::Press;
+use crate::view::ViewStep;
 
 const ZOOM_PER_SCROLL_STEP: f32 = 1.1;
 const SURFACE_SCROLL_PER_STEP: f64 = 15.0;
@@ -127,7 +128,10 @@ fn scroll_view(
         f64::from(canvas.height()) / 2.0,
     ));
     let factor = ZOOM_PER_SCROLL_STEP.powf(-scroll_steps(controller, dy) as f32);
-    canvas.set_zoom_around(x, y, canvas.zoom() * factor);
+    canvas.apply_view_step(ViewStep::Zoom {
+        anchor: (x, y),
+        factor,
+    });
     glib::Propagation::Stop
 }
 
@@ -173,6 +177,9 @@ fn pinch_zoom(
         return;
     }
     if let Some((x, y)) = pinch.bounding_box_center() {
-        canvas.set_zoom_around(x, y, canvas.zoom() * (scale / previous) as f32);
+        canvas.apply_view_step(ViewStep::Zoom {
+            anchor: (x, y),
+            factor: (scale / previous) as f32,
+        });
     }
 }

@@ -6,9 +6,9 @@ use gtk::subclass::prelude::*;
 use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
-use crate::input::nav_drag::{NavMode, ViewStep, held_mode};
+use crate::input::nav_drag::{NavMode, held_mode};
 use crate::surface_scale::device_scale;
-use crate::view;
+use crate::view::{self, ViewStep};
 
 const FIT_MARGIN: f64 = 24.0;
 const ZOOM_STEP: f32 = 1.25;
@@ -51,44 +51,38 @@ impl CadmiumCanvas {
     }
 
     pub fn zoom_in(&self) {
-        self.zoom_around_center(self.zoom() * ZOOM_STEP);
+        self.apply_view_step(ViewStep::Zoom {
+            anchor: self.widget_centre(),
+            factor: ZOOM_STEP,
+        });
     }
 
     pub fn zoom_out(&self) {
-        self.zoom_around_center(self.zoom() / ZOOM_STEP);
-    }
-
-    pub fn set_zoom_around(&self, widget_x: f64, widget_y: f64, zoom: f32) {
+        // Kept off `ViewStep::Zoom` on purpose: `zoom * ZOOM_STEP.recip()` can differ from
+        // `zoom / ZOOM_STEP` in the last bit.
+        let (x, y) = self.widget_centre();
         let scale = self.device_scale();
         let current = self.state().borrow().view;
         self.imp().user_moved_view.set(true);
         self.set_view(view::zoom_around(
             current,
-            widget_x * scale,
-            widget_y * scale,
-            zoom,
+            x * scale,
+            y * scale,
+            current.zoom / ZOOM_STEP,
         ));
     }
 
     pub fn pan_by(&self, dx: f64, dy: f64) {
-        let scale = self.device_scale();
-        let current = self.state().borrow().view;
-        self.imp().user_moved_view.set(true);
-        self.set_view(view::pan(current, dx * scale, dy * scale));
+        self.apply_view_step(ViewStep::Pan { dx, dy });
     }
 
     /// Turns the picture clockwise by `delta` radians about widget point (`widget_x`, `widget_y`),
     /// which stays put on screen.
     pub fn rotate_around(&self, widget_x: f64, widget_y: f64, delta: f32) {
-        let scale = self.device_scale();
-        let current = self.state().borrow().view;
-        self.imp().user_moved_view.set(true);
-        self.set_view(view::rotate_around(
-            current,
-            widget_x * scale,
-            widget_y * scale,
+        self.apply_view_step(ViewStep::Rotate {
+            centre: (widget_x, widget_y),
             delta,
-        ));
+        });
     }
 
     /// Turns the picture one 15° step about the viewport centre, clockwise when `clockwise`,
@@ -124,28 +118,22 @@ impl CadmiumCanvas {
         }
     }
 
-    /// Applies one step of a navigation drag to the view.
+    /// Applies one step of a navigation gesture or key to the view.
     pub(crate) fn apply_view_step(&self, step: ViewStep) {
-        match step {
-            ViewStep::Pan { dx, dy } => self.pan_by(dx, dy),
-            ViewStep::Zoom { anchor, factor } => {
-                self.set_zoom_around(anchor.0, anchor.1, self.zoom() * factor)
-            }
-            ViewStep::Rotate { centre, delta } => self.rotate_around(centre.0, centre.1, delta),
-        }
+        let current = self.state().borrow().view;
+        self.imp().user_moved_view.set(true);
+        self.show_view(view::step(current, step, self.device_scale()));
     }
 
-    fn zoom_around_center(&self, zoom: f32) {
-        let (x, y) = self.widget_centre();
-        self.set_zoom_around(x, y, zoom);
-    }
-
+    /// Settles `new_view`, then shows it.
     fn set_view(&self, new_view: ViewTransform) {
-        let new_view = ViewTransform {
-            zoom: view::clamp_zoom(new_view.zoom),
-            rotation: view::normalise_rotation(new_view.rotation),
-            ..new_view
-        };
+        self.show_view(view::settle(new_view));
+    }
+
+    /// Shows `new_view`, which is already settled. `view::step` settles already, and settling
+    /// again would move the rotation (`normalise_rotation` isn't idempotent in f32), so user
+    /// steps come here, not through `set_view`.
+    fn show_view(&self, new_view: ViewTransform) {
         self.state().borrow_mut().view = new_view;
         self.queue_present();
         self.queue_draw();

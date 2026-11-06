@@ -121,5 +121,37 @@ pub fn pan(view: ViewTransform, dx_px: f64, dy_px: f64) -> ViewTransform {
     }
 }
 
+/// One change a navigation gesture or key makes to the view, in widget px.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ViewStep {
+    Pan { dx: f64, dy: f64 },
+    Zoom { anchor: (f64, f64), factor: f32 },
+    Rotate { centre: (f64, f64), delta: f32 },
+}
+
+/// `view` with its zoom in range and its rotation in (-π, π].
+pub fn settle(view: ViewTransform) -> ViewTransform {
+    ViewTransform {
+        zoom: clamp_zoom(view.zoom),
+        rotation: normalise_rotation(view.rotation),
+        ..view
+    }
+}
+
+/// `view` after `change`, whose widget px are `scale` device px each.
+pub fn step(view: ViewTransform, change: ViewStep, scale: f64) -> ViewTransform {
+    settle(match change {
+        ViewStep::Pan { dx, dy } => pan(view, dx * scale, dy * scale),
+        ViewStep::Zoom {
+            anchor: (x, y),
+            factor,
+        } => zoom_around(view, x * scale, y * scale, view.zoom * factor),
+        ViewStep::Rotate {
+            centre: (x, y),
+            delta,
+        } => rotate_around(view, x * scale, y * scale, delta),
+    })
+}
+
 #[cfg(test)]
 mod tests;
