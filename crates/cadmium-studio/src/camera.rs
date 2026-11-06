@@ -28,7 +28,14 @@ const PITCH_MAX: f32 = 85.0 * DEG;
 /// Distance factor of one zoom step; positive steps move closer.
 const ZOOM_STEP: f32 = 0.9;
 /// Zoom limits, as factors of the reset distance.
-const ZOOM_MIN: f32 = 0.3;
+///
+/// The closest zoom keeps the eye outside the framing sphere by at least the
+/// near distance, so the near plane never cuts the box or the brush. The
+/// distance is `zoom · R / sin(h)`, `h` the smaller half field of view (at
+/// most 22.5°), and `distance · (1 − NEAR_FACTOR) ≥ R` needs
+/// `zoom ≥ sin(22.5°) / 0.9 ≈ 0.425`. The one exception is a brush leaning
+/// past the sphere at a box corner (see `framing`).
+const ZOOM_MIN: f32 = 0.45;
 const ZOOM_MAX: f32 = 4.0;
 /// Near plane, as a factor of the distance; the far plane is at infinity, so
 /// a low pitch looking across a large canvas never clips it.

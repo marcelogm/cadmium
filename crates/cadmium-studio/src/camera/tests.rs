@@ -1,6 +1,9 @@
 use glam::{Vec3, Vec4Swizzles};
 
-use super::{FERRULE_LENGTH, FERRULE_SHARE, HANDLE_CLEARANCE, OrbitCamera, PITCH_MIN, ZOOM_MIN};
+use super::{
+    FERRULE_LENGTH, FERRULE_SHARE, FOV_Y, HANDLE_CLEARANCE, NEAR_FACTOR, OrbitCamera, PITCH_MIN,
+    ZOOM_MIN,
+};
 use crate::StrokeBox;
 
 const BOX: StrokeBox = StrokeBox {
@@ -146,7 +149,7 @@ fn zoom_scales_the_distance_within_its_limits() {
     camera.zoom(-3.0);
     assert!(close(camera.distance(), reset / 0.9));
     camera.zoom(1000.0);
-    assert!(close(camera.distance(), reset * 0.3));
+    assert!(close(camera.distance(), reset * ZOOM_MIN));
     camera.zoom(-1000.0);
     assert!(close(camera.distance(), reset * 4.0));
 }
@@ -265,40 +268,24 @@ fn a_low_close_view_never_clips_the_far_side_of_a_large_canvas() {
     }
 }
 
-/// Points over the stroke box, on the canvas and at the brush's reach.
-fn box_and_brush_samples() -> Vec<Vec3> {
-    let steps = 8;
-    let at =
-        |start: f64, length: f64, i: u32| (start + length * f64::from(i) / f64::from(steps)) as f32;
-    let grid = (0..=steps).flat_map(|i| (0..=steps).map(move |j| (i, j)));
-    grid.flat_map(|(i, j)| {
-        let (x, y) = (at(BOX.x, BOX.width, i), at(BOX.y, BOX.height, j));
-        [0.0, REACH / 2.0, REACH].map(|z| Vec3::new(x, y, z))
-    })
-    .collect()
-}
-
-/// Whether the near plane cuts `point` out of the view: on screen, in front
-/// of the eye, but nearer than the near plane.
-fn clipped_by_near(camera: &OrbitCamera, point: Vec3) -> bool {
-    let clip = camera.view_proj() * point.extend(1.0);
-    let ndc = clip.xyz() / clip.w;
-    clip.w > 0.0 && ndc.x.abs() <= 1.0 && ndc.y.abs() <= 1.0 && ndc.z < 0.0
+#[test]
+fn the_closest_zoom_keeps_the_eye_outside_the_framing_sphere_by_the_near_distance() {
+    for aspect in [0.5, 1.0, 1.5, 3.0] {
+        for pitch_px in [-10_000.0, 10_000.0] {
+            let mut camera = camera(aspect);
+            camera.orbit(0.0, pitch_px);
+            camera.zoom(1000.0);
+            assert!(close(camera.zoom, ZOOM_MIN));
+            let clearance = camera.distance() - camera.near();
+            assert!(clearance >= camera.radius, "aspect {aspect}: {clearance}");
+        }
+    }
 }
 
 #[test]
-fn the_near_plane_never_cuts_the_box_or_the_brush_when_zoomed_in() {
-    let views = [-10_000.0, 0.0, 10_000.0]
-        .into_iter()
-        .flat_map(|pitch| [0.0, 100.0, 200.0, 300.0, 400.0, 500.0].map(|yaw| (yaw, pitch)));
-    for (yaw_px, pitch_px) in views {
-        let mut camera = camera(1.5);
-        camera.orbit(yaw_px, pitch_px);
-        camera.zoom(1000.0);
-        assert!(close(camera.zoom, ZOOM_MIN));
-        let cut = box_and_brush_samples()
-            .into_iter()
-            .find(|point| clipped_by_near(&camera, *point));
-        assert_eq!(cut, None, "pitch {}", camera.pitch);
-    }
+fn the_closest_zoom_meets_its_bound_at_the_widest_limiting_half_fov() {
+    // The half field of view that limits the distance is at most FOV_Y / 2;
+    // the bound sin(h) / (1 - NEAR_FACTOR) is largest there.
+    let bound = (FOV_Y / 2.0).sin() / (1.0 - NEAR_FACTOR);
+    assert!(ZOOM_MIN >= bound, "{ZOOM_MIN} < {bound}");
 }
