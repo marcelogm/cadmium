@@ -175,6 +175,11 @@ fn a_paused_studio_stands_still() {
 fn new_paint_restarts_the_studio() {
     let clock = ScriptedClock::starting_at(1000.0);
     let mut state = open_at_rest(&clock);
+    for _ in 0..3 {
+        clock.advance(FRAME_MS);
+        state.encode_studio_frame().unwrap();
+    }
+    assert_ne!(snapshot(&state), reference(&state, 1.0, 0.0));
     state.set_load(0.4);
     state.session.canvas.spec.primer = Primer::SiennaImprimatura;
     assert_ne!(
@@ -186,6 +191,7 @@ fn new_paint_restarts_the_studio() {
         state.studio.as_ref().unwrap().player.paint(),
         &state.studio_paint()
     );
+    assert_eq!(snapshot(&state), reference(&state, 1.0, 0.0));
 }
 
 fn present(state: &mut AppState, target: &wgpu::Texture) -> Vec<u8> {
