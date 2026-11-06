@@ -310,14 +310,23 @@ fn the_handle_rises_up_the_brush_axis() {
     let snapshot = player.session().engine.bristle_snapshot(&gpu).unwrap();
     let radius = player.session().engine.bristle_view().ferrule_radius_px();
     let ferrule = glam::Vec3::from(snapshot.ferrule_px);
-    // 4.5 ferrule radii up the axis is inside the handle (1.5 to 5.5); as far
-    // down it lies under the canvas, clear of the hairs, where nothing shows.
-    let reach = glam::Vec3::from(snapshot.axis) * (4.5 * radius);
+    let axis = glam::Vec3::from(snapshot.axis);
+    // 4.5 ferrule radii up the axis is inside the handle (1.5 to 5.5). The
+    // same distance up the axis with its lean mirrored stays above the canvas,
+    // where a handle leaning the wrong way would show.
+    let reach = 4.5 * radius;
+    let leaned_back = glam::Vec3::new(-axis.x, -axis.y, axis.z);
+    // The handle is at most 1.2 radii thick: the probe must clear it, with room.
+    let clearance = (leaned_back * reach).cross(axis).length();
+    assert!(clearance > 2.4 * radius, "too little lean: {clearance} px");
     let shot = BrushShot::of(&gpu, &player);
-    assert!(shot.drawn_around(ferrule + reach), "no handle up the axis");
     assert!(
-        !shot.drawn_around(ferrule - reach),
-        "a handle down the axis"
+        shot.drawn_around(ferrule + axis * reach),
+        "no handle up the axis"
+    );
+    assert!(
+        !shot.drawn_around(ferrule + leaned_back * reach),
+        "the handle leans the wrong way"
     );
 }
 
