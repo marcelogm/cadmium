@@ -50,7 +50,7 @@ impl<'a> BristleView<'a> {
     }
 
     /// Segments in each bristle's chain: one fewer than its vertices, the
-    /// `BRISTLE_SEGMENTS` of [`BristleView::wgsl`].
+    /// `BRISTLE_SEGMENTS` of [`BristleView::wgsl_source`].
     pub fn segments(&self) -> u32 {
         BRISTLE_SEGMENTS as u32
     }
@@ -80,13 +80,9 @@ impl<'a> BristleView<'a> {
     /// handle pose, it binds [`BristleView::handle`] as its own
     /// `var<storage, read>` of `HandleState` (the buffer has no uniform usage) and
     /// calls `pose_of(handle)`.
-    pub fn wgsl(&self) -> String {
-        Self::wgsl_source()
-    }
-
-    /// [`BristleView::wgsl`] without a view: the module depends on no
-    /// engine state, so a renderer can build its pipelines before the first
-    /// dab.
+    ///
+    /// The module depends on no engine state, so a renderer can build its
+    /// pipelines before the first dab.
     pub fn wgsl_source() -> String {
         bristle_view_source()
     }

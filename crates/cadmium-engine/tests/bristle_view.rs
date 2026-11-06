@@ -68,11 +68,7 @@ fn probe_layout(gpu: &GpuContext) -> wgpu::BindGroupLayout {
         })
 }
 
-fn probe_pipeline(
-    gpu: &GpuContext,
-    view: &BristleView<'_>,
-    bind_layout: &wgpu::BindGroupLayout,
-) -> wgpu::ComputePipeline {
+fn probe_pipeline(gpu: &GpuContext, bind_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline {
     let layout = gpu
         .device
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -84,7 +80,9 @@ fn probe_pipeline(
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("bristle_view_probe"),
-            source: wgpu::ShaderSource::Wgsl(format!("{}\n{PROBE}", view.wgsl()).into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!("{}\n{PROBE}", BristleView::wgsl_source()).into(),
+            ),
         });
     gpu.device
         .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -99,7 +97,7 @@ fn probe_pipeline(
 
 fn probe_floats(gpu: &GpuContext, view: &BristleView<'_>, per_bristle: usize) -> Vec<f32> {
     let bind_layout = probe_layout(gpu);
-    let pipeline = probe_pipeline(gpu, view, &bind_layout);
+    let pipeline = probe_pipeline(gpu, &bind_layout);
     let vertices = view.count() * per_bristle as u32;
     let bytes = (u64::from(vertices) + EXTRA_SLOTS as u64) * VERTEX_BYTES;
     let out = gpu.device.create_buffer(&wgpu::BufferDescriptor {
