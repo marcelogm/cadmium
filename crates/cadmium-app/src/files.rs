@@ -27,6 +27,7 @@ mod read;
 mod title;
 mod write;
 
+/// The words the window uses while a file write runs, when it ends and when it fails.
 struct WriteWording {
     busy: &'static str,
     done: &'static str,
@@ -34,6 +35,7 @@ struct WriteWording {
     failed: &'static str,
 }
 
+/// The wording that matches a write: saving a painting or exporting an image.
 fn write_wording(kind: WriteKind) -> WriteWording {
     match kind {
         WriteKind::Painting => WriteWording {

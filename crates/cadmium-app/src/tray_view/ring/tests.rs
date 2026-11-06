@@ -68,10 +68,11 @@ fn a_ring_is_gone_once_its_fade_ends() {
 }
 
 const HOVER: (f64, f64) = (40.0, 50.0);
+const EDGE: Duration = Duration::from_millis(1);
+
 fn fade() -> Duration {
     Duration::from_secs_f32(RING_FADE_SECONDS)
 }
-const EDGE: Duration = Duration::from_millis(1);
 
 fn shown_at(centre: (f64, f64), released_at: Option<Instant>) -> ShownRing {
     ShownRing {
