@@ -78,7 +78,7 @@ impl AppState {
         let mut state = AppState {
             gpu,
             session,
-            brushes: BrushLibrary::load(PathBuf::new()).0,
+            brushes: BrushLibrary::factory_only(),
             view: ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,

@@ -73,6 +73,9 @@ impl CadmiumWindow {
             return;
         };
         state.borrow_mut().wear_brush(&brush);
+        if let Some(error) = &imported.save_error {
+            glib::g_warning!(LOG_DOMAIN, "couldn't save brush {}: {error}", brush.name);
+        }
         self.after_library_change(&import_toast(&brush.name, &imported));
     }
 
@@ -121,7 +124,7 @@ fn import_toast(name: &str, imported: &Imported) -> String {
     if imported.adjusted {
         toast.push_str("; some values were out of range and were adjusted");
     }
-    if !imported.saved {
+    if !imported.saved() {
         toast.push_str("; couldn't save it to your brush folder, it will be gone after you quit");
     }
     toast

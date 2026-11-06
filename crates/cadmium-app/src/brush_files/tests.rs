@@ -6,7 +6,7 @@ fn imported(renamed: bool, adjusted: bool, saved: bool) -> Imported {
         index: 15,
         renamed,
         adjusted,
-        saved,
+        save_error: (!saved).then(|| std::io::Error::other("full")),
     }
 }
 

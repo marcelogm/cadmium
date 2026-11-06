@@ -3,11 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use cadmium_engine::brush::{
-    BRUSH_EXTENSION, BrushFileError, BrushSettings, BrushSpec, brush_from_json, brush_to_json,
-    factory_brushes,
+    BRUSH_EXTENSION, BrushFileError, BrushSettings, BrushSpec, brush_from_json, factory_brushes,
 };
 
-const FALLBACK_SLUG: &str = "brush";
 const CUSTOM_BRUSH_NAME: &str = "Custom Brush";
 
 #[derive(Debug)]
@@ -33,7 +31,14 @@ pub struct Imported {
     pub index: usize,
     pub renamed: bool,
     pub adjusted: bool,
-    pub saved: bool,
+    /// Why the brush could not be written to the brush folder, if it could not.
+    pub save_error: Option<std::io::Error>,
+}
+
+impl Imported {
+    pub fn saved(&self) -> bool {
+        self.save_error.is_none()
+    }
 }
 
 struct UserBrush {
@@ -42,30 +47,35 @@ struct UserBrush {
 }
 
 pub struct BrushLibrary {
-    dir: PathBuf,
+    dir: Option<PathBuf>,
     factory: Vec<BrushSpec>,
     user: Vec<UserBrush>,
 }
 
 impl BrushLibrary {
+    /// Just the factory brushes; imports live for the session and are never written.
+    pub fn factory_only() -> BrushLibrary {
+        BrushLibrary {
+            dir: None,
+            factory: factory_brushes(),
+            user: Vec::new(),
+        }
+    }
+
     /// Reads every `.cadbrush` in `dir`, skipping unreadable ones with a warning each.
     pub fn load(dir: PathBuf) -> (BrushLibrary, Vec<String>) {
         let mut warnings = Vec::new();
-        let mut user = Vec::new();
-        for path in brush_files(&dir) {
+        let mut library = BrushLibrary {
+            dir: Some(dir),
+            ..BrushLibrary::factory_only()
+        };
+        let paths = library.dir.as_deref().map(brush_files).unwrap_or_default();
+        for path in paths {
             match read_brush(&path) {
-                Ok(brush) => user.push(UserBrush {
-                    brush,
-                    path: Some(path),
-                }),
+                Ok(brush) => library.add(brush, Some(path)),
                 Err(error) => warnings.push(format!("{}: {error}", path.display())),
             }
         }
-        let library = BrushLibrary {
-            dir,
-            factory: factory_brushes(),
-            user,
-        };
         (library, warnings)
     }
 
@@ -94,27 +104,36 @@ impl BrushLibrary {
         let name = self.unique_name(&brush.name);
         let renamed = name != brush.name;
         brush.name = name;
-        let path = self.write(&brush).ok();
-        let saved = path.is_some();
+        let (path, save_error) = match writing::write(self.dir.as_deref(), &brush) {
+            Ok(path) => (Some(path), None),
+            Err(error) => (None, Some(error)),
+        };
         self.user.push(UserBrush { brush, path });
-        let index = self.factory.len() + self.user.len() - 1;
         Ok(Imported {
-            index,
+            index: self.factory.len() + self.user.len() - 1,
             renamed,
             adjusted: read.adjusted,
-            saved,
+            save_error,
         })
     }
 
+    /// Removes a user brush's file, then the brush; a file already gone counts as removed.
     pub fn delete(&mut self, index: usize) -> Result<(), LibraryError> {
         if !self.is_user(index) {
             return Err(LibraryError::NotAUserBrush);
         }
-        let removed = self.user.remove(index - self.factory.len());
-        if let Some(path) = removed.path {
-            std::fs::remove_file(path).map_err(LibraryError::Io)?;
+        let position = index - self.factory.len();
+        if let Some(path) = &self.user[position].path {
+            writing::remove(path).map_err(LibraryError::Io)?;
         }
+        self.user.remove(position);
         Ok(())
+    }
+
+    /// Adds a brush read from disk, numbering its name when another brush has it.
+    fn add(&mut self, mut brush: BrushSpec, path: Option<PathBuf>) {
+        brush.name = self.unique_name(&brush.name);
+        self.user.push(UserBrush { brush, path });
     }
 
     fn unique_name(&self, wanted: &str) -> String {
@@ -126,13 +145,6 @@ impl BrushLibrary {
             .map(|number| format!("{wanted} ({number})"))
             .find(|name| !taken(name))
             .expect("some number is free")
-    }
-
-    fn write(&self, brush: &BrushSpec) -> std::io::Result<PathBuf> {
-        std::fs::create_dir_all(&self.dir)?;
-        let path = free_path(&self.dir, &file_name_for(&brush.name));
-        std::fs::write(&path, brush_to_json(brush))?;
-        Ok(path)
     }
 }
 
@@ -169,35 +181,11 @@ fn read_brush(path: &Path) -> Result<BrushSpec, String> {
         .map_err(|error| error.to_string())
 }
 
-/// A file name made only of lowercase ASCII letters, digits and dashes.
-pub(crate) fn file_name_for(name: &str) -> String {
-    let mut slug = String::new();
-    for word in name
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|w| !w.is_empty())
-    {
-        if !slug.is_empty() {
-            slug.push('-');
-        }
-        slug.push_str(&word.to_ascii_lowercase());
-    }
-    if slug.is_empty() {
-        slug.push_str(FALLBACK_SLUG);
-    }
-    format!("{slug}.{BRUSH_EXTENSION}")
-}
+mod writing;
 
-fn free_path(dir: &Path, file_name: &str) -> PathBuf {
-    let candidate = dir.join(file_name);
-    if !candidate.exists() {
-        return candidate;
-    }
-    let stem = file_name.trim_end_matches(&format!(".{BRUSH_EXTENSION}"));
-    (2..)
-        .map(|number| dir.join(format!("{stem}-{number}.{BRUSH_EXTENSION}")))
-        .find(|path| !path.exists())
-        .expect("some number is free")
-}
+#[cfg(test)]
+use writing::MAX_SLUG_CHARS;
+pub(crate) use writing::file_name_for;
 
 #[cfg(test)]
 mod tests;
