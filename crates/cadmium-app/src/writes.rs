@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+mod closing;
+
+pub use closing::{AfterWrite, CloseStep, Closing};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EditMark(u64);
 

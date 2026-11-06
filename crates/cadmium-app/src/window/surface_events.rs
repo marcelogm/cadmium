@@ -159,7 +159,7 @@ impl CadmiumWindow {
                 #[weak(rename_to = window)]
                 self,
                 move || {
-                    window.imp().close_confirmed.set(true);
+                    window.imp().closing.borrow_mut().confirm();
                     window.close();
                 }
             ),

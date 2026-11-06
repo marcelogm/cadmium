@@ -1,7 +1,7 @@
 use std::cell::{Cell, OnceCell, RefCell};
 
 use super::*;
-use crate::writes::WritesInFlight;
+use crate::writes::Closing;
 
 /// The open brush editor's dialog, and what stops the editor before the window closes it.
 pub struct KeptEditor {
@@ -45,14 +45,10 @@ pub struct CadmiumWindow {
     /// Whether the window has claimed the Space press now held down.
     pub space_claimed: Cell<bool>,
     pub panel_refreshers: RefCell<Vec<PanelRefresher>>,
-    pub writes_in_flight: RefCell<WritesInFlight>,
+    pub closing: RefCell<Closing>,
     pub document_generation: Cell<u64>,
-    pub close_after_writes: Cell<bool>,
     pub write_wait_timeout: RefCell<Option<glib::SourceId>>,
     pub write_wait_alert: RefCell<Option<adw::AlertDialog>>,
-    pub abandon_writes: Cell<bool>,
-    pub close_confirmed: Cell<bool>,
-    pub asking_to_close: Cell<bool>,
     pub history_disabled_announced: Cell<bool>,
     pub copy_presentation_announced: Cell<bool>,
     pub gpu_lost_announced: Cell<bool>,
