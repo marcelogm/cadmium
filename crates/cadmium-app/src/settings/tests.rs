@@ -1,10 +1,5 @@
 use super::*;
-
-fn scratch_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("cadmium-settings-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    dir
-}
+use crate::test_dir::TempDir;
 
 #[test]
 fn defaults_keep_the_pen_buttons_as_they_always_were() {
@@ -37,13 +32,14 @@ fn unreadable_json_gives_the_defaults() {
 
 #[test]
 fn a_missing_file_gives_the_defaults() {
-    let store = SettingsStore::load(scratch_dir("missing").join("settings.json"));
+    let store = SettingsStore::load(TempDir::new().path().join("settings.json"));
     assert_eq!(store.get(), Settings::default());
 }
 
 #[test]
 fn a_change_is_saved_and_read_back() {
-    let path = scratch_dir("saved").join("nested").join("settings.json");
+    let dir = TempDir::new();
+    let path = dir.path().join("nested").join("settings.json");
     let mut store = SettingsStore::load(path.clone());
     store
         .update(|settings| settings.upper_pen_button = PenButtonAction::Zoom)

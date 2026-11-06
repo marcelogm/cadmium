@@ -4,15 +4,21 @@ use gtk::glib;
 use serde::{Deserialize, Serialize};
 
 use crate::LOG_DOMAIN;
+use crate::atomic_file;
 
 /// What a pen barrel button does on the painting canvas.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PenButtonAction {
+    /// Drags the canvas along (labelled Move).
     Pan,
+    /// Zooms the canvas.
     Zoom,
+    /// Turns the canvas.
     Rotate,
+    /// Picks the colour under the pen onto the brush.
     PickColour,
+    /// Ignores the button.
     Nothing,
 }
 
@@ -38,7 +44,8 @@ impl PenButtonAction {
     }
 }
 
-/// The painter's preferences.
+/// The painter's preferences. They are read through [`Settings::from_json`], which gives each
+/// field its own fallback, so this does not derive `Deserialize`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Settings {
     /// The barrel button nearer the tip (GDK's middle button).
@@ -118,7 +125,8 @@ impl SettingsStore {
         self.settings
     }
 
-    /// Changes the settings, then saves them to the file, if there is one.
+    /// Changes the settings, then saves them to the file, if there is one. The change stands even
+    /// if saving fails.
     pub fn update(&mut self, change: impl FnOnce(&mut Settings)) -> std::io::Result<()> {
         change(&mut self.settings);
         match &self.file {
@@ -128,15 +136,12 @@ impl SettingsStore {
     }
 }
 
-/// Writes `settings` to `file` through a temporary file beside it, so the file is never
-/// left half-written.
+/// Writes `settings` to `file` through a temporary file beside it (see [`atomic_file::replace`]).
 fn write_settings(file: &Path, settings: Settings) -> std::io::Result<()> {
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let temp = file.with_extension("json.tmp");
-    std::fs::write(&temp, settings.to_json())?;
-    std::fs::rename(&temp, file)
+    atomic_file::replace(file, &file.with_extension("json.tmp"), &settings.to_json())
 }
 
 #[cfg(test)]

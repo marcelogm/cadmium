@@ -180,6 +180,4 @@ use writing::MAX_SLUG_CHARS;
 pub(crate) use writing::file_name_for;
 
 #[cfg(test)]
-mod test_dir;
-#[cfg(test)]
 mod tests;
