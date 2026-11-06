@@ -9,6 +9,7 @@ use gtk::{gdk, glib, graphene, gsk};
 
 use crate::handlers::run_handlers;
 use crate::input::PaintSurfaceWidget;
+use crate::input::nav_drag::held_mode;
 use crate::presenter::FramePresenter;
 use crate::state::SharedState;
 use crate::surface_scale::SurfaceScaleWatch;
@@ -151,8 +152,8 @@ impl PaintSurfaceWidget for CadmiumCanvas {
         run_handlers(&self.imp().released_handlers, self);
     }
 
-    fn holds_navigation(&self) -> bool {
-        self.space_mode().is_some()
+    fn holds_navigation(&self, modifiers: gdk::ModifierType) -> bool {
+        held_mode(self.space_held(), modifiers).is_some()
     }
 }
 

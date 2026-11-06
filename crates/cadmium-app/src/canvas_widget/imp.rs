@@ -22,7 +22,8 @@ pub struct CadmiumCanvas {
     pub gpu_lost_handlers: RefCell<Vec<CanvasHandler>>,
     pub released_handlers: RefCell<Vec<CanvasHandler>>,
     pub gpu_lost_announced: Cell<bool>,
-    pub(crate) space_mode: Cell<Option<NavMode>>,
+    pub(crate) space_held: Cell<bool>,
+    pub(crate) held_mode: Cell<Option<NavMode>>,
 }
 
 #[glib::object_subclass]

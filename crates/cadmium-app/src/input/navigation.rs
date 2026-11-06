@@ -4,7 +4,7 @@ use std::rc::Rc;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
-use super::nav_drag::{NavButton, NavDrag, NavPress, nav_mode, space_mode};
+use super::nav_drag::{NavButton, NavDrag, NavPress, held_mode, nav_mode};
 use super::samples::{comes_from_a_pen, pen_buttons_of};
 use super::{Contact, PaintSurfaceWidget};
 use crate::canvas_widget::CadmiumCanvas;
@@ -61,9 +61,7 @@ fn begin_nav(
                 .current_event()
                 .is_some_and(|event| comes_from_a_pen(&event)),
             // The pointer event's own modifier state is current; key events' is one step behind.
-            space: canvas
-                .space_mode()
-                .map(|_| space_mode(drag.current_event_state())),
+            held: held_mode(canvas.space_held(), drag.current_event_state()),
             tool_pans: state.ui_tool.profile().press_on(canvas.surface()) == Press::Pan,
             stroking: state.is_stroking(),
             pen_buttons: pen_buttons_of(canvas),
