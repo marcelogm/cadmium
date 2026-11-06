@@ -25,6 +25,8 @@ wgpu = { workspace = true }
 wgpu-hal = { workspace = true }
 async-channel = { workspace = true }
 pollster = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = { workspace = true }

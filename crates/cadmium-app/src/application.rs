@@ -10,6 +10,7 @@ use crate::LOG_DOMAIN;
 use crate::brush_library::BrushLibrary;
 use crate::dialogs;
 use crate::presets::starting_canvas_spec;
+use crate::settings::SettingsStore;
 use crate::smoke::SmokeConfig;
 use crate::state::{AppState, SharedState};
 use crate::window::CadmiumWindow;
@@ -90,6 +91,9 @@ fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
     };
     if let Some(dir) = brush_dir {
         load_brush_library(&state, dir);
+    }
+    if smoke.borrow().is_none() {
+        state.borrow_mut().settings = SettingsStore::load(SettingsStore::default_path());
     }
     let window = CadmiumWindow::new(app, state);
     if let Some(smoke) = smoke.borrow_mut().take() {
