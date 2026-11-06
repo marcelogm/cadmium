@@ -69,11 +69,9 @@ impl BrushPanel {
         let Some(index) = rack::picked(flow) else {
             return;
         };
-        let picked = self.state.borrow().brushes.get(index).cloned();
-        let Some(brush) = picked else {
-            return;
-        };
-        self.change_brush(|state| state.wear_brush(&brush));
+        self.change_brush(|state| {
+            state.wear_library_brush(index);
+        });
     }
 
     fn change_reload_each_stroke(self: &Rc<Self>, row: &adw::SwitchRow) {

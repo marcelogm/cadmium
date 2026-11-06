@@ -29,6 +29,7 @@ mod gesture;
 mod hand;
 mod history;
 mod lab;
+mod library;
 mod pen;
 mod recipe;
 mod tray;
@@ -45,6 +46,8 @@ pub struct AppState {
     pub gpu: Rc<GpuContext>,
     pub session: PaintSession,
     pub brushes: BrushLibrary,
+    /// The library brush last picked, told apart from others with the same head and hair.
+    worn_brush_index: Option<usize>,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
     pub tube_slot: usize,
@@ -79,6 +82,7 @@ impl AppState {
             gpu,
             session,
             brushes: BrushLibrary::factory_only(),
+            worn_brush_index: None,
             view: ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,

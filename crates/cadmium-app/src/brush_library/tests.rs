@@ -270,7 +270,7 @@ fn the_default_settings_export_under_the_first_factory_name() {
     let library = BrushLibrary::factory_only();
     let settings = BrushSettings::default();
     assert_eq!(
-        export_name(&library, &settings),
+        export_name(&library, None, &settings),
         ("Round · Synthetic".to_string(), Some(0))
     );
 }
@@ -281,7 +281,7 @@ fn tuned_settings_export_as_a_custom_brush() {
     let mut settings = BrushSettings::default();
     settings.hair.clumping = 0.123;
     assert_eq!(
-        export_name(&library, &settings),
+        export_name(&library, None, &settings),
         ("Custom Brush".to_string(), None)
     );
 }
@@ -295,7 +295,20 @@ fn an_imported_brush_exports_under_its_own_name() {
     let mut settings = BrushSettings::default();
     settings.wear(library.get(imported.index).unwrap());
     assert_eq!(
-        export_name(&library, &settings),
+        export_name(&library, None, &settings),
         ("Soft Dome".to_string(), Some(imported.index))
+    );
+}
+
+#[test]
+fn a_re_imported_factory_brush_exports_under_its_new_name() {
+    let mut library = BrushLibrary::factory_only();
+    let imported = library
+        .import(&brush_to_json(&factory_brushes()[0]))
+        .unwrap();
+    let settings = BrushSettings::default();
+    assert_eq!(
+        export_name(&library, Some(imported.index), &settings),
+        ("Round · Synthetic (2)".to_string(), Some(imported.index))
     );
 }

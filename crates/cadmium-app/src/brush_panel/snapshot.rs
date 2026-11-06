@@ -2,7 +2,7 @@ use cadmium_engine::canvas::primer_srgb8;
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 
-use super::presentation::{PLATE_GAP_KEY, PanelTool, panel_tool, worn_brush};
+use super::presentation::{PLATE_GAP_KEY, PanelTool, panel_tool};
 use crate::state::AppState;
 
 pub(super) struct PigmentChoice {
@@ -47,7 +47,7 @@ impl Snapshot {
         let colour_of = |mixture: &Mixture| mixture_colour(db, &slots, primer, mixture);
         let palette_colour = colour_of(&state.palette_mixture());
         let (held_colour, held_level, held_is_clean) = held_paint(state, tool, colour_of);
-        let worn = worn_brush(state.brushes.all(), &session.brush);
+        let worn = state.worn_library_brush();
         Snapshot {
             tool,
             tube_slot: state.tube_slot,

@@ -3,10 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use cadmium_engine::brush::{
-    BRUSH_EXTENSION, BrushFileError, BrushSettings, BrushSpec, brush_from_json, factory_brushes,
+    BRUSH_EXTENSION, BrushFileError, BrushSpec, brush_from_json, factory_brushes,
 };
-
-const CUSTOM_BRUSH_NAME: &str = "Custom Brush";
 
 #[derive(Debug)]
 pub enum LibraryError {
@@ -148,20 +146,6 @@ impl BrushLibrary {
     }
 }
 
-/// The name the worn brush is exported under, and its library index when it is a library brush.
-pub(crate) fn export_name(
-    brushes: &BrushLibrary,
-    settings: &BrushSettings,
-) -> (String, Option<usize>) {
-    let index = brushes
-        .all()
-        .position(|brush| brush.head == settings.head && brush.hair == settings.hair);
-    let name = index
-        .and_then(|index| brushes.get(index))
-        .map_or_else(|| CUSTOM_BRUSH_NAME.to_string(), |brush| brush.name.clone());
-    (name, index)
-}
-
 fn brush_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -181,7 +165,10 @@ fn read_brush(path: &Path) -> Result<BrushSpec, String> {
         .map_err(|error| error.to_string())
 }
 
+mod worn;
 mod writing;
+
+pub(crate) use worn::{export_name, index_after_delete, worn_brush};
 
 #[cfg(test)]
 use writing::MAX_SLUG_CHARS;

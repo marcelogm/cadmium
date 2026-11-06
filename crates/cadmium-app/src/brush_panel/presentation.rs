@@ -1,4 +1,3 @@
-use cadmium_engine::brush::{BrushSettings, BrushSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
 use cadmium_engine::stroke::Tool;
 use gtk::gdk;
@@ -121,16 +120,6 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
         "{} {PLATE_GAP_UNIT}",
         format_param(plate_gap_spec(), gap_um)
     )
-}
-
-/// The library brush whose head and hair the settings wear, if any.
-pub(super) fn worn_brush<'a>(
-    brushes: impl IntoIterator<Item = &'a BrushSpec>,
-    settings: &BrushSettings,
-) -> Option<usize> {
-    brushes
-        .into_iter()
-        .position(|brush| brush.head == settings.head && brush.hair == settings.hair)
 }
 
 pub(super) fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {

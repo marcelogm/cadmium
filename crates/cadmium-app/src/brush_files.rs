@@ -1,9 +1,10 @@
 //! Import, export and delete brushes from the brush panel's menu.
 
 use std::fmt::Display;
+use std::path::Path;
 
 use adw::prelude::*;
-use cadmium_engine::brush::{BRUSH_EXTENSION, BrushSpec, brush_to_json, default_brush};
+use cadmium_engine::brush::{BRUSH_EXTENSION, BrushSpec, brush_to_json};
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
@@ -25,7 +26,7 @@ fn worn_brush_spec(window: &CadmiumWindow) -> (BrushSpec, Option<usize>) {
     let state = window.state();
     let state = state.borrow();
     let settings = &state.session.brush;
-    let (name, index) = export_name(&state.brushes, settings);
+    let (name, index) = export_name(&state.brushes, state.worn_library_brush(), settings);
     let spec = BrushSpec {
         name,
         size_px: settings.geometry.max_diameter_px,
@@ -53,30 +54,52 @@ impl CadmiumWindow {
     }
 
     pub fn delete_brush(&self) {
-        let (spec, index) = worn_brush_spec(self);
-        let Some(index) = index.filter(|&index| self.state().borrow().brushes.is_user(index))
-        else {
+        let Some((name, index)) = self.deletable_worn_brush() else {
             return;
         };
-        glib::spawn_future_local(delete_confirmed(self.downgrade(), spec.name, index));
+        glib::spawn_future_local(delete_confirmed(self.downgrade(), name, index));
+    }
+
+    /// Imports the brush file at `path`, as the Import dialog does once a file is chosen.
+    pub(crate) fn import_brush_file(&self, path: &Path) {
+        match std::fs::read_to_string(path) {
+            Ok(text) => self.import_brush_text(&text),
+            Err(error) => self.report_brush_error(IMPORT_FAILED, &error),
+        }
+    }
+
+    fn deletable_worn_brush(&self) -> Option<(String, usize)> {
+        let (spec, index) = worn_brush_spec(self);
+        let index = index.filter(|&index| self.state().borrow().brushes.is_user(index))?;
+        Some((spec.name, index))
     }
 
     fn import_brush_text(&self, text: &str) {
         let state = self.state();
-        let imported = state.borrow_mut().brushes.import(text);
+        let imported = state.borrow_mut().import_brush(text);
         let imported = match imported {
             Ok(imported) => imported,
             Err(error) => return self.report_brush_error(IMPORT_FAILED, &error),
         };
-        let brush = state.borrow().brushes.get(imported.index).cloned();
-        let Some(brush) = brush else {
+        let name = state
+            .borrow()
+            .brushes
+            .get(imported.index)
+            .map(|brush| brush.name.clone());
+        let Some(name) = name else {
             return;
         };
-        state.borrow_mut().wear_brush(&brush);
         if let Some(error) = &imported.save_error {
-            glib::g_warning!(LOG_DOMAIN, "couldn't save brush {}: {error}", brush.name);
+            glib::g_warning!(LOG_DOMAIN, "couldn't save brush {name}: {error}");
         }
-        self.after_library_change(&import_toast(&brush.name, &imported));
+        self.after_library_change(&import_toast(&name, &imported));
+    }
+
+    fn write_brush_file(&self, target: &Path, spec: &BrushSpec) {
+        match std::fs::write(target, brush_to_json(spec)) {
+            Ok(()) => self.show_toast(&format!("Exported {}", spec.name)),
+            Err(error) => self.report_brush_error(EXPORT_FAILED, &error),
+        }
     }
 
     fn delete_library_brush(&self, name: &str, index: usize) {
@@ -89,10 +112,9 @@ impl CadmiumWindow {
         if !still_there {
             return;
         }
-        let deleted = state.borrow_mut().brushes.delete(index);
+        let deleted = state.borrow_mut().delete_library_brush(index);
         match deleted {
             Ok(()) => {
-                state.borrow_mut().wear_brush(&default_brush());
                 self.after_library_change(&format!("Deleted {name}"));
             }
             Err(error) => {
@@ -144,10 +166,7 @@ async fn import_chosen(window: glib::WeakRef<CadmiumWindow>, dialog: gtk::FileDi
     let Some(path) = window.chosen_path(chosen) else {
         return;
     };
-    match std::fs::read_to_string(&path) {
-        Ok(text) => window.import_brush_text(&text),
-        Err(error) => window.report_brush_error(IMPORT_FAILED, &error),
-    }
+    window.import_brush_file(&path);
 }
 
 async fn export_chosen(
@@ -161,10 +180,7 @@ async fn export_chosen(
     let Some(window) = window.upgrade() else {
         return;
     };
-    match std::fs::write(&target, brush_to_json(&spec)) {
-        Ok(()) => window.show_toast(&format!("Exported {}", spec.name)),
-        Err(error) => window.report_brush_error(EXPORT_FAILED, &error),
-    }
+    window.write_brush_file(&target, &spec);
 }
 
 async fn delete_confirmed(window: glib::WeakRef<CadmiumWindow>, name: String, index: usize) {
