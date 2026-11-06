@@ -167,7 +167,7 @@ impl HeadSpec {
         if self.dome == 0.0 && self.slant == 0.0 {
             return 1.0;
         }
-        let reach = root[0].hypot(root[1]).min(1.0);
+        let reach = libm::hypotf(root[0], root[1]).min(1.0);
         let domed = (1.0 - self.dome) + self.dome * (1.0 - reach * reach).sqrt();
         let side = if self.slant < 0.0 { -1.0 } else { 1.0 };
         let across = (side * root[0]).clamp(-1.0, 1.0);
@@ -179,7 +179,7 @@ impl HeadSpec {
     /// `section`: a fan splays a round head; a bar or an arc only by its belly.
     pub(crate) fn bulge(&self, section: Section) -> f32 {
         let fan = if section == Section::Round {
-            self.fan_deg.to_radians().sin()
+            libm::sinf(self.fan_deg.to_radians())
         } else {
             0.0
         };

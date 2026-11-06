@@ -5,13 +5,15 @@ const REFERENCE_SEED: u64 = 0x00C4_D317_B215_7E55;
 const FNV_OFFSET: u64 = 0xCBF2_9CE4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01B3;
 const REFERENCE_RADII_PX: [f32; 2] = [20.0, 250.0];
+/// The layout takes its trigonometry from `libm`, not the platform C library, so these
+/// fingerprints hold on every target.
 const REFERENCE_FINGERPRINTS: [u64; 6] = [
-    0x594a_bad9_9ce2_5b25,
+    0x9a7d_4ff9_f7ce_3cb1,
     0x5b59_a02d_093c_7ac0,
-    0x8e89_0549_0040_9312,
-    0xbc67_3f4d_3400_b197,
+    0xcec6_4534_26f4_5c0e,
+    0xcdce_f70d_f3b4_5bf6,
     0xb6e0_90a2_960b_a9df,
-    0x2740_9292_b9bc_3b26,
+    0xd629_1582_9975_975a,
 ];
 
 fn fnv(hash: u64, word: u32) -> u64 {
@@ -81,17 +83,17 @@ const SHAPED_HEADS: [HeadSpec; 6] = [
 ];
 const SHAPED_FINGERPRINTS: [u64; 12] = [
     0x6279_b06d_79d0_d573,
-    0x48e5_e12d_12f8_bac8,
-    0x3cef_2cd3_0407_3fa3,
+    0xc449_8131_f72c_f262,
+    0xe714_41e2_94d1_0d22,
     0x998a_943a_9766_76a5,
-    0x860e_2199_54e4_6fd4,
-    0x75d0_98ac_0a45_f6fd,
+    0x33ff_5db3_bcee_30f4,
+    0x3866_d850_e530_e106,
     0xadf6_b075_cd0d_1fa1,
-    0x17f6_f20e_5d08_971a,
-    0xe889_9493_34db_2dc0,
+    0x0663_4d56_3c3b_7f68,
+    0xcdaa_5753_8d5f_eaf2,
     0x74b6_9374_5f1f_40bf,
-    0xab7b_54ef_9f7f_1ffd,
-    0xa32f_bcbe_8db6_09a2,
+    0xe1f1_821e_9052_d35e,
+    0x9bee_0120_e660_2da4,
 ];
 
 fn shaped_fingerprints() -> Vec<u64> {

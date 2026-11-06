@@ -23,6 +23,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 zstd = "0.13"
 png = "0.17"
 libc = "0.2"
+libm = "0.2.16"
 drm-fourcc = "2.2"
 async-channel = "2"
 gtk = { package = "gtk4", version = "0.11.5", features = ["gnome_50"] }

@@ -201,7 +201,7 @@ fn blend(mix: SectionMix, [round, bar, arc]: [Root; 3]) -> Root {
 /// the lone section's lane wherever one section is left.
 fn blended_lane(mix: SectionMix, [round, bar, arc]: [[f32; 2]; 3]) -> [f32; 2] {
     let turn = (mix.bar + mix.arc) * turn_between(round, bar) + mix.arc * turn_between(bar, arc);
-    let (sin, cos) = turn.sin_cos();
+    let (sin, cos) = libm::sincosf(turn);
     [
         round[0] * cos - round[1] * sin,
         round[0] * sin + round[1] * cos,
@@ -212,7 +212,7 @@ fn blended_lane(mix: SectionMix, [round, bar, arc]: [[f32; 2]; 3]) -> [f32; 2] {
 fn turn_between(from: [f32; 2], to: [f32; 2]) -> f32 {
     let cross = from[0] * to[1] - from[1] * to[0];
     let dot = from[0] * to[0] + from[1] * to[1];
-    cross.atan2(dot)
+    libm::atan2f(cross, dot)
 }
 
 fn unit_of(position_px: [f32; 2], radius_px: f32) -> [f32; 2] {
@@ -225,7 +225,7 @@ fn spiral_root(index: usize, count: usize, radius_px: f32, random: &mut SplitMix
     let jitter_px = (random.unit() - 0.5) * SPIRAL_JITTER_SHARE * spacing_px;
     let distance_px = (ideal_px + jitter_px).clamp(0.0, radius_px);
     let angle = index as f32 * GOLDEN_ANGLE_RAD + (random.unit() - 0.5) * SPIRAL_JITTER_SHARE;
-    let outward = [angle.cos(), angle.sin()];
+    let outward = [libm::cosf(angle), libm::sinf(angle)];
     let position_px = [outward[0] * distance_px, outward[1] * distance_px];
     Root {
         position_px,
@@ -257,7 +257,7 @@ fn flat_root(
         (2.0 * across - 1.0) * radius_px,
         (2.0 * thick - 1.0) * radius_px * thickness,
     ];
-    let reach_px = position_px[0].hypot(position_px[1]);
+    let reach_px = libm::hypotf(position_px[0], position_px[1]);
     if reach_px > radius_px {
         let shrink = radius_px / reach_px;
         position_px = [position_px[0] * shrink, position_px[1] * shrink];
@@ -287,7 +287,7 @@ fn fan_root(
     let angle = (2.0 * across - 1.0) * spread;
     let band_px = 2.0 * radius_px * head.thickness;
     let distance_px = FAN_ARC_RADIUS_SHARE * radius_px + (thick - 0.5) * band_px;
-    let outward = [angle.sin(), angle.cos()];
+    let outward = [libm::sinf(angle), libm::cosf(angle)];
     let position_px = [
         outward[0] * distance_px,
         outward[1] * distance_px - arc_centroid_px(radius_px, spread),
@@ -305,7 +305,7 @@ fn fan_root(
 /// it, so the fan stays centred on the ferrule. A spread too small to divide by is straight.
 fn arc_centroid_px(radius_px: f32, spread: f32) -> f32 {
     if spread > MIN_ARC_SPREAD_RAD {
-        FAN_ARC_RADIUS_SHARE * radius_px * spread.sin() / spread
+        FAN_ARC_RADIUS_SHARE * radius_px * libm::sinf(spread) / spread
     } else {
         FAN_ARC_RADIUS_SHARE * radius_px
     }
