@@ -271,17 +271,16 @@ fn impasto_edge_facing_the_light_is_brighter_than_the_edge_in_shadow() {
 fn a_quarter_turn_swings_the_canvas_around_the_view_origin() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = blank(&gpu);
-    let centre = (64 * 128 + 64) * 4;
     let turned = ViewTransform {
         rotation: std::f32::consts::FRAC_PI_2,
         ..IDENTITY_VIEW
     };
     let px = shade_and_present(&gpu, &mut canvas, turned, 128, 128);
-    assert_eq!(&px[centre..centre + 3], &[192, 191, 188]);
-    let turned_back_on = ViewTransform {
+    assert_eq!(texel(&px, 64, 64), BACKGROUND_SRGB8);
+    let shifted_into_view = ViewTransform {
         origin_y: 128.0,
         ..turned
     };
-    let px = shade_and_present(&gpu, &mut canvas, turned_back_on, 128, 128);
-    assert_ne!(&px[centre..centre + 3], &[192, 191, 188]);
+    let px = shade_and_present(&gpu, &mut canvas, shifted_into_view, 128, 128);
+    assert_ne!(texel(&px, 64, 64), BACKGROUND_SRGB8);
 }
