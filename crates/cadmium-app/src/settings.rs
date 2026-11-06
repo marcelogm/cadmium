@@ -37,7 +37,8 @@ impl PenButtonAction {
         Self::ALL
             .iter()
             .position(|action| *action == self)
-            .map_or(0, |index| index as u32)
+            .map(|index| index as u32)
+            .expect("every action is listed in ALL")
     }
 
     /// The action at a Preferences menu position, if there is one.

@@ -80,3 +80,26 @@ fn menu_positions_map_to_actions_and_back() {
         None
     );
 }
+
+/// Adding an action makes this `match` fail to compile until `ALL` is updated too.
+#[test]
+fn every_action_is_in_the_menu() {
+    for action in PenButtonAction::ALL {
+        match action {
+            PenButtonAction::Pan
+            | PenButtonAction::Zoom
+            | PenButtonAction::Rotate
+            | PenButtonAction::PickColour
+            | PenButtonAction::Nothing => {}
+        }
+    }
+    for action in [
+        PenButtonAction::Pan,
+        PenButtonAction::Zoom,
+        PenButtonAction::Rotate,
+        PenButtonAction::PickColour,
+        PenButtonAction::Nothing,
+    ] {
+        assert!(PenButtonAction::ALL.contains(&action));
+    }
+}

@@ -5,10 +5,14 @@ use crate::LOG_DOMAIN;
 use crate::settings::{PenButtonAction, Settings};
 use crate::state::SharedState;
 
-/// The Preferences dialog: what each pen barrel button does on the canvas. A change
-/// applies and is saved at once.
+const SAVE_FAILED: &str =
+    "Couldn't save the preferences; they'll be back to how they were next time";
+
+/// The app's Preferences dialog; each change applies and is saved at once.
 pub fn preferences_dialog(state: &SharedState) -> adw::PreferencesDialog {
-    let dialog = adw::PreferencesDialog::new();
+    let dialog = adw::PreferencesDialog::builder()
+        .title("Preferences")
+        .build();
     let page = adw::PreferencesPage::new();
     let group = adw::PreferencesGroup::builder()
         .title("Pen Buttons")
@@ -17,12 +21,14 @@ pub fn preferences_dialog(state: &SharedState) -> adw::PreferencesDialog {
     let settings = state.borrow().settings.get();
     group.add(&button_row(
         state,
+        &dialog,
         ("Lower Button", "Nearer the tip"),
         settings.lower_pen_button,
         |settings, action| settings.lower_pen_button = action,
     ));
     group.add(&button_row(
         state,
+        &dialog,
         ("Upper Button", "Further from the tip"),
         settings.upper_pen_button,
         |settings, action| settings.upper_pen_button = action,
@@ -35,6 +41,7 @@ pub fn preferences_dialog(state: &SharedState) -> adw::PreferencesDialog {
 /// A row choosing the action of one pen button; `bind` stores the choice in the settings.
 fn button_row(
     state: &SharedState,
+    dialog: &adw::PreferencesDialog,
     (title, subtitle): (&str, &str),
     current: PenButtonAction,
     bind: fn(&mut Settings, PenButtonAction),
@@ -52,6 +59,8 @@ fn button_row(
     row.connect_selected_notify(glib::clone!(
         #[strong]
         state,
+        #[weak]
+        dialog,
         move |row| {
             let Some(action) = PenButtonAction::at_menu_index(row.selected()) else {
                 return;
@@ -62,6 +71,7 @@ fn button_row(
                 .update(|settings| bind(settings, action));
             if let Err(error) = saved {
                 glib::g_warning!(LOG_DOMAIN, "couldn't save the settings: {error}");
+                dialog.add_toast(adw::Toast::new(SAVE_FAILED));
             }
         }
     ));
