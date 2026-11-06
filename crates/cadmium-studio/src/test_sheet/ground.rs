@@ -2,7 +2,7 @@
 //! ground itself, so paint lies over the lines as ink over graph paper: thin paint lets them
 //! show, opaque paint hides them.
 
-use cadmium_engine::canvas::{Canvas, Primer, StateTexture, primer_reflectance};
+use cadmium_engine::canvas::{Canvas, StateTexture, primer_reflectance};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::pigments::PigmentDb;
 use cadmium_engine::spectral::BandValues;
@@ -33,9 +33,9 @@ pub(super) fn line_share(x: u32, y: u32) -> f32 {
     }
 }
 
-/// Rules the grid into `canvas`'s ground of paper, which paint then lies over.
+/// Rules the grid into `canvas`'s ground, the canvas's primer, which paint then lies over.
 pub(super) fn rule(canvas: &mut Canvas, gpu: &GpuContext, db: &PigmentDb) {
-    let paper = primer_reflectance(db, Primer::Paper);
+    let paper = primer_reflectance(db, canvas.spec.primer);
     let size = (canvas.spec.width, canvas.spec.height);
     let textures = [
         (StateTexture::DryRefl0, 0),
@@ -50,10 +50,14 @@ pub(super) fn rule(canvas: &mut Canvas, gpu: &GpuContext, db: &PigmentDb) {
 /// One ground texture's texels, row by row: four bands of the paper, darkened on the lines.
 fn ruled_texels(paper: &BandValues, first_band: usize, (width, height): (u32, u32)) -> Vec<f32> {
     let bands = &paper[first_band..first_band + BANDS_PER_TEXTURE];
-    (0..height)
-        .flat_map(|y| (0..width).map(move |x| line_share(x, y)))
-        .flat_map(|share| bands.iter().map(move |band| band * share))
-        .collect()
+    let mut texels = Vec::with_capacity((width * height) as usize * BANDS_PER_TEXTURE);
+    for y in 0..height {
+        for x in 0..width {
+            let share = line_share(x, y);
+            texels.extend(bands.iter().map(|band| band * share));
+        }
+    }
+    texels
 }
 
 #[cfg(test)]
