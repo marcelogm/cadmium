@@ -18,7 +18,9 @@ pub(super) struct DabRecord {
     pub(super) radius: f32,
     pub(super) pressure: f32,
     pub(super) altitude: f32,
-    pub(super) azimuth: f32,
+    /// 1 on a stroke's first resting dab, whose rest takes the found height
+    /// outright instead of following it at `rest_follow`.
+    pub(super) first_rest: u32,
     pub(super) direction: f32,
     pub(super) speed: f32,
     pub(super) orientation: [f32; 2],

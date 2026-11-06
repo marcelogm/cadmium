@@ -3,7 +3,7 @@ struct Dab {
     radius: f32,
     pressure: f32,
     altitude: f32,
-    azimuth: f32,
+    first_rest: u32,
     direction: f32,
     speed: f32,
     orientation: vec2<f32>,
@@ -62,6 +62,14 @@ struct Body {
     granted_ratio: f32,
     granted_fractions: array<f32, 8>,
 };
+
+// Where a dab leaves the height it rests on. A stroke's first rest takes the
+// found height outright: mix() at a full follow is not enough on drivers that
+// lower it as a + t * (b - a) (radv, for one), whose rounding would carry the
+// previous stroke's rest into this one.
+fn followed_rest(previous: f32, found: f32, follow: f32, first_rest: u32) -> f32 {
+    return select(mix(previous, found, follow), found, first_rest != 0u);
+}
 
 fn tip_index(texel: vec2<u32>) -> u32 {
     return (texel.y * TIP_SIZE + texel.x) * TIP_CHANNELS;

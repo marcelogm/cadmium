@@ -55,7 +55,7 @@ const RUST_DAB_OFFSETS: [(&str, usize); 55] = [
     field!(radius),
     field!(pressure),
     field!(altitude),
-    field!(azimuth),
+    field!(first_rest),
     field!(direction),
     field!(speed),
     field!(orientation),

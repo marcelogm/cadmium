@@ -17,7 +17,6 @@ const CAPILLARY_SHARE: f32 = 0.2;
 const SPREAD_APRON_PX: i32 = 1;
 const TIP_APRON_TEXELS: f32 = 1.0;
 const KNIFE_SPILL_SHARE: f32 = 0.5;
-const FIRST_REST_FOLLOW: f32 = 1.0;
 const _: () = assert!(DEFAULT_SPACING * 2.0 * MAX_TIP_RADIUS < MAX_SWEEP_PX);
 
 #[derive(Clone, Copy, Debug)]
@@ -56,6 +55,35 @@ pub(super) struct Placement {
     pub(super) profile: &'static ToolProfile,
 }
 
+/// Marks a stroke's first resting dab, so its rest measures the surface afresh.
+#[derive(Debug)]
+pub(super) struct FirstRest {
+    pending: bool,
+}
+
+impl FirstRest {
+    pub(super) fn new() -> FirstRest {
+        FirstRest { pending: true }
+    }
+
+    pub(super) fn begin_stroke(&mut self) {
+        self.pending = true;
+    }
+
+    pub(super) fn take(&mut self, placements: &mut [Placement]) {
+        if !self.pending {
+            return;
+        }
+        if let Some(first_resting) = placements
+            .iter_mut()
+            .find(|placement| !placement.profile.wipes())
+        {
+            first_resting.record.first_rest = 1;
+            self.pending = false;
+        }
+    }
+}
+
 impl WetOilEngine {
     pub(super) fn place_all(
         &mut self,
@@ -82,17 +110,6 @@ impl WetOilEngine {
                 .advance(&mut placement.record, dab, &self.params);
         }
         Some(placement)
-    }
-
-    pub(super) fn take_first_rest(&mut self, placements: &mut [Placement]) {
-        if let Some(first_resting) = placements
-            .iter_mut()
-            .find(|placement| !placement.profile.wipes())
-            && self.rest_pending
-        {
-            first_resting.record.rest_follow = FIRST_REST_FOLLOW;
-            self.rest_pending = false;
-        }
     }
 
     fn step_since_previous_dab(&mut self, dab: &Dab) -> DabStep {
@@ -172,7 +189,6 @@ impl WetOilEngine {
             radius: footprint.radius,
             pressure: dab.pressure,
             altitude: dab.altitude,
-            azimuth: dab.azimuth,
             direction: dab.direction,
             speed: dab.speed,
             orientation: [cos, sin],
@@ -311,3 +327,6 @@ fn tip_window(semi_axes: [f32; 2]) -> ([i32; 2], [u32; 2]) {
     let size = reach.map(|r| 2 * r + 1);
     (origin, size)
 }
+
+#[cfg(test)]
+mod tests;
