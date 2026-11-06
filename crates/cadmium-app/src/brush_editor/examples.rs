@@ -10,7 +10,8 @@ mod queue;
 mod view;
 
 pub(super) use job::{ExampleJob, Tick};
-pub(super) use queue::{ExampleQueue, Order};
+use queue::ExampleQueue;
+pub(super) use queue::Order;
 pub(super) use view::ExamplesView;
 
 /// What the toast says when the example strokes can't be painted.
