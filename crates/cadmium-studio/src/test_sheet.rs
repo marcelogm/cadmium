@@ -31,7 +31,8 @@ pub struct SheetFrame {
     pub view: ViewTransform,
 }
 
-/// A canvas to try a brush on by hand.
+/// A canvas to try a brush on by hand. Its paint is fixed when it is made: a new paint
+/// takes a new sheet.
 pub struct TestSheet {
     session: PaintSession,
     paint: StudioPaint,
@@ -77,8 +78,10 @@ impl TestSheet {
         self.brush = brush.clone();
     }
 
-    /// Puts the brush in hand, freshly loaded with the paint, then starts a stroke at `sample`.
+    /// Ends a stroke still under way, puts the brush in hand, freshly loaded with the paint,
+    /// then starts a stroke at `sample`.
     pub fn begin_stroke(&mut self, gpu: &GpuContext, sample: StrokeSample) {
+        self.session.end_stroke();
         let loading = Loading {
             recipe: &self.paint.recipe,
             load: self.paint.load,
@@ -88,10 +91,12 @@ impl TestSheet {
         self.session.begin_stroke(gpu, sample);
     }
 
+    /// Carries the stroke under way on through `samples`; without one, does nothing.
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {
         self.session.add_samples(samples);
     }
 
+    /// Lifts the brush off the sheet; what is left of the stroke paints on later frames.
     pub fn end_stroke(&mut self) {
         self.session.end_stroke();
     }

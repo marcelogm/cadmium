@@ -22,6 +22,8 @@ const ONE_TO_ONE: ViewTransform = ViewTransform {
 const DIP_TOLERANCE: f64 = 0.01;
 /// The darkest a bare paper pixel may present at (the ground alone is ≈ 247, 248, 244).
 const PAPER_FLOOR: u8 = 238;
+/// How many runs of `FRAMES` frames a stroke may take to settle.
+const SETTLE_RUNS: u32 = 10;
 
 fn paint() -> StudioPaint {
     StudioPaint {
@@ -191,4 +193,61 @@ fn every_stroke_starts_with_a_fresh_dip() {
         (dipped_again - dipped).abs() <= dipped * DIP_TOLERANCE,
         "the second stroke began at {dipped_again}, the first at {dipped}"
     );
+}
+
+/// Paints a row, then begins a second one with a bigger brush, ending the first stroke
+/// first only when `ended` is set; the settled pixels.
+fn second_stroke_after(gpu: &GpuContext, ended: bool) -> Vec<u8> {
+    let mut sheet = round_sheet(gpu);
+    let mut clock_ms = 0.0;
+    let first = row(60.0);
+    sheet.begin_stroke(gpu, first[0]);
+    sheet.add_samples(&first[1..]);
+    if ended {
+        sheet.end_stroke();
+    }
+    sheet.set_brush(&BrushSpec {
+        size_px: BRUSH_PX * 3.0,
+        ..brush(HeadSpec::ROUND)
+    });
+    stroke(gpu, &mut sheet, &row(140.0));
+    shown(gpu, &mut sheet, &mut clock_ms)
+}
+
+#[test]
+fn a_stroke_left_open_ends_as_it_began_before_the_next_dip() {
+    let gpu = GpuContext::new().unwrap();
+    let left_open = second_stroke_after(&gpu, false);
+    let ended = second_stroke_after(&gpu, true);
+    let differing = left_open.iter().zip(&ended).filter(|(a, b)| a != b).count();
+    assert_eq!(differing, 0, "{differing} bytes differ");
+}
+
+#[test]
+fn clearing_mid_stroke_gives_back_a_blank_sheet() {
+    let gpu = GpuContext::new().unwrap();
+    let mut sheet = round_sheet(&gpu);
+    let mut clock_ms = 0.0;
+    let blank = shown(&gpu, &mut sheet, &mut clock_ms);
+    let samples = row(60.0);
+    sheet.begin_stroke(&gpu, samples[0]);
+    sheet.add_samples(&samples[1..]);
+    sheet.clear(&gpu).unwrap();
+    let cleared = shown(&gpu, &mut sheet, &mut clock_ms);
+    assert!(cleared == blank, "the cleared sheet is not blank");
+    assert_eq!(wet_volume(&gpu, &sheet), 0.0);
+}
+
+#[test]
+fn a_stroke_needs_frames_until_it_settles() {
+    let gpu = GpuContext::new().unwrap();
+    let mut sheet = round_sheet(&gpu);
+    let mut clock_ms = 0.0;
+    stroke(&gpu, &mut sheet, &row(60.0));
+    assert!(sheet.needs_frames(clock_ms));
+    let settled = (0..SETTLE_RUNS).any(|_| {
+        shown(&gpu, &mut sheet, &mut clock_ms);
+        !sheet.needs_frames(clock_ms)
+    });
+    assert!(settled, "still needs frames at {clock_ms} ms");
 }
