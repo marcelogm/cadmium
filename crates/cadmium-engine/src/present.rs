@@ -15,14 +15,19 @@ pub struct ViewTransform {
     pub zoom: f32,
 }
 
-/// What to present: a linear `Rgba16Float` view (with `TEXTURE_BINDING`) and how to frame it.
+/// What to present and how to frame it.
+///
+/// `source` must be a 2D, single-sample, single-layer view of a linear `Rgba16Float`
+/// texture with `TEXTURE_BINDING`. Other formats (e.g. `Rgba8Unorm`) are not rejected and
+/// render incorrectly. `view.origin_*` and `view.zoom` are in source-texel units; the
+/// source's alpha is ignored.
 pub struct PresentRequest<'a> {
     pub source: &'a wgpu::TextureView,
     pub view: ViewTransform,
 }
 
 impl<'a> PresentRequest<'a> {
-    pub fn of_canvas(canvas: &'a Canvas, view: ViewTransform) -> PresentRequest<'a> {
+    pub fn of_canvas(canvas: &'a Canvas, view: ViewTransform) -> Self {
         PresentRequest {
             source: canvas.view(StateTexture::Display),
             view,
