@@ -233,10 +233,7 @@ fn a_light_touch_on_ridges_taller_than_its_press_is_carried_by_their_tops() {
 fn hairs_pulled_into_clumps_across_a_dried_edge_stay_on_top_of_it() {
     let gpu = GpuContext::new().unwrap();
     let mut painting = session(&gpu);
-    painting
-        .engine
-        .params_mut()
-        .set("bristle_clumping", FULL_CLUMPING);
+    painting.brush.hair.clumping = FULL_CLUMPING;
     dried(&gpu, &painting, |x| {
         if x >= STEP_EDGE_X {
             STEP_HEIGHT_UM

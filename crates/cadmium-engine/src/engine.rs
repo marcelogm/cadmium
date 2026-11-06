@@ -184,6 +184,8 @@ impl WetOilEngine {
         }
         self.bristles.take_up(brush.tool);
         let head = brush.head.clamped();
+        let hair = brush.hair.clamped();
+        self.bristles.wear(hair);
         let request = LayoutRequest {
             head,
             ferrule_radius_px: self.tip_radius,
@@ -191,7 +193,7 @@ impl WetOilEngine {
         };
         self.bristles
             .fit(gpu, &self.buffers.bristles, &request, encoder);
-        let tuning = BristleTuning::of(&self.params, &head, canvas.tooth_height_um());
+        let tuning = BristleTuning::of(&self.params, &head, &hair, canvas.tooth_height_um());
         self.buffers.bristles.tune(gpu, &tuning, encoder);
     }
 
@@ -279,6 +281,7 @@ impl PaintEngine for WetOilEngine {
         let tuning = BristleTuning::of(
             &self.params,
             &self.bristles.head(),
+            &self.bristles.hair(),
             canvas.tooth_height_um(),
         );
         self.buffers.bristles.tune(gpu, &tuning, encoder);

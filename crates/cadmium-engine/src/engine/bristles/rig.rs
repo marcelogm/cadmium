@@ -1,7 +1,7 @@
 use super::handle::{HandleClock, HandleGauge, ferrule_over_nib, substeps};
 use super::layout::{BristleLayout, LayoutRequest, layout};
 use super::state::BristleBuffers;
-use crate::brush::HeadSpec;
+use crate::brush::{HairSpec, HeadSpec};
 use crate::engine::dab_record::DabRecord;
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
@@ -45,6 +45,7 @@ pub(crate) struct BristleRig {
     reach_px: f32,
     ferrule_radius_px: f32,
     head: HeadSpec,
+    hair: HairSpec,
     tool: Option<Tool>,
     previous_orientation: Option<[f32; 2]>,
     reset_pending: bool,
@@ -66,6 +67,7 @@ impl BristleRig {
             reach_px: 0.0,
             ferrule_radius_px: 0.0,
             head: HeadSpec::ROUND,
+            hair: HairSpec::default(),
             tool: None,
             previous_orientation: None,
             reset_pending: true,
@@ -83,6 +85,14 @@ impl BristleRig {
 
     pub(crate) fn head(&self) -> HeadSpec {
         self.head
+    }
+
+    pub(crate) fn wear(&mut self, hair: HairSpec) {
+        self.hair = hair;
+    }
+
+    pub(crate) fn hair(&self) -> HairSpec {
+        self.hair
     }
 
     pub(crate) fn clusters(&self) -> &[u32] {
@@ -172,8 +182,8 @@ impl BristleRig {
         record.dt_seconds = self.clock.elapsed_seconds(dab.time_ms);
         record.substeps = substeps(travel_px, self.mean_radius_px);
         record.bristle_total = self.count;
-        record.bristle_stiffness = params.get("bristle_stiffness");
-        record.bristle_damping = params.get("bristle_damping");
+        record.bristle_stiffness = self.hair.stiffness;
+        record.bristle_damping = self.hair.damping;
         record.bristle_reset = u32::from(std::mem::take(&mut self.reset_pending));
         record.bristle_orientation = self.continuous_orientation(record.orientation);
         self.last_dab = Some(*record);

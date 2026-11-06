@@ -1,5 +1,5 @@
 use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
-use cadmium_engine::engine::{BristleSnapshot, FULL_DIP, PaintEngine};
+use cadmium_engine::engine::{BristleSnapshot, FULL_DIP};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::session::PaintSession;
@@ -94,9 +94,7 @@ fn nearest_tip_gaps_px(snapshot: &BristleSnapshot) -> Vec<f32> {
 fn fully_clumped_wet_bristles_still_keep_apart_from_one_another() {
     let gpu = GpuContext::new().unwrap();
     let mut wet = session(&gpu);
-    wet.engine
-        .params_mut()
-        .set("bristle_clumping", FULL_CLUMPING);
+    wet.brush.hair.clumping = FULL_CLUMPING;
     without_wgpu_errors(&gpu, || wet.dip(&gpu, &full_load(), FULL_DIP).unwrap());
     let gaps = nearest_tip_gaps_px(&press(&gpu, &mut wet));
     let narrow_gap_px = gaps[gaps.len() / NARROW_GAP_RANK_DIVISOR];

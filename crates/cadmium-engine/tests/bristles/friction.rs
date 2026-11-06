@@ -1,6 +1,6 @@
+use cadmium_engine::brush::HairSpec;
 use cadmium_engine::engine::{BristleSnapshot, PaintEngine};
 use cadmium_engine::gpu::GpuContext;
-use cadmium_engine::params::SimParams;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::StrokeSample;
 
@@ -120,9 +120,9 @@ fn tip_offsets(snapshot: &BristleSnapshot) -> Vec<[f32; 2]> {
 
 fn loose_session(gpu: &GpuContext, plasticity: f32) -> PaintSession {
     let mut s = session(gpu);
-    s.engine.params_mut().set("bristle_clumping", 0.0);
-    s.engine.params_mut().set("bristle_pointing", 0.0);
-    s.engine.params_mut().set("bristle_plasticity", plasticity);
+    s.brush.hair.clumping = 0.0;
+    s.brush.hair.wet_point = 0.0;
+    s.brush.hair.bend_memory = plasticity;
     s
 }
 
@@ -218,7 +218,7 @@ fn on_a_turn_the_tips_lag_the_new_direction() {
 #[test]
 fn a_brush_stays_bent_after_a_hard_stroke() {
     let gpu = GpuContext::new().unwrap();
-    let plasticity = SimParams::default().get("bristle_plasticity");
+    let plasticity = HairSpec::default().bend_memory;
     let stroke = hard_stroke_then_lift(&gpu, plasticity);
     let during_px = mean_bend_px(&stroke.during, &stroke.resting);
     let settled_px = mean_bend_px(&stroke.settled, &stroke.resting);
@@ -241,9 +241,7 @@ fn no_plasticity_lets_the_brush_spring_back_straight() {
 
 fn trail_px(gpu: &GpuContext, drag_anisotropy: f32) -> f32 {
     let mut s = session(gpu);
-    s.engine
-        .params_mut()
-        .set("bristle_drag_anisotropy", drag_anisotropy);
+    s.brush.hair.drag_anisotropy = drag_anisotropy;
     let mut stroke = Stroke::begin(gpu, &mut s, PRESSURE);
     let snapshot = stroke.run(gpu, &mut s, STROKE_SAMPLES);
     handle(&snapshot)[0] - tip_centroid(&snapshot)[0]
@@ -269,7 +267,7 @@ fn rest_bend_bits(snapshot: &BristleSnapshot) -> Vec<[u32; 2]> {
 }
 
 fn bends_after_timeless_presses(gpu: &GpuContext, presses: u32) -> Vec<[u32; 2]> {
-    let plasticity = SimParams::default().get("bristle_plasticity");
+    let plasticity = HairSpec::default().bend_memory;
     let mut s = loose_session(gpu, plasticity);
     let mut stroke = Stroke::begin(gpu, &mut s, HARD_PRESSURE);
     stroke.run(gpu, &mut s, STROKE_SAMPLES);
@@ -301,7 +299,7 @@ fn holding_a_pressed_brush_still_does_not_bend_it_further() {
 
 fn radial_set_lean(gpu: &GpuContext, pressure: f32) -> f32 {
     let mut s = session(gpu);
-    s.engine.params_mut().set("bristle_clumping", 0.0);
+    s.brush.hair.clumping = 0.0;
     let mut stroke = Stroke::begin(gpu, &mut s, pressure);
     stroke.run(gpu, &mut s, STROKE_SAMPLES);
     s.end_stroke();

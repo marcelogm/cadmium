@@ -197,6 +197,7 @@ impl WetOilEngine {
         regions: &DabRegions,
     ) -> DabRecord {
         let params = &self.params;
+        let hair = brush.hair.clamped();
         let profile = brush.tool.profile();
         let spreading = profile.spreading.rates(params);
         DabRecord {
@@ -219,10 +220,10 @@ impl WetOilEngine {
             blade_spill_share: KNIFE_SPILL_SHARE,
             step_ratio,
             capillary_rate: rate_over_step(CAPILLARY_SHARE, step_ratio),
-            wicking_rate: rate_over_step(params.get("wicking_share"), step_ratio),
+            wicking_rate: rate_over_step(hair.wicking, step_ratio),
             slump_rate: rate_over_step(spreading.slump, step_ratio),
             slump_yield_um2_per_px: params.get("slump_yield_um2_per_px"),
-            hair_load_limit: params.get("bristle_load_limit"),
+            hair_load_limit: hair.load_limit,
             capillary_scale: capillary_scale(regions.tip_size),
             ..bytemuck::Zeroable::zeroed()
         }

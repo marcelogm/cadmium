@@ -1,5 +1,5 @@
 use super::{BRISTLE_TUNING_BYTES, BristleTuning};
-use crate::brush::HeadSpec;
+use crate::brush::{HairSpec, HeadSpec};
 use crate::params::SimParams;
 
 const SCALAR_BYTES: u64 = 4;
@@ -21,22 +21,39 @@ fn the_shader_tuning_struct_mirrors_the_bristle_tuning() {
 
 #[test]
 fn kinetic_friction_never_exceeds_static_friction() {
-    let mut params = SimParams::default();
-    params.set("bristle_static_friction", 0.4);
-    params.set("bristle_kinetic_friction", 1.5);
-    let tuning = BristleTuning::of(&params, &HeadSpec::ROUND, 0.0);
+    let params = SimParams::default();
+    let mut hair = HairSpec {
+        static_friction: 0.4,
+        kinetic_friction: 1.5,
+        ..HairSpec::default()
+    };
+    let tuning = BristleTuning::of(&params, &HeadSpec::ROUND, &hair, 0.0);
     assert_eq!(tuning.kinetic_friction, 0.4);
-    params.set("bristle_kinetic_friction", 0.25);
+    hair.kinetic_friction = 0.25;
     assert_eq!(
-        BristleTuning::of(&params, &HeadSpec::ROUND, 0.0).kinetic_friction,
+        BristleTuning::of(&params, &HeadSpec::ROUND, &hair, 0.0).kinetic_friction,
         0.25
     );
 }
 
 #[test]
+fn the_tuning_follows_the_hair() {
+    let tuning = BristleTuning::of(
+        &SimParams::default(),
+        &HeadSpec::ROUND,
+        &HairSpec::SABLE,
+        0.0,
+    );
+    assert_eq!(tuning.clumping, HairSpec::SABLE.clumping);
+    assert_eq!(tuning.pointing, HairSpec::SABLE.wet_point);
+    assert_eq!(tuning.plasticity, HairSpec::SABLE.bend_memory);
+}
+
+#[test]
 fn a_round_points_on_both_axes_a_flat_on_its_thin_axis_and_a_fan_not_at_all() {
     let params = SimParams::default();
-    let axes = |head: HeadSpec| BristleTuning::of(&params, &head, 0.0).point_axes;
+    let axes =
+        |head: HeadSpec| BristleTuning::of(&params, &head, &HairSpec::default(), 0.0).point_axes;
     assert_eq!(axes(HeadSpec::ROUND), [1.0, 1.0]);
     assert_eq!(axes(HeadSpec::FLAT), [0.0, 1.0]);
     assert_eq!(axes(HeadSpec::FAN), [0.0, 0.0]);
@@ -44,7 +61,12 @@ fn a_round_points_on_both_axes_a_flat_on_its_thin_axis_and_a_fan_not_at_all() {
 
 #[test]
 fn the_default_round_brush_keeps_todays_tuning() {
-    let tuning = BristleTuning::of(&SimParams::default(), &HeadSpec::ROUND, 3.0);
+    let tuning = BristleTuning::of(
+        &SimParams::default(),
+        &HeadSpec::ROUND,
+        &HairSpec::default(),
+        3.0,
+    );
     assert_eq!(
         tuning,
         BristleTuning {
