@@ -11,6 +11,7 @@ pub struct BristleView<'a> {
     states: &'a wgpu::Buffer,
     rests: &'a wgpu::Buffer,
     handle: &'a wgpu::Buffer,
+    in_hand: bool,
     count: u32,
     ferrule_radius_px: f32,
     root_half_extent_px: [f32; 2],
@@ -33,10 +34,22 @@ impl<'a> BristleView<'a> {
         self.handle
     }
 
+    /// Whether a bristle tool painted the last dab. False before the first
+    /// dab and after a dab with a tool that has no bristles (the knife, say),
+    /// when the buffers still hold the last brush's hairs.
+    pub fn in_hand(&self) -> bool {
+        self.in_hand
+    }
+
+    /// Bristles in the fitted layout, at most 512: the instance count to draw.
+    /// 0 before the first dab. Refitted on a dab, so after a brush change it
+    /// stays the old layout's until the next dab.
     pub fn count(&self) -> u32 {
         self.count
     }
 
+    /// Ferrule radius of the fitted layout, in px. Like [`BristleView::count`],
+    /// it follows a resize only once the next dab refits the layout.
     pub fn ferrule_radius_px(&self) -> f32 {
         self.ferrule_radius_px
     }
@@ -65,6 +78,7 @@ impl WetOilEngine {
             states: &buffers.states,
             rests: &buffers.rests,
             handle: &buffers.handle,
+            in_hand: self.bristles.in_hand(),
             count: self.bristles.count(),
             ferrule_radius_px: self.bristles.ferrule_radius_px(),
             root_half_extent_px: self.bristles.root_half_extent_px(),

@@ -84,6 +84,10 @@ impl BristleRig {
         &self.radii_px
     }
 
+    pub(crate) fn in_hand(&self) -> bool {
+        self.tool.is_some()
+    }
+
     pub(crate) fn count(&self) -> u32 {
         self.count
     }

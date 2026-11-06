@@ -4,6 +4,7 @@ use cadmium_engine::brush::HeadSpec;
 use cadmium_engine::engine::{BristleView, ferrule_radius_for};
 use cadmium_engine::gpu::{GpuContext, read_mapped, staging_buffer};
 use cadmium_engine::session::PaintSession;
+use cadmium_engine::stroke::Tool;
 use support::{session, stroke, without_wgpu_errors};
 
 const VERTEX_FLOATS: usize = 4;
@@ -159,4 +160,16 @@ fn a_flat_head_roots_narrower_across_than_a_round_one() {
     }
     assert!(round_x <= ferrule_px && flat_x <= ferrule_px);
     assert!(flat_y < round_y, "flat {flat_y} round {round_y}");
+}
+
+#[test]
+fn the_bristles_leave_the_hand_when_a_knife_paints() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    assert!(!s.engine.bristle_view().in_hand());
+    stroke(&gpu, &mut s, 128.0, 100.0, 400.0);
+    assert!(s.engine.bristle_view().in_hand());
+    s.brush.tool = Tool::Knife;
+    stroke(&gpu, &mut s, 64.0, 100.0, 400.0);
+    assert!(!s.engine.bristle_view().in_hand());
 }
