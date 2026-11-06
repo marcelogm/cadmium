@@ -2,7 +2,6 @@ use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::PigmentDb;
 use cadmium_engine::render::ViewMode;
 
-use super::ParamControl;
 use crate::state::AppState;
 
 const TINT_WHITE_PARTS: f32 = 1.0;
@@ -24,15 +23,12 @@ pub(super) struct Snapshot {
 }
 
 impl Snapshot {
-    pub(super) fn of(state: &AppState, controls: &[ParamControl]) -> Snapshot {
+    pub(super) fn of<'a>(state: &AppState, keys: impl IntoIterator<Item = &'a str>) -> Snapshot {
         let session = &state.session;
         let slots = session.canvas.spec.pigment_slots.clone();
         let infos = slot_infos(&session.db, &slots);
         let params = session.engine.params();
-        let values: Vec<f32> = controls
-            .iter()
-            .map(|control| params.get(control.spec.key))
-            .collect();
+        let values: Vec<f32> = keys.into_iter().map(|key| params.get(key)).collect();
         Snapshot {
             slots,
             infos,
@@ -56,3 +52,6 @@ fn slot_infos(db: &PigmentDb, slots: &[String]) -> Vec<SlotInfo> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;
