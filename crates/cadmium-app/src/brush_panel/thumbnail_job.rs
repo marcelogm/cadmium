@@ -74,13 +74,22 @@ impl BrushPanel {
         glib::idle_add_local(move || thumbnail_tick(&panel));
     }
 
-    /// Pauses while the brush editor is open; closing it refreshes the panels,
-    /// which starts the job again.
+    /// Pauses while the brush editor is open, letting go of the studio; closing the editor
+    /// refreshes the panels, which starts the job again.
     fn tick(&self) -> TickOutcome {
         if self.editor_open() {
+            self.studio.take();
             return TickOutcome::Paused;
         }
         self.paint_next_thumbnail()
+    }
+
+    /// Lets go of the thumbnail studio while the brush editor is open: the editor's example
+    /// sheet needs the video memory. The next thumbnail after it closes opens a new one.
+    pub(super) fn release_studio_while_editing(&self) {
+        if self.editor_open() {
+            self.studio.take();
+        }
     }
 
     /// Whether the brush editor dialog is open; false once the window is gone.

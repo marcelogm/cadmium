@@ -56,6 +56,8 @@ pub fn open(window: &CadmiumWindow) {
     let draft = draft_for(&window.state().borrow());
     let editor = Editor::new(window, draft);
     window.keep_editor(&editor.dialog);
+    // The panels see the editor open: the brush panel lets go of its thumbnail studio.
+    window.refresh_panels();
     editor.dialog.present(Some(window));
 }
 
