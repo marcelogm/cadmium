@@ -166,15 +166,16 @@ pub(crate) enum SpacePress {
     Pass,
     /// Take the press and ready (or keep ready) a navigation drag.
     Hold,
-    /// Take the press and drop the hold: a dialog or text field took over mid-hold.
+    /// Take the press and drop the hold: a dialog or text field took over mid-press.
     Release,
 }
 
-/// Decides a Space press. `holding` is whether a hold is active; `free` is whether Space is
-/// free for navigation (no dialog, no text field focused). A hold keeps claiming Space even
-/// when not free, so auto-repeat can't leak into a dialog that opened meanwhile.
-pub(crate) fn space_press(holding: bool, free: bool) -> SpacePress {
-    match (free, holding) {
+/// Decides a Space press. `claimed` is whether the window already claimed the Space press
+/// being held; `free` is whether Space is free for navigation (no dialog, no text field
+/// focused). A claimed press keeps being claimed until released, so auto-repeat can't leak
+/// into a dialog that opened meanwhile; a fresh press while not free passes through.
+pub(crate) fn space_press(claimed: bool, free: bool) -> SpacePress {
+    match (free, claimed) {
         (true, _) => SpacePress::Hold,
         (false, true) => SpacePress::Release,
         (false, false) => SpacePress::Pass,

@@ -270,7 +270,7 @@ fn modifiers_follow_ctrl_and_shift_presses_and_releases() {
 }
 
 #[test]
-fn a_space_hold_keeps_claiming_space_until_it_is_released() {
+fn a_claimed_space_press_keeps_being_swallowed_until_released() {
     assert_eq!(space_press(false, true), SpacePress::Hold);
     assert_eq!(space_press(true, true), SpacePress::Hold);
     assert_eq!(space_press(true, false), SpacePress::Release);

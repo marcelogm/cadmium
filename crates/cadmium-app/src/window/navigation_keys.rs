@@ -31,6 +31,7 @@ impl CadmiumWindow {
     /// Drops the Space hold when the window loses focus, since the release would go unseen.
     fn release_space_when_inactive(&self) {
         if !self.is_active() {
+            self.imp().space_claimed.set(false);
             self.hold_space(None);
         }
     }
@@ -47,19 +48,23 @@ impl CadmiumWindow {
     /// Handles a key release: Space ends the hold; Ctrl and Shift retune it.
     fn key_released(&self, key: gdk::Key, modifiers: gdk::ModifierType) {
         if key == gdk::Key::space {
+            self.imp().space_claimed.set(false);
             self.hold_space(None);
         } else {
             self.retune_space(modifiers_after(key, false, modifiers));
         }
     }
 
-    /// Handles a Space press: claims it while it navigates or a hold is active.
+    /// Handles a Space press: claims it while it navigates, and keeps claiming its
+    /// auto-repeats until the key is released.
     fn space_pressed(&self, modifiers: gdk::ModifierType) -> glib::Propagation {
-        match space_press(self.space_held(), self.space_navigates()) {
+        let claimed = self.imp().space_claimed.get();
+        match space_press(claimed, self.space_navigates()) {
             SpacePress::Pass => return glib::Propagation::Proceed,
             SpacePress::Hold => self.hold_space(Some(modifiers)),
             SpacePress::Release => self.hold_space(None),
         }
+        self.imp().space_claimed.set(true);
         glib::Propagation::Stop
     }
 

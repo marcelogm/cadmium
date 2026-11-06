@@ -42,6 +42,8 @@ pub struct CadmiumWindow {
     pub lab_panel_slot: TemplateChild<gtk::Box>,
     pub tool: Cell<UiTool>,
     pub canvas: OnceCell<CadmiumCanvas>,
+    /// Whether the window has claimed the Space press now held down.
+    pub space_claimed: Cell<bool>,
     pub panel_refreshers: RefCell<Vec<PanelRefresher>>,
     pub writes_in_flight: RefCell<WritesInFlight>,
     pub document_generation: Cell<u64>,
