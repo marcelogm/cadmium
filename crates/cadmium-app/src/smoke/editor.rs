@@ -12,6 +12,8 @@ use crate::window::CadmiumWindow;
 enum EditorShown {
     Closed,
     Unmapped,
+    /// Mapped, its example strokes still being painted.
+    Painting,
     Mapped,
 }
 
@@ -34,10 +36,10 @@ pub(super) fn open(window: &CadmiumWindow) {
 }
 
 /// Whether the screenshot can be taken: with an editor expected, once its
-/// dialog is mapped. The editor holds no GPU view yet, and a smoke
-/// run turns animations off, so a mapped dialog is already at rest; the step's
-/// frame hold (`Editor(frames)` extends `earliest_end_frame`) only lets its
-/// contents draw. An editor that closed ends the run.
+/// dialog is mapped and its example strokes are shown. A smoke run turns
+/// animations off, so a mapped dialog is already at rest; the step's frame hold
+/// (`Editor(frames)` extends `earliest_end_frame`) only lets its contents draw.
+/// An editor that closed ends the run.
 pub(super) fn ready_for_screenshot(window: &CadmiumWindow, expects_editor: bool) -> bool {
     match readiness(expects_editor, shown(window)) {
         Readiness::Ready => true,
@@ -50,7 +52,7 @@ pub(super) fn ready_for_screenshot(window: &CadmiumWindow, expects_editor: bool)
 fn readiness(expects_editor: bool, shown: EditorShown) -> Readiness {
     match (expects_editor, shown) {
         (false, _) | (true, EditorShown::Mapped) => Readiness::Ready,
-        (true, EditorShown::Unmapped) => Readiness::Wait,
+        (true, EditorShown::Unmapped | EditorShown::Painting) => Readiness::Wait,
         (true, EditorShown::Closed) => Readiness::EditorClosed,
     }
 }
@@ -59,8 +61,9 @@ fn readiness(expects_editor: bool, shown: EditorShown) -> Readiness {
 fn shown(window: &CadmiumWindow) -> EditorShown {
     match window.editor() {
         None => EditorShown::Closed,
-        Some(editor) if editor.is_mapped() => EditorShown::Mapped,
-        Some(_) => EditorShown::Unmapped,
+        Some(editor) if !editor.is_mapped() => EditorShown::Unmapped,
+        Some(_) if window.examples_pending() => EditorShown::Painting,
+        Some(_) => EditorShown::Mapped,
     }
 }
 

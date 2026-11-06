@@ -5,6 +5,7 @@ fn without_an_editor_step_the_screenshot_is_ready() {
     for shown in [
         EditorShown::Closed,
         EditorShown::Unmapped,
+        EditorShown::Painting,
         EditorShown::Mapped,
     ] {
         assert_eq!(readiness(false, shown), Readiness::Ready, "{shown:?}");
@@ -23,4 +24,9 @@ fn an_expected_editor_that_closed_ends_the_run() {
         readiness(true, EditorShown::Closed),
         Readiness::EditorClosed
     );
+}
+
+#[test]
+fn an_expected_editor_waits_for_its_example_strokes() {
+    assert_eq!(readiness(true, EditorShown::Painting), Readiness::Wait);
 }
