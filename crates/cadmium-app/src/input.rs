@@ -14,7 +14,7 @@ use crate::state::SharedState;
 const PAN_BUTTON: u32 = gdk::BUTTON_MIDDLE;
 
 mod navigation;
-mod samples;
+pub(crate) mod samples;
 mod stylus;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

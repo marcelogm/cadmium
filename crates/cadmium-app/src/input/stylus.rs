@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use cadmium_engine::stroke::StrokeSample;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
@@ -63,6 +64,16 @@ fn connect_proximity_and_cancel<W: PaintSurfaceWidget>(
     ));
 }
 
+/// The pen's state at widget point (`x`, `y`), mapped onto the widget's surface.
+fn widget_sample<W: PaintSurfaceWidget>(
+    widget: &W,
+    event: &gdk::Event,
+    x: f64,
+    y: f64,
+) -> StrokeSample {
+    event_sample(event, x, y, |x, y| widget.surface_point(x, y))
+}
+
 fn stylus_down<W: PaintSurfaceWidget>(
     widget: &W,
     contact: &Contact,
@@ -89,7 +100,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         widget.pick_colour_at(x, y);
         return;
     }
-    let sample = event_sample(widget, &event, x, y);
+    let sample = widget_sample(widget, &event, x, y);
     if !state.borrow_mut().press(widget.surface(), sample, eraser) {
         return;
     }
@@ -116,14 +127,14 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     let state = widget.state();
     if !state.borrow().contact_on(widget.surface()) {
         if comes_from_a_pen(&event) {
-            widget.observe_hover_pen(&event_sample(widget, &event, x, y));
+            widget.observe_hover_pen(&widget_sample(widget, &event, x, y));
         }
         return;
     }
     if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
         return;
     }
-    let samples = motion_samples(widget, &event, x, y);
+    let samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
     state.borrow_mut().motion(&samples);
 }
 
@@ -155,7 +166,7 @@ fn stylus_proximity<W: PaintSurfaceWidget>(
     }
     widget.set_hover(Some((x, y)));
     if comes_from_a_pen(&event) {
-        widget.observe_hover_pen(&event_sample(widget, &event, x, y));
+        widget.observe_hover_pen(&widget_sample(widget, &event, x, y));
     }
 }
 
