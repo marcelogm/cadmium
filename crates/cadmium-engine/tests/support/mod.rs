@@ -102,14 +102,14 @@ pub fn presented_rgba(gpu: &GpuContext, s: &PaintSession, width: u32, height: u3
     let mut e = gpu.device.create_command_encoder(&Default::default());
     s.presenter.encode_present(
         gpu,
-        PresentRequest {
-            canvas: &s.canvas,
-            view: ViewTransform {
+        PresentRequest::of_canvas(
+            &s.canvas,
+            ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
                 zoom: 1.0,
             },
-        },
+        ),
         &target,
         &mut e,
     );

@@ -120,14 +120,14 @@ impl BrushStudio {
         let presenter = &self.session.presenter;
         let target = presenter.create_target(gpu, THUMBNAIL_SIZE.0, THUMBNAIL_SIZE.1);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        let request = PresentRequest {
-            canvas: &self.session.canvas,
-            view: ViewTransform {
+        let request = PresentRequest::of_canvas(
+            &self.session.canvas,
+            ViewTransform {
                 origin_x: 0.0,
                 origin_y: 0.0,
                 zoom: 1.0 / STUDIO_SCALE as f32,
             },
-        };
+        );
         presenter.encode_present(gpu, request, &target, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         readback_rgba8(gpu, &target)

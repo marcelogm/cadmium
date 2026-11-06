@@ -1,7 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::canvas::{Canvas, StateTexture};
-use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
+use crate::compute::{AutoLayoutStage, buffer_binding};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_mapped, staging_buffer};
 
 const PRESENT_WORKGROUP_SIZE: u32 = 8;
@@ -15,9 +15,26 @@ pub struct ViewTransform {
     pub zoom: f32,
 }
 
+/// What to present: a linear `Rgba16Float` view (with `TEXTURE_BINDING`) and how to frame it.
 pub struct PresentRequest<'a> {
-    pub canvas: &'a Canvas,
+    pub source: &'a wgpu::TextureView,
     pub view: ViewTransform,
+}
+
+impl<'a> PresentRequest<'a> {
+    pub fn of_canvas(canvas: &'a Canvas, view: ViewTransform) -> PresentRequest<'a> {
+        PresentRequest {
+            source: canvas.view(StateTexture::Display),
+            view,
+        }
+    }
+}
+
+fn source_binding(source: &wgpu::TextureView) -> wgpu::BindGroupEntry<'_> {
+    wgpu::BindGroupEntry {
+        binding: 1,
+        resource: wgpu::BindingResource::TextureView(source),
+    }
 }
 
 #[repr(C)]
@@ -73,7 +90,7 @@ impl Presenter {
         target: &wgpu::Texture,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let PresentRequest { canvas, view } = request;
+        let PresentRequest { source, view } = request;
         let params = PresentParams {
             origin: [view.origin_x, view.origin_y],
             zoom: view.zoom,
@@ -91,7 +108,7 @@ impl Presenter {
             gpu,
             &[
                 buffer_binding(0, &params_buffer),
-                texture_binding(1, canvas, StateTexture::Display),
+                source_binding(source),
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),

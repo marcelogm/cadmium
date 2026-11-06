@@ -146,14 +146,14 @@ fn encode_full_present(
     target: &wgpu::Texture,
     encoder: &mut wgpu::CommandEncoder,
 ) {
-    let request = PresentRequest {
-        canvas: &session.canvas,
-        view: ViewTransform {
+    let request = PresentRequest::of_canvas(
+        &session.canvas,
+        ViewTransform {
             origin_x: 0.0,
             origin_y: 0.0,
             zoom: 1.0,
         },
-    };
+    );
     session
         .presenter
         .encode_present(gpu, request, target, encoder);

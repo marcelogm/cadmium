@@ -52,10 +52,7 @@ impl PresentSource {
                 state.encode_frame(encoder);
                 state.session.presenter.encode_present(
                     gpu,
-                    PresentRequest {
-                        canvas: &state.session.canvas,
-                        view: state.view,
-                    },
+                    PresentRequest::of_canvas(&state.session.canvas, state.view),
                     target,
                     encoder,
                 );
@@ -65,10 +62,7 @@ impl PresentSource {
                 let view = tray_view((target.width(), target.height()));
                 state.session.presenter.encode_present(
                     gpu,
-                    PresentRequest {
-                        canvas: &state.session.tray,
-                        view,
-                    },
+                    PresentRequest::of_canvas(&state.session.tray, view),
                     target,
                     encoder,
                 );

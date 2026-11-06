@@ -40,7 +40,12 @@ fn shade_and_present(
         },
         &mut enc,
     );
-    presenter.encode_present(gpu, PresentRequest { canvas, view }, &target, &mut enc);
+    presenter.encode_present(
+        gpu,
+        PresentRequest::of_canvas(canvas, view),
+        &target,
+        &mut enc,
+    );
     gpu.queue.submit([enc.finish()]);
     readback_rgba8(gpu, &target).unwrap()
 }
@@ -105,6 +110,32 @@ fn wet_ultramarine_over_white_looks_blue() {
         "{:?}",
         &px[i..i + 3]
     );
+}
+
+#[test]
+fn presenting_the_display_view_directly_matches_presenting_the_canvas() {
+    let gpu = GpuContext::new().unwrap();
+    let mut canvas = blank(&gpu);
+    let n = 128 * 128;
+    let mut pig = vec![0.0f32; n * 4];
+    for i in 0..n {
+        pig[i * 4] = 1.0;
+    }
+    canvas.write_f32(&gpu, StateTexture::WetPig0, &pig);
+    canvas.write_f32(&gpu, StateTexture::WetVol, &vec![200.0; n]);
+    canvas.dirty.mark_all();
+    let via_canvas = shade_and_present(&gpu, &mut canvas, IDENTITY_VIEW, 128, 128);
+    let presenter = Presenter::new(&gpu);
+    let target = presenter.create_target(&gpu, 128, 128);
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    let request = PresentRequest {
+        source: canvas.view(StateTexture::Display),
+        view: IDENTITY_VIEW,
+    };
+    presenter.encode_present(&gpu, request, &target, &mut enc);
+    gpu.queue.submit([enc.finish()]);
+    let via_view = readback_rgba8(&gpu, &target).unwrap();
+    assert_eq!(via_canvas, via_view);
 }
 
 #[test]
