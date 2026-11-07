@@ -29,6 +29,7 @@ impl CursorOutline {
         let mut brush = state.session.brush.clone();
         if let Press::Stroke(tool) | Press::LoadFromPile(tool) = state.press_for(surface) {
             brush.tool = tool;
+            brush.geometry.max_diameter_px = state.stroke_diameter_px(tool);
         }
         let pen = StrokeSample {
             x: 0.0,
@@ -105,3 +106,6 @@ pub(crate) fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
     snapshot.append_stroke(&path.to_path(), &gsk::Stroke::new(ring.width), &ring.colour);
     snapshot.restore();
 }
+
+#[cfg(test)]
+mod tests;

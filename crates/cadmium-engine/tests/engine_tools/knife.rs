@@ -247,6 +247,19 @@ fn a_full_dip_lays_on_a_clean_knife_the_volume_the_engine_predicts() {
     assert!(s.engine.knife_full_dip_volume(2.0 * mixture.volume_um) > predicted as f32);
 }
 
+#[test]
+fn a_full_dip_is_predicted_for_any_blade_length() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let thickness = s.brush.reservoir_mixture(SLOT_COUNT).volume_um;
+    let diameter = s.brush.geometry.max_diameter_px;
+    s.brush.tool = Tool::Knife;
+    s.resize_tip();
+    let worn = s.engine.knife_full_dip_volume(thickness);
+    assert_eq!(s.engine.blade_full_dip_volume(thickness, diameter), worn);
+    assert!(s.engine.blade_full_dip_volume(thickness, 2.0 * diameter) > worn);
+}
+
 fn row_profile(
     gpu: &GpuContext,
     s: &PaintSession,

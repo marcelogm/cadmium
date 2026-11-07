@@ -134,7 +134,7 @@ fn motion(pixel: vec2<i32>, volume: f32) -> vec4<f32> {
     let ahead = heading();
     let across = vec2<f32>(-ahead.y, ahead.x);
     var squeeze_push = squeeze_gradient;
-    if (dab.tool_mode != TOOL_MODE_KNIFE) {
+    if (!is_blade_mode(dab.tool_mode)) {
         squeeze_push = dot(squeeze_gradient, across) * across;
     }
     let drag = dab.advection * min(dab.speed * DRAG_SPEED_GAIN, 1.0);

@@ -10,6 +10,7 @@ use crate::tools::UiTool;
 
 use super::SmokeConfig;
 use super::brushes::SmokeBrushes;
+use super::tray::{TRAY_MIX, TRAY_TOOL, parse_tray_tool};
 
 pub(super) const EXIT_AFTER_FRAMES: &str = "CADMIUM_SMOKE_EXIT_AFTER_FRAMES";
 pub(super) const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
@@ -35,6 +36,7 @@ impl SmokeConfig {
         let screenshot = lookup_path(&lookup, SCREENSHOT);
         let dialog = lookup(DIALOG);
         let tool = lookup(TOOL).filter(|value| !value.is_empty());
+        let tray_tool = lookup(TRAY_TOOL).filter(|value| !value.is_empty());
         let config = SmokeConfig {
             exit_after_frames: DEFAULT_EXIT_AFTER_FRAMES,
             screenshot,
@@ -45,6 +47,8 @@ impl SmokeConfig {
                 .filter(|value| !value.is_empty())
                 .map(|value| value.to_string_lossy().into_owned()),
             tray: lookup_flag(&lookup, TRAY),
+            tray_tool: None,
+            tray_mix: lookup_flag(&lookup, TRAY_MIX),
             save: lookup_path(&lookup, SAVE),
             open: lookup_path(&lookup, OPEN),
             export: lookup_path(&lookup, EXPORT),
@@ -54,6 +58,7 @@ impl SmokeConfig {
         if exit_after_frames.is_none()
             && dialog.is_none()
             && tool.is_none()
+            && tray_tool.is_none()
             && config.requests_nothing_else()
         {
             return None;
@@ -61,6 +66,7 @@ impl SmokeConfig {
         Some(SmokeConfig {
             dialog: dialog.and_then(|value| parse_or_warn(DIALOG, &value)),
             tool: tool.and_then(parse_tool),
+            tray_tool: tray_tool.and_then(parse_tray_tool),
             exit_after_frames: exit_after_frames
                 .and_then(|value| parse_or_warn(EXIT_AFTER_FRAMES, &value))
                 .unwrap_or(DEFAULT_EXIT_AFTER_FRAMES),
@@ -73,6 +79,7 @@ impl SmokeConfig {
             && !self.stroke
             && self.page.is_none()
             && !self.tray
+            && !self.tray_mix
             && self.save.is_none()
             && self.open.is_none()
             && self.export.is_none()

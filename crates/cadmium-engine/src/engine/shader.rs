@@ -18,7 +18,7 @@ use super::{
 };
 use crate::canvas::{TILE_CHANGE_HEADER_WORDS, TILE_SIZE};
 use crate::compute::WORKGROUP_SIZE;
-use crate::tool::TOOL_MODE_KNIFE;
+use crate::tool::BLADE_MODES;
 
 const TIP_SUM_INVOCATIONS: u32 = 256;
 const PICK_INVOCATIONS: u32 = 256;
@@ -29,6 +29,12 @@ pub(super) const DAB_SNIPPETS: [&str; 3] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/nearest_half.wgsl"),
     include_str!("../shaders/footprint.wgsl"),
+];
+pub(super) const BLADE_SNIPPETS: [&str; 4] = [
+    include_str!("../shaders/brush_tip.wgsl"),
+    include_str!("../shaders/nearest_half.wgsl"),
+    include_str!("../shaders/footprint.wgsl"),
+    include_str!("../shaders/blade_paint.wgsl"),
 ];
 pub(super) const ADVECT_SNIPPETS: [&str; 4] = [
     include_str!("../shaders/brush_tip.wgsl"),
@@ -129,6 +135,19 @@ fn bristle_constants() -> String {
     )
 }
 
+/// `is_blade_mode` for WGSL, built from `BLADE_MODES` so the shaders and the
+/// tool profiles agree on which modes draw a blade.
+fn blade_mode_test() -> String {
+    let tests: Vec<String> = BLADE_MODES
+        .iter()
+        .map(|mode| format!("mode == {mode}u"))
+        .collect();
+    format!(
+        "fn is_blade_mode(mode: u32) -> bool {{ return {}; }}\n",
+        tests.join(" || ")
+    )
+}
+
 pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
     let mut source = format!(
         "const TIP_SIZE: u32 = {TIP_SIZE}u;\n\
@@ -137,7 +156,6 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
          const PIGMENT_CHANNELS: u32 = {PIGMENT_CHANNELS}u;\n\
          const VOLUME_CHANNEL: u32 = {VOLUME_CHANNEL}u;\n\
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
-         const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
          const TILE_SIZE: u32 = {TILE_SIZE}u;\n\
          const TILE_CHANGE_HEADER_WORDS: u32 = {TILE_CHANGE_HEADER_WORDS}u;\n\
          const BLOCK_SIDE_PX: u32 = {WORKGROUP_SIZE}u;\n\
@@ -152,6 +170,7 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
          const BLADE_CELL_GROUP_SIZE: u32 = {BLADE_CELL_GROUP_SIZE}u;\n"
     );
     source.push_str(&bristle_constants());
+    source.push_str(&blade_mode_test());
     for snippet in snippets {
         source.push_str(snippet);
         source.push('\n');

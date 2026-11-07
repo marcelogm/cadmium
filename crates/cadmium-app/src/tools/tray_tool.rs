@@ -1,7 +1,7 @@
 use gtk::gdk;
 
 use super::panel::{PanelTool, TUBE_LABEL};
-use super::{Press, Tool, UiTool};
+use super::{Press, Tool, UiTool, mixing_knife};
 
 /// What the pen does on the tray, chosen in the tray's own header.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -9,6 +9,8 @@ pub enum TrayTool {
     /// Loads the painting tool with the paint under the pen.
     #[default]
     Load,
+    /// Mixes paint on the tray with the face of a wide blade.
+    MixingKnife,
     Blender,
     Rag,
     Tube,
@@ -28,6 +30,13 @@ const LOAD: TrayToolProfile = TrayToolProfile {
     icon: "cadmium-brush-symbolic",
     tooltip: "Load (Shift+1): touch the tray to load the brush or knife with the paint under it",
     key: gdk::Key::_1,
+};
+const MIXING_KNIFE: TrayToolProfile = TrayToolProfile {
+    name: "tray-mixing-knife",
+    label: mixing_knife::MIXING_KNIFE.label,
+    icon: mixing_knife::MIXING_KNIFE.icon,
+    tooltip: mixing_knife::MIXING_KNIFE.tooltip,
+    key: gdk::Key::_2,
 };
 const BLENDER: TrayToolProfile = TrayToolProfile {
     name: "tray-blender",
@@ -52,8 +61,9 @@ const TUBE: TrayToolProfile = TrayToolProfile {
 };
 
 impl TrayTool {
-    pub const ALL: [TrayTool; 4] = [
+    pub const ALL: [TrayTool; 5] = [
         TrayTool::Load,
+        TrayTool::MixingKnife,
         TrayTool::Blender,
         TrayTool::Rag,
         TrayTool::Tube,
@@ -62,6 +72,7 @@ impl TrayTool {
     pub(crate) const fn profile(self) -> &'static TrayToolProfile {
         match self {
             TrayTool::Load => &LOAD,
+            TrayTool::MixingKnife => &MIXING_KNIFE,
             TrayTool::Blender => &BLENDER,
             TrayTool::Rag => &RAG,
             TrayTool::Tube => &TUBE,
@@ -92,6 +103,7 @@ impl TrayTool {
                 Some(tool) => Press::LoadFromPile(tool),
                 None => Press::Nothing,
             },
+            TrayTool::MixingKnife => Press::Stroke(Tool::MixingKnife),
             TrayTool::Blender => Press::Stroke(Tool::Blender),
             TrayTool::Rag => Press::Stroke(Tool::Rag),
             TrayTool::Tube => Press::Squeeze,
@@ -132,6 +144,7 @@ impl TrayTool {
     pub(crate) fn panel_tool(self, painting: UiTool, tool_in_hand: Tool) -> PanelTool {
         match self {
             TrayTool::Load => PanelTool::of_painting(painting, tool_in_hand),
+            TrayTool::MixingKnife => PanelTool::Paint(Tool::MixingKnife),
             TrayTool::Blender => PanelTool::Paint(Tool::Blender),
             TrayTool::Rag => PanelTool::Paint(Tool::Rag),
             TrayTool::Tube => PanelTool::Tube,

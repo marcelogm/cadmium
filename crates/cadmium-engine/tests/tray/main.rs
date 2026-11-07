@@ -1,5 +1,6 @@
 mod cord;
 mod draw_up;
+mod mixing_knife;
 mod strokes;
 mod surface;
 mod tube;

@@ -76,3 +76,13 @@ fn a_paint_tool_strokes_as_itself() {
         }
     }
 }
+
+#[test]
+fn the_mixing_knife_is_no_header_tool_and_does_nothing_on_the_painting() {
+    let mixing_knife = UiTool::Paint(Tool::MixingKnife);
+    assert!(!UiTool::ALL.contains(&mixing_knife));
+    assert_eq!(UiTool::from_name(mixing_knife.name()), None);
+    let profile = mixing_knife.profile();
+    assert!(profile.keys.is_empty() && profile.keypad_keys.is_empty());
+    assert_eq!(profile.on_painting, Press::Nothing);
+}

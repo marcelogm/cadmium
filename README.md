@@ -23,6 +23,9 @@ palette knife lays thick slabs and carves grooves, and colors mix like pigments,
 each pigment is an absorption and scattering spectrum (Kubelka-Munk), simulated on the GPU.
 
 - Brush, palette knife, blender and rag, shaped by pen pressure and tilt
+- A mixing tray under the canvas: squeeze tubes onto it, mix them with the mixing knife,
+  whose uneven blade leaves streaks that fade pass after pass, and load the brush or knife
+  from it
 - Twelve pigments, up to eight per painting, on linen, cotton or smooth canvas
 - Paintings save wet, so you can pick up where you left off; export to PNG
 - A Lab panel to look inside the simulation: height, wetness, pigment amounts, every parameter
@@ -55,6 +58,7 @@ Always build with `--release`; the debug build is too slow to paint with.
 |---|---|
 | Pressure | Stroke size and how deep the brush sinks into wet paint |
 | Tilt | Lays the brush on its side; tilts the knife to lay paint instead of scraping |
+| Tilt, mixing knife | Upright scrapes paint onto its face; laid flat spreads it |
 | Eraser end | Rag |
 | Lower / upper side button | Eyedropper / pan |
 | Middle / right mouse button | Pan / eyedropper |

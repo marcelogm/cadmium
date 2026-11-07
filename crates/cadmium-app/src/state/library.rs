@@ -13,7 +13,7 @@ impl AppState {
     /// The worn brush as a library brush at the current size.
     pub fn worn_brush_spec(&self) -> BrushSpec {
         let settings = &self.session.brush;
-        let size_px = settings.geometry.max_diameter_px;
+        let size_px = self.brush_diameter_px();
         match self.worn_library_brush().and_then(|i| self.brushes.get(i)) {
             Some(brush) => BrushSpec {
                 size_px,

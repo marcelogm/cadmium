@@ -25,6 +25,7 @@ impl PaintSession {
         self.view_mode = ViewMode::Color;
         self.engine.clean_brush(gpu);
         self.engine.clean_knife(gpu);
+        self.engine.clean_face(gpu);
         replaced.and(tray_rebuilt)
     }
 

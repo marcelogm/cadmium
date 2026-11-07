@@ -71,6 +71,6 @@ fn tray_tool_accelerators_are_shifted_digits() {
         .collect();
     assert_eq!(
         accelerators,
-        ["<Shift>1", "<Shift>4", "<Shift>5", "<Shift>6"]
+        ["<Shift>1", "<Shift>2", "<Shift>4", "<Shift>5", "<Shift>6"]
     );
 }

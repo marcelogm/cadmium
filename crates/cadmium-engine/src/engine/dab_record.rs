@@ -7,8 +7,8 @@ use crate::params::SimParams;
 
 pub(super) const DAB_RECORD_STRIDE: u64 = 256;
 const CAPILLARY_POOL_BUDGET: f32 = 4.0e9;
-const KNIFE_LAID_ALTITUDE_RAD: f32 = std::f32::consts::FRAC_PI_4;
-const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
+pub(super) const KNIFE_LAID_ALTITUDE_RAD: f32 = std::f32::consts::FRAC_PI_4;
+pub(super) const KNIFE_UPRIGHT_ALTITUDE_RAD: f32 = 80.0 * std::f32::consts::PI / 180.0;
 const KNIFE_UPRIGHT_CAPACITY_UM: f32 = 200.0;
 
 #[repr(C)]

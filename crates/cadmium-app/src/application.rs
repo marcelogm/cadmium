@@ -95,7 +95,8 @@ fn activate(app: &adw::Application, smoke: &RefCell<Option<SmokeConfig>>) {
         load_brush_library(&state, dir);
     }
     if smoke.borrow().is_none() {
-        state.borrow_mut().settings = SettingsStore::load(SettingsStore::default_path());
+        let store = SettingsStore::load(SettingsStore::default_path());
+        state.borrow_mut().use_settings(store);
     }
     let window = CadmiumWindow::new(app, state);
     if let Some(smoke) = smoke.borrow_mut().take() {

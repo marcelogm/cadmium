@@ -2,6 +2,7 @@ use crate::engine::{BrushOutline, BrushReadout};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::Mixture;
 use crate::stroke::StrokeSample;
+use crate::tool::Holder;
 
 use super::PaintSession;
 use super::queue::{BrushChange, KnifeLoad, Queued};
@@ -29,6 +30,10 @@ impl PaintSession {
 
     pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) -> Result<(), GpuLost> {
         let mixture = *mixture;
+        if self.brush.tool.profile().holds_on_face() {
+            // The mixing knife's face loads only by scraping paint up off the tray.
+            return Ok(());
+        }
         if self.holds_knife() {
             self.resize_tip();
             self.load_knife(gpu, KnifeLoad::Dip { mixture, amount })
@@ -66,8 +71,12 @@ impl PaintSession {
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        let knife = self.holds_knife();
-        self.change_brush(gpu, BrushChange::Clean { knife });
+        self.clean_holder(gpu, self.brush.tool.profile().holder);
+    }
+
+    /// Cleans what `holder` carries, whatever tool is in hand.
+    pub fn clean_holder(&mut self, gpu: &GpuContext, holder: Option<Holder>) {
+        self.change_brush(gpu, BrushChange::Clean { holder });
     }
 
     pub(super) fn holds_knife(&self) -> bool {

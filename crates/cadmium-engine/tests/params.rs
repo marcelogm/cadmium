@@ -51,7 +51,7 @@ const GONE_KEYS: [&str; 19] = [
 #[test]
 fn specs_cover_every_lab_parameter_once() {
     let specs = SimParams::specs();
-    assert_eq!(specs.len(), 25);
+    assert_eq!(specs.len(), 29);
     assert_each_spec_is_unique_with_its_default_in_range(specs);
     for gone in GONE_KEYS {
         assert!(specs.iter().all(|spec| spec.key != gone), "{gone}");

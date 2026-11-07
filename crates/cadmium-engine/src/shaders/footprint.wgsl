@@ -45,7 +45,7 @@ fn tuft_footprint(position: vec2<f32>) -> f32 {
 }
 
 fn footprint(position: vec2<f32>) -> f32 {
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+    if (is_blade_mode(dab.tool_mode)) {
         return blade_footprint(position);
     }
     return tuft_footprint(position);
@@ -62,7 +62,7 @@ fn blade_pressure_gradient(position: vec2<f32>) -> vec2<f32> {
 }
 
 fn inside_outline(offset: vec2<f32>) -> bool {
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+    if (is_blade_mode(dab.tool_mode)) {
         return all(abs(offset) <= semi_axes());
     }
     return length(offset / semi_axes()) <= 1.0;

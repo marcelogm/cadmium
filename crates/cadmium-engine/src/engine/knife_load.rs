@@ -1,14 +1,28 @@
-use super::readout::accumulate;
+use super::readout::cell_totals;
 use super::reservoir::{dip_fractions, dip_thickness, holds_paint, level_after};
 use super::{
     BLADE_CELLS, KNIFE_DIP_LENGTH_PX, KNIFE_LAID_CAPACITY_UM, MAX_TIP_THICKNESS_UM,
-    PIGMENT_CHANNELS, TIP_CHANNELS, TIP_HALF, VOLUME_CHANNEL, WetOilEngine,
+    PIGMENT_CHANNELS, TIP_CHANNELS, TIP_HALF, VOLUME_CHANNEL, WetOilEngine, ferrule_radius_for,
 };
 use crate::brush::FULL_RESERVOIR_VOLUME_UM;
 use crate::canvas::PaintTotals;
 use crate::compute::read_buffer;
 use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::Mixture;
+
+fn full_dip_volume(thickness_um: f32, radius: f32) -> f32 {
+    if !thickness_um.is_finite() || thickness_um <= 0.0 {
+        return 0.0;
+    }
+    let thickness = thickness_um.min(MAX_TIP_THICKNESS_UM);
+    let reach = radius.ceil() as i32 + 1;
+    (-reach..=reach)
+        .map(|offset| {
+            (blade_cell_cover(offset, radius) * thickness * KNIFE_DIP_LENGTH_PX)
+                .min(KNIFE_LAID_CAPACITY_UM)
+        })
+        .sum()
+}
 
 impl WetOilEngine {
     pub(super) fn draw_up_into_knife(
@@ -18,7 +32,7 @@ impl WetOilEngine {
     ) -> Result<(PaintTotals, f32), GpuLost> {
         let mut load = read_buffer(gpu, &self.buffers.blade_load)?;
         let shares = blade_shares(self.tip_radius);
-        let held = knife_from_load(&load).volume as f32;
+        let held = cell_totals(&load).volume as f32;
         let full_dip = self.knife_full_dip_volume(FULL_RESERVOIR_VOLUME_UM);
         let room = (full_dip - held).min(blade_room(&load, &shares)).max(0.0);
         let taken = take(room)?;
@@ -59,17 +73,12 @@ impl WetOilEngine {
     }
 
     pub fn knife_full_dip_volume(&self, thickness_um: f32) -> f32 {
-        if !thickness_um.is_finite() || thickness_um <= 0.0 {
-            return 0.0;
-        }
-        let thickness = thickness_um.min(MAX_TIP_THICKNESS_UM);
-        let reach = self.tip_radius.ceil() as i32 + 1;
-        (-reach..=reach)
-            .map(|offset| {
-                (blade_cell_cover(offset, self.tip_radius) * thickness * KNIFE_DIP_LENGTH_PX)
-                    .min(KNIFE_LAID_CAPACITY_UM)
-            })
-            .sum()
+        full_dip_volume(thickness_um, self.tip_radius)
+    }
+
+    /// What a full dip lays on a blade `diameter_px` long, whatever the tip in use.
+    pub fn blade_full_dip_volume(&self, thickness_um: f32, diameter_px: f32) -> f32 {
+        full_dip_volume(thickness_um, ferrule_radius_for(diameter_px))
     }
 
     pub fn clean_knife(&mut self, gpu: &GpuContext) {
@@ -84,10 +93,7 @@ impl WetOilEngine {
     }
 
     pub fn knife_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
-        Ok(knife_from_load(&read_buffer(
-            gpu,
-            &self.buffers.blade_load,
-        )?))
+        Ok(cell_totals(&read_buffer(gpu, &self.buffers.blade_load)?))
     }
 }
 
@@ -130,14 +136,6 @@ fn add_to_blade(load: &mut [f32], shares: &[(usize, f32)], taken: &PaintTotals) 
         }
         values[VOLUME_CHANNEL] += (taken.volume * share) as f32;
     }
-}
-
-pub(super) fn knife_from_load(load: &[f32]) -> PaintTotals {
-    let mut totals = PaintTotals::default();
-    for cell in load.as_chunks::<TIP_CHANNELS>().0 {
-        accumulate(&mut totals, cell);
-    }
-    totals
 }
 
 fn add_to_cell(values: &mut [f32], fractions: &[f32; PIGMENT_CHANNELS], added: f32) {

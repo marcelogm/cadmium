@@ -1,3 +1,5 @@
+use cadmium_engine::tool::Holder;
+
 use super::{Tool, UiTool};
 
 pub(crate) const CLEAN_LABEL: &str = "Clean";
@@ -87,8 +89,12 @@ impl PanelTool {
         }
     }
 
-    pub(crate) fn holds_knife(self) -> bool {
-        matches!(self, PanelTool::Paint(tool) if tool.profile().holds_on_blade())
+    /// Where the tool carries its paint, if it carries any.
+    pub(crate) fn holder(self) -> Option<Holder> {
+        match self {
+            PanelTool::Paint(tool) => tool.profile().holder,
+            PanelTool::Tube => None,
+        }
     }
 
     pub(crate) fn wording(self) -> ToolWording {

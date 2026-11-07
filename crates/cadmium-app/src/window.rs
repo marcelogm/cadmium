@@ -50,6 +50,13 @@ impl CadmiumWindow {
         self.canvas().state()
     }
 
+    /// Saves the mixing knife's size; the window calls it as it closes.
+    fn remember_mixing_knife_size(&self) {
+        if let Err(error) = self.state().borrow_mut().remember_mixing_knife_size() {
+            glib::g_warning!(LOG_DOMAIN, "couldn't save the mixing knife size: {error}");
+        }
+    }
+
     pub fn show_toast(&self, title: &str) {
         self.imp().toast_overlay.add_toast(adw::Toast::new(title));
     }

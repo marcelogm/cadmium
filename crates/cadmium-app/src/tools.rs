@@ -9,6 +9,7 @@ mod brush;
 mod eyedropper;
 pub(crate) mod keys;
 pub(crate) mod knife;
+pub(crate) mod mixing_knife;
 mod moving;
 pub(crate) mod panel;
 mod rag;
@@ -65,6 +66,7 @@ impl UiTool {
             UiTool::Move => &moving::MOVE,
             UiTool::Paint(Tool::Brush) => &brush::BRUSH,
             UiTool::Paint(Tool::Knife) => &knife::KNIFE,
+            UiTool::Paint(Tool::MixingKnife) => &mixing_knife::MIXING_KNIFE,
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
             UiTool::Paint(Tool::Eyedropper) => &eyedropper::EYEDROPPER,

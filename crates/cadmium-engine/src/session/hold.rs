@@ -63,7 +63,9 @@ impl PaintSession {
         let Some(Hold { surface, .. }) = self.hold else {
             return Ok(DrawnUp::default());
         };
-        if self.brush.tool.profile().holder.is_none() {
+        let profile = self.brush.tool.profile();
+        // The mixing knife's face takes paint only by scraping it up.
+        if profile.holder.is_none() || profile.holds_on_face() {
             return Ok(DrawnUp::default());
         }
         self.resize_tip();

@@ -1,6 +1,6 @@
-use super::knife_load::knife_from_load;
 use super::{
-    BODY_BYTES, PIGMENT_CHANNELS, TIP_CHANNELS, TIP_SUM_CHANNELS, VOLUME_CHANNEL, WetOilEngine,
+    BLADE_LOAD_VALUES, BODY_BYTES, PIGMENT_CHANNELS, TIP_CHANNELS, TIP_SUM_CHANNELS,
+    VOLUME_CHANNEL, WetOilEngine,
 };
 use crate::canvas::PaintTotals;
 use crate::compute::read_buffer;
@@ -15,6 +15,7 @@ pub struct BrushReadout {
     pub tip_mean: Mixture,
     pub reserve: PaintTotals,
     pub knife: PaintTotals,
+    pub face: PaintTotals,
 }
 
 impl WetOilEngine {
@@ -37,6 +38,7 @@ impl WetOilEngine {
             &self.buffers.tip_sums,
             &self.buffers.body,
             &self.buffers.blade_load,
+            &self.buffers.face_sums,
         ];
         let staging = staging_buffer(
             gpu,
@@ -45,6 +47,7 @@ impl WetOilEngine {
         );
         let mut encoder = new_encoder(gpu, "brush_readout");
         self.encode_sum_tip(gpu, &mut encoder);
+        self.face_sum_pass.encode(gpu, &self.buffers, &mut encoder);
         let mut offset = 0;
         for source in sources {
             encoder.copy_buffer_to_buffer(source, 0, &staging, offset, source.size());
@@ -54,11 +57,13 @@ impl WetOilEngine {
         read_mapped(gpu, &staging, |bytes| {
             let values: &[f32] = bytemuck::cast_slice(bytes);
             let (sums, rest) = values.split_at(TIP_SUM_CHANNELS);
-            let (body, load) = rest.split_at(BODY_BYTES as usize / std::mem::size_of::<f32>());
+            let (body, loads) = rest.split_at(BODY_BYTES as usize / std::mem::size_of::<f32>());
+            let (blade, face) = loads.split_at(BLADE_LOAD_VALUES);
             BrushReadout {
                 tip_mean: tip_mean_from_sums(sums),
                 reserve: reserve_from_body(body),
-                knife: knife_from_load(load),
+                knife: cell_totals(blade),
+                face: cell_totals(face),
             }
         })
     }
@@ -120,4 +125,13 @@ pub(super) fn accumulate(totals: &mut PaintTotals, amounts: &[f32]) {
         totals.pigment[slot] += f64::from(*amount);
     }
     totals.volume += f64::from(amounts[VOLUME_CHANNEL]);
+}
+
+/// The paint held over a blade's cells, `TIP_CHANNELS` values to a cell.
+pub(super) fn cell_totals(load: &[f32]) -> PaintTotals {
+    let mut totals = PaintTotals::default();
+    for cell in load.as_chunks::<TIP_CHANNELS>().0 {
+        accumulate(&mut totals, cell);
+    }
+    totals
 }

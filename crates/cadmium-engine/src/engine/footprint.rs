@@ -3,13 +3,14 @@ use super::{
     BLADE_COVERAGE_MARGIN_PX, BLADE_SPILL_BAND_PX, MAX_TIP_RADIUS, MIN_DAB_RADIUS, WetOilEngine,
 };
 use crate::brush::BrushSettings;
-use crate::stroke::{Dab, PenAngles, StrokeSample, pen_angles};
+use crate::stroke::{Dab, PenAngles, StrokeSample, Tool, pen_angles};
 
 const UPRIGHT_TILT_RAD: f32 = 5.0 * std::f32::consts::PI / 180.0;
 const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
 const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
+const MIXING_KNIFE_HALF_WIDTH_RATIO: f32 = 0.35;
 const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
 const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
 
@@ -44,7 +45,7 @@ impl Footprint {
         let radius = (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
         Footprint {
             radius,
-            elongation: knife_half_width(radius) / radius,
+            elongation: blade_half_width(brush.tool, radius) / radius,
             orientation: dab.direction,
             rectangular: true,
             lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
@@ -131,7 +132,16 @@ fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-pub(super) fn knife_half_width(radius: f32) -> f32 {
+/// Half the blade's width along the stroke: the painting knife is a thin edge,
+/// the mixing knife lays a broad face on the paint.
+fn blade_half_width(tool: Tool, radius: f32) -> f32 {
+    if tool == Tool::MixingKnife {
+        return MIXING_KNIFE_HALF_WIDTH_RATIO * radius;
+    }
+    knife_half_width(radius)
+}
+
+fn knife_half_width(radius: f32) -> f32 {
     (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX)
 }
 
@@ -176,3 +186,6 @@ fn bristle_outline(brush: &BrushSettings, angles: PenAngles) -> BrushOutline {
         orientation: blade_orientation(head.is_round(), angles.altitude_rad, angles.azimuth_rad),
     }
 }
+
+#[cfg(test)]
+mod tests;

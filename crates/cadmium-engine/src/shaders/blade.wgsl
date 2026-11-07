@@ -10,10 +10,6 @@ const UPPER_END: u32 = 1u;
 const WANT_CHANNEL: u32 = TIP_CHANNELS;
 const GRANT_RATIO_CHANNEL: u32 = VOLUME_CHANNEL;
 const BLADE_THREADS: u32 = 256u;
-const QUANTIZE_LIMIT: f32 = 2.0e9;
-const EMPTY_VOLUME_UM: f32 = 1e-4;
-const GRANT_SAFETY: f32 = 0.999999;
-const NO_PEAK: f32 = -3.0e38;
 
 var<workgroup> reduced: array<f32, BLADE_THREADS>;
 var<workgroup> lower_weights: array<f32, BLADE_THREADS>;
@@ -29,23 +25,6 @@ var<workgroup> upper_weights: array<f32, BLADE_THREADS>;
 @group(0) @binding(7) var<storage, read_write> blade_grant: array<f32>;
 @group(0) @binding(8) var<storage, read_write> blade: BladeState;
 
-fn quantize(amount: f32) -> i32 {
-    return i32(round(clamp(amount * BLADE_DELTA_SCALE, -QUANTIZE_LIMIT, QUANTIZE_LIMIT)));
-}
-
-fn quantize_down(amount: f32) -> i32 {
-    return i32(floor(clamp(amount * BLADE_DELTA_SCALE, -QUANTIZE_LIMIT, QUANTIZE_LIMIT)));
-}
-
-fn dequantize(amount: i32) -> f32 {
-    return f32(amount) / BLADE_DELTA_SCALE;
-}
-
-fn region_pixel(index: u32) -> vec2<i32> {
-    let width = dab.canvas_size.x;
-    return dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
-}
-
 fn band_cover(position: vec2<f32>, end: u32) -> f32 {
     let semi = semi_axes();
     let along = clamp(semi.x - abs(position.x) + BLADE_COVERAGE_HALF_PX, 0.0, 1.0);
@@ -58,48 +37,11 @@ fn band_cover(position: vec2<f32>, end: u32) -> f32 {
     return along * across;
 }
 
-fn lateral_cover(position: vec2<f32>) -> f32 {
-    let inset = semi_axes() - abs(position);
-    if (inset.x + BLADE_COVERAGE_HALF_PX <= 0.0) {
-        return 0.0;
-    }
-    return clamp(inset.y + BLADE_COVERAGE_HALF_PX, 0.0, 1.0);
-}
-
-fn cell_of(position: vec2<f32>) -> u32 {
-    return u32(clamp(i32(floor(position.y)) + TIP_HALF, 0, i32(TIP_SIZE) - 1));
-}
-
-fn read_fractions(pixel: vec2<i32>) -> array<f32, 8> {
-    let low = textureLoad(wet_pig0, pixel);
-    let high = textureLoad(wet_pig1, pixel);
-    return array<f32, 8>(low.x, low.y, low.z, low.w, high.x, high.y, high.z, high.w);
-}
-
-fn store_paint(pixel: vec2<i32>, volume: f32, amounts: array<f32, 8>) {
-    var fractions = array<f32, 8>();
-    if (volume >= EMPTY_VOLUME_UM) {
-        for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-            fractions[slot] = nearest_half(max(amounts[slot], 0.0) / volume);
-        }
-        fractions = within_whole_volume(fractions);
-    }
-    textureStore(wet_vol, pixel, vec4<f32>(volume, 0.0, 0.0, 0.0));
-    textureStore(wet_pig0, pixel, vec4<f32>(fractions[0], fractions[1], fractions[2], fractions[3]));
-    textureStore(wet_pig1, pixel, vec4<f32>(fractions[4], fractions[5], fractions[6], fractions[7]));
-}
-
 fn lay_wanted(pixel: vec2<i32>, cover: f32) -> i32 {
     let dry = textureLoad(dry_height, pixel).x;
     let surface = dry + textureLoad(wet_vol, pixel).x;
     let laid_top = mix(dry, blade.plane, cover);
     return max(quantize_down(laid_top - surface), 0);
-}
-
-fn centre_dry_height() -> f32 {
-    let size = vec2<i32>(textureDimensions(dry_height));
-    let pixel = clamp(vec2<i32>(floor(dab.center)), vec2<i32>(0), size - vec2<i32>(1));
-    return textureLoad(dry_height, pixel).x;
 }
 
 fn reduce_sum(thread: u32) {
@@ -183,11 +125,7 @@ fn grant(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     blade_grant[base + GRANT_RATIO_CHANNEL] = ratio;
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-        var share = 0.0;
-        if (held > EMPTY_VOLUME_UM) {
-            share = max(blade_load[base + slot], 0.0) / held;
-        }
-        blade_grant[base + slot] = share;
+        blade_grant[base + slot] = held_share(blade_load[base + slot], held);
     }
 }
 
@@ -213,21 +151,16 @@ fn lay(@builtin(global_invocation_id) id: vec3<u32>) {
     if (deposit_q == 0 && pickup_q == 0) {
         return;
     }
-    let deposit = dequantize(deposit_q);
-    let pickup = dequantize(pickup_q);
-    let fractions = read_fractions(pixel);
-    var amounts = array<f32, 8>();
+    var shares = array<f32, PIGMENT_CHANNELS>();
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-        let deposit_slot_q = max(quantize_down(deposit * blade_grant[grant_base + slot]), 0);
-        let pickup_slot_q = max(quantize(pickup * fractions[slot]), 0);
-        amounts[slot] = fractions[slot] * volume + dequantize(deposit_slot_q) - dequantize(pickup_slot_q);
-        let change = pickup_slot_q - deposit_slot_q;
-        if (change != 0) {
-            atomicAdd(&blade_delta[delta_base + slot], change);
+        shares[slot] = blade_grant[grant_base + slot];
+    }
+    let gained = trade(pixel, volume, deposit_q, pickup_q, shares);
+    for (var channel = 0u; channel < TIP_CHANNELS; channel++) {
+        if (gained[channel] != 0) {
+            atomicAdd(&blade_delta[delta_base + channel], gained[channel]);
         }
     }
-    atomicAdd(&blade_delta[delta_base + VOLUME_CHANNEL], pickup_q - deposit_q);
-    store_paint(pixel, volume - pickup + deposit, amounts);
 }
 
 @compute @workgroup_size(BLADE_THREADS)

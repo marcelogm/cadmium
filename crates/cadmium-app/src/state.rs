@@ -35,6 +35,7 @@ mod hand;
 mod history;
 mod lab;
 mod library;
+mod mixing_knife;
 mod pacing;
 mod pen;
 mod provisional;
@@ -101,6 +102,7 @@ pub struct AppState {
     reserve_mixture: Mixture,
     pub knife_mixture: Mixture,
     knife_volume: f32,
+    mixing_knife: mixing_knife::MixingKnife,
     contact: Option<Contact>,
     hold_clock: Option<Instant>,
     /// How the tray widget shows the tray, in device px.
@@ -141,6 +143,7 @@ impl AppState {
             reserve_mixture: EMPTY_MIXTURE,
             knife_mixture: EMPTY_MIXTURE,
             knife_volume: 0.0,
+            mixing_knife: mixing_knife::MixingKnife::default(),
             contact: None,
             hold_clock: None,
             tray_view: UNMOVED_VIEW,

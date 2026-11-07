@@ -34,6 +34,7 @@ fn total(gpu: &GpuContext, s: &PaintSession) -> PaintTotals {
     for tool in [
         s.engine.brush_totals(gpu).unwrap(),
         s.engine.knife_totals(gpu).unwrap(),
+        s.engine.face_totals(gpu).unwrap(),
     ] {
         t.volume += tool.volume;
         for i in 0..8 {

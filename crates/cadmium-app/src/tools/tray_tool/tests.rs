@@ -4,7 +4,16 @@ use crate::tools::panel::PanelTool;
 #[test]
 fn names_round_trip_and_match_the_tray_header() {
     let names: Vec<_> = TrayTool::ALL.iter().map(|tool| tool.name()).collect();
-    assert_eq!(names, ["load", "tray-blender", "tray-rag", "tray-tube"]);
+    assert_eq!(
+        names,
+        [
+            "load",
+            "tray-mixing-knife",
+            "tray-blender",
+            "tray-rag",
+            "tray-tube"
+        ]
+    );
     for tool in TrayTool::ALL {
         assert_eq!(TrayTool::from_name(tool.name()), Some(tool));
     }
@@ -46,7 +55,16 @@ fn the_other_tray_tools_ignore_the_painting_tool() {
         );
         assert_eq!(TrayTool::Rag.press(painting), Press::Stroke(Tool::Rag));
         assert_eq!(TrayTool::Tube.press(painting), Press::Squeeze);
-        for tool in [TrayTool::Blender, TrayTool::Rag, TrayTool::Tube] {
+        assert_eq!(
+            TrayTool::MixingKnife.press(painting),
+            Press::Stroke(Tool::MixingKnife)
+        );
+        for tool in [
+            TrayTool::MixingKnife,
+            TrayTool::Blender,
+            TrayTool::Rag,
+            TrayTool::Tube,
+        ] {
             assert!(tool.is_enabled(painting));
         }
     }
@@ -87,7 +105,13 @@ fn tray_keys_are_shifted_digits_and_tooltips_name_them() {
     let keys: Vec<_> = TrayTool::ALL.iter().map(|tool| tool.key()).collect();
     assert_eq!(
         keys,
-        [gdk::Key::_1, gdk::Key::_4, gdk::Key::_5, gdk::Key::_6]
+        [
+            gdk::Key::_1,
+            gdk::Key::_2,
+            gdk::Key::_4,
+            gdk::Key::_5,
+            gdk::Key::_6
+        ]
     );
     for tool in TrayTool::ALL {
         let digit = tool.key().name().unwrap();
@@ -121,6 +145,10 @@ fn every_tray_tool_shows_in_the_panel() {
         TrayTool::Tube.panel_tool(brush, Tool::Brush),
         PanelTool::Tube
     );
+    assert_eq!(
+        TrayTool::MixingKnife.panel_tool(brush, Tool::Brush),
+        PanelTool::Paint(Tool::MixingKnife)
+    );
 }
 
 #[test]
@@ -141,4 +169,19 @@ fn a_disabled_load_says_what_to_pick_to_use_it() {
     for tool in [TrayTool::Blender, TrayTool::Rag, TrayTool::Tube] {
         assert_eq!(tool.tooltip_for(UiTool::Move), tool.profile().tooltip);
     }
+}
+
+#[test]
+fn the_mixing_knife_is_the_tray_header_s_second_tool() {
+    let labels: Vec<_> = TrayTool::ALL.iter().map(|tool| tool.label()).collect();
+    assert_eq!(labels, ["Load", "Mixing Knife", "Blender", "Rag", "Tube"]);
+    let tool = TrayTool::MixingKnife;
+    assert_eq!(tool.name(), "tray-mixing-knife");
+    assert_eq!(tool.key(), gdk::Key::_2);
+    assert!(tool.profile().tooltip.contains("(Shift+2)"));
+    assert_eq!(
+        tool.icon_for(UiTool::Paint(Tool::Brush)),
+        "cadmium-mixing-knife-symbolic"
+    );
+    assert_eq!(tool.label_for(UiTool::Move), "Mixing Knife");
 }

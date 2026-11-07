@@ -1,7 +1,10 @@
 use cadmium_engine::brush::BrushSpec;
 use cadmium_engine::surface::Surface;
 
+use gtk::glib;
+
 use super::AppState;
+use crate::LOG_DOMAIN;
 use crate::tools::UiTool;
 
 impl AppState {
@@ -36,7 +39,15 @@ impl AppState {
         self.session.brush.medium = medium;
     }
 
+    /// Picks the painting's tool; one the tool header doesn't offer is ignored.
     pub fn set_ui_tool(&mut self, tool: UiTool) {
+        if !UiTool::ALL.contains(&tool) {
+            glib::g_warning!(
+                LOG_DOMAIN,
+                "{tool:?} is not a painting tool; keeping the one in hand"
+            );
+            return;
+        }
         self.focus = Surface::Painting;
         self.ui_tool = tool;
         let UiTool::Paint(paint_tool) = tool else {
