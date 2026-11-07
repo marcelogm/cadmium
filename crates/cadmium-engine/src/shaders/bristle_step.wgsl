@@ -9,8 +9,19 @@
 @group(0) @binding(8) var wet_vol: texture_storage_2d<r32float, read>;
 @group(0) @binding(9) var<storage, read_write> hair_loads: array<f32>;
 
+/// How fast a hair's own motion dies away between substeps: one set swinging settles
+/// instead of swinging on and touching the canvas at every pass.
+const HAIR_VISCOSITY_PER_SECOND: f32 = 100.0;
+
 // Mirrors MIN_AXIS_RISE in engine/bristles/handle.rs.
 const MIN_AXIS_RISE: f32 = 0.0175;
+/// Share of the way a hair's shape follows its wetness over one reference dab step: paint it
+/// lays and draws back up changes its wetness every dab, and a shape that followed that
+/// at once would lift the hair off the canvas and set it down again, dab after dab.
+const WETNESS_FOLLOW_SHARE: f32 = 0.1;
+/// Marks a bend slot whose `z` already holds the hair's steady wetness.
+const WETNESS_KNOWN: f32 = 1.0;
+
 /// Share of the handle's drop beyond its resting slack given back over one reference dab step
 /// while the hairs touch.
 const DROP_RELAX_SHARE: f32 = 0.25;
@@ -119,7 +130,8 @@ fn lifted_off() -> bool {
 
 /// How far the handle comes down below where the pressure alone puts it, so the lightest
 /// touch still lands its lowest hair: the hanging bundle's slack, plus however far the hairs
-/// were left hovering by clumping and drag, given back gradually while they touch.
+/// were left hovering by clumping and drag. That extra eases back every dab, so once the
+/// hairs touch, it drains away.
 fn handle_drop_px(thread: u32, base_px: f32, wetness: Wetness) -> f32 {
     let resting = slack_px(thread, base_px, wetness);
     let hovering = hovering_px(thread);
@@ -215,7 +227,8 @@ fn local_velocity(at: vec3<f32>, follow: vec3<f32>, motion: Motion) -> vec3<f32>
     }
     var carried = vec3<f32>(0.0);
     if motion.previous_seconds > 0.0 {
-        carried = (at - follow) / motion.previous_seconds;
+        let kept = exp(-HAIR_VISCOSITY_PER_SECOND * motion.seconds);
+        carried = (at - follow) / motion.previous_seconds * kept;
     }
     return carried - dab.bristle_damping * motion.velocity_change;
 }
@@ -261,12 +274,13 @@ fn advance(bristle: u32, motion: Motion, wetness: f32) {
     var chain = predicted(bristle, root - root_position(rest, motion.start), motion);
     var anchors = held_anchors(bristle);
     chain[0] = root;
-    let bend = states[bend_slot(bristle)].xy;
+    let held_bend = states[bend_slot(bristle)];
+    let bend = held_bend.xy;
     let lean = resting_lean(rest, gathering(wetness));
     let floors = solve(&chain, &anchors, rest, hanging_along(lean + bend, motion.end));
     let span = chain[BRISTLE_VERTICES - 1u] - root;
     let kept = remembered_bend(bend, lean, span, motion.end, motion.seconds);
-    states[bend_slot(bristle)] = vec4<f32>(kept, 0.0, 0.0);
+    states[bend_slot(bristle)] = vec4<f32>(kept, held_bend.zw);
     store(bristle, chain, anchors, floors, motion.seconds);
 }
 
@@ -292,6 +306,31 @@ fn remember_pose(pose: Pose, substep_seconds: f32, velocity: vec3<f32>, drop_px:
         pose.orientation,
         vec2<f32>(0.0),
     );
+}
+
+fn steady_wetness(thread: u32) -> Wetness {
+    let fresh = owned_wetness(thread);
+    let follow = 1.0 - pow(1.0 - WETNESS_FOLLOW_SHARE, max(dab.step_ratio, 0.0));
+    var steady = fresh;
+    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
+        let bristle = owned_bristle(thread, share);
+        if bristle < dab.bristle_total {
+            let held = states[bend_slot(bristle)];
+            let known = held.w == WETNESS_KNOWN && dab.bristle_reset == 0u;
+            steady[share] = select(fresh[share], mix(held.z, fresh[share], follow), known);
+        }
+    }
+    return steady;
+}
+
+fn remember_wetness(thread: u32, wetness: Wetness) {
+    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
+        let bristle = owned_bristle(thread, share);
+        if bristle < dab.bristle_total {
+            let bend = states[bend_slot(bristle)].xy;
+            states[bend_slot(bristle)] = vec4<f32>(bend, wetness[share], WETNESS_KNOWN);
+        }
+    }
 }
 
 fn hang_owned_at_rest(thread: u32, pose: Pose, wetness: Wetness) {
@@ -327,7 +366,7 @@ fn advance_owned(thread: u32, motion: Motion, wetness: Wetness) {
 @compute @workgroup_size(BRISTLE_WORKGROUP_SIZE)
 fn step(@builtin(local_invocation_index) thread: u32) {
     let resetting = dab.bristle_reset != 0u;
-    let wetness = owned_wetness(thread);
+    let wetness = steady_wetness(thread);
     let found_base_px = resting_base_px(thread, wetness);
     let drop_px = handle_drop_px(thread, found_base_px, wetness);
     let base_px = found_base_px - drop_px;
@@ -346,6 +385,7 @@ fn step(@builtin(local_invocation_index) thread: u32) {
     if resetting {
         hang_owned_at_rest(thread, start, wetness);
     }
+    remember_wetness(thread, wetness);
     share_pulls(thread, wetness);
     storageBarrier();
     for (var substep = 0u; substep < substeps; substep++) {

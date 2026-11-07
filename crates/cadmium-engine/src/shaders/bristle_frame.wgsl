@@ -41,6 +41,7 @@ fn anchor_slot(bristle: u32, vertex: u32) -> u32 {
     return state_slot(bristle) + 2u * BRISTLE_VERTICES + vertex;
 }
 
+/// The hair's remembered bend in `xy`, its steady wetness in `z`, `WETNESS_KNOWN` in `w`.
 fn bend_slot(bristle: u32) -> u32 {
     return state_slot(bristle) + 3u * BRISTLE_VERTICES;
 }
