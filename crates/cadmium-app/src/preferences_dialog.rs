@@ -36,8 +36,26 @@ pub fn preferences_dialog(state: &SharedState) -> adw::PreferencesDialog {
         |settings, action| settings.upper_pen_button = action,
     ));
     page.add(&group);
+    page.add(&pressure::pressure_group(
+        settings.pressure_curve,
+        glib::clone!(
+            #[strong]
+            state,
+            #[weak]
+            dialog,
+            move |curve| save(&state, &dialog, |settings| settings.pressure_curve = curve)
+        ),
+    ));
     dialog.add(&page);
     dialog
+}
+
+/// Applies `change` to the settings and saves them; a failed save is told in a toast.
+fn save(state: &SharedState, dialog: &adw::PreferencesDialog, change: impl FnOnce(&mut Settings)) {
+    if let Err(error) = state.borrow_mut().settings.update(change) {
+        glib::g_warning!(LOG_DOMAIN, "couldn't save the settings: {error}");
+        dialog.add_toast(adw::Toast::new(SAVE_FAILED));
+    }
 }
 
 /// A row choosing the action of one pen button; `bind` stores the choice in the settings.
@@ -67,14 +85,7 @@ fn button_row(
             let Some(action) = PenButtonAction::at_menu_index(row.selected()) else {
                 return;
             };
-            let saved = state
-                .borrow_mut()
-                .settings
-                .update(|settings| bind(settings, action));
-            if let Err(error) = saved {
-                glib::g_warning!(LOG_DOMAIN, "couldn't save the settings: {error}");
-                dialog.add_toast(adw::Toast::new(SAVE_FAILED));
-            }
+            save(&state, &dialog, |settings| bind(settings, action));
         }
     ));
     row
