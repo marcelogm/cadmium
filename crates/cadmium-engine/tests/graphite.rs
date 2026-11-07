@@ -1,6 +1,11 @@
 pub mod support;
 
-use cadmium_engine::{canvas::StateTexture, gpu::GpuContext, session::PaintSession};
+use cadmium_engine::{
+    canvas::StateTexture,
+    gpu::GpuContext,
+    pigments::{MAX_SLOTS, Mixture},
+    session::PaintSession,
+};
 use support::{drag, frame, line, presented_rgba, session, stroke, without_wgpu_errors};
 
 const WIDTH: u32 = 512;
@@ -17,6 +22,12 @@ const FULL_SKETCH: f32 = 1.0;
 const HALF_SKETCH: f32 = 0.5;
 const RGBA_CHANNELS: usize = 4;
 const BANDS_PER_TEXTURE: usize = 4;
+const DARKENED_RATIO_DIVISOR: u32 = 2;
+const TITANIUM_WHITE: usize = 2;
+const WHITE_LOAD_UM: f32 = 100.0;
+const FULL_DIP: f32 = 1.0;
+const OPAQUE_PASSES: usize = 6;
+const HIDDEN_SHARE_OF_BARE_CONTRAST: f32 = 0.05;
 const SHOWS_THROUGH_RATIO: f32 = 0.9;
 
 fn sketch_row(gpu: &GpuContext, s: &mut PaintSession, density: f32) {
@@ -30,7 +41,7 @@ fn sketch_row(gpu: &GpuContext, s: &mut PaintSession, density: f32) {
     s.canvas.dirty.mark_all();
 }
 
-fn luminance_at(rgba: &[u8], x: usize, y: usize) -> u32 {
+fn rgb_sum_at(rgba: &[u8], x: usize, y: usize) -> u32 {
     let i = (y * WIDTH as usize + x) * RGBA_CHANNELS;
     u32::from(rgba[i]) + u32::from(rgba[i + 1]) + u32::from(rgba[i + 2])
 }
@@ -47,7 +58,8 @@ fn graphite_darkens_the_bare_canvas() {
     frame(&gpu, &mut s);
     let rgba = presented_rgba(&gpu, &s, WIDTH, HEIGHT);
     assert!(
-        luminance_at(&rgba, CENTRE_X, SKETCH_ROW) < luminance_at(&rgba, CENTRE_X, CLEAN_ROW) / 2
+        rgb_sum_at(&rgba, CENTRE_X, SKETCH_ROW)
+            < rgb_sum_at(&rgba, CENTRE_X, CLEAN_ROW) / DARKENED_RATIO_DIVISOR
     );
 }
 
@@ -79,8 +91,7 @@ fn dried_glaze_reflectance(gpu: &GpuContext, sketched: bool) -> Vec<f32> {
     if sketched {
         sketch_row(gpu, &mut s, FULL_SKETCH);
     }
-    let glaze = line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, GLAZE_PRESSURE, GLAZE_TILT_DEG);
-    drag(gpu, &mut s, &glaze);
+    thin_glaze(gpu, &mut s);
     assert!(s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap()[centre()] > 0.0);
     without_wgpu_errors(gpu, || s.dry(gpu));
     let first = centre() * BANDS_PER_TEXTURE;
@@ -104,4 +115,82 @@ fn graphite_shows_through_a_dried_glaze() {
     let sketched_total: f32 = sketched.iter().sum();
     let clean_total: f32 = clean.iter().sum();
     assert!(sketched_total < clean_total * SHOWS_THROUGH_RATIO);
+}
+
+fn white() -> Mixture {
+    let mut fractions = [0.0; MAX_SLOTS];
+    fractions[TITANIUM_WHITE] = 1.0;
+    Mixture {
+        volume_um: WHITE_LOAD_UM,
+        fractions,
+    }
+}
+
+fn shown_under_wet_paint(
+    gpu: &GpuContext,
+    sketched: bool,
+    paint: impl Fn(&GpuContext, &mut PaintSession),
+) -> u32 {
+    let mut s = session(gpu);
+    if sketched {
+        sketch_row(gpu, &mut s, FULL_SKETCH);
+    }
+    paint(gpu, &mut s);
+    assert!(s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap()[centre()] > 0.0);
+    frame(gpu, &mut s);
+    rgb_sum_at(&presented_rgba(gpu, &s, WIDTH, HEIGHT), CENTRE_X, SKETCH_ROW)
+}
+
+fn thick_white(gpu: &GpuContext, s: &mut PaintSession) {
+    without_wgpu_errors(gpu, || s.clean_brush(gpu));
+    for _ in 0..OPAQUE_PASSES {
+        without_wgpu_errors(gpu, || s.dip(gpu, &white(), FULL_DIP).unwrap());
+        stroke(gpu, s, SKETCH_ROW as f64, STROKE_FROM, STROKE_TO);
+    }
+}
+
+fn thin_glaze(gpu: &GpuContext, s: &mut PaintSession) {
+    let glaze = line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, GLAZE_PRESSURE, GLAZE_TILT_DEG);
+    drag(gpu, s, &glaze);
+}
+
+fn bare_graphite_contrast(gpu: &GpuContext) -> u32 {
+    let mut s = session(gpu);
+    sketch_row(gpu, &mut s, FULL_SKETCH);
+    frame(gpu, &mut s);
+    let rgba = presented_rgba(gpu, &s, WIDTH, HEIGHT);
+    rgb_sum_at(&rgba, CENTRE_X, CLEAN_ROW) - rgb_sum_at(&rgba, CENTRE_X, SKETCH_ROW)
+}
+
+#[test]
+fn opaque_wet_paint_hides_the_graphite() {
+    let gpu = GpuContext::new().unwrap();
+    let over_graphite = shown_under_wet_paint(&gpu, true, thick_white);
+    let over_canvas = shown_under_wet_paint(&gpu, false, thick_white);
+    let residual = over_graphite.abs_diff(over_canvas) as f32;
+    let bare = bare_graphite_contrast(&gpu) as f32;
+    assert!(
+        residual <= bare * HIDDEN_SHARE_OF_BARE_CONTRAST,
+        "{over_graphite} vs {over_canvas}, bare contrast {bare}"
+    );
+}
+
+#[test]
+fn graphite_shows_through_a_wet_glaze() {
+    let gpu = GpuContext::new().unwrap();
+    let over_graphite = shown_under_wet_paint(&gpu, true, thin_glaze);
+    let over_canvas = shown_under_wet_paint(&gpu, false, thin_glaze);
+    assert!(over_graphite < over_canvas, "{over_graphite} vs {over_canvas}");
+}
+
+#[test]
+fn undoing_a_dry_brings_the_graphite_back() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    sketch_row(&gpu, &mut s, FULL_SKETCH);
+    stroke(&gpu, &mut s, SKETCH_ROW as f64, STROKE_FROM, STROKE_TO);
+    without_wgpu_errors(&gpu, || s.dry(&gpu));
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    let graphite = s.canvas.read_f32(&gpu, StateTexture::Graphite).unwrap();
+    assert_eq!(graphite[centre()], FULL_SKETCH);
 }
