@@ -70,11 +70,7 @@ impl AppState {
     pub(super) fn finish_stroke(&mut self) {
         self.session.end_stroke();
         self.edits.record();
-        if self.session.has_queued_dabs() {
-            self.pacing.brush_measure_waits = true;
-        } else {
-            self.measure_brush();
-        }
+        self.measure_brush_once_painted();
     }
 }
 

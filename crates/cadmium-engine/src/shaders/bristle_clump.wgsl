@@ -144,7 +144,17 @@ fn clump_owned(thread: u32) {
         if clumped_bristle(item) >= dab.bristle_total {
             break;
         }
-        states[position_slot(clumped_bristle(item), clumped_vertex_index(item))] = moved[share];
+        let bristle = clumped_bristle(item);
+        let vertex = clumped_vertex_index(item);
+        let held = states[position_slot(bristle, vertex)].xyz;
+        let follow = states[previous_slot(bristle, vertex)];
+        let centroid = centroids[rests[bristle].cluster * BRISTLE_VERTICES + vertex];
+        let gathered = (centroid - held) * pulls[bristle];
+        // Only as deep as the canvas let it: the floor's push back stays motion.
+        let landed = vec3<f32>(gathered.xy, min(gathered.z, moved[share].z - held.z));
+        states[position_slot(bristle, vertex)] = moved[share];
+        // A clump draws its hairs in without setting them moving: their last positions follow.
+        states[previous_slot(bristle, vertex)] = vec4<f32>(follow.xyz + landed, follow.w);
     }
     storageBarrier();
 }

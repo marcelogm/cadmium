@@ -13,6 +13,8 @@ pub(crate) struct FramePacing {
     timer: OnceCell<Option<GpuFrameTimer>>,
     timing: Option<usize>,
     pub(crate) brush_measure_waits: bool,
+    /// Set when a deferred brush read lands; the window drains it to refresh the panels.
+    pub(crate) brush_measured: bool,
 }
 
 impl FramePacing {

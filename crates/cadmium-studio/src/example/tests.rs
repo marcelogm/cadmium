@@ -10,6 +10,10 @@ use crate::demo::StrokeBox;
 use crate::paint::{DEMO_PIGMENT, StudioPaint};
 use crate::studio::Thumbnail;
 
+/// The heavy quarter of the ramp inks at least a sixth more than the light one. A light touch
+/// lays an unbroken mark, so the middle and heavy quarters both near a full band.
+const MIN_RAMP_GAIN_DIVISOR: usize = 6;
+
 /// Small, so the canvas is small and the tests stay quick on lavapipe.
 const TEST_SIZE_PX: f32 = 12.0;
 /// How far a channel may stray from the paper before a pixel counts as inked (as in the
@@ -203,7 +207,10 @@ fn the_ramp_inks_more_toward_its_heavy_end() {
             .map(|which| inked(&shown, &fit, &quarter(&ramp, which)))
             .collect();
         let (light, heavy) = (ink[0], ink[3]);
-        assert!(heavy > light + light / 4, "{head:?} {ink:?}");
+        assert!(
+            heavy > light + light / MIN_RAMP_GAIN_DIVISOR,
+            "{head:?} {ink:?}"
+        );
         assert!(
             ink[1..].iter().all(|&more| more > light),
             "{head:?} {ink:?}"

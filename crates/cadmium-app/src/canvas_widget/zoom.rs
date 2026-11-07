@@ -141,10 +141,14 @@ impl CadmiumCanvas {
         )
     }
 
-    pub(super) fn provisional_marks(&self) -> Option<([u8; 3], Vec<Mark>)> {
+    pub(super) fn provisional_marks(&self) -> Option<([u8; 3], f32, Vec<Mark>)> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let trail = state.provisional_trail()?;
-        Some((trail.colour, trail.widget_marks(self.device_scale() as f32)))
+        Some((
+            trail.colour,
+            trail.opacity,
+            trail.widget_marks(self.device_scale() as f32),
+        ))
     }
 
     pub(super) fn follow_scale_change(&self) {

@@ -19,6 +19,9 @@ struct SweptContact {
 };
 
 const MIN_COVERAGE: f32 = 1e-6;
+/// A hair already on the canvas keeps painting until it rises this many radii above it, so
+/// one grazing the edge of contact draws a steady line rather than a string of dots.
+const RELEASE_BAND_SHARE: f32 = 1.2;
 const DRAW_DISCARDED_BITS: u32 = 8u;
 const COVERAGE_FEATHER_PX: f32 = 0.5;
 const MIN_SPAN_PX2: f32 = 1e-8;
@@ -354,10 +357,12 @@ fn rasterize(
     }
     let rest = rests[bristle];
     let slot = swept_slot(bristle, segment);
-    let now = touching_span(bristle, segment, rest.radius_px);
-    var before = now;
     let remembered = remembered_span(slot);
-    if (continues_previous_dab() && remembered.touching) {
+    let holding = continues_previous_dab() && remembered.touching;
+    let band_px = rest.radius_px * select(1.0, RELEASE_BAND_SHARE, holding);
+    let now = touching_span(bristle, segment, band_px);
+    var before = now;
+    if (holding) {
         before = remembered;
     }
     storageBarrier();
@@ -365,7 +370,7 @@ fn rasterize(
         remember_span(slot, now);
     }
     if (now.touching) {
-        let first = first_touching_arc(bristle, rest.radius_px);
+        let first = first_touching_arc(bristle, band_px);
         let sweep = Sweep(before, now, rest.radius_px, first, hair_draw_log(bristle));
         rasterize_sweep(sweep, bristle, thread);
     }

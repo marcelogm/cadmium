@@ -1,7 +1,8 @@
 use super::*;
 use crate::state::test_support::{
-    PAINT_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals, holding_the_knife,
-    knife_totals, paint_stroke, painting_state, reserve_volume, row_samples,
+    PAINT_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals, finish_painting,
+    holding_the_knife, knife_totals, paint_stroke, painting_state, present_one_frame,
+    reserve_volume, row_samples, stroke,
 };
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
@@ -17,6 +18,27 @@ fn choosing_another_pigment_cleans_the_brush_before_loading_it() {
     assert_eq!(totals.pigment[ULTRAMARINE_SLOT], 0.0);
     assert!(totals.pigment[WHITE_SLOT] > 0.0);
     assert_eq!(state.session.brush.recipe, [(WHITE_SLOT, 1.0)]);
+}
+
+#[test]
+fn choosing_a_pigment_behind_a_queued_stroke_leaves_its_dabs_to_the_frames() {
+    let mut state = painting_state();
+    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
+    assert!(state.session.has_queued_dabs());
+    finish_painting(&mut state, present_one_frame);
+    assert!(state.reserve_mixture.fractions[WHITE_SLOT] > 0.0);
+    assert_eq!(state.reserve_mixture.fractions[ULTRAMARINE_SLOT], 0.0);
+}
+
+#[test]
+fn cleaning_the_brush_behind_a_queued_stroke_leaves_its_dabs_to_the_frames() {
+    let mut state = painting_state();
+    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    state.clean_brush();
+    assert!(state.session.has_queued_dabs());
+    finish_painting(&mut state, present_one_frame);
+    assert!(state.brush_is_clean());
 }
 
 #[test]
@@ -174,4 +196,39 @@ fn reserve_level_is_a_share_of_the_full_reserve() {
     assert_eq!(fill_level(small / 2.0, small), 0.5);
     assert_eq!(fill_level(small * 2.0, small), 1.0);
     assert_eq!(fill_level(1.0, 0.0), 0.0);
+}
+
+#[test]
+fn the_brush_read_is_due_in_the_frame_after_the_queue_drains() {
+    let mut state = painting_state();
+    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
+    assert!(state.session.has_queued_dabs());
+    while state.session.has_queued_dabs() {
+        present_one_frame(&mut state);
+    }
+    assert!(state.brush_measure_due());
+    assert!(!state.take_brush_measured());
+    present_one_frame(&mut state);
+    assert!(!state.brush_measure_due());
+    assert!(state.take_brush_measured());
+    assert!(!state.take_brush_measured());
+}
+
+#[test]
+fn the_deferred_brush_read_updates_the_readout_when_it_lands() {
+    let mut state = painting_state();
+    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
+    assert!(state.session.has_queued_dabs());
+    finish_painting(&mut state, present_one_frame);
+    assert!(state.reserve_mixture.fractions[WHITE_SLOT] > 0.0);
+    assert_eq!(state.reserve_mixture.fractions[ULTRAMARINE_SLOT], 0.0);
+}
+
+#[test]
+fn a_brush_read_that_was_not_deferred_is_not_announced() {
+    let mut state = painting_state();
+    state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
+    assert!(!state.take_brush_measured());
 }

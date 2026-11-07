@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::LOG_DOMAIN;
 use crate::atomic_file;
+use crate::pressure_curve::PressureCurve;
 
 /// What a pen barrel button does on the painting canvas.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +74,8 @@ pub struct Settings {
     pub lower_pen_button: PenButtonAction,
     /// The barrel button further from the tip.
     pub upper_pen_button: PenButtonAction,
+    /// How the pen's pressure maps onto the brush's.
+    pub pressure_curve: PressureCurve,
     /// The share of the window height the tray takes, between `MIN_TRAY_SHARE` and
     /// `MAX_TRAY_SHARE`.
     #[serde(serialize_with = "round_share")]
@@ -91,6 +94,7 @@ impl Default for Settings {
         Settings {
             lower_pen_button: PenButtonAction::PickColour,
             upper_pen_button: PenButtonAction::Pan,
+            pressure_curve: PressureCurve::linear(),
             tray_share: DEFAULT_TRAY_SHARE,
             tray_shown: true,
         }
@@ -114,6 +118,10 @@ impl Settings {
         Settings {
             lower_pen_button: field("lower_pen_button", defaults.lower_pen_button),
             upper_pen_button: field("upper_pen_button", defaults.upper_pen_button),
+            pressure_curve: fields
+                .get("pressure_curve")
+                .and_then(PressureCurve::from_json)
+                .unwrap_or(defaults.pressure_curve),
             tray_share: fields
                 .get("tray_share")
                 .and_then(serde_json::Value::as_f64)

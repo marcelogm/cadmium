@@ -24,7 +24,8 @@ const WAVE_PRESSURE_SWING: f32 = 0.4;
 const WAVES: f64 = 2.0;
 const WAVE_BODY_X: std::ops::Range<usize> = 90..420;
 const MIN_CENTRE_WOBBLE_PX: f64 = 0.25;
-const MIN_PRESSURE_WIDTH_RATIO: f64 = 2.0;
+/// Hairs on the canvas hold on through a slight lift, so the narrow end stays a little wider.
+const MIN_PRESSURE_WIDTH_RATIO: f64 = 1.9;
 
 const CURVE_SWING_PX: f64 = 60.0;
 const CURVE_PRESSURE: f32 = 0.7;
