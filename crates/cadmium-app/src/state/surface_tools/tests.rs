@@ -1,6 +1,7 @@
 use cadmium_engine::engine::Tip;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
+use cadmium_engine::tool::UNTILTED_MIXING_KNIFE_TILT_DEG;
 
 use super::tip_for;
 use crate::state::test_support::{
@@ -170,4 +171,18 @@ fn the_move_tool_s_panel_shows_the_painting_tool_after_a_tray_stroke() {
     assert_eq!(state.session.brush.tool, Tool::Brush);
     state.set_tray_tool(TrayTool::Load);
     assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Brush));
+}
+
+#[test]
+fn a_device_without_tilt_holds_only_the_mixing_knife_tilted() {
+    let mut state = painting_state();
+    state.set_ui_tool(UiTool::Paint(Tool::Knife));
+    state.set_tray_tool(TrayTool::MixingKnife);
+    assert_eq!(
+        state.untilted_tilt_deg(Surface::Tray),
+        UNTILTED_MIXING_KNIFE_TILT_DEG
+    );
+    assert_eq!(state.untilted_tilt_deg(Surface::Painting), 0.0);
+    state.set_tray_tool(TrayTool::Blender);
+    assert_eq!(state.untilted_tilt_deg(Surface::Tray), 0.0);
 }

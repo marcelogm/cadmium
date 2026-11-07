@@ -22,6 +22,10 @@ const CONTACT_REST_FOLLOW: f32 = 0.25;
 pub(crate) const BLADE_MODES: [u32; 2] = [TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE];
 const RAG_STRENGTH_PARAM: &str = "rag_strength";
 const PENCIL_STRENGTH_PARAM: &str = "pencil_strength";
+/// The tilt a device without a tilt axis (a mouse) holds the mixing knife at: its altitude
+/// halfway between laid flat (45°) and upright (80°), so the face both scrapes and lays.
+/// Read as upright, the face would only scrape and never mix.
+pub const UNTILTED_MIXING_KNIFE_TILT_DEG: f32 = 27.5;
 
 #[derive(Debug)]
 pub struct ToolProfile {

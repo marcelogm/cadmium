@@ -151,6 +151,11 @@ pub(crate) fn is_primary_contact(event: &gdk::Event) -> bool {
     }
 }
 
+/// Whether the event's device reports a tilt; a mouse doesn't.
+pub(crate) fn has_tilt(event: &gdk::Event) -> bool {
+    event.axis(gdk::AxisUse::Xtilt).is_some() || event.axis(gdk::AxisUse::Ytilt).is_some()
+}
+
 pub(super) fn comes_from_a_pen(event: &gdk::Event) -> bool {
     event.device_tool().is_some()
 }

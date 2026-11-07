@@ -6,6 +6,7 @@ use std::ops::Range;
 use cadmium_engine::{
     draw_up::DrawUpRequest, engine::PaintEngine, engine::TIP_SIZE, gpu::GpuContext,
     session::PaintSession, stroke::Tool, surface::Surface, tool::Holder,
+    tool::UNTILTED_MIXING_KNIFE_TILT_DEG,
 };
 
 use scene::*;
@@ -20,6 +21,9 @@ const PIGMENT_TOLERANCE: f64 = 1e-3;
 const FIRST_PASS_KEEPS: f64 = 0.6;
 const EIGHT_PASSES_LEAVE: f64 = 0.15;
 const MONOTONE_SLACK: f64 = 1.05;
+const MOUSE_PRESSURE: f32 = 1.0;
+const MOUSE_PASSES: usize = 8;
+const MOUSE_PASSES_LEAVE: f64 = 0.3;
 const SMEARED: f32 = 0.6;
 const UNSMEARED: f32 = 0.0;
 const SMEAR_PASSES: usize = 3;
@@ -252,4 +256,30 @@ fn only_the_rows_the_blade_covers_hold_paint() {
         .sum();
     assert!(rows.iter().sum::<f64>() > 0.0);
     assert_eq!(stray, 0.0, "paint on rows the blade never covers");
+}
+
+/// The relative variance left after `passes` of the mixing pass held at `tilt_x_deg` and
+/// pressed as hard as a mouse presses.
+fn mouse_variance_after(gpu: &GpuContext, tilt_x_deg: f32, passes: usize) -> f64 {
+    let mut s = mixing_session(gpu);
+    two_cords(gpu, &mut s);
+    let initial = mixed_region_variance(gpu, &s);
+    for index in 0..passes {
+        let pass = Pass {
+            tilt_x_deg,
+            pressure: MOUSE_PRESSURE,
+            ..mixing_pass(index)
+        };
+        knife_pass(gpu, &mut s, pass);
+    }
+    mixed_region_variance(gpu, &s) / initial
+}
+
+#[test]
+fn a_mouse_holding_the_knife_untilted_mixes() {
+    let gpu = GpuContext::new().unwrap();
+    let upright = mouse_variance_after(&gpu, UPRIGHT_TILT_DEG, MOUSE_PASSES);
+    let untilted = mouse_variance_after(&gpu, UNTILTED_MIXING_KNIFE_TILT_DEG, MOUSE_PASSES);
+    eprintln!("after {MOUSE_PASSES} mouse passes: upright {upright}, untilted {untilted}");
+    assert!(untilted <= MOUSE_PASSES_LEAVE, "{untilted}");
 }
