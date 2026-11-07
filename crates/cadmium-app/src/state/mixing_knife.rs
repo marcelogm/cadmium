@@ -131,7 +131,8 @@ impl AppState {
         self.mixing_knife.face.is_empty()
     }
 
-    /// How full the face is, against what a full dip lays on a blade its size.
+    /// How full the face is, measured against what a full dip lays on a painting knife
+    /// of the mixing knife's size, not against the face's own (much larger) capacity.
     pub fn mixing_knife_level(&self) -> f32 {
         let capacity = self
             .session

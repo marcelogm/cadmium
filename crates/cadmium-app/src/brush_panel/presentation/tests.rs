@@ -236,3 +236,20 @@ fn a_row_carries_the_brush_shape_for_its_tip_icon() {
     assert_eq!(entry.head, HeadSpec::FAN);
     assert_eq!(entry.hair, HairSpec::SQUIRREL);
 }
+
+#[test]
+fn the_mixing_knife_swatch_shows_only_its_face() {
+    let (palette, held) = ([10, 20, 30], [200, 100, 0]);
+    assert_eq!(
+        loaded_swatch_colours(PanelTool::Paint(Tool::MixingKnife), palette, held),
+        (held, None)
+    );
+    for tool in [Tool::Brush, Tool::Knife] {
+        assert_eq!(
+            loaded_swatch_colours(PanelTool::Paint(tool), palette, held),
+            (palette, Some(held))
+        );
+    }
+    let wording = PanelTool::Paint(Tool::MixingKnife).wording();
+    assert!(!wording.loaded_tooltip.contains("palette"));
+}

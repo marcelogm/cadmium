@@ -12,7 +12,7 @@ pub(super) const MIXING_KNIFE: UiToolProfile = UiToolProfile {
     name: "mixing-knife",
     label: "Mixing Knife",
     icon: "cadmium-mixing-knife-symbolic",
-    tooltip: "Mixing Knife (Shift+2): upright scrapes paint onto its face, laid flat spreads it; every pass mixes a little more",
+    tooltip: "Mixing Knife (Shift+2): mixes paint on the tray",
     keys: &[],
     keypad_keys: &[],
     on_painting: Press::Nothing,
@@ -29,7 +29,7 @@ pub(super) const MIXING_KNIFE: UiToolProfile = UiToolProfile {
 
 const MIXING_KNIFE_WORDING: ToolWording = ToolWording {
     loaded_title: "On the Mixing Knife",
-    loaded_tooltip: "Left: mix on the palette · right: paint on the mixing knife's face",
+    loaded_tooltip: "Paint on the mixing knife's face",
     level_tooltip: "Paint on the mixing knife",
     clean_button: "Clean Mixing Knife",
     ..KNIFE.wording

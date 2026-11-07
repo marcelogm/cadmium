@@ -1,5 +1,6 @@
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
+use cadmium_engine::tool::Holder;
 use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
@@ -21,6 +22,20 @@ const CUSTOM_PART: &str = "Custom";
 
 pub(super) fn tool_hint(tool: PanelTool) -> &'static str {
     tool.handling().unwrap_or(EYEDROPPER_HINT)
+}
+
+/// The loaded swatch's colour and its right half's: the palette's mix beside the
+/// held paint, or the face's paint alone, since the face never loads from the palette.
+pub(super) fn loaded_swatch_colours(
+    tool: PanelTool,
+    palette: [u8; 3],
+    held: [u8; 3],
+) -> ([u8; 3], Option<[u8; 3]>) {
+    if tool.holder() == Some(Holder::Face) {
+        (held, None)
+    } else {
+        (palette, Some(held))
+    }
 }
 
 pub(super) fn pile_is_highlighted(
