@@ -13,6 +13,7 @@ use super::{
     Contact, DownOutcome, PaintSurfaceWidget, down_outcome, release, side_button_may_act,
     stroke_may_begin,
 };
+use crate::pressure_curve::PressureCurve;
 
 pub(super) fn stylus_gesture<W: PaintSurfaceWidget>(
     widget: &W,
@@ -66,6 +67,11 @@ fn connect_proximity_and_cancel<W: PaintSurfaceWidget>(
     ));
 }
 
+/// The painter's pressure curve.
+fn pressure_curve<W: PaintSurfaceWidget>(widget: &W) -> PressureCurve {
+    widget.state().borrow().settings.get().pressure_curve
+}
+
 /// The pen's state at widget point (`x`, `y`), mapped onto the widget's surface.
 fn widget_sample<W: PaintSurfaceWidget>(
     widget: &W,
@@ -73,7 +79,13 @@ fn widget_sample<W: PaintSurfaceWidget>(
     x: f64,
     y: f64,
 ) -> StrokeSample {
-    let sample = event_sample(event, x, y, |x, y| widget.surface_point(x, y));
+    let sample = event_sample(
+        event,
+        x,
+        y,
+        |x, y| widget.surface_point(x, y),
+        &pressure_curve(widget),
+    );
     tilt_onto_canvas(sample, widget.view_rotation())
 }
 
@@ -138,7 +150,13 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     if !contact.is_stroking_device(stylus.current_event_device().as_ref()) {
         return;
     }
-    let mut samples = motion_samples(&event, x, y, |x, y| widget.surface_point(x, y));
+    let mut samples = motion_samples(
+        &event,
+        x,
+        y,
+        |x, y| widget.surface_point(x, y),
+        &pressure_curve(widget),
+    );
     let rotation = widget.view_rotation();
     for sample in &mut samples {
         *sample = tilt_onto_canvas(*sample, rotation);

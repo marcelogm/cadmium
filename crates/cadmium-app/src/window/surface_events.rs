@@ -59,7 +59,10 @@ impl CadmiumWindow {
         canvas.connect_presented(glib::clone!(
             #[weak(rename_to = window)]
             self,
-            move |_| window.sync_history_actions()
+            move |_| {
+                window.sync_history_actions();
+                window.refresh_if_brush_measured();
+            }
         ));
         canvas.connect_gpu_lost(glib::clone!(
             #[weak(rename_to = window)]
@@ -118,6 +121,12 @@ impl CadmiumWindow {
             self,
             move |_| window.after_contact()
         ));
+        // The deferred brush read can land on a tray frame.
+        tray.connect_presented(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.refresh_if_brush_measured()
+        ));
         self.imp().tray_slot.append(&tray);
         if self.imp().tray.set(tray.clone()).is_err() {
             unreachable!("the tray is attached once");
@@ -128,6 +137,17 @@ impl CadmiumWindow {
     pub(crate) fn announce_copy_presentation(&self) {
         if !self.imp().copy_presentation_announced.replace(true) {
             self.show_toast(COPY_PRESENTATION_TOAST);
+        }
+    }
+
+    /// Refreshes the panels once a deferred brush read has landed in a frame.
+    fn refresh_if_brush_measured(&self) {
+        let measured = self
+            .state()
+            .try_borrow_mut()
+            .is_ok_and(|mut state| state.take_brush_measured());
+        if measured {
+            self.refresh_panels();
         }
     }
 

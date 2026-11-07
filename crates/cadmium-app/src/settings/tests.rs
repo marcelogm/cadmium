@@ -1,4 +1,5 @@
 use super::*;
+use crate::pressure_curve::PressureCurve;
 use crate::test_dir::TempDir;
 
 /// On Wayland the lower button always picked colour and the upper one panned.
@@ -9,11 +10,16 @@ fn defaults_pick_with_the_lower_button_and_pan_with_the_upper() {
     assert_eq!(settings.upper_pen_button, PenButtonAction::Pan);
 }
 
+fn soft_curve() -> PressureCurve {
+    PressureCurve::from_points(&[(0.0, 0.1), (0.4, 0.6), (1.0, 0.9)]).unwrap()
+}
+
 #[test]
 fn settings_round_trip_through_json() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::Rotate,
         upper_pen_button: PenButtonAction::Nothing,
+        pressure_curve: soft_curve(),
         ..Settings::default()
     };
     assert_eq!(Settings::from_json(&settings.to_json()), settings);
@@ -155,4 +161,36 @@ fn the_saved_tray_share_is_rounded() {
             .to_json()
             .contains("\"tray_share\": 0.35,")
     );
+}
+
+#[test]
+fn the_pressure_curve_starts_linear() {
+    assert_eq!(Settings::default().pressure_curve, PressureCurve::linear());
+}
+
+#[test]
+fn a_file_from_before_the_pressure_curve_reads_it_as_linear() {
+    let read = Settings::from_json(r#"{"lower_pen_button":"zoom","upper_pen_button":"pan"}"#);
+    assert_eq!(read.lower_pen_button, PenButtonAction::Zoom);
+    assert_eq!(read.pressure_curve, PressureCurve::linear());
+}
+
+#[test]
+fn a_bad_pressure_curve_falls_back_alone() {
+    let read = Settings::from_json(
+        r#"{"lower_pen_button":"zoom","pressure_curve":[[0.0,0.0],[0.5,2.0],[1.0,1.0]]}"#,
+    );
+    assert_eq!(read.lower_pen_button, PenButtonAction::Zoom);
+    assert_eq!(read.pressure_curve, PressureCurve::linear());
+}
+
+#[test]
+fn a_changed_curve_is_saved_and_read_back() {
+    let dir = TempDir::new();
+    let path = dir.path().join("settings.json");
+    let mut store = SettingsStore::load(path.clone());
+    store
+        .update(|settings| settings.pressure_curve = soft_curve())
+        .unwrap();
+    assert_eq!(SettingsStore::load(path).get().pressure_curve, soft_curve());
 }

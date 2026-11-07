@@ -86,13 +86,13 @@ impl AppState {
     pub fn reload_brush(&mut self) {
         self.release();
         self.session.reload_brush(&self.gpu);
-        self.measure_brush();
+        self.measure_brush_once_painted();
     }
 
     pub fn clean_brush(&mut self) {
         self.put_down_stroke_tool();
         self.session.clean_brush(&self.gpu);
-        self.measure_brush();
+        self.measure_brush_once_painted();
         self.wake();
     }
 
@@ -113,7 +113,7 @@ impl AppState {
                 self.dip(&mixture, PARTIAL_DIP);
             }
         }
-        self.measure_brush();
+        self.measure_brush_once_painted();
         self.wake();
     }
 
@@ -131,6 +131,26 @@ impl AppState {
         self.measure_brush();
         self.wake();
         true
+    }
+
+    /// Reads the brush now, or once the frames have painted the dabs queued ahead of the
+    /// change: reading it sooner would push the whole backlog to the GPU in one submission.
+    pub(super) fn measure_brush_once_painted(&mut self) {
+        if self.session.has_queued_dabs() {
+            self.pacing.brush_measure_waits = true;
+        } else {
+            self.measure_brush();
+        }
+    }
+
+    /// Whether a deferred brush read is due on the next frame.
+    pub fn brush_measure_due(&self) -> bool {
+        self.pacing.brush_measure_waits && !self.session.has_queued_dabs()
+    }
+
+    /// Whether a deferred brush read landed since the last call, so the panels can refresh.
+    pub fn take_brush_measured(&mut self) -> bool {
+        std::mem::take(&mut self.pacing.brush_measured)
     }
 
     pub(super) fn measure_brush(&mut self) -> Option<BrushReadout> {

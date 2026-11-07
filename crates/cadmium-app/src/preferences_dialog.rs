@@ -5,6 +5,8 @@ use crate::LOG_DOMAIN;
 use crate::settings::{PenButtonAction, Settings};
 use crate::state::SharedState;
 
+mod pressure;
+
 const SAVE_FAILED: &str =
     "Couldn't save the preferences; they'll be back to how they were next time";
 
@@ -34,8 +36,37 @@ pub fn preferences_dialog(state: &SharedState) -> adw::PreferencesDialog {
         |settings, action| settings.upper_pen_button = action,
     ));
     page.add(&group);
+    page.add(&pressure::pressure_group(
+        settings.pressure_curve,
+        glib::clone!(
+            #[strong]
+            state,
+            #[weak_allow_none]
+            dialog,
+            move |curve| {
+                save(&state, dialog.as_ref(), |settings| {
+                    settings.pressure_curve = curve;
+                });
+            }
+        ),
+    ));
     dialog.add(&page);
     dialog
+}
+
+/// Applies `change` to the settings and saves them, even if the dialog is gone; a failed save
+/// is told in a toast when it's still there.
+fn save(
+    state: &SharedState,
+    dialog: Option<&adw::PreferencesDialog>,
+    change: impl FnOnce(&mut Settings),
+) {
+    if let Err(error) = state.borrow_mut().settings.update(change) {
+        glib::g_warning!(LOG_DOMAIN, "couldn't save the settings: {error}");
+        if let Some(dialog) = dialog {
+            dialog.add_toast(adw::Toast::new(SAVE_FAILED));
+        }
+    }
 }
 
 /// A row choosing the action of one pen button; `bind` stores the choice in the settings.
@@ -59,20 +90,13 @@ fn button_row(
     row.connect_selected_notify(glib::clone!(
         #[strong]
         state,
-        #[weak]
+        #[weak_allow_none]
         dialog,
         move |row| {
             let Some(action) = PenButtonAction::at_menu_index(row.selected()) else {
                 return;
             };
-            let saved = state
-                .borrow_mut()
-                .settings
-                .update(|settings| bind(settings, action));
-            if let Err(error) = saved {
-                glib::g_warning!(LOG_DOMAIN, "couldn't save the settings: {error}");
-                dialog.add_toast(adw::Toast::new(SAVE_FAILED));
-            }
+            save(&state, dialog.as_ref(), |settings| bind(settings, action));
         }
     ));
     row

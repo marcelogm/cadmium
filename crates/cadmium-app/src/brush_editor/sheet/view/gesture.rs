@@ -44,7 +44,13 @@ fn down(view: &TestSheetView, stylus: &gtk::GestureStylus, x: f64, y: f64) {
         return;
     };
     if is_primary_contact(&event) {
-        let sample = event_sample(&event, x, y, |x, y| view.canvas_point(x, y));
+        let sample = event_sample(
+            &event,
+            x,
+            y,
+            |x, y| view.canvas_point(x, y),
+            &view.pressure_curve(),
+        );
         view.begin_stroke(sample, stylus.current_event_device());
     }
 }
@@ -64,7 +70,11 @@ fn motion(view: &TestSheetView, stylus: &gtk::GestureStylus, x: f64, y: f64) {
     let Some(event) = stylus.current_event() else {
         return;
     };
-    view.extend_stroke(&motion_samples(&event, x, y, |x, y| {
-        view.canvas_point(x, y)
-    }));
+    view.extend_stroke(&motion_samples(
+        &event,
+        x,
+        y,
+        |x, y| view.canvas_point(x, y),
+        &view.pressure_curve(),
+    ));
 }
