@@ -43,14 +43,42 @@ fn the_curve_passes_through_its_points() {
 /// A steep step next to a flat run is where a plain cubic spline overshoots.
 #[test]
 fn rising_points_give_a_curve_that_never_dips_or_leaves_the_unit_range() {
-    let steep = curve(&[(0.0, 0.0), (0.1, 0.9), (0.15, 0.92), (1.0, 1.0)]);
-    let mut previous = 0.0;
+    let packed: Vec<(f32, f32)> = (0..MAX_POINTS - 1)
+        .map(|i| (i as f32 * MIN_GAP, if i < 3 { 0.0 } else { 0.9 }))
+        .chain([(1.0, 1.0)])
+        .collect();
+    let curves = [
+        curve(&[(0.0, 0.0), (0.1, 0.9), (0.15, 0.92), (1.0, 1.0)]),
+        curve(&[(0.0, 0.0), (0.8, 0.05), (0.85, 0.95), (1.0, 1.0)]),
+        curve(&packed),
+    ];
+    for steep in curves {
+        let mut previous = 0.0;
+        for pressure in grid() {
+            let out = steep.apply(pressure);
+            assert!((0.0..=1.0).contains(&out), "{out} at {pressure}");
+            assert!(out >= previous - 1e-6, "dips at {pressure}");
+            previous = out;
+        }
+    }
+}
+
+#[test]
+fn falling_points_give_a_curve_that_never_rises_or_leaves_the_unit_range() {
+    let falling = curve(&[(0.0, 1.0), (0.1, 0.1), (0.15, 0.08), (1.0, 0.0)]);
+    let mut previous = 1.0;
     for pressure in grid() {
-        let out = steep.apply(pressure);
+        let out = falling.apply(pressure);
         assert!((0.0..=1.0).contains(&out), "{out} at {pressure}");
-        assert!(out >= previous - 1e-6, "dips at {pressure}");
+        assert!(out <= previous + 1e-6, "rises at {pressure}");
         previous = out;
     }
+}
+
+#[test]
+fn a_nan_reading_counts_as_no_pressure() {
+    let raised = curve(&[(0.0, 0.2), (1.0, 0.8)]);
+    assert_eq!(raised.apply(f32::NAN), 0.2);
 }
 
 #[test]

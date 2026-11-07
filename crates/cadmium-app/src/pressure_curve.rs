@@ -3,7 +3,7 @@
 //! The curve is a monotone cubic (Fritsch–Carlson): it passes through every point and never
 //! bulges past them, so rising points always give a rising curve.
 
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 /// The most points a curve holds.
 pub const MAX_POINTS: usize = 8;
@@ -61,7 +61,7 @@ impl PressureCurve {
 
     /// The curve a settings value holds: a list of `[input, output]` pairs.
     pub fn from_json(value: &serde_json::Value) -> Option<PressureCurve> {
-        let pairs: Vec<[f32; 2]> = serde_json::from_value(value.clone()).ok()?;
+        let pairs: Vec<[f32; 2]> = Vec::<[f32; 2]>::deserialize(value).ok()?;
         let points: Vec<(f32, f32)> = pairs.iter().map(|&[x, y]| (x, y)).collect();
         PressureCurve::from_points(&points)
     }
@@ -73,7 +73,11 @@ impl PressureCurve {
 
     /// The brush pressure for pen `pressure`, both in 0..=1.
     pub fn apply(&self, pressure: f32) -> f32 {
-        let x = pressure.clamp(0.0, 1.0);
+        let x = if pressure.is_nan() {
+            0.0
+        } else {
+            pressure.clamp(0.0, 1.0)
+        };
         let points = self.points();
         let i = points
             .windows(2)
@@ -84,6 +88,8 @@ impl PressureCurve {
         let secant = (y1 - y0) / width;
         let (m0, m1) = (self.tangents[i], self.tangents[i + 1]);
         let straight = (m0 - secant).abs() <= f32::EPSILON && (m1 - secant).abs() <= f32::EPSILON;
+        // Keeps straight segments, the linear curve above all, exact instead of rounded
+        // through the Hermite blend.
         let y = if straight {
             y0 + t * (y1 - y0)
         } else {
@@ -99,7 +105,7 @@ impl Serialize for PressureCurve {
     }
 }
 
-/// The cubic Hermite blend at `t` of end values `ends` with end slopes `slopes` (already
+/// The cubic Hermite blend at `t` of end values `y0`, `y1` with end slopes `m0`, `m1` (already
 /// scaled by the segment's width).
 fn hermite(t: f32, (y0, y1): (f32, f32), (m0, m1): (f32, f32)) -> f32 {
     let (t2, t3) = (t * t, t * t * t);
