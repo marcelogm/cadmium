@@ -17,7 +17,7 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 4;
+const FORMAT_VERSION: u32 = 5;
 const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
 const TRAYLESS_FORMAT: u32 = 2;
 /// The format that saved the tray, at its old size.
@@ -29,6 +29,8 @@ const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
 const MANIFEST_ENTRY: &str = "manifest.json";
 const THICKNESS_BYTES: usize = 4;
+const DENSITY_BYTES: usize = 4;
+const MAX_GRAPHITE_DENSITY: f32 = 1.0;
 
 #[derive(Debug)]
 pub enum DocumentError {
@@ -188,7 +190,19 @@ impl DocumentSnapshot {
         }
     }
 
+    fn holds_graphite(&self) -> bool {
+        // Only the painting: the pencil never marks the tray.
+        self.states
+            .iter()
+            .filter(|state| state.which == StateTexture::Graphite)
+            .any(|state| state.texels().iter().any(|byte| *byte != 0))
+    }
+
     fn file_format(&self) -> u32 {
+        // Older builds would open a sketch and drop it, so only the current format carries one.
+        if self.holds_graphite() {
+            return FORMAT_VERSION;
+        }
         match &self.tray {
             // Read from format 3 and written without being opened: keeps its old tray and format.
             Some(tray) if [tray.spec.width, tray.spec.height] == LEGACY_TRAY => TRAY_FORMAT,

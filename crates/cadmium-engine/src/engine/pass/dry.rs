@@ -35,6 +35,7 @@ impl DryPass {
                 texture_entry(7, ReadWrite, R32Float),
                 texture_entry(8, WriteOnly, Rgba16Float),
                 texture_entry(9, WriteOnly, Rgba16Float),
+                texture_entry(10, ReadWrite, R32Float),
             ],
         );
         DryPass {
@@ -96,6 +97,7 @@ impl DryPass {
                 texture_binding(7, canvas, StateTexture::DryHeight),
                 texture_binding(8, canvas, StateTexture::DryTopPig0),
                 texture_binding(9, canvas, StateTexture::DryTopPig1),
+                texture_binding(10, canvas, StateTexture::Graphite),
             ],
         )
     }

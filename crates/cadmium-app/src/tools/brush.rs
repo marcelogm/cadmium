@@ -22,6 +22,7 @@ pub(super) const BRUSH: UiToolProfile = UiToolProfile {
         stroke_loading: true,
         clean: true,
         hint: false,
+        hardness: false,
     },
     wording: BRUSH_WORDING,
     handling: None,

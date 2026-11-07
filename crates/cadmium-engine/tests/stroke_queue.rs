@@ -17,6 +17,8 @@ const SMALL_DIAMETER_PX: f32 = 12.0;
 const UPPER_ROW: f64 = 64.0;
 const LOWER_ROW: f64 = 192.0;
 const HATCH_ROWS: [f64; 3] = [120.0, 128.0, 136.0];
+const SOFTEST_LEAD: f32 = 0.0;
+const HARDEST_LEAD: f32 = 1.0;
 
 #[derive(Clone, Copy, Debug)]
 enum Act {
@@ -28,9 +30,10 @@ enum Act {
     TopUpKnife,
     CleanBrush,
     Resize { diameter_px: f32 },
+    Sharpen { hardness: f32 },
 }
 
-use Act::{CleanBrush, Dip, Frame, Hold, Resize, RestoreReserve, TopUpKnife};
+use Act::{CleanBrush, Dip, Frame, Hold, Resize, RestoreReserve, Sharpen, TopUpKnife};
 
 fn painting(row: f64) -> Act {
     Act::Stroke {
@@ -100,6 +103,7 @@ fn perform(gpu: &GpuContext, s: &mut PaintSession, act: Act) {
             s.brush.geometry.max_diameter_px = diameter_px;
             s.resize_tip();
         }
+        Sharpen { hardness } => s.brush.pencil_hardness = hardness,
     }
 }
 
@@ -181,6 +185,23 @@ fn a_brush_resized_behind_a_backlog_leaves_the_earlier_stroke_its_size() {
         Frame,
         Resize {
             diameter_px: SMALL_DIAMETER_PX,
+        },
+        painting(LOWER_ROW),
+        Frame,
+    ]);
+}
+
+#[test]
+fn a_pencil_sharpened_behind_a_backlog_leaves_the_earlier_line_its_lead() {
+    assert_a_backlog_paints_the_same_as_painting_at_once(&[
+        Hold(Tool::Pencil),
+        Sharpen {
+            hardness: SOFTEST_LEAD,
+        },
+        painting(UPPER_ROW),
+        Frame,
+        Sharpen {
+            hardness: HARDEST_LEAD,
         },
         painting(LOWER_ROW),
         Frame,

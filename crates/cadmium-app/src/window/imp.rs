@@ -103,6 +103,7 @@ impl WidgetImpl for CadmiumWindow {}
 impl WindowImpl for CadmiumWindow {
     fn close_request(&self) -> glib::Propagation {
         self.obj().remember_mixing_knife_size();
+        self.obj().remember_pencil_hardness();
         if self.obj().may_close() {
             self.parent_close_request()
         } else {

@@ -44,7 +44,7 @@ pub(super) struct DabRecord {
     pub(super) blade_gap_um: f32,
     pub(super) spread_origin: [i32; 2],
     pub(super) spread_size: [u32; 2],
-    pub(super) rag_strength: f32,
+    pub(super) tool_strength: f32,
     pub(super) rest_follow: f32,
     pub(super) blade_capacity_um: f32,
     pub(super) blade_spill_share: f32,

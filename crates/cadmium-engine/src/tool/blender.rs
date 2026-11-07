@@ -1,5 +1,6 @@
 use super::{
-    CONTACT_REST_FOLLOW, DabStage, FootprintShape, Spreading, TOOL_MODE_BLENDER, ToolProfile,
+    CONTACT_REST_FOLLOW, DabStage, FootprintShape, RAG_STRENGTH_PARAM, Spreading,
+    TOOL_MODE_BLENDER, ToolProfile,
 };
 
 pub(super) const BLENDER: ToolProfile = ToolProfile {
@@ -16,4 +17,5 @@ pub(super) const BLENDER: ToolProfile = ToolProfile {
         DabStage::Capillary,
         DabStage::Spread,
     ],
+    strength_param: RAG_STRENGTH_PARAM,
 };

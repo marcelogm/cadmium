@@ -110,6 +110,7 @@ fn brush_and_knife_reload_or_clean_at_pen_down_and_other_tools_do_not() {
     for tool in [
         Tool::Blender,
         Tool::Rag,
+        Tool::Pencil,
         Tool::Eyedropper,
         Tool::MixingKnife,
     ] {

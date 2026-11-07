@@ -76,7 +76,7 @@ impl FirstRest {
         }
         if let Some(first_resting) = placements
             .iter_mut()
-            .find(|placement| !placement.profile.wipes())
+            .find(|placement| placement.profile.rests_on_surface())
         {
             first_resting.record.first_rest = 1;
             self.pending = false;
@@ -234,7 +234,7 @@ impl WetOilEngine {
             ferrule_press_share: params.get("ferrule_press_share"),
             diffusion: spreading.diffusion,
             blade_gap_um: blade_gap_um(params, dab.pressure, dab.altitude),
-            rag_strength: params.get("rag_strength"),
+            tool_strength: params.get(profile.strength_param),
             rest_follow: profile.rest_follow,
             blade_capacity_um: blade_capacity_um(dab.altitude),
             blade_spill_share: KNIFE_SPILL_SHARE,
@@ -298,7 +298,9 @@ pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
         } else {
             canvas.dirty.mark_rect(x0, y0, x1, y1);
         }
-        canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
+        if placement.profile.touches_paint() {
+            canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
+        }
     }
 }
 

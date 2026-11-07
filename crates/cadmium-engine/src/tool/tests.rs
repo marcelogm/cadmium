@@ -1,4 +1,5 @@
 use super::{BLADE_MODES, DabStage, Holder, TOOL_MODE_MIXING_KNIFE};
+use crate::params::SimParams;
 use crate::stroke::Tool;
 
 #[test]
@@ -67,5 +68,44 @@ fn only_the_face_holder_works_the_face() {
             profile.holds_on_face(),
             "{tool:?}"
         );
+    }
+}
+
+#[test]
+fn every_tool_reads_its_strength_from_a_known_param() {
+    for tool in Tool::ALL {
+        let key = tool.profile().strength_param;
+        assert!(
+            SimParams::specs().iter().any(|spec| spec.key == key),
+            "{tool:?}: {key}"
+        );
+    }
+}
+
+#[test]
+fn only_the_pencil_draws_graphite() {
+    for tool in Tool::ALL {
+        assert_eq!(
+            tool.profile().dab_stages.contains(&DabStage::Graphite),
+            tool == Tool::Pencil,
+            "{tool:?}"
+        );
+    }
+}
+
+#[test]
+fn the_rag_and_the_pencil_never_rest_on_the_surface() {
+    for tool in Tool::ALL {
+        let rests = !matches!(tool, Tool::Rag | Tool::Pencil | Tool::Eyedropper);
+        assert_eq!(tool.profile().rests_on_surface(), rests, "{tool:?}");
+    }
+}
+
+#[test]
+fn only_the_pencil_leaves_the_paint_untouched() {
+    for tool in Tool::ALL {
+        let profile = tool.profile();
+        let untouched = tool == Tool::Pencil || !profile.places_dabs();
+        assert_eq!(!profile.touches_paint(), untouched, "{tool:?}");
     }
 }

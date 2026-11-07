@@ -23,8 +23,9 @@ mod thumbnail_job;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
-    RackEntry, describe_recipe, loaded_swatch_colours, percent_text, pile_is_highlighted,
-    plate_gap_text, size_to_slider, slider_needs_sync, tool_group_description, tool_hint,
+    RackEntry, describe_recipe, hardness_grade, loaded_swatch_colours, percent_text,
+    pile_is_highlighted, plate_gap_text, size_to_slider, slider_needs_sync, tool_group_description,
+    tool_hint,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -148,6 +149,14 @@ impl BrushPanel {
             .size
             .value_label
             .set_label(&format!("{:.0} px", snapshot.diameter_px));
+        group
+            .hardness
+            .scale
+            .set_value(f64::from(snapshot.pencil_hardness));
+        group
+            .hardness
+            .value_label
+            .set_label(hardness_grade(snapshot.pencil_hardness));
         group.load.scale.set_value(f64::from(snapshot.load));
         group
             .load
@@ -238,6 +247,7 @@ impl BrushPanel {
         group.group.set_description(group_description);
         group.loaded_row.set_visible(shown.loaded);
         group.size.row.set_visible(shown.size);
+        group.hardness.row.set_visible(shown.hardness);
         group.load.row.set_visible(shown.load);
         group.medium.row.set_visible(shown.medium);
         group.plate_gap.row.set_visible(shown.plate_gap);

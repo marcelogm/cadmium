@@ -87,11 +87,12 @@ pub(super) const EYEDROPPER_SNIPPETS: [&str; 2] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/slot_lane.wgsl"),
 ];
-pub(super) const DRY_SNIPPETS: [&str; 4] = [
+pub(super) const DRY_SNIPPETS: [&str; 5] = [
     include_str!("../shaders/pigment_slots.wgsl"),
     include_str!("../shaders/slot_lane.wgsl"),
     include_str!("../shaders/kubelka_munk.wgsl"),
     include_str!("../shaders/nearest_half.wgsl"),
+    include_str!("../shaders/graphite.wgsl"),
 ];
 
 fn bristle_constants() -> String {

@@ -1,4 +1,7 @@
-use super::{CONTACT_REST_FOLLOW, DabStage, FootprintShape, Spreading, TOOL_MODE_RAG, ToolProfile};
+use super::{
+    CONTACT_REST_FOLLOW, DabStage, FootprintShape, RAG_STRENGTH_PARAM, Spreading, TOOL_MODE_RAG,
+    ToolProfile,
+};
 
 pub(super) const RAG: ToolProfile = ToolProfile {
     shader_mode: TOOL_MODE_RAG,
@@ -7,4 +10,5 @@ pub(super) const RAG: ToolProfile = ToolProfile {
     footprint: Some(FootprintShape::Ellipse),
     rest_follow: CONTACT_REST_FOLLOW,
     dab_stages: &[DabStage::Wipe],
+    strength_param: RAG_STRENGTH_PARAM,
 };

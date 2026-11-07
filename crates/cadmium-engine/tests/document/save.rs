@@ -9,9 +9,11 @@ use cadmium_engine::{
 };
 
 use crate::entries::{Entries, read_entries};
+use crate::support::session;
 use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES, TempDir,
-    painted_session, painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
+    BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT,
+    FORMAT_1_STATE_ENTRIES, TempDir, painted_session, painted_session_with_stroke, painted_spec,
+    sample, session_with_ended_stroke, sketch_on_the_painting,
 };
 
 const LARGE_WIDTH: u32 = 2048;
@@ -62,6 +64,22 @@ fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
             "{t:?}"
         );
     }
+}
+
+#[test]
+fn saving_keeps_the_graphite_sketch() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    let sketch = sketch_on_the_painting(&gpu, &s);
+    let dir = TempDir::new("graphite");
+    let path = dir.file("graphite.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let opened = document::open(&gpu, &path).unwrap();
+    let reopened = opened
+        .canvas
+        .read_f32(&gpu, StateTexture::Graphite)
+        .unwrap();
+    assert_eq!(reopened, sketch);
 }
 
 fn dried_session(gpu: &GpuContext) -> PaintSession {
@@ -259,7 +277,7 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         .read_to_string(&mut manifest)
         .unwrap();
     let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
-    assert_eq!(manifest["format"], 4);
+    assert_eq!(manifest["format"], CURRENT_FORMAT);
     assert_eq!(manifest["bands"], 8);
     assert_eq!(manifest["units"], "um");
     drop(archive);

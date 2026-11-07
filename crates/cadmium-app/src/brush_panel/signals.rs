@@ -15,6 +15,10 @@ impl BrushPanel {
             with_panel(&panel, |panel| panel.resize_brush(scale))
         });
         let panel = Rc::downgrade(self);
+        group.hardness.scale.connect_value_changed(move |scale| {
+            with_panel(&panel, |panel| panel.change_hardness(scale))
+        });
+        let panel = Rc::downgrade(self);
         group.load.scale.connect_value_changed(move |scale| {
             with_panel(&panel, |panel| panel.change_load(scale))
         });
@@ -45,6 +49,11 @@ impl BrushPanel {
     fn resize_brush(self: &Rc<Self>, scale: &gtk::Scale) {
         let diameter = slider_to_size(scale.value());
         self.change_brush(|state| state.set_focused_size(diameter));
+    }
+
+    fn change_hardness(self: &Rc<Self>, scale: &gtk::Scale) {
+        let hardness = scale.value() as f32;
+        self.change_brush(|state| state.set_pencil_hardness(hardness));
     }
 
     fn change_load(self: &Rc<Self>, scale: &gtk::Scale) {

@@ -22,6 +22,11 @@ impl WipePass {
                     wgpu::StorageTextureAccess::ReadWrite,
                     wgpu::TextureFormat::R32Float,
                 ),
+                texture_entry(
+                    2,
+                    wgpu::StorageTextureAccess::ReadWrite,
+                    wgpu::TextureFormat::R32Float,
+                ),
             ],
         );
         WipePass {
@@ -36,6 +41,7 @@ impl WipePass {
             &[
                 dab_record_binding(resources.dab_records),
                 texture_binding(1, resources.canvas, StateTexture::WetVol),
+                texture_binding(2, resources.canvas, StateTexture::Graphite),
             ],
         )
     }

@@ -39,6 +39,7 @@ fn load_loads_the_painting_tool_that_holds_paint() {
         UiTool::Move,
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
+        UiTool::Paint(Tool::Pencil),
         UiTool::Paint(Tool::Eyedropper),
     ] {
         assert_eq!(TrayTool::Load.press(tool), Press::Nothing, "{tool:?}");

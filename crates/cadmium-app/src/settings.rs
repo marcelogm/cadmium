@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use cadmium_engine::brush::DEFAULT_PENCIL_HARDNESS;
 use gtk::glib;
 use serde::{Deserialize, Serialize};
 
@@ -89,6 +90,14 @@ pub struct Settings {
     pub tray_shown: bool,
     /// The mixing knife's blade length, in canvas px.
     pub mixing_knife_diameter_px: f32,
+    /// The pencil's lead, from the softest B (0) to the hardest H (1).
+    #[serde(serialize_with = "round_fraction")]
+    pub pencil_hardness: f32,
+}
+
+/// Writes `fraction` to three decimals, so an f32 like 0.35 doesn't show its widening noise.
+fn round_fraction<S: serde::Serializer>(fraction: &f32, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_f64((f64::from(*fraction) * 1000.0).round() / 1000.0)
 }
 
 impl Default for Settings {
@@ -99,6 +108,7 @@ impl Default for Settings {
             pressure_curve: PressureCurve::linear(),
             tray_shown: true,
             mixing_knife_diameter_px: DEFAULT_MIXING_KNIFE_DIAMETER_PX,
+            pencil_hardness: DEFAULT_PENCIL_HARDNESS,
         }
     }
 }
@@ -133,6 +143,11 @@ impl Settings {
                 .and_then(serde_json::Value::as_f64)
                 .map(|diameter| mixing_knife_diameter(diameter as f32))
                 .unwrap_or(defaults.mixing_knife_diameter_px),
+            pencil_hardness: fields
+                .get("pencil_hardness")
+                .and_then(serde_json::Value::as_f64)
+                .map(|hardness| (hardness as f32).clamp(0.0, 1.0))
+                .unwrap_or(defaults.pencil_hardness),
         }
     }
 

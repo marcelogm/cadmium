@@ -12,7 +12,8 @@ struct InitParams {
 @group(0) @binding(6) var dry_height: texture_storage_2d<r32float, write>;
 @group(0) @binding(7) var dry_top_pig0: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(8) var dry_top_pig1: texture_storage_2d<rgba16float, write>;
-@group(0) @binding(9) var display: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(9) var graphite: texture_storage_2d<r32float, write>;
+@group(0) @binding(10) var display: texture_storage_2d<rgba16float, write>;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -30,5 +31,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(dry_height, pixel, empty);
     textureStore(dry_top_pig0, pixel, empty);
     textureStore(dry_top_pig1, pixel, empty);
+    textureStore(graphite, pixel, empty);
     textureStore(display, pixel, empty);
 }

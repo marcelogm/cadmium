@@ -8,10 +8,10 @@ use cadmium_engine::{
     surface::{TRAY_HEIGHT, TRAY_WIDTH, tray_spec},
 };
 
-use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
+use crate::entries::{Entries, format_reason, read_entries, set_first_f32};
 use crate::{
-    INVALID_THICKNESS, TempDir, painted_session, painted_spec, squeeze_on_the_tray,
-    squeeze_on_the_tray_at,
+    CURRENT_FORMAT, INVALID_THICKNESS, TempDir, painted_session, painted_spec,
+    sketch_on_the_painting, squeeze_on_the_tray, squeeze_on_the_tray_at,
 };
 
 const TRAY_WET_VOLUME: &str = "tray/state/wet_vol.zst";
@@ -114,11 +114,11 @@ fn a_format_three_painting_saved_again_keeps_its_tray() {
 }
 
 #[test]
-fn a_painting_with_a_wet_tray_saves_in_format_four() {
+fn a_painting_with_a_wet_tray_saves_in_the_current_format() {
     let gpu = GpuContext::new().unwrap();
-    let dir = TempDir::new("format-4");
+    let dir = TempDir::new("current-format");
     let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    assert_eq!(saved_format(&path), 4);
+    assert_eq!(saved_format(&path), CURRENT_FORMAT);
 }
 
 #[test]
@@ -178,18 +178,50 @@ fn a_format_two_painting_saved_again_still_opens() {
     assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
 }
 
+#[test]
+fn a_legacy_tray_painting_with_graphite_saves_in_the_current_format() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-3-graphite");
+    let mut s = painted_session(&gpu);
+    squeeze_on_the_tray_at(&gpu, &mut s, middle_of_the_tray());
+    sketch_on_the_painting(&gpu, &s);
+    let path = dir.file("tray.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let resaved = dir.file("resaved.cadmium");
+    read_entries(Entries::saved_as_format_3(&path))
+        .unwrap()
+        .write(&resaved)
+        .unwrap();
+    assert_eq!(saved_format(&resaved), CURRENT_FORMAT);
+}
+
+#[test]
+fn a_trayless_painting_with_graphite_saves_in_the_current_format() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-2-graphite");
+    let (mut s, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
+    sketch_on_the_painting(&gpu, &s);
+    document::save(&gpu, &mut s, &path).unwrap();
+    let resaved = dir.file("resaved.cadmium");
+    read_entries(Entries::saved_as_format_2(&path))
+        .unwrap()
+        .write(&resaved)
+        .unwrap();
+    assert_eq!(saved_format(&resaved), CURRENT_FORMAT);
+}
+
 fn saved_format(path: &Path) -> serde_json::Value {
     Entries::saved(path).manifest()["format"].clone()
 }
 
 #[test]
-fn a_clean_tray_is_still_saved_as_format_four() {
+fn a_clean_tray_is_still_saved_in_the_current_format() {
     let gpu = GpuContext::new().unwrap();
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("clean-tray");
     let path = dir.file("clean.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
-    assert_eq!(saved_format(&path), 4);
+    assert_eq!(saved_format(&path), CURRENT_FORMAT);
     assert!(
         Entries::saved(&path)
             .0
@@ -259,7 +291,7 @@ fn a_tray_entry_with_a_negative_thickness_is_a_format_error() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("negative-tray");
     let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    let entries = Entries::saved(&path).edit_state(TRAY_WET_VOLUME, set_first_thickness(-1.0));
+    let entries = Entries::saved(&path).edit_state(TRAY_WET_VOLUME, set_first_f32(-1.0));
     let reason = format_reason(read_entries(entries));
     assert!(
         reason.contains(&format!("{TRAY_WET_VOLUME} {INVALID_THICKNESS}")),

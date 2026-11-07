@@ -27,7 +27,7 @@ struct Dab {
     blade_gap_um: f32,
     spread_origin: vec2<i32>,
     spread_size: vec2<u32>,
-    rag_strength: f32,
+    tool_strength: f32,
     rest_follow: f32,
     blade_capacity_um: f32,
     blade_spill_share: f32,

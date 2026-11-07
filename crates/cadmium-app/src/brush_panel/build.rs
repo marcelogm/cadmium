@@ -2,7 +2,9 @@ use adw::prelude::*;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
-use super::presentation::{EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, plate_gap_spec};
+use super::presentation::{
+    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, hardness_grade, plate_gap_spec,
+};
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::tools::panel::PanelTool;
@@ -18,6 +20,10 @@ const UNIT_STEP: f64 = 0.01;
 const UNIT_PAGE: f64 = 0.1;
 const MEDIUM_SLIDER_MAX: f64 = 0.9;
 const PLATE_GAP_TITLE: &str = "Slab Thickness";
+const HARDNESS_TITLE: &str = "Hardness";
+const HARDNESS_SUBTITLE: &str = "Soft B leads are dark; hard H leads stay light and grainy";
+/// The softest, the middle (HB) and the hardest lead, marked with the grades the value shows.
+const HARDNESS_MARKS: [f32; 3] = [0.0, 0.5, 1.0];
 const RELOAD_EACH_STROKE: &str = "Reload Every Stroke";
 const CLEAN_EACH_STROKE: &str = "Clean Every Stroke";
 
@@ -32,6 +38,7 @@ pub(super) struct ToolGroup {
     pub(super) loaded_swatch: Swatch,
     pub(super) reserve_bar: gtk::LevelBar,
     pub(super) size: SliderRow,
+    pub(super) hardness: SliderRow,
     pub(super) load: SliderRow,
     pub(super) plate_gap: SliderRow,
     pub(super) medium: SliderRow,
@@ -65,6 +72,7 @@ pub(super) fn pigments_group() -> PigmentsGroup {
 pub(super) fn tool_group() -> ToolGroup {
     let (loaded_row, loaded_swatch, reserve_bar) = loaded_row();
     let size = size_row();
+    let hardness = hardness_row();
     let load = slider_row("Load", 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
     let plate_gap = plate_gap_row();
     let medium = slider_row("Medium", 0.0, MEDIUM_SLIDER_MAX, UNIT_STEP, UNIT_PAGE);
@@ -73,6 +81,7 @@ pub(super) fn tool_group() -> ToolGroup {
     let group = adw::PreferencesGroup::builder().title("Brush").build();
     group.add(&loaded_row);
     group.add(&size.row);
+    group.add(&hardness.row);
     group.add(&load.row);
     group.add(&plate_gap.row);
     group.add(&medium.row);
@@ -84,6 +93,7 @@ pub(super) fn tool_group() -> ToolGroup {
         loaded_swatch,
         reserve_bar,
         size,
+        hardness,
         load,
         plate_gap,
         medium,
@@ -141,6 +151,20 @@ fn size_row() -> SliderRow {
         SIZE_STEP,
         SIZE_PAGE,
     )
+}
+
+fn hardness_row() -> SliderRow {
+    let hardness = slider_row(HARDNESS_TITLE, 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
+    hardness.row.set_subtitle(HARDNESS_SUBTITLE);
+    hardness.scale.set_tooltip_text(Some(HARDNESS_SUBTITLE));
+    for mark in HARDNESS_MARKS {
+        hardness.scale.add_mark(
+            f64::from(mark),
+            gtk::PositionType::Bottom,
+            Some(hardness_grade(mark)),
+        );
+    }
+    hardness
 }
 
 fn plate_gap_row() -> SliderRow {

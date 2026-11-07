@@ -46,6 +46,7 @@ impl AppState {
     pub fn use_settings(&mut self, store: SettingsStore) {
         self.settings = store;
         self.mixing_knife.diameter_px = self.settings.get().mixing_knife_diameter_px;
+        self.session.brush.pencil_hardness = self.settings.get().pencil_hardness;
     }
 
     /// Saves the mixing knife's size, if it changed; the window calls it as it closes.

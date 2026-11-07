@@ -11,17 +11,19 @@ pub enum Tool {
     MixingKnife,
     Blender,
     Rag,
+    Pencil,
     Eyedropper,
 }
 
 impl Tool {
     #[cfg(test)]
-    pub(crate) const ALL: [Tool; 6] = [
+    pub(crate) const ALL: [Tool; 7] = [
         Tool::Brush,
         Tool::Knife,
         Tool::MixingKnife,
         Tool::Blender,
         Tool::Rag,
+        Tool::Pencil,
         Tool::Eyedropper,
     ];
 }

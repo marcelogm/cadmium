@@ -136,6 +136,46 @@ fn a_file_from_the_tray_divider_still_reads() {
 }
 
 #[test]
+fn the_pencil_starts_at_hb() {
+    assert_eq!(Settings::default().pencil_hardness, DEFAULT_PENCIL_HARDNESS);
+}
+
+#[test]
+fn the_pencil_hardness_round_trips_through_json() {
+    let settings = Settings {
+        pencil_hardness: 0.25,
+        ..Settings::default()
+    };
+    assert_eq!(Settings::from_json(&settings.to_json()), settings);
+}
+
+#[test]
+fn a_pencil_hardness_out_of_range_is_clamped_and_garbage_falls_back() {
+    let hardness = |text| Settings::from_json(text).pencil_hardness;
+    assert_eq!(hardness(r#"{"pencil_hardness": 2.0}"#), 1.0);
+    assert_eq!(hardness(r#"{"pencil_hardness": -1.0}"#), 0.0);
+    assert_eq!(
+        hardness(r#"{"pencil_hardness": "soft"}"#),
+        DEFAULT_PENCIL_HARDNESS
+    );
+    assert_eq!(
+        hardness(r#"{"lower_pen_button":"zoom"}"#),
+        DEFAULT_PENCIL_HARDNESS
+    );
+}
+
+#[test]
+fn a_changed_hardness_is_saved_and_read_back() {
+    let dir = TempDir::new();
+    let path = dir.path().join("settings.json");
+    let mut store = SettingsStore::load(path.clone());
+    store
+        .update(|settings| settings.pencil_hardness = 0.9)
+        .unwrap();
+    assert_eq!(SettingsStore::load(path).get().pencil_hardness, 0.9);
+}
+
+#[test]
 fn the_pressure_curve_starts_linear() {
     assert_eq!(Settings::default().pressure_curve, PressureCurve::linear());
 }

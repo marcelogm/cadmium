@@ -30,6 +30,7 @@ pub(crate) struct VisibleControls {
     pub(crate) stroke_loading: bool,
     pub(crate) clean: bool,
     pub(crate) hint: bool,
+    pub(crate) hardness: bool,
 }
 
 impl VisibleControls {
@@ -49,6 +50,7 @@ pub(super) const NO_CONTROLS: VisibleControls = VisibleControls {
     stroke_loading: false,
     clean: false,
     hint: false,
+    hardness: false,
 };
 
 pub(super) const TUBE_LABEL: &str = "Tube";

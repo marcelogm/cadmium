@@ -13,6 +13,7 @@ use bristle_step::BristleStepPass;
 use capillary::CapillaryPass;
 use exchange::ExchangePass;
 use face::FacePass;
+use graphite::GraphitePass;
 use refill::RefillPass;
 use spread::{HairContact, SpreadBindGroups, SpreadPass};
 use touched_tiles::TouchedTilesPass;
@@ -28,6 +29,7 @@ pub(super) mod dry;
 mod exchange;
 mod face;
 pub(super) mod face_sum;
+mod graphite;
 pub(super) mod pick;
 mod refill;
 mod spread;
@@ -70,6 +72,7 @@ pub(super) struct DabPasses {
     blade: BladePass,
     face: FacePass,
     wipe: WipePass,
+    graphite: GraphitePass,
 }
 
 pub(super) struct DabBindGroups {
@@ -80,6 +83,7 @@ pub(super) struct DabBindGroups {
     apply: wgpu::BindGroup,
     refill: wgpu::BindGroup,
     wipe: wgpu::BindGroup,
+    graphite: wgpu::BindGroup,
     blade: wgpu::BindGroup,
     face: Option<wgpu::BindGroup>,
     spread: SpreadBindGroups,
@@ -100,6 +104,7 @@ impl DabPasses {
             blade: BladePass::new(gpu),
             face: FacePass::new(gpu),
             wipe: WipePass::new(gpu),
+            graphite: GraphitePass::new(gpu),
         }
     }
 
@@ -108,7 +113,12 @@ impl DabPasses {
         self.contact.fit(gpu, placements);
     }
 
-    pub(super) fn bind_groups(&self, resources: &DabResources<'_>) -> DabBindGroups {
+    /// The bind groups for one batch of dabs, `pencil_lead` holding that batch's lead.
+    pub(super) fn bind_groups(
+        &self,
+        resources: &DabResources<'_>,
+        pencil_lead: &wgpu::Buffer,
+    ) -> DabBindGroups {
         DabBindGroups {
             bristles: self.bristles.bind_group(resources),
             contact: self.contact.bind_group(resources),
@@ -117,6 +127,7 @@ impl DabPasses {
             apply: self.apply.bind_group(resources),
             refill: self.refill.bind_group(resources),
             wipe: self.wipe.bind_group(resources),
+            graphite: self.graphite.bind_group(resources, pencil_lead),
             blade: self.blade.bind_group(resources),
             face: resources
                 .face_settings
@@ -200,6 +211,7 @@ impl DabPasses {
             DabStage::Blade => self.blade.encode(pass, &bind_groups.blade, dab),
             DabStage::Face => self.encode_face(bind_groups, pass, dab),
             DabStage::Wipe => self.wipe.encode(pass, &bind_groups.wipe, dab),
+            DabStage::Graphite => self.graphite.encode(pass, &bind_groups.graphite, dab),
         }
     }
 }

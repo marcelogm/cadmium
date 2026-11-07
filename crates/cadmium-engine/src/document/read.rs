@@ -10,9 +10,9 @@ use crate::surface::{legacy_tray_spec, tray_spec};
 
 use super::relief::dry_height_over_weave;
 use super::{
-    ABSOLUTE_DRY_HEIGHT_FORMAT, DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY,
-    Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES, THICKNESS_UNITS, TRAY_FORMAT,
-    TRAY_PREFIX, TraySnapshot, state_entry,
+    ABSOLUTE_DRY_HEIGHT_FORMAT, DENSITY_BYTES, DocumentError, DocumentSnapshot, FORMAT_VERSION,
+    MANIFEST_ENTRY, MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES,
+    THICKNESS_UNITS, TRAY_FORMAT, TRAY_PREFIX, TraySnapshot, state_entry,
 };
 
 const OLDEST_READABLE_FORMAT: u32 = ABSOLUTE_DRY_HEIGHT_FORMAT;
@@ -104,10 +104,25 @@ fn read_states<R: Read + std::io::Seek>(
             Ok(StateBytes {
                 which: *which,
                 rows: TexelRows::unpadded(spec.width * which.bytes_per_texel(), spec.height),
-                bytes: read_state(archive, format, prefix, spec, *which)?,
+                bytes: read_optional_state(archive, format, prefix, spec, *which)?,
             })
         })
         .collect()
+}
+
+/// A painting from before the pencil has no graphite entry: it reads as an empty sketch.
+fn read_optional_state<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    format: u32,
+    prefix: &str,
+    spec: &CanvasSpec,
+    which: StateTexture,
+) -> Result<Vec<u8>, DocumentError> {
+    let name = state_entry(prefix, which, format);
+    if which == StateTexture::Graphite && archive.index_for_name(&name).is_none() {
+        return Ok(vec![0; state_size(spec, which)]);
+    }
+    read_state(archive, format, prefix, spec, which)
 }
 
 fn read_state<R: Read + std::io::Seek>(
@@ -118,7 +133,7 @@ fn read_state<R: Read + std::io::Seek>(
     which: StateTexture,
 ) -> Result<Vec<u8>, DocumentError> {
     let name = state_entry(prefix, which, format);
-    let expected = spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize;
+    let expected = state_size(spec, which);
     let entry = entry(archive, &name)?;
     let corrupt = |error: std::io::Error| DocumentError::Format(format!("{name}: {error}"));
     let mut raw = Vec::with_capacity(expected);
@@ -143,7 +158,16 @@ fn read_state<R: Read + std::io::Seek>(
             "{name} holds a negative or non-finite thickness"
         )));
     }
+    if which == StateTexture::Graphite && !densities_are_valid(&raw) {
+        return Err(DocumentError::Format(format!(
+            "{name} holds a graphite density outside 0 to 1"
+        )));
+    }
     Ok(raw)
+}
+
+fn state_size(spec: &CanvasSpec, which: StateTexture) -> usize {
+    spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize
 }
 
 fn holds_thickness(which: StateTexture) -> bool {
@@ -156,6 +180,14 @@ fn thicknesses_are_valid(raw: &[u8]) -> bool {
         .iter()
         .map(|texel| f32::from_le_bytes(*texel))
         .all(|thickness| thickness.is_finite() && thickness >= 0.0)
+}
+
+fn densities_are_valid(raw: &[u8]) -> bool {
+    raw.as_chunks::<DENSITY_BYTES>()
+        .0
+        .iter()
+        .map(|texel| f32::from_le_bytes(*texel))
+        .all(|density| (0.0..=MAX_GRAPHITE_DENSITY).contains(&density))
 }
 
 fn entry<'a, R: Read + std::io::Seek>(

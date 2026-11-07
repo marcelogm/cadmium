@@ -130,6 +130,14 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         default: 0.5,
     },
     ParamSpec {
+        key: "pencil_strength",
+        label: "Pencil Strength",
+        group: ParamGroup::Tools,
+        min: 0.0,
+        max: 1.0,
+        default: 0.35,
+    },
+    ParamSpec {
         key: "tube_flow_um_per_s",
         label: "Blob Growth (µm/s)",
         group: ParamGroup::Tools,

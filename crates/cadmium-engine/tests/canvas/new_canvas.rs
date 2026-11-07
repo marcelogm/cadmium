@@ -15,6 +15,19 @@ fn new_canvas_has_no_wet_paint() {
 }
 
 #[test]
+fn new_canvas_has_no_graphite() {
+    let gpu = GpuContext::new().unwrap();
+    let c = Canvas::new(
+        &gpu,
+        &PigmentDb::builtin(),
+        spec(Primer::WhiteGesso, Weave::Smooth),
+    )
+    .unwrap();
+    let graphite = c.read_f32(&gpu, StateTexture::Graphite).unwrap();
+    assert!(graphite.iter().all(|g| *g == 0.0));
+}
+
+#[test]
 fn white_gesso_primer_reflects_like_titanium_white() {
     let gpu = GpuContext::new().unwrap();
     let db = PigmentDb::builtin();

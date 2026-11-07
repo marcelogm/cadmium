@@ -1,5 +1,6 @@
 use super::{
-    CONTACT_REST_FOLLOW, DabStage, FootprintShape, Holder, Spreading, TOOL_MODE_BRUSH, ToolProfile,
+    CONTACT_REST_FOLLOW, DabStage, FootprintShape, Holder, RAG_STRENGTH_PARAM, Spreading,
+    TOOL_MODE_BRUSH, ToolProfile,
 };
 
 pub(super) const BRUSH: ToolProfile = ToolProfile {
@@ -17,4 +18,5 @@ pub(super) const BRUSH: ToolProfile = ToolProfile {
         DabStage::Refill,
         DabStage::Spread,
     ],
+    strength_param: RAG_STRENGTH_PARAM,
 };

@@ -6,6 +6,7 @@ mod brush;
 mod eyedropper;
 mod knife;
 mod mixing_knife;
+mod pencil;
 mod rag;
 
 const TOOL_MODE_BRUSH: u32 = 0;
@@ -14,10 +15,13 @@ const TOOL_MODE_BLENDER: u32 = 2;
 const TOOL_MODE_RAG: u32 = 3;
 const TOOL_MODE_EYEDROPPER: u32 = 4;
 pub(crate) const TOOL_MODE_MIXING_KNIFE: u32 = 5;
+const TOOL_MODE_PENCIL: u32 = 6;
 const CONTACT_REST_FOLLOW: f32 = 0.25;
 /// The shader modes whose dabs are a flat rectangular blade rather than a tuft;
 /// the WGSL `is_blade_mode` is generated from this list.
 pub(crate) const BLADE_MODES: [u32; 2] = [TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE];
+const RAG_STRENGTH_PARAM: &str = "rag_strength";
+const PENCIL_STRENGTH_PARAM: &str = "pencil_strength";
 
 #[derive(Debug)]
 pub struct ToolProfile {
@@ -27,6 +31,8 @@ pub struct ToolProfile {
     pub(crate) footprint: Option<FootprintShape>,
     pub(crate) rest_follow: f32,
     pub(crate) dab_stages: &'static [DabStage],
+    /// Param read into the dab's tool strength; only the rag and pencil shaders use it.
+    pub(crate) strength_param: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,6 +61,7 @@ pub(crate) enum DabStage {
     Blade,
     Face,
     Wipe,
+    Graphite,
 }
 
 impl ToolProfile {
@@ -91,10 +98,23 @@ impl ToolProfile {
         self.dab_stages.contains(&DabStage::Bristles)
     }
 
-    pub(crate) fn wipes(&self) -> bool {
-        self.dab_stages.contains(&DabStage::Wipe)
+    /// Whether any of its dabs reach the wet paint; graphite alone leaves it be.
+    pub(crate) fn touches_paint(&self) -> bool {
+        self.dab_stages
+            .iter()
+            .any(|stage| !PAINTLESS_STAGES.contains(stage))
+    }
+
+    /// Whether its dabs settle on the surface: only the exchange, blade and face stages read the
+    /// rest.
+    pub(crate) fn rests_on_surface(&self) -> bool {
+        self.dab_stages
+            .iter()
+            .any(|stage| matches!(stage, DabStage::Exchange | DabStage::Blade | DabStage::Face))
     }
 }
+
+const PAINTLESS_STAGES: [DabStage; 1] = [DabStage::Graphite];
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Spreading {
@@ -146,6 +166,7 @@ impl Tool {
             Tool::MixingKnife => &mixing_knife::MIXING_KNIFE,
             Tool::Blender => &blender::BLENDER,
             Tool::Rag => &rag::RAG,
+            Tool::Pencil => &pencil::PENCIL,
             Tool::Eyedropper => &eyedropper::EYEDROPPER,
         }
     }
