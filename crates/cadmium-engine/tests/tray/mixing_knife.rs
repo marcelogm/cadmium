@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use cadmium_engine::{
     draw_up::DrawUpRequest, engine::PaintEngine, gpu::GpuContext, session::PaintSession,
-    surface::Surface,
+    stroke::Tool, surface::Surface, tool::Holder,
 };
 
 use scene::*;
@@ -207,4 +207,18 @@ fn the_mixing_knife_loads_only_by_working_the_tray() {
     assert_eq!(face_totals(&gpu, &s).volume, 0.0);
     assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);
     assert_eq!(s.engine.brush_totals(&gpu).unwrap().volume, brush_before);
+}
+
+#[test]
+fn cleaning_the_face_with_another_tool_in_hand_leaves_that_tool_alone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = mixing_session(&gpu);
+    scrape_across_both_cords(&gpu, &mut s);
+    assert!(face_totals(&gpu, &s).volume > 0.0);
+    s.brush.tool = Tool::Brush;
+    let brush = s.engine.brush_totals(&gpu).unwrap();
+    s.clean_holder(&gpu, Some(Holder::Face));
+    assert_eq!(face_totals(&gpu, &s).volume, 0.0);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap(), brush);
+    assert_eq!(s.brush.tool, Tool::Brush);
 }

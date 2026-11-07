@@ -2,6 +2,7 @@ use crate::engine::{BrushOutline, BrushReadout};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::Mixture;
 use crate::stroke::StrokeSample;
+use crate::tool::Holder;
 
 use super::PaintSession;
 use super::queue::{BrushChange, KnifeLoad, Queued};
@@ -70,7 +71,11 @@ impl PaintSession {
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        let holder = self.brush.tool.profile().holder;
+        self.clean_holder(gpu, self.brush.tool.profile().holder);
+    }
+
+    /// Cleans what `holder` carries, whatever tool is in hand.
+    pub fn clean_holder(&mut self, gpu: &GpuContext, holder: Option<Holder>) {
         self.change_brush(gpu, BrushChange::Clean { holder });
     }
 
