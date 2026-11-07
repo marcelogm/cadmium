@@ -6,6 +6,7 @@ mod brush;
 mod eyedropper;
 mod knife;
 mod mixing_knife;
+mod pencil;
 mod rag;
 
 const TOOL_MODE_BRUSH: u32 = 0;
@@ -14,11 +15,13 @@ const TOOL_MODE_BLENDER: u32 = 2;
 const TOOL_MODE_RAG: u32 = 3;
 const TOOL_MODE_EYEDROPPER: u32 = 4;
 pub(crate) const TOOL_MODE_MIXING_KNIFE: u32 = 5;
+const TOOL_MODE_PENCIL: u32 = 6;
 const CONTACT_REST_FOLLOW: f32 = 0.25;
 /// The shader modes whose dabs are a flat rectangular blade rather than a tuft;
 /// the WGSL `is_blade_mode` is generated from this list.
 pub(crate) const BLADE_MODES: [u32; 2] = [TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE];
 const RAG_STRENGTH_PARAM: &str = "rag_strength";
+const PENCIL_STRENGTH_PARAM: &str = "pencil_strength";
 
 #[derive(Debug)]
 pub struct ToolProfile {
@@ -58,6 +61,7 @@ pub(crate) enum DabStage {
     Blade,
     Face,
     Wipe,
+    Graphite,
 }
 
 impl ToolProfile {
@@ -149,6 +153,7 @@ impl Tool {
             Tool::MixingKnife => &mixing_knife::MIXING_KNIFE,
             Tool::Blender => &blender::BLENDER,
             Tool::Rag => &rag::RAG,
+            Tool::Pencil => &pencil::PENCIL,
             Tool::Eyedropper => &eyedropper::EYEDROPPER,
         }
     }

@@ -81,3 +81,14 @@ fn every_tool_reads_its_strength_from_a_known_param() {
         );
     }
 }
+
+#[test]
+fn only_the_pencil_draws_graphite() {
+    for tool in Tool::ALL {
+        assert_eq!(
+            tool.profile().dab_stages.contains(&DabStage::Graphite),
+            tool == Tool::Pencil,
+            "{tool:?}"
+        );
+    }
+}

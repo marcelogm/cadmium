@@ -1,10 +1,11 @@
 pub mod support;
 
 use cadmium_engine::{
-    canvas::StateTexture,
+    canvas::{StateTexture, Weave, weave_heights},
     gpu::GpuContext,
     pigments::{MAX_SLOTS, Mixture},
     session::PaintSession,
+    stroke::Tool,
 };
 use support::{drag, frame, line, presented_rgba, session, stroke, without_wgpu_errors};
 
@@ -29,6 +30,15 @@ const FULL_DIP: f32 = 1.0;
 const OPAQUE_PASSES: usize = 6;
 const HIDDEN_SHARE_OF_BARE_CONTRAST: f32 = 0.05;
 const SHOWS_THROUGH_RATIO: f32 = 0.9;
+const PENCIL_TILT_DEG: f32 = 0.0;
+const FIRM_PRESSURE: f32 = 0.8;
+const LIGHT_PRESSURE: f32 = 0.2;
+const HARD_PRESSURE: f32 = 0.9;
+const DARKER_RATIO: f32 = 1.5;
+const TOOTH_RATIO: f32 = 1.5;
+const TOOTH_BAND_HALF_HEIGHT: usize = 1;
+const TOOTH_BAND_FROM_X: usize = 100;
+const TOOTH_BAND_TO_X: usize = 400;
 
 fn sketch_row(gpu: &GpuContext, s: &mut PaintSession, density: f32) {
     let mut sketch = vec![0.0; (WIDTH * HEIGHT) as usize];
@@ -193,4 +203,71 @@ fn undoing_a_dry_brings_the_graphite_back() {
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
     let graphite = s.canvas.read_f32(&gpu, StateTexture::Graphite).unwrap();
     assert_eq!(graphite[centre()], FULL_SKETCH);
+}
+
+fn pencil_line(gpu: &GpuContext, s: &mut PaintSession, pressure: f32) {
+    s.brush.tool = Tool::Pencil;
+    let samples = line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, pressure, PENCIL_TILT_DEG);
+    drag(gpu, s, &samples);
+}
+
+fn graphite(gpu: &GpuContext, s: &PaintSession) -> Vec<f32> {
+    s.canvas.read_f32(gpu, StateTexture::Graphite).unwrap()
+}
+
+fn total_graphite(gpu: &GpuContext, pressure: f32) -> f32 {
+    let mut s = session(gpu);
+    pencil_line(gpu, &mut s, pressure);
+    graphite(gpu, &s).iter().sum()
+}
+
+fn mean(values: &[f32]) -> f32 {
+    values.iter().sum::<f32>() / values.len() as f32
+}
+
+#[test]
+fn the_pencil_draws_graphite_and_no_paint() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    pencil_line(&gpu, &mut s, FIRM_PRESSURE);
+    assert!(graphite(&gpu, &s)[centre()] > 0.0);
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+}
+
+#[test]
+fn pressing_harder_draws_darker() {
+    let gpu = GpuContext::new().unwrap();
+    let light = total_graphite(&gpu, LIGHT_PRESSURE);
+    let firm = total_graphite(&gpu, HARD_PRESSURE);
+    assert!(firm > light * DARKER_RATIO, "{firm} vs {light}");
+}
+
+#[test]
+fn a_light_touch_catches_the_tooth_of_the_linen() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    pencil_line(&gpu, &mut s, LIGHT_PRESSURE);
+    let density = graphite(&gpu, &s);
+    let heights = weave_heights(Weave::Linen, WIDTH, HEIGHT);
+    let rows = SKETCH_ROW - TOOTH_BAND_HALF_HEIGHT..=SKETCH_ROW + TOOTH_BAND_HALF_HEIGHT;
+    let band: Vec<usize> = rows
+        .flat_map(|y| (TOOTH_BAND_FROM_X..TOOTH_BAND_TO_X).map(move |x| y * WIDTH as usize + x))
+        .collect();
+    let mut band_heights: Vec<f32> = band.iter().map(|&i| heights[i]).collect();
+    band_heights.sort_by(f32::total_cmp);
+    let median = band_heights[band_heights.len() / 2];
+    let (peaks, valleys): (Vec<usize>, Vec<usize>) =
+        band.iter().partition(|&&i| heights[i] > median);
+    let on = |texels: &[usize]| mean(&texels.iter().map(|&i| density[i]).collect::<Vec<_>>());
+    let (peak_mean, valley_mean) = (on(&peaks), on(&valleys));
+    assert!(peak_mean > valley_mean * TOOTH_RATIO, "peaks {peak_mean} vs valleys {valley_mean}");
+}
+
+#[test]
+fn undo_takes_back_a_pencil_line() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    pencil_line(&gpu, &mut s, FIRM_PRESSURE);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(graphite(&gpu, &s).iter().all(|&density| density == 0.0));
 }
