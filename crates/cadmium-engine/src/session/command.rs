@@ -60,6 +60,8 @@ impl PaintSession {
                 self.engine.encode_clean_brush(encoder);
             }
         }
+        // Anything after works the painting tip unless it picks another.
+        self.engine.select_tip(Tip::Painting);
     }
 
     pub(super) fn run_knife_load(

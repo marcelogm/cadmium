@@ -37,6 +37,11 @@ impl WetOilEngine {
         }
     }
 
+    /// Whether the engine has the tray's own tip; headless ones don't.
+    pub fn has_tray_tip(&self) -> bool {
+        self.parked.is_some() || self.active == Tip::Tray
+    }
+
     pub fn active_tip(&self) -> Tip {
         self.active
     }

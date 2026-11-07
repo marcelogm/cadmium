@@ -76,3 +76,18 @@ fn the_tray_rag_leaves_the_painting_brush_holding_what_it_held() {
     tray_tool_stroke(&gpu, &mut s, Tool::Rag, 100.0);
     assert_eq!(s.read_brush(&gpu).unwrap(), before);
 }
+
+#[test]
+fn a_headless_session_has_no_tray_tip_to_read_or_clean() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = PaintSession::headless(&gpu, crate::spec()).unwrap();
+    load_slot(&gpu, &mut s, 0);
+    let before = s.read_brush(&gpu).unwrap();
+    assert!(s.read_tip(&gpu, Tip::Tray).unwrap().tip_mean.is_empty());
+    s.clean_tray_tip(&gpu);
+    assert_eq!(
+        s.read_brush(&gpu).unwrap(),
+        before,
+        "the painting brush stays loaded"
+    );
+}
