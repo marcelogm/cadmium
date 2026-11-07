@@ -85,3 +85,10 @@ fn an_index_past_the_points_changes_nothing() {
     assert_eq!(drag(&three(), 9, (0.5, 0.5)), three());
     assert_eq!(remove(&three(), 9), three());
 }
+
+#[test]
+fn a_tightly_packed_point_still_moves_up_and_down() {
+    let packed = curve(&[(0.0, 0.0), (0.4, 0.3), (0.42, 0.5), (0.44, 0.6), (1.0, 1.0)]);
+    let moved = drag(&packed, 2, (0.42, 0.9));
+    assert_eq!(moved.points()[2], (0.42, 0.9));
+}

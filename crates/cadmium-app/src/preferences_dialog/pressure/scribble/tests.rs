@@ -38,3 +38,22 @@ fn width_follows_pressure_inside_the_unit_range() {
     assert_eq!(width_for(0.0), 0.0);
     assert_eq!(width_for(2.0), MAX_WIDTH);
 }
+
+#[test]
+fn extend_says_whether_it_left_a_mark() {
+    let mut scribble = Scribble::default();
+    assert!(!scribble.extend((1.0, 0.0), 1.0));
+    scribble.begin((0.0, 0.0));
+    assert!(scribble.extend((1.0, 0.0), 1.0));
+}
+
+#[test]
+fn the_oldest_marks_go_first_past_the_cap() {
+    let mut scribble = Scribble::default();
+    scribble.begin((0.0, 0.0));
+    for i in 1..=MAX_MARKS + 3 {
+        scribble.extend((i as f64, 0.0), 1.0);
+    }
+    assert_eq!(scribble.marks().len(), MAX_MARKS);
+    assert_eq!(scribble.marks()[0].to, (4.0, 0.0));
+}

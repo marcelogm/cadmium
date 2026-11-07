@@ -1,7 +1,7 @@
 //! Where the unit square of the curve sits in the editor widget.
 
 /// Widget px kept clear around the plot, so the end points' handles show whole.
-pub(super) const PADDING: f64 = 12.0;
+const PADDING: f64 = 12.0;
 
 /// The square the curve is drawn in: input rightward, output upward.
 #[derive(Clone, Copy, Debug, PartialEq)]

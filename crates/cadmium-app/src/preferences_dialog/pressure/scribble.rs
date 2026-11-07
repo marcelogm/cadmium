@@ -2,6 +2,7 @@
 //! Plain cairo lines, not the paint engine.
 
 use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 use gtk::glib;
@@ -11,9 +12,10 @@ use crate::input::samples::{is_primary_contact, motion_samples};
 use crate::pressure_curve::PressureCurve;
 
 /// The width of a line at full pressure, in widget px.
-pub(super) const MAX_WIDTH: f64 = 24.0;
+const MAX_WIDTH: f64 = 24.0;
 const PAD_SIZE: i32 = 200;
-const MARK_ALPHA: f64 = 0.85;
+/// The most marks kept; the oldest go first.
+const MAX_MARKS: usize = 4096;
 
 /// One move of a stroke.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -26,7 +28,7 @@ pub(super) struct Mark {
 /// The marks on the pad and where the stroke under way last was.
 #[derive(Debug, Default)]
 pub(super) struct Scribble {
-    marks: Vec<Mark>,
+    marks: VecDeque<Mark>,
     last: Option<(f64, f64)>,
 }
 
@@ -35,16 +37,21 @@ impl Scribble {
         self.last = Some(at);
     }
 
-    /// Adds a mark to `at`, if a stroke is under way.
-    pub(super) fn extend(&mut self, at: (f64, f64), pressure: f32) {
-        if let Some(from) = self.last {
-            self.marks.push(Mark {
-                from,
-                to: at,
-                width: width_for(pressure),
-            });
-            self.last = Some(at);
+    /// Adds a mark to `at`, if a stroke is under way; whether it did.
+    pub(super) fn extend(&mut self, at: (f64, f64), pressure: f32) -> bool {
+        let Some(from) = self.last else {
+            return false;
+        };
+        if self.marks.len() >= MAX_MARKS {
+            self.marks.pop_front();
         }
+        self.marks.push_back(Mark {
+            from,
+            to: at,
+            width: width_for(pressure),
+        });
+        self.last = Some(at);
+        true
     }
 
     pub(super) fn end(&mut self) {
@@ -56,13 +63,13 @@ impl Scribble {
         self.last = None;
     }
 
-    pub(super) fn marks(&self) -> &[Mark] {
+    pub(super) fn marks(&self) -> &VecDeque<Mark> {
         &self.marks
     }
 }
 
 /// The line width for a (shaped) pressure.
-pub(super) fn width_for(pressure: f32) -> f64 {
+fn width_for(pressure: f32) -> f64 {
     f64::from(pressure.clamp(0.0, 1.0)) * MAX_WIDTH
 }
 
@@ -104,10 +111,7 @@ fn attach_stylus(
         #[strong]
         scribble,
         move |stylus, x, y| {
-            if stylus
-                .current_event()
-                .is_some_and(|e| is_primary_contact(&e))
-            {
+            if is_primary(stylus) {
                 scribble.borrow_mut().begin((x, y));
             }
         }
@@ -117,32 +121,56 @@ fn attach_stylus(
         scribble,
         #[weak]
         area,
-        move |stylus, x, y| {
-            let Some(event) = stylus.current_event() else {
-                return;
-            };
-            let samples = motion_samples(&event, x, y, |x, y| (x, y), &curve.get());
-            let mut scribble = scribble.borrow_mut();
-            for sample in samples {
-                scribble.extend((sample.x, sample.y), sample.pressure);
-            }
-            area.queue_draw();
-        }
+        move |stylus, x, y| motion(stylus, (x, y), &scribble, &area, &curve.get())
     ));
     stylus.connect_up(glib::clone!(
         #[strong]
         scribble,
-        move |_, _, _| scribble.borrow_mut().end()
+        move |stylus, _, _| {
+            if is_primary(stylus) {
+                scribble.borrow_mut().end();
+            }
+        }
+    ));
+    stylus.connect_cancel(glib::clone!(
+        #[strong]
+        scribble,
+        move |_, _| scribble.borrow_mut().end()
     ));
     area.add_controller(stylus);
 }
 
-fn draw(context: &gtk::cairo::Context, ink: &gtk::gdk::RGBA, marks: &[Mark]) {
-    context.set_source_rgba(
+fn is_primary(stylus: &gtk::GestureStylus) -> bool {
+    stylus
+        .current_event()
+        .is_some_and(|event| is_primary_contact(&event))
+}
+
+fn motion(
+    stylus: &gtk::GestureStylus,
+    (x, y): (f64, f64),
+    scribble: &RefCell<Scribble>,
+    area: &gtk::DrawingArea,
+    curve: &PressureCurve,
+) {
+    let Some(event) = stylus.current_event() else {
+        return;
+    };
+    let mut scribble = scribble.borrow_mut();
+    let mut added = false;
+    for sample in motion_samples(&event, x, y, |x, y| (x, y), curve) {
+        added |= scribble.extend((sample.x, sample.y), sample.pressure);
+    }
+    if added {
+        area.queue_draw();
+    }
+}
+
+fn draw(context: &gtk::cairo::Context, ink: &gtk::gdk::RGBA, marks: &VecDeque<Mark>) {
+    context.set_source_rgb(
         f64::from(ink.red()),
         f64::from(ink.green()),
         f64::from(ink.blue()),
-        MARK_ALPHA,
     );
     context.set_line_cap(gtk::cairo::LineCap::Round);
     for mark in marks {
