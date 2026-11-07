@@ -66,6 +66,11 @@ impl ToolProfile {
         self.holder == Some(Holder::Face)
     }
 
+    /// Whether the tool's dabs work the mixing knife's face.
+    pub(crate) fn works_the_face(&self) -> bool {
+        self.dab_stages.contains(&DabStage::Face)
+    }
+
     pub(crate) fn has_blade_footprint(&self) -> bool {
         self.footprint == Some(FootprintShape::Blade)
     }

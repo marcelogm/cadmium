@@ -39,7 +39,8 @@ pub(super) struct DabResources<'a> {
     pub(super) canvas: &'a Canvas,
     pub(super) dab_records: &'a wgpu::Buffer,
     pub(super) buffers: &'a Buffers,
-    pub(super) face_settings: FaceSettings,
+    /// The face's settings, for a batch that works the mixing knife's face.
+    pub(super) face_settings: Option<FaceSettings>,
 }
 
 #[derive(Clone, Copy)]
@@ -80,7 +81,7 @@ pub(super) struct DabBindGroups {
     refill: wgpu::BindGroup,
     wipe: wgpu::BindGroup,
     blade: wgpu::BindGroup,
-    face: wgpu::BindGroup,
+    face: Option<wgpu::BindGroup>,
     spread: SpreadBindGroups,
 }
 
@@ -117,7 +118,9 @@ impl DabPasses {
             refill: self.refill.bind_group(resources),
             wipe: self.wipe.bind_group(resources),
             blade: self.blade.bind_group(resources),
-            face: self.face.bind_group(resources),
+            face: resources
+                .face_settings
+                .map(|settings| self.face.bind_group(resources, settings)),
             spread: self.spread.bind_groups(
                 resources,
                 HairContact {
@@ -163,6 +166,19 @@ impl DabPasses {
         }
     }
 
+    /// Works the face; a batch whose tool doesn't work it has no face bind group.
+    fn encode_face(
+        &self,
+        bind_groups: &DabBindGroups,
+        pass: &mut wgpu::ComputePass<'_>,
+        dab: PlacedDab<'_>,
+    ) {
+        let Some(face) = &bind_groups.face else {
+            return;
+        };
+        self.face.encode(pass, face, dab);
+    }
+
     fn encode_stage(
         &self,
         stage: DabStage,
@@ -182,7 +198,7 @@ impl DabPasses {
             DabStage::Refill => self.refill.encode(pass, &bind_groups.refill, dab),
             DabStage::Spread => self.spread.encode(pass, &bind_groups.spread, dab),
             DabStage::Blade => self.blade.encode(pass, &bind_groups.blade, dab),
-            DabStage::Face => self.face.encode(pass, &bind_groups.face, dab),
+            DabStage::Face => self.encode_face(bind_groups, pass, dab),
             DabStage::Wipe => self.wipe.encode(pass, &bind_groups.wipe, dab),
         }
     }

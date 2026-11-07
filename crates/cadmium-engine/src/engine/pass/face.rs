@@ -8,7 +8,7 @@ use crate::compute::{
 };
 use crate::engine::dab_record::{KNIFE_LAID_ALTITUDE_RAD, KNIFE_UPRIGHT_ALTITUDE_RAD};
 use crate::engine::face_load::{
-    FACE_CAPACITY_UM, FACE_CELLS, FACE_COLUMN_PX, FACE_DEPTH, FACE_GRANT_CHANNELS,
+    FACE_CAPACITY_UM, FACE_CELLS, FACE_COLUMN_PX, FACE_DEPTH, FACE_GRANT_CHANNELS, FaceSettings,
 };
 use crate::engine::shader::{BLADE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
@@ -99,7 +99,11 @@ impl FacePass {
         }
     }
 
-    pub(super) fn bind_group(&self, resources: &DabResources<'_>) -> wgpu::BindGroup {
+    pub(super) fn bind_group(
+        &self,
+        resources: &DabResources<'_>,
+        face_settings: FaceSettings,
+    ) -> wgpu::BindGroup {
         let canvas = resources.canvas;
         // A buffer of its own for every batch, as the dab records have: one submit
         // can carry several strokes, and a buffer rewritten in place would hand
@@ -109,7 +113,7 @@ impl FacePass {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("mixing_knife_face_settings"),
-                contents: bytemuck::bytes_of(&resources.face_settings),
+                contents: bytemuck::bytes_of(&face_settings),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         self.compute.bind_group(

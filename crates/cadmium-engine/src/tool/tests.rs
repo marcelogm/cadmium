@@ -57,3 +57,15 @@ fn the_painting_knife_still_carries_its_paint_along_its_edge() {
     assert!(profile.holds_on_blade());
     assert!(!profile.holds_on_face());
 }
+
+#[test]
+fn only_the_face_holder_works_the_face() {
+    for tool in Tool::ALL {
+        let profile = tool.profile();
+        assert_eq!(
+            profile.works_the_face(),
+            profile.holds_on_face(),
+            "{tool:?}"
+        );
+    }
+}

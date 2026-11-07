@@ -281,7 +281,9 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &dab_records,
             buffers: &self.buffers,
-            face_settings: FaceSettings::of(&self.params, self.strokes_begun),
+            face_settings: (batch.brush.tool.profile())
+                .works_the_face()
+                .then(|| FaceSettings::of(&self.params, self.strokes_begun)),
         };
         let bind_groups = self.dab_passes.bind_groups(&resources);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -316,7 +318,7 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &records,
             buffers: &self.buffers,
-            face_settings: FaceSettings::of(&self.params, self.strokes_begun),
+            face_settings: None,
         };
         self.dab_passes.encode_bristles_alone(&resources, encoder);
     }

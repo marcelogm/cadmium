@@ -18,7 +18,7 @@ use super::{
 };
 use crate::canvas::{TILE_CHANGE_HEADER_WORDS, TILE_SIZE};
 use crate::compute::WORKGROUP_SIZE;
-use crate::tool::{BLADE_MODES, TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE};
+use crate::tool::BLADE_MODES;
 
 const TIP_SUM_INVOCATIONS: u32 = 256;
 const PICK_INVOCATIONS: u32 = 256;
@@ -156,8 +156,6 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
          const PIGMENT_CHANNELS: u32 = {PIGMENT_CHANNELS}u;\n\
          const VOLUME_CHANNEL: u32 = {VOLUME_CHANNEL}u;\n\
          const DELTA_SCALE: f32 = {DELTA_SCALE:?};\n\
-         const TOOL_MODE_KNIFE: u32 = {TOOL_MODE_KNIFE}u;\n\
-         const TOOL_MODE_MIXING_KNIFE: u32 = {TOOL_MODE_MIXING_KNIFE}u;\n\
          const TILE_SIZE: u32 = {TILE_SIZE}u;\n\
          const TILE_CHANGE_HEADER_WORDS: u32 = {TILE_CHANGE_HEADER_WORDS}u;\n\
          const BLOCK_SIDE_PX: u32 = {WORKGROUP_SIZE}u;\n\
