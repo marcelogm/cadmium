@@ -3,7 +3,7 @@ use adw::subclass::prelude::*;
 use gtk::{gdk, glib};
 
 use super::CadmiumWindow;
-use super::tray_divider::TrayDivider;
+use super::tray_divider::{TrayDivider, bar_drag_opens};
 use crate::LOG_DOMAIN;
 use crate::settings::Settings;
 use crate::tools::keys::{DigitPick, digit_pick};
@@ -126,9 +126,16 @@ impl CadmiumWindow {
     }
 
     pub(super) fn toggle_tray(&self) {
-        let shown = !self.imp().tray_pane.is_visible();
-        self.show_tray_pane(shown);
-        self.remember_tray(|settings| settings.tray_shown = shown);
+        self.set_tray_open(!self.imp().tray_pane.is_visible());
+    }
+
+    /// Opens or closes the tray, and remembers which.
+    fn set_tray_open(&self, open: bool) {
+        if self.imp().tray_pane.is_visible() == open {
+            return;
+        }
+        self.show_tray_pane(open);
+        self.remember_tray(|settings| settings.tray_shown = open);
     }
 
     pub fn show_tray(&self) {
@@ -139,6 +146,7 @@ impl CadmiumWindow {
         let imp = self.imp();
         let showing_now = shown && !imp.tray_pane.is_visible();
         imp.tray_pane.set_visible(shown);
+        imp.tray_bar.set_visible(!shown);
         if showing_now {
             let mut divider = imp.tray_divider.get();
             divider.forget_layout();
@@ -167,6 +175,65 @@ impl CadmiumWindow {
             self,
             move |_| window.follow_divider()
         ));
+        self.close_tray_when_let_go_low();
+        self.open_tray_from_its_bar();
+    }
+
+    /// Closes the tray when the painter lets go of the divider near the bottom. GtkPaned keeps
+    /// its own drag to itself, so the let-go is read from the pointer or touch ending, seen
+    /// on the way down to the divider.
+    fn close_tray_when_let_go_low(&self) {
+        let ends = gtk::EventControllerLegacy::new();
+        ends.set_propagation_phase(gtk::PropagationPhase::Capture);
+        ends.connect_event(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            #[upgrade_or]
+            glib::Propagation::Proceed,
+            move |_, event| {
+                let ended = matches!(
+                    event.event_type(),
+                    gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd
+                );
+                if ended {
+                    window.divider_let_go();
+                }
+                glib::Propagation::Proceed
+            }
+        ));
+        self.imp().tray_paned.add_controller(ends);
+    }
+
+    fn divider_let_go(&self) {
+        let imp = self.imp();
+        let mut divider = imp.tray_divider.get();
+        let closes = divider.released();
+        imp.tray_divider.set(divider);
+        if closes {
+            self.set_tray_open(false);
+        }
+    }
+
+    /// A click on the closed tray's bar opens it, and so does a short drag up.
+    fn open_tray_from_its_bar(&self) {
+        let bar = &self.imp().tray_bar;
+        bar.connect_clicked(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.set_tray_open(true)
+        ));
+        let drag = gtk::GestureDrag::new();
+        drag.connect_drag_update(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |drag, _, offset_y| {
+                if bar_drag_opens(offset_y) {
+                    drag.set_state(gtk::EventSequenceState::Claimed);
+                    window.set_tray_open(true);
+                }
+            }
+        ));
+        bar.add_controller(drag);
     }
 
     /// Places the divider once the paned's new height is laid out, outside its allocation.

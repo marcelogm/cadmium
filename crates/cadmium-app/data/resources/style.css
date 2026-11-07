@@ -20,3 +20,17 @@ button.pigment-swatch {
 row.locked-control {
   opacity: 0.6;
 }
+
+/* The closed tray: a low bar with a sheet's handle over "Tray", to click or drag open. */
+button.tray-bar {
+  border-radius: 0;
+  border-top: 1px solid var(--border-color);
+  padding: 6px 12px;
+}
+
+.tray-handle {
+  min-width: 36px;
+  min-height: 4px;
+  border-radius: 99px;
+  background-color: color-mix(in srgb, currentColor 30%, transparent);
+}
