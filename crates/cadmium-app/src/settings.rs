@@ -75,9 +75,15 @@ pub struct Settings {
     pub upper_pen_button: PenButtonAction,
     /// The share of the window height the tray takes, between `MIN_TRAY_SHARE` and
     /// `MAX_TRAY_SHARE`.
+    #[serde(serialize_with = "round_share")]
     pub tray_share: f32,
     /// Whether the tray is showing under the canvas.
     pub tray_shown: bool,
+}
+
+/// Writes `share` to three decimals, so an f32 like 0.35 doesn't show its widening noise.
+fn round_share<S: serde::Serializer>(share: &f32, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_f64((f64::from(*share) * 1000.0).round() / 1000.0)
 }
 
 impl Default for Settings {

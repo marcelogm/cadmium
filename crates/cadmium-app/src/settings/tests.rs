@@ -147,3 +147,12 @@ fn the_divider_position_and_the_share_convert_both_ways() {
     assert_eq!(tray_share_at(0, 800), MAX_TRAY_SHARE);
     assert_eq!(tray_share_at(10, 0), DEFAULT_TRAY_SHARE);
 }
+
+#[test]
+fn the_saved_tray_share_is_rounded() {
+    assert!(
+        Settings::default()
+            .to_json()
+            .contains("\"tray_share\": 0.35,")
+    );
+}

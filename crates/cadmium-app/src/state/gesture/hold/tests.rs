@@ -47,7 +47,7 @@ fn the_cancel_distance_is_measured_on_screen() {
 }
 
 #[test]
-fn a_tray_zoom_that_is_not_a_scale_is_ignored() {
+fn a_tray_view_that_is_not_a_scale_is_ignored() {
     let mut state = painting_state();
     for zoom in [0.0, -1.0, f32::NAN, f32::INFINITY] {
         state.set_tray_view(zoomed(zoom), 1.0);
