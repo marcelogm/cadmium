@@ -54,3 +54,15 @@ fn a_move_is_ignored_before_anything_is_laid_out() {
     divider.follow_move(400, 800);
     assert_eq!(divider.share(), 0.25);
 }
+
+#[test]
+fn a_move_after_the_layout_is_forgotten_waits_for_the_next_placing() {
+    let mut divider = TrayDivider::new(0.25);
+    divider.place(800);
+    divider.end_place();
+    // The tray was just shown: GTK clamps the divider before it is placed again.
+    divider.forget_layout();
+    divider.follow_move(700, 800);
+    assert_eq!(divider.share(), 0.25);
+    assert_eq!(divider.place(800), Some(600));
+}

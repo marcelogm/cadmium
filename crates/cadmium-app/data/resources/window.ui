@@ -72,7 +72,6 @@
                     <property name="wide-handle">True</property>
                     <property name="shrink-start-child">False</property>
                     <property name="shrink-end-child">False</property>
-                    <property name="resize-end-child">False</property>
                     <property name="start-child">
                       <object class="GtkOverlay" id="canvas_overlay">
                         <property name="child">

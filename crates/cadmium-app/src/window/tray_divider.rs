@@ -45,6 +45,11 @@ impl TrayDivider {
         self.placing = false;
     }
 
+    /// Takes no move as the painter's until the divider is placed again.
+    pub(super) fn forget_layout(&mut self) {
+        self.laid_out_height = None;
+    }
+
     /// Follows the divider to `position` in a paned `height` tall.
     pub(super) fn follow_move(&mut self, position: i32, height: i32) {
         if !self.placing && height > 0 && self.laid_out_height == Some(height) {

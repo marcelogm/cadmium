@@ -52,7 +52,7 @@ pub struct CadmiumWindow {
     pub tray_tool: Cell<TrayTool>,
     pub(super) tray_divider: Cell<TrayDivider>,
     /// Whether placing the divider is already queued for the paned's new height.
-    pub divider_queued: Cell<bool>,
+    pub(super) divider_queued: Cell<bool>,
     pub canvas: OnceCell<CadmiumCanvas>,
     /// Whether the window has claimed the Space press now held down.
     pub space_claimed: Cell<bool>,
@@ -95,7 +95,7 @@ impl ObjectImpl for CadmiumWindow {
         window.fill_tray_tool_group();
         window.setup_actions();
         window.setup_tool_shortcuts();
-        window.setup_tray_tool_keys();
+        window.setup_digit_keys();
         window.setup_navigation_keys();
         window.follow_tool_group();
         window.follow_tray_tool_group();

@@ -6,7 +6,8 @@ use super::CadmiumWindow;
 use super::tray_divider::TrayDivider;
 use crate::LOG_DOMAIN;
 use crate::settings::Settings;
-use crate::tools::TrayTool;
+use crate::tools::keys::{DigitPick, digit_pick};
+use crate::tools::{TrayTool, UiTool};
 
 impl CadmiumWindow {
     pub(super) fn fill_tray_tool_group(&self) {
@@ -64,16 +65,17 @@ impl CadmiumWindow {
             return;
         };
         toggle.set_label(Some(&load.label_for(painting)));
-        toggle.set_tooltip(load.tooltip_for(painting));
+        toggle.set_tooltip(&load.tooltip_for(painting));
         toggle.set_icon_name(Some(load.icon_for(painting)));
         toggle.set_enabled(load.is_enabled(painting));
     }
 
-    /// Shift+digit picks the tray's tool. Shift+1 arrives as `!` on most layouts, which no
-    /// `<Shift>1` trigger matches, so the key is also read back unshifted. It is taken in
-    /// the capture phase so the painting's digit shortcuts never see it, as they would on
-    /// AZERTY, where Shift+& gives the digit itself.
-    pub(super) fn setup_tray_tool_keys(&self) {
+    /// Number-row keys pick tools by the physical key: a digit picks the painting's tool,
+    /// Shift and a digit the tray's. Shift+1 arrives as `!` on US and AZERTY's unshifted
+    /// `&` is its 1, which no keyval trigger gets right on both, so the key is read on both
+    /// levels. Taken in the capture phase so the digit triggers never see these presses;
+    /// keypad keys and letters still go through them.
+    pub(super) fn setup_digit_keys(&self) {
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
         keys.connect_key_pressed(glib::clone!(
@@ -81,34 +83,46 @@ impl CadmiumWindow {
             self,
             #[upgrade_or]
             glib::Propagation::Proceed,
-            move |keys, keyval, keycode, modifiers| {
-                window.tray_key_pressed(keys, keyval, keycode, modifiers)
-            }
+            move |keys, _, keycode, modifiers| window.digit_key_pressed(keys, keycode, modifiers)
         ));
         self.add_controller(keys);
     }
 
-    fn tray_key_pressed(
+    fn digit_key_pressed(
         &self,
         keys: &gtk::EventControllerKey,
-        keyval: gdk::Key,
         keycode: u32,
         modifiers: gdk::ModifierType,
     ) -> glib::Propagation {
         if !self.window_keys_are_free() {
             return glib::Propagation::Proceed;
         }
-        let unshifted = WidgetExt::display(self)
-            .translate_key(keycode, gdk::ModifierType::empty(), keys.group() as i32)
-            .map_or(keyval, |(key, ..)| key);
-        let Some(tool) = TrayTool::for_shifted_key(keyval, unshifted, modifiers) else {
-            return glib::Propagation::Proceed;
+        let display = WidgetExt::display(self);
+        let level = |state| {
+            display
+                .translate_key(keycode, state, keys.group() as i32)
+                .map(|(key, ..)| key)
         };
-        // A Load that can't load is not picked, but the press is still the tray's.
-        if tool.is_enabled(self.tool()) {
-            self.select_tray_tool(tool.name());
+        let pick = digit_pick(
+            level(gdk::ModifierType::empty()),
+            level(gdk::ModifierType::SHIFT_MASK),
+            modifiers,
+        );
+        match pick {
+            None => return glib::Propagation::Proceed,
+            Some(DigitPick::Painting(tool)) => self.pick_painting_tool(tool),
+            // A Load that can't load is not picked, but the press is still the tray's.
+            Some(DigitPick::Tray(tool)) if !tool.is_enabled(self.tool()) => {}
+            Some(DigitPick::Tray(tool)) => self.select_tray_tool(tool.name()),
         }
         glib::Propagation::Stop
+    }
+
+    fn pick_painting_tool(&self, tool: UiTool) {
+        let name = tool.name().to_variant();
+        if let Err(error) = WidgetExt::activate_action(self, "win.tool", Some(&name)) {
+            glib::g_warning!(LOG_DOMAIN, "couldn't pick {tool:?}: {error}");
+        }
     }
 
     pub(super) fn toggle_tray(&self) {
@@ -125,6 +139,9 @@ impl CadmiumWindow {
         let imp = self.imp();
         imp.tray_pane.set_visible(shown);
         if shown {
+            let mut divider = imp.tray_divider.get();
+            divider.forget_layout();
+            imp.tray_divider.set(divider);
             self.queue_divider_placing();
         }
         if imp.tray_toggle.is_active() != shown {
@@ -156,14 +173,20 @@ impl CadmiumWindow {
         if self.imp().divider_queued.replace(true) {
             return;
         }
-        glib::idle_add_local_once(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move || {
-                window.imp().divider_queued.set(false);
-                window.place_divider();
-            }
-        ));
+        glib::idle_add_local_full(
+            glib::Priority::HIGH_IDLE,
+            glib::clone!(
+                #[weak(rename_to = window)]
+                self,
+                #[upgrade_or]
+                glib::ControlFlow::Break,
+                move || {
+                    window.imp().divider_queued.set(false);
+                    window.place_divider();
+                    glib::ControlFlow::Break
+                }
+            ),
+        );
     }
 
     fn place_divider(&self) {

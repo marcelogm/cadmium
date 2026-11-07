@@ -51,16 +51,6 @@ const TUBE: TrayToolProfile = TrayToolProfile {
     key: gdk::Key::_6,
 };
 
-const LOAD_DISABLED_TOOLTIP: &str =
-    "Load (Shift+1): pick the brush or the knife to load it from the tray";
-
-const SHORTCUT_MODIFIERS: gdk::ModifierType = gdk::ModifierType::SHIFT_MASK
-    .union(gdk::ModifierType::CONTROL_MASK)
-    .union(gdk::ModifierType::ALT_MASK)
-    .union(gdk::ModifierType::SUPER_MASK)
-    .union(gdk::ModifierType::HYPER_MASK)
-    .union(gdk::ModifierType::META_MASK);
-
 impl TrayTool {
     pub const ALL: [TrayTool; 4] = [
         TrayTool::Load,
@@ -90,22 +80,6 @@ impl TrayTool {
         self.profile().key
     }
 
-    /// The tool a press picks when Shift and nothing else is held. `keyval` is what the
-    /// press gives and `unshifted` the same key with Shift let go: Shift+1 gives `!` on
-    /// most layouts, while on AZERTY the digit itself is on the Shift level.
-    pub(crate) fn for_shifted_key(
-        keyval: gdk::Key,
-        unshifted: gdk::Key,
-        modifiers: gdk::ModifierType,
-    ) -> Option<TrayTool> {
-        if modifiers & SHORTCUT_MODIFIERS != gdk::ModifierType::SHIFT_MASK {
-            return None;
-        }
-        TrayTool::ALL
-            .into_iter()
-            .find(|tool| tool.key() == unshifted || tool.key() == keyval)
-    }
-
     /// What a touch on the tray does while `painting` is the painting's tool.
     pub(crate) fn press(self, painting: UiTool) -> Press {
         match self {
@@ -124,12 +98,15 @@ impl TrayTool {
     }
 
     /// The tooltip while `painting` is the painting's tool; a disabled Load says why.
-    pub fn tooltip_for(self, painting: UiTool) -> &'static str {
+    pub fn tooltip_for(self, painting: UiTool) -> String {
         if self.is_enabled(painting) {
-            self.profile().tooltip
-        } else {
-            LOAD_DISABLED_TOOLTIP
+            return self.profile().tooltip.to_string();
         }
+        let key = self.key().name().unwrap_or_default();
+        format!(
+            "{} (Shift+{key}): pick the brush or the knife to load it from the tray",
+            self.profile().label
+        )
     }
 
     pub fn label_for(self, painting: UiTool) -> String {
