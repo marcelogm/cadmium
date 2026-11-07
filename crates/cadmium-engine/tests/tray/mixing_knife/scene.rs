@@ -73,18 +73,30 @@ pub(super) struct Pass {
     pub(super) pressure: f32,
 }
 
+fn pass_sample(pass: &Pass, i: u32) -> StrokeSample {
+    let t = f64::from(i) / f64::from(PASS_SAMPLES);
+    StrokeSample {
+        x: pass.from[0] + t * (pass.to[0] - pass.from[0]),
+        y: pass.from[1] + t * (pass.to[1] - pass.from[1]),
+        pressure: pass.pressure,
+        tilt_x_deg: pass.tilt_x_deg,
+        tilt_y_deg: 0.0,
+        time_ms: 8 * i,
+    }
+}
+
+/// Queues a whole pass without painting it: its dabs wait for the next frame or
+/// flush.
+pub(super) fn queue_pass(s: &mut PaintSession, pass: &Pass) {
+    s.begin_stroke_on(Surface::Tray, pass_sample(pass, 0));
+    for i in 1..=PASS_SAMPLES {
+        s.add_samples(&[pass_sample(pass, i)]);
+    }
+    s.end_stroke();
+}
+
 pub(super) fn knife_pass(gpu: &GpuContext, s: &mut PaintSession, pass: Pass) {
-    let at = |i: u32| {
-        let t = f64::from(i) / f64::from(PASS_SAMPLES);
-        StrokeSample {
-            x: pass.from[0] + t * (pass.to[0] - pass.from[0]),
-            y: pass.from[1] + t * (pass.to[1] - pass.from[1]),
-            pressure: pass.pressure,
-            tilt_x_deg: pass.tilt_x_deg,
-            tilt_y_deg: 0.0,
-            time_ms: 8 * i,
-        }
-    };
+    let at = |i: u32| pass_sample(&pass, i);
     s.begin_stroke_on(Surface::Tray, at(0));
     for i in 1..=PASS_SAMPLES {
         s.add_samples(&[at(i)]);

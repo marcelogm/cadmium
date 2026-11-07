@@ -1,12 +1,14 @@
+use wgpu::util::DeviceExt;
+
 use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_buffer, storage_entry, texture_binding, texture_entry,
-    uniform_buffer, uniform_entry,
+    uniform_entry,
 };
 use crate::engine::dab_record::{KNIFE_LAID_ALTITUDE_RAD, KNIFE_UPRIGHT_ALTITUDE_RAD};
 use crate::engine::face_load::{
-    FACE_CAPACITY_UM, FACE_CELLS, FACE_COLUMN_PX, FACE_DEPTH, FACE_GRANT_CHANNELS, FaceSettings,
+    FACE_CAPACITY_UM, FACE_CELLS, FACE_COLUMN_PX, FACE_DEPTH, FACE_GRANT_CHANNELS,
 };
 use crate::engine::shader::{BLADE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
@@ -65,7 +67,6 @@ pub(super) struct FacePass {
     pipelines: FacePipelines,
     face_grant: wgpu::Buffer,
     face_state: wgpu::Buffer,
-    settings: wgpu::Buffer,
 }
 
 impl FacePass {
@@ -94,24 +95,23 @@ impl FacePass {
             pipelines: FacePipelines::new(gpu, &compute),
             face_grant: storage_buffer(gpu, "mixing_knife_face_grant", FACE_GRANT_BYTES),
             face_state: storage_buffer(gpu, "mixing_knife_face_state", FACE_STATE_BYTES),
-            settings: uniform_buffer(
-                gpu,
-                "mixing_knife_face_settings",
-                std::mem::size_of::<FaceSettings>() as u64,
-            ),
             compute,
         }
     }
 
     pub(super) fn bind_group(&self, resources: &DabResources<'_>) -> wgpu::BindGroup {
         let canvas = resources.canvas;
-        // Every batch encoded before the next submit shares this write: the
-        // parameters do not change between the batches of one frame.
-        resources.gpu.queue.write_buffer(
-            &self.settings,
-            0,
-            bytemuck::bytes_of(&resources.face_settings),
-        );
+        // A buffer of its own for every batch, as the dab records have: one submit
+        // can carry several strokes, and a buffer rewritten in place would hand
+        // them all the last stroke's seed.
+        let settings = resources
+            .gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("mixing_knife_face_settings"),
+                contents: bytemuck::bytes_of(&resources.face_settings),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
         self.compute.bind_group(
             resources.gpu,
             &[
@@ -124,7 +124,7 @@ impl FacePass {
                 buffer_binding(6, &resources.buffers.face_delta),
                 buffer_binding(7, &self.face_grant),
                 buffer_binding(8, &self.face_state),
-                buffer_binding(9, &self.settings),
+                buffer_binding(9, &settings),
             ],
         )
     }

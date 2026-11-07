@@ -198,15 +198,6 @@ pub(crate) fn storage_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::
     })
 }
 
-pub(crate) fn uniform_buffer(gpu: &GpuContext, label: &str, size: u64) -> wgpu::Buffer {
-    gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(label),
-        size,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    })
-}
-
 pub(crate) fn read_buffer(gpu: &GpuContext, buffer: &wgpu::Buffer) -> Result<Vec<f32>, GpuLost> {
     let staging = staging_buffer(gpu, "brush_readback", buffer.size());
     let mut encoder = new_encoder(gpu, "brush_readback");

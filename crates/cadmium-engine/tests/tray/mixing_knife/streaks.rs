@@ -1,12 +1,13 @@
 use std::ops::Range;
 
 use cadmium_engine::{
-    engine::PaintEngine, gpu::GpuContext, session::PaintSession, surface::Surface, tube::Nozzle,
+    canvas::StateTexture, engine::PaintEngine, gpu::GpuContext, session::PaintSession,
+    surface::Surface, tube::Nozzle,
 };
 
 use super::scene::{
-    LAID_TILT_DEG, MIXING_PRESSURE, Pass, TrayPaint, knife_pass, mixing_session, tray_and_tools,
-    weighted_variance, write_tray_preview,
+    LAID_TILT_DEG, MIXING_PRESSURE, Pass, TrayPaint, knife_pass, mixing_session, queue_pass,
+    tray_and_tools, weighted_variance, write_tray_preview,
 };
 use crate::FRAME_SECONDS;
 
@@ -27,9 +28,11 @@ const SWEPT_HALF_LENGTH_PX: f64 = 36.0;
 const SWEPT_X: Range<usize> = 270..431;
 const SWEPT_Y: Range<usize> = 210..411;
 const FIRST_PASS_KEEPS: f64 = 0.6;
-/// Paint changing as much along a pass as across it scores one half; the heaps'
-/// own boundary, leaning off each pass, already scores about 0.82.
-const FIRST_PASS_STREAKY: f64 = 0.84;
+/// How much more streaky than the heaps' own boundary the first pass must leave
+/// the paint, and an uneven edge than an even one: both measured in one run, so
+/// the scene's own score (about 0.82, the boundary leaning off the pass) cancels.
+const FIRST_PASS_GAIN: f64 = 0.015;
+const EDGE_GAIN: f64 = 0.01;
 const TEN_PASSES_LEAVE: f64 = 0.25;
 const MONOTONE_SLACK: f64 = 1.05;
 const VOLUME_TOLERANCE: f64 = 1e-6;
@@ -157,7 +160,7 @@ fn mix_across_the_boundary(
 }
 
 #[test]
-fn the_first_passes_leave_streaks_that_fade_pass_after_pass() {
+fn the_first_pass_leaves_streaks_and_every_pass_mixes_more() {
     let gpu = GpuContext::new().unwrap();
     let mut s = mixing_session(&gpu);
     let measures = mix_across_the_boundary(&gpu, &mut s, 10, "streaks");
@@ -167,7 +170,7 @@ fn the_first_passes_leave_streaks_that_fade_pass_after_pass() {
     eprintln!("relative variance {relative:?}");
     eprintln!("streakiness {streaky:?}");
     assert!(relative[1] >= FIRST_PASS_KEEPS);
-    assert!(streaky[1] >= FIRST_PASS_STREAKY);
+    assert!(streaky[1] - streaky[0] >= FIRST_PASS_GAIN);
     for pair in relative.windows(2) {
         assert!(pair[1] <= pair[0] * MONOTONE_SLACK, "{relative:?}");
     }
@@ -183,7 +186,7 @@ fn an_even_edge_leaves_fewer_streaks() {
     even.engine.params_mut().set("face_edge_unevenness", 0.0);
     let smooth = mix_across_the_boundary(&gpu, &mut even, 1, "even")[1].streakiness;
     eprintln!("streakiness uneven {streaky}, even {smooth}");
-    assert!(smooth < streaky);
+    assert!(streaky - smooth >= EDGE_GAIN);
 }
 
 #[test]
@@ -200,5 +203,56 @@ fn mixing_across_the_boundary_conserves_paint() {
     for slot in 0..2 {
         let drift = (after.pigment[slot] - before.pigment[slot]) / before.volume;
         assert!(drift.abs() < PIGMENT_TOLERANCE, "{slot}: {drift:e}");
+    }
+}
+
+/// How two queued passes get painted.
+#[derive(Clone, Copy)]
+enum Painting {
+    FlushedTogether,
+    FlushedApart,
+    AFewDabsAFrame,
+}
+
+const FEW_DABS_A_FRAME: usize = 7;
+const MAX_FRAMES: usize = 1000;
+
+fn paint_a_few_dabs_a_frame(gpu: &GpuContext, s: &mut PaintSession) {
+    s.limit_dabs_per_frame(Some(FEW_DABS_A_FRAME));
+    for _ in 0..MAX_FRAMES {
+        if !s.tray_has_pending_work() {
+            return;
+        }
+        crate::frame(gpu, s);
+    }
+}
+
+fn tray_after_two_queued_passes(gpu: &GpuContext, painting: Painting) -> Vec<u8> {
+    let mut s = mixing_session(gpu);
+    two_blobs(gpu, &mut s);
+    queue_pass(&mut s, &crossing_pass(0));
+    if matches!(painting, Painting::FlushedApart) {
+        s.flush(gpu);
+    }
+    queue_pass(&mut s, &crossing_pass(2));
+    if matches!(painting, Painting::AFewDabsAFrame) {
+        paint_a_few_dabs_a_frame(gpu, &mut s);
+    }
+    s.flush(gpu);
+    let mut bytes = s.tray.read_bytes(gpu, StateTexture::WetVol).unwrap();
+    bytes.extend(s.tray.read_bytes(gpu, StateTexture::WetPig0).unwrap());
+    bytes
+}
+
+#[test]
+fn strokes_paint_the_same_however_their_dabs_are_split() {
+    let gpu = GpuContext::new().unwrap();
+    let together = tray_after_two_queued_passes(&gpu, Painting::FlushedTogether);
+    for painting in [Painting::FlushedApart, Painting::AFewDabsAFrame] {
+        let other = tray_after_two_queued_passes(&gpu, painting);
+        assert!(
+            other == together,
+            "the tray depends on how its dabs were split"
+        );
     }
 }

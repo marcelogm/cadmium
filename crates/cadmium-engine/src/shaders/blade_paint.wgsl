@@ -72,18 +72,20 @@ fn held_share(amount: f32, held: f32) -> f32 {
 /// Lays `deposit_q` of a blade cell's paint, mixed as `shares`, onto `pixel`
 /// holding `volume`, and takes `pickup_q` of the pixel's own paint up. Stores the
 /// pixel and returns what the cell gains per channel, quantised, for the caller
-/// to add to its deltas: every unit leaving one side reaches the other.
+/// to add to its deltas: every unit leaving one side reaches the other. WGSL takes
+/// no pointer to a storage buffer as an argument, so each caller gathers the cell's
+/// shares from its own grant buffer and adds the gains to its own deltas.
 fn trade(
     pixel: vec2<i32>,
     volume: f32,
     deposit_q: i32,
     pickup_q: i32,
-    shares: array<f32, 8>,
+    shares: array<f32, PIGMENT_CHANNELS>,
 ) -> array<i32, TIP_CHANNELS> {
     let deposit = dequantize(deposit_q);
     let pickup = dequantize(pickup_q);
     let fractions = read_fractions(pixel);
-    var amounts = array<f32, 8>();
+    var amounts = array<f32, PIGMENT_CHANNELS>();
     var gained = array<i32, TIP_CHANNELS>();
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
         let deposit_slot_q = max(quantize_down(deposit * shares[slot]), 0);

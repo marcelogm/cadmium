@@ -151,7 +151,7 @@ fn lay(@builtin(global_invocation_id) id: vec3<u32>) {
     if (deposit_q == 0 && pickup_q == 0) {
         return;
     }
-    var shares = array<f32, 8>();
+    var shares = array<f32, PIGMENT_CHANNELS>();
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
         shares[slot] = blade_grant[grant_base + slot];
     }

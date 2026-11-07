@@ -158,7 +158,8 @@ pub struct WetOilEngine {
     buffers: Buffers,
     first_rest: FirstRest,
     previous_dab: Option<PreviousDab>,
-    /// Counts strokes, seeding what varies from one stroke to the next.
+    /// The strokes this engine has begun, on the painting and the tray alike: a
+    /// running count that seeds what varies from one stroke to the next.
     strokes_begun: u32,
     bristles: BristleRig,
     dab_passes: DabPasses,
