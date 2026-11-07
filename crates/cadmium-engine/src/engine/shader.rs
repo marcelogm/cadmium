@@ -18,7 +18,7 @@ use super::{
 };
 use crate::canvas::{TILE_CHANGE_HEADER_WORDS, TILE_SIZE};
 use crate::compute::WORKGROUP_SIZE;
-use crate::tool::{TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE};
+use crate::tool::{BLADE_MODES, TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE};
 
 const TIP_SUM_INVOCATIONS: u32 = 256;
 const PICK_INVOCATIONS: u32 = 256;
@@ -129,6 +129,19 @@ fn bristle_constants() -> String {
     )
 }
 
+/// `is_blade_mode` for WGSL, built from `BLADE_MODES` so the shaders and the
+/// tool profiles agree on which modes draw a blade.
+fn blade_mode_test() -> String {
+    let tests: Vec<String> = BLADE_MODES
+        .iter()
+        .map(|mode| format!("mode == {mode}u"))
+        .collect();
+    format!(
+        "fn is_blade_mode(mode: u32) -> bool {{ return {}; }}\n",
+        tests.join(" || ")
+    )
+}
+
 pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
     let mut source = format!(
         "const TIP_SIZE: u32 = {TIP_SIZE}u;\n\
@@ -153,6 +166,7 @@ pub(crate) fn shader_source(snippets: &[&str], body: &str) -> String {
          const BLADE_CELL_GROUP_SIZE: u32 = {BLADE_CELL_GROUP_SIZE}u;\n"
     );
     source.push_str(&bristle_constants());
+    source.push_str(&blade_mode_test());
     for snippet in snippets {
         source.push_str(snippet);
         source.push('\n');

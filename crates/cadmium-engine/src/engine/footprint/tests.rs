@@ -1,4 +1,4 @@
-use super::{Footprint, MIXING_KNIFE_HALF_WIDTH_SHARE};
+use super::{Footprint, MIXING_KNIFE_HALF_WIDTH_RATIO};
 use crate::brush::BrushSettings;
 use crate::stroke::{Dab, Tool};
 
@@ -28,12 +28,12 @@ fn blade_of(tool: Tool) -> Footprint {
 }
 
 #[test]
-fn the_mixing_knife_s_blade_is_much_wider_across_the_stroke_than_the_knife_s() {
+fn the_mixing_knife_blade_is_much_wider_across_the_stroke_than_the_knife_blade() {
     let knife = blade_of(Tool::Knife);
     let mixing = blade_of(Tool::MixingKnife);
     assert_eq!(mixing.radius, knife.radius);
     assert!((knife.elongation - KNIFE_ELONGATION).abs() < ELONGATION_TOLERANCE);
-    assert!((mixing.elongation - MIXING_KNIFE_HALF_WIDTH_SHARE).abs() < ELONGATION_TOLERANCE);
+    assert!((mixing.elongation - MIXING_KNIFE_HALF_WIDTH_RATIO).abs() < ELONGATION_TOLERANCE);
     assert!(mixing.elongation > 2.0 * knife.elongation);
 }
 

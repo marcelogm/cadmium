@@ -10,7 +10,7 @@ const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
 const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
-const MIXING_KNIFE_HALF_WIDTH_SHARE: f32 = 0.35;
+const MIXING_KNIFE_HALF_WIDTH_RATIO: f32 = 0.35;
 const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
 const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
 
@@ -136,12 +136,12 @@ fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
 /// the mixing knife lays a broad face on the paint.
 fn blade_half_width(tool: Tool, radius: f32) -> f32 {
     if tool == Tool::MixingKnife {
-        return MIXING_KNIFE_HALF_WIDTH_SHARE * radius;
+        return MIXING_KNIFE_HALF_WIDTH_RATIO * radius;
     }
     knife_half_width(radius)
 }
 
-pub(super) fn knife_half_width(radius: f32) -> f32 {
+fn knife_half_width(radius: f32) -> f32 {
     (KNIFE_HALF_WIDTH_RATIO * radius).max(KNIFE_MIN_HALF_WIDTH_PX)
 }
 

@@ -1,4 +1,4 @@
-use super::{DabStage, Holder, TOOL_MODE_MIXING_KNIFE, is_blade_mode};
+use super::{BLADE_MODES, DabStage, Holder, TOOL_MODE_MIXING_KNIFE};
 use crate::stroke::Tool;
 
 #[test]
@@ -7,7 +7,7 @@ fn only_a_blade_footprint_is_drawn_with_a_blade_shader_mode() {
         let profile = tool.profile();
         assert_eq!(
             profile.has_blade_footprint(),
-            is_blade_mode(profile.shader_mode),
+            BLADE_MODES.contains(&profile.shader_mode),
             "{tool:?}"
         );
     }

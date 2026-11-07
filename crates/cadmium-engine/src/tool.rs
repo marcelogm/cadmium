@@ -15,6 +15,9 @@ const TOOL_MODE_RAG: u32 = 3;
 const TOOL_MODE_EYEDROPPER: u32 = 4;
 pub(crate) const TOOL_MODE_MIXING_KNIFE: u32 = 5;
 const CONTACT_REST_FOLLOW: f32 = 0.25;
+/// The shader modes whose dabs are a flat rectangular blade rather than a tuft;
+/// the WGSL `is_blade_mode` is generated from this list.
+pub(crate) const BLADE_MODES: [u32; 2] = [TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE];
 
 #[derive(Debug)]
 pub struct ToolProfile {
@@ -86,13 +89,6 @@ impl ToolProfile {
     pub(crate) fn wipes(&self) -> bool {
         self.dab_stages.contains(&DabStage::Wipe)
     }
-}
-
-/// Mirrors the WGSL `is_blade_mode`: the shader modes whose dabs are a flat
-/// rectangular blade rather than a tuft.
-#[cfg(test)]
-pub(crate) fn is_blade_mode(mode: u32) -> bool {
-    mode == TOOL_MODE_KNIFE || mode == TOOL_MODE_MIXING_KNIFE
 }
 
 #[derive(Clone, Copy, Debug)]
