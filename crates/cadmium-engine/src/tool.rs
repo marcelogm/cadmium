@@ -98,6 +98,13 @@ impl ToolProfile {
         self.dab_stages.contains(&DabStage::Bristles)
     }
 
+    /// Whether any of its dabs reach the wet paint; graphite alone leaves it be.
+    pub(crate) fn touches_paint(&self) -> bool {
+        self.dab_stages
+            .iter()
+            .any(|stage| !PAINTLESS_STAGES.contains(stage))
+    }
+
     /// Whether its dabs settle on the surface: only the exchange and blade stages read the rest.
     pub(crate) fn rests_on_surface(&self) -> bool {
         self.dab_stages
@@ -105,6 +112,8 @@ impl ToolProfile {
             .any(|stage| matches!(stage, DabStage::Exchange | DabStage::Blade))
     }
 }
+
+const PAINTLESS_STAGES: [DabStage; 1] = [DabStage::Graphite];
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Spreading {

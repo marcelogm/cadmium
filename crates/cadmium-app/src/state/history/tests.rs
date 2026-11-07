@@ -16,6 +16,16 @@ fn drying_a_canvas_without_wet_paint_does_nothing() {
 }
 
 #[test]
+fn drying_after_a_pencil_sketch_does_nothing() {
+    let mut state = painting_state();
+    stroke(&mut state, Tool::Pencil, &row_samples(PAINT_ROW_Y));
+    let mark = state.edit_mark();
+    state.saved_to(PathBuf::from("sketch.cadmium"), mark);
+    assert_eq!(state.dry(), DryOutcome::NothingWet);
+    assert!(!state.has_unsaved_edits());
+}
+
+#[test]
 fn drying_wet_paint_can_be_undone() {
     let mut state = painting_state();
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));

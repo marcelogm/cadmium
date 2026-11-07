@@ -100,3 +100,12 @@ fn the_rag_and_the_pencil_never_rest_on_the_surface() {
         assert_eq!(tool.profile().rests_on_surface(), rests, "{tool:?}");
     }
 }
+
+#[test]
+fn only_the_pencil_leaves_the_paint_untouched() {
+    for tool in Tool::ALL {
+        let profile = tool.profile();
+        let untouched = tool == Tool::Pencil || !profile.places_dabs();
+        assert_eq!(!profile.touches_paint(), untouched, "{tool:?}");
+    }
+}

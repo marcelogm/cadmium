@@ -337,3 +337,14 @@ fn the_rag_leaves_graphite_under_wet_paint() {
     assert!(s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap()[centre()] > 0.0);
     assert_eq!(graphite(&gpu, &s)[centre()], FULL_SKETCH);
 }
+
+#[test]
+fn a_pencil_sketch_leaves_nothing_to_dry() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    pencil_line(&gpu, &mut s, FIRM_PRESSURE);
+    assert!(s.canvas.wet_tiles.is_empty());
+    assert!(without_wgpu_errors(&gpu, || s.dry(&gpu)));
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(graphite(&gpu, &s).iter().all(|&density| density == 0.0));
+}
