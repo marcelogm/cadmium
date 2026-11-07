@@ -11,6 +11,7 @@ const NOISE_RANGE: f32 = 16777216.0;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var wet_vol: texture_storage_2d<r32float, read_write>;
+@group(0) @binding(2) var graphite: texture_storage_2d<r32float, read_write>;
 
 fn hash(value: u32) -> u32 {
     let state = value * HASH_MULTIPLIER + HASH_INCREMENT;
@@ -37,10 +38,14 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (mask <= 0.0) {
         return;
     }
+    let rub = clamp(dab.tool_strength * dab.pressure * mask * cloth(pixel), 0.0, 1.0);
     let volume = textureLoad(wet_vol, pixel).x;
-    if (volume <= 0.0) {
+    if (volume > 0.0) {
+        textureStore(wet_vol, pixel, vec4<f32>(volume * (1.0 - rub), 0.0, 0.0, 0.0));
         return;
     }
-    let kept = clamp(1.0 - dab.tool_strength * dab.pressure * mask * cloth(pixel), 0.0, 1.0);
-    textureStore(wet_vol, pixel, vec4<f32>(volume * kept, 0.0, 0.0, 0.0));
+    let density = textureLoad(graphite, pixel).x;
+    if (density > 0.0) {
+        textureStore(graphite, pixel, vec4<f32>(density * (1.0 - rub), 0.0, 0.0, 0.0));
+    }
 }

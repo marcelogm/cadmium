@@ -38,6 +38,7 @@ const TOOTH_RATIO: f32 = 1.5;
 const TOOTH_BAND_HALF_HEIGHT: usize = 1;
 const TOOTH_BAND_FROM_X: usize = 100;
 const TOOTH_BAND_TO_X: usize = 400;
+const RUBBED_OUT_BELOW: f32 = 0.5;
 
 fn sketch_row(gpu: &GpuContext, s: &mut PaintSession, density: f32) {
     let mut sketch = vec![0.0; (WIDTH * HEIGHT) as usize];
@@ -271,4 +272,30 @@ fn undo_takes_back_a_pencil_line() {
     pencil_line(&gpu, &mut s, FIRM_PRESSURE);
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
     assert!(graphite(&gpu, &s).iter().all(|&density| density == 0.0));
+}
+
+fn rag_line(gpu: &GpuContext, s: &mut PaintSession) {
+    s.brush.tool = Tool::Rag;
+    drag(gpu, s, &line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, FIRM_PRESSURE, PENCIL_TILT_DEG));
+}
+
+#[test]
+fn the_rag_rubs_out_graphite_on_bare_canvas() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    sketch_row(&gpu, &mut s, FULL_SKETCH);
+    rag_line(&gpu, &mut s);
+    let left = graphite(&gpu, &s)[centre()];
+    assert!(left < RUBBED_OUT_BELOW, "{left}");
+}
+
+#[test]
+fn the_rag_leaves_graphite_under_wet_paint() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    sketch_row(&gpu, &mut s, FULL_SKETCH);
+    stroke(&gpu, &mut s, SKETCH_ROW as f64, STROKE_FROM, STROKE_TO);
+    rag_line(&gpu, &mut s);
+    assert!(s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap()[centre()] > 0.0);
+    assert_eq!(graphite(&gpu, &s)[centre()], FULL_SKETCH);
 }
