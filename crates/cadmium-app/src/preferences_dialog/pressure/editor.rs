@@ -123,8 +123,6 @@ fn remove_at(editing: &Editing, plot: Plot, (x, y): (f64, f64)) {
 /// Moves the held point with the pointer; the release hands on the change.
 fn attach_drag(area: &gtk::DrawingArea, editing: &Rc<Editing>, click: &gtk::GestureClick) {
     let gesture = gtk::GestureDrag::new();
-    // Grouped, so claiming the click's sequence doesn't deny the drag.
-    gesture.group_with(click);
     gesture.connect_drag_update(glib::clone!(
         #[strong]
         editing,
@@ -148,7 +146,10 @@ fn attach_drag(area: &gtk::DrawingArea, editing: &Rc<Editing>, click: &gtk::Gest
             }
         }
     ));
-    area.add_controller(gesture);
+    area.add_controller(gesture.clone());
+    // Grouped, so claiming the click's sequence doesn't deny the drag. GTK only groups
+    // gestures already on the same widget.
+    gesture.group_with(click);
 }
 
 fn draw(context: &cairo::Context, ink: &gdk::RGBA, plot: Plot, curve: &PressureCurve) {
