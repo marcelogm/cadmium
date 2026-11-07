@@ -11,8 +11,9 @@ use cadmium_engine::{
 use crate::entries::{Entries, read_entries};
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT,
-    FORMAT_1_STATE_ENTRIES, SKETCH_DENSITY, TempDir,
+    FORMAT_1_STATE_ENTRIES, TempDir,
     painted_session, painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
+    sketch_on_the_painting,
 };
 use crate::support::session;
 
@@ -70,9 +71,7 @@ fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
 fn saving_keeps_the_graphite_sketch() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let mut sketch = vec![0.0; (s.canvas.spec.width * s.canvas.spec.height) as usize];
-    sketch[0] = SKETCH_DENSITY;
-    s.canvas.write_f32(&gpu, StateTexture::Graphite, &sketch);
+    let sketch = sketch_on_the_painting(&gpu, &s);
     let dir = TempDir::new("graphite");
     let path = dir.file("graphite.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();

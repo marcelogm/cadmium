@@ -8,10 +8,10 @@ use cadmium_engine::{
     surface::{TRAY_HEIGHT, TRAY_WIDTH, tray_spec},
 };
 
-use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
+use crate::entries::{Entries, format_reason, read_entries, set_first_f32};
 use crate::{
-    CURRENT_FORMAT, INVALID_THICKNESS, SKETCH_DENSITY, TempDir, painted_session, painted_spec,
-    squeeze_on_the_tray, squeeze_on_the_tray_at,
+    CURRENT_FORMAT, INVALID_THICKNESS, TempDir, painted_session, painted_spec,
+    sketch_on_the_painting, squeeze_on_the_tray, squeeze_on_the_tray_at,
 };
 
 const TRAY_WET_VOLUME: &str = "tray/state/wet_vol.zst";
@@ -178,20 +178,13 @@ fn a_format_two_painting_saved_again_still_opens() {
     assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
 }
 
-fn sketch_on_the_painting(gpu: &GpuContext, s: &mut PaintSession) {
-    let texels = (s.canvas.spec.width * s.canvas.spec.height) as usize;
-    let mut sketch = vec![0.0; texels];
-    sketch[0] = SKETCH_DENSITY;
-    s.canvas.write_f32(gpu, StateTexture::Graphite, &sketch);
-}
-
 #[test]
 fn a_legacy_tray_painting_with_graphite_saves_in_the_current_format() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("format-3-graphite");
     let mut s = painted_session(&gpu);
     squeeze_on_the_tray_at(&gpu, &mut s, middle_of_the_tray());
-    sketch_on_the_painting(&gpu, &mut s);
+    sketch_on_the_painting(&gpu, &s);
     let path = dir.file("tray.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
     let resaved = dir.file("resaved.cadmium");
@@ -207,7 +200,7 @@ fn a_trayless_painting_with_graphite_saves_in_the_current_format() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("format-2-graphite");
     let (mut s, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    sketch_on_the_painting(&gpu, &mut s);
+    sketch_on_the_painting(&gpu, &s);
     document::save(&gpu, &mut s, &path).unwrap();
     let resaved = dir.file("resaved.cadmium");
     read_entries(Entries::saved_as_format_2(&path))
@@ -298,7 +291,7 @@ fn a_tray_entry_with_a_negative_thickness_is_a_format_error() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("negative-tray");
     let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    let entries = Entries::saved(&path).edit_state(TRAY_WET_VOLUME, set_first_thickness(-1.0));
+    let entries = Entries::saved(&path).edit_state(TRAY_WET_VOLUME, set_first_f32(-1.0));
     let reason = format_reason(read_entries(entries));
     assert!(
         reason.contains(&format!("{TRAY_WET_VOLUME} {INVALID_THICKNESS}")),

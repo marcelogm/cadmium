@@ -120,8 +120,7 @@ fn read_optional_state<R: Read + std::io::Seek>(
 ) -> Result<Vec<u8>, DocumentError> {
     let name = state_entry(prefix, which, format);
     if which == StateTexture::Graphite && archive.index_for_name(&name).is_none() {
-        let texels = spec.width as usize * spec.height as usize;
-        return Ok(vec![0; texels * which.bytes_per_texel() as usize]);
+        return Ok(vec![0; state_size(spec, which)]);
     }
     read_state(archive, format, prefix, spec, which)
 }
@@ -134,7 +133,7 @@ fn read_state<R: Read + std::io::Seek>(
     which: StateTexture,
 ) -> Result<Vec<u8>, DocumentError> {
     let name = state_entry(prefix, which, format);
-    let expected = spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize;
+    let expected = state_size(spec, which);
     let entry = entry(archive, &name)?;
     let corrupt = |error: std::io::Error| DocumentError::Format(format!("{name}: {error}"));
     let mut raw = Vec::with_capacity(expected);
@@ -165,6 +164,10 @@ fn read_state<R: Read + std::io::Seek>(
         )));
     }
     Ok(raw)
+}
+
+fn state_size(spec: &CanvasSpec, which: StateTexture) -> usize {
+    spec.width as usize * spec.height as usize * which.bytes_per_texel() as usize
 }
 
 fn holds_thickness(which: StateTexture) -> bool {

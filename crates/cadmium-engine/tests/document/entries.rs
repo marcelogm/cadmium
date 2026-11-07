@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use cadmium_engine::{
-    canvas::{CanvasSpec, Primer, Weave},
+    canvas::{CanvasSpec, Primer, StateTexture, Weave},
     document::{DocumentError, DocumentSnapshot},
     pigments::PigmentDb,
     surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, TRAY_HEIGHT, TRAY_WIDTH},
@@ -14,8 +14,6 @@ use crate::{
 };
 
 const TRAY_PREFIX: &str = "tray/";
-
-const GRAPHITE_BYTES: usize = 4;
 
 pub(super) struct Entries(pub(super) Vec<(String, Vec<u8>)>);
 
@@ -68,7 +66,8 @@ impl Entries {
 
     /// Adds a graphite entry, all zero, which `edit_state` can then change.
     pub(super) fn with_graphite(mut self) -> Entries {
-        let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT) as usize * GRAPHITE_BYTES];
+        let texel = StateTexture::Graphite.bytes_per_texel();
+        let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * texel) as usize];
         self.0.push((
             GRAPHITE_ENTRY.to_string(),
             zstd::encode_all(raw.as_slice(), 3).unwrap(),
@@ -193,6 +192,6 @@ pub(super) fn format_reason(result: Result<DocumentSnapshot, DocumentError>) -> 
     }
 }
 
-pub(super) fn set_first_thickness(value: f32) -> impl FnOnce(&mut Vec<u8>) {
+pub(super) fn set_first_f32(value: f32) -> impl FnOnce(&mut Vec<u8>) {
     move |raw| raw[..4].copy_from_slice(&value.to_le_bytes())
 }

@@ -4,12 +4,13 @@ use cadmium_engine::{
     gpu::GpuContext,
 };
 
-use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
+use crate::entries::{Entries, format_reason, read_entries, set_first_f32};
 use crate::{
     CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir,
 };
 
 const FUTURE_FORMAT: u32 = CURRENT_FORMAT + 1;
+const MAX_DENSITY: f32 = 1.0;
 const MAX_MANIFEST_BYTES: usize = 1 << 20;
 
 #[test]
@@ -115,7 +116,7 @@ fn state_entry_decompressing_past_the_canvas_is_a_format_error() {
 #[test]
 fn non_finite_or_negative_wet_volume_is_a_format_error() {
     for value in [f32::NAN, f32::INFINITY, -1.0] {
-        let entries = Entries::blank().edit_state("state/wet_vol.zst", set_first_thickness(value));
+        let entries = Entries::blank().edit_state("state/wet_vol.zst", set_first_f32(value));
         let reason = format_reason(read_entries(entries));
         assert!(
             reason.contains(&format!("state/wet_vol.zst {INVALID_THICKNESS}")),
@@ -127,7 +128,7 @@ fn non_finite_or_negative_wet_volume_is_a_format_error() {
 #[test]
 fn non_finite_or_negative_dry_height_is_a_format_error() {
     for value in [f32::NAN, f32::NEG_INFINITY, -0.5] {
-        let entries = Entries::blank().edit_state(FORMAT_1_DRY_HEIGHT, set_first_thickness(value));
+        let entries = Entries::blank().edit_state(FORMAT_1_DRY_HEIGHT, set_first_f32(value));
         let reason = format_reason(read_entries(entries));
         assert!(
             reason.contains(&format!("{FORMAT_1_DRY_HEIGHT} {INVALID_THICKNESS}")),
@@ -141,7 +142,7 @@ fn a_dry_relief_that_sinks_below_the_bare_canvas_is_a_format_error() {
     for value in [f32::NAN, f32::NEG_INFINITY, -0.5] {
         let entries = Entries::blank()
             .in_format_2()
-            .edit_state(DRY_RELIEF, set_first_thickness(value));
+            .edit_state(DRY_RELIEF, set_first_f32(value));
         let reason = format_reason(read_entries(entries));
         assert!(
             reason.contains(&format!("{DRY_RELIEF} {INVALID_THICKNESS}")),
@@ -171,11 +172,21 @@ fn a_graphite_density_outside_zero_to_one_is_a_format_error() {
     for value in [2.0, -0.5, f32::NAN] {
         let entries = Entries::blank()
             .with_graphite()
-            .edit_state(GRAPHITE_ENTRY, set_first_thickness(value));
+            .edit_state(GRAPHITE_ENTRY, set_first_f32(value));
         let reason = format_reason(read_entries(entries));
         assert!(
             reason.contains(&format!("{GRAPHITE_ENTRY} holds a graphite density outside")),
             "{reason}"
         );
+    }
+}
+
+#[test]
+fn graphite_densities_of_exactly_zero_and_one_are_accepted() {
+    for value in [0.0, MAX_DENSITY] {
+        let entries = Entries::blank()
+            .with_graphite()
+            .edit_state(GRAPHITE_ENTRY, set_first_f32(value));
+        assert!(read_entries(entries).is_ok(), "{value}");
     }
 }

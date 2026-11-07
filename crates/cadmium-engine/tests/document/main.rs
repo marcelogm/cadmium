@@ -40,6 +40,14 @@ const FORMAT_1_STATE_ENTRIES: [(&str, StateTexture); 8] = [
     ("state/dry_top_pig1.zst", StateTexture::DryTopPig1),
 ];
 
+/// Writes a one-texel pencil sketch on the painting and returns the whole graphite field.
+fn sketch_on_the_painting(gpu: &GpuContext, s: &PaintSession) -> Vec<f32> {
+    let mut sketch = vec![0.0; (s.canvas.spec.width * s.canvas.spec.height) as usize];
+    sketch[0] = SKETCH_DENSITY;
+    s.canvas.write_f32(gpu, StateTexture::Graphite, &sketch);
+    sketch
+}
+
 static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
 struct TempDir(PathBuf);

@@ -191,6 +191,7 @@ impl DocumentSnapshot {
     }
 
     fn holds_graphite(&self) -> bool {
+        // Only the painting: the pencil never marks the tray.
         self.states
             .iter()
             .filter(|state| state.which == StateTexture::Graphite)
