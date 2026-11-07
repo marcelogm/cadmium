@@ -47,13 +47,17 @@ impl GraphitePass {
         }
     }
 
-    pub(super) fn bind_group(&self, resources: &DabResources<'_>) -> wgpu::BindGroup {
+    pub(super) fn bind_group(
+        &self,
+        resources: &DabResources<'_>,
+        pencil_lead: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
         let mut entries = vec![dab_record_binding(resources.dab_records)];
         entries.extend(
             SURFACE_TEXTURES
                 .map(|(binding, which, _)| texture_binding(binding, resources.canvas, which)),
         );
-        entries.push(buffer_binding(LEAD_BINDING, &resources.buffers.pencil));
+        entries.push(buffer_binding(LEAD_BINDING, pencil_lead));
         self.compute.bind_group(resources.gpu, &entries)
     }
 

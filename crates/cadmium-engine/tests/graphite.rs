@@ -42,7 +42,9 @@ const RUBBED_OUT_BELOW: f32 = 0.5;
 const SOFTEST: f32 = 0.0;
 const HARDEST: f32 = 1.0;
 const SOFT_OVER_HARD_RATIO: f32 = 2.0;
+/// `HARD_COVERAGE_FIRM` in pencil.wgsl: the most a hard lead covers at full pressure.
 const HARD_DARKEST_DENSITY: f32 = 0.65;
+const FULL_PRESSURE: f32 = 1.0;
 const BARE_BELOW: f32 = 0.01;
 
 fn sketch_row(gpu: &GpuContext, s: &mut PaintSession, density: f32) {
@@ -248,10 +250,10 @@ fn total_graphite(gpu: &GpuContext, pressure: f32) -> f32 {
     graphite(gpu, &s).iter().sum()
 }
 
-fn graphite_of_lead(gpu: &GpuContext, hardness: f32) -> Vec<f32> {
+fn graphite_of_lead(gpu: &GpuContext, hardness: f32, pressure: f32) -> Vec<f32> {
     let mut s = session(gpu);
     s.brush.pencil_hardness = hardness;
-    pencil_line(gpu, &mut s, FIRM_PRESSURE);
+    pencil_line(gpu, &mut s, pressure);
     graphite(gpu, &s)
 }
 
@@ -372,15 +374,15 @@ fn a_pencil_sketch_leaves_nothing_to_dry() {
 #[test]
 fn a_soft_lead_leaves_more_graphite_than_a_hard_one() {
     let gpu = GpuContext::new().unwrap();
-    let soft: f32 = graphite_of_lead(&gpu, SOFTEST).iter().sum();
-    let hard: f32 = graphite_of_lead(&gpu, HARDEST).iter().sum();
+    let soft: f32 = graphite_of_lead(&gpu, SOFTEST, FIRM_PRESSURE).iter().sum();
+    let hard: f32 = graphite_of_lead(&gpu, HARDEST, FIRM_PRESSURE).iter().sum();
     assert!(soft > hard * SOFT_OVER_HARD_RATIO, "{soft} vs {hard}");
 }
 
 #[test]
 fn a_hard_lead_never_gets_very_dark() {
     let gpu = GpuContext::new().unwrap();
-    let darkest = graphite_of_lead(&gpu, HARDEST)
+    let darkest = graphite_of_lead(&gpu, HARDEST, FULL_PRESSURE)
         .into_iter()
         .fold(0.0, f32::max);
     assert!(darkest <= HARD_DARKEST_DENSITY, "{darkest}");
@@ -389,7 +391,7 @@ fn a_hard_lead_never_gets_very_dark() {
 #[test]
 fn a_hard_lead_skips_more_of_the_grain() {
     let gpu = GpuContext::new().unwrap();
-    let soft = bare_in_line(&graphite_of_lead(&gpu, SOFTEST));
-    let hard = bare_in_line(&graphite_of_lead(&gpu, HARDEST));
+    let soft = bare_in_line(&graphite_of_lead(&gpu, SOFTEST, FIRM_PRESSURE));
+    let hard = bare_in_line(&graphite_of_lead(&gpu, HARDEST, FIRM_PRESSURE));
     assert!(hard > soft, "{hard} bare vs {soft}");
 }

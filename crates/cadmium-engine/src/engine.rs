@@ -8,6 +8,7 @@ use crate::gpu::{GpuContext, GpuLost};
 use crate::params::SimParams;
 use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::Dab;
+use wgpu::util::DeviceExt;
 
 mod bristles;
 mod dab_record;
@@ -122,7 +123,8 @@ const BODY_BYTES: u64 = std::mem::size_of::<BodyState>() as u64;
 
 const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
 
-/// What the pencil pass needs to know about the lead, once per stroke.
+/// What the pencil pass needs to know about the lead. Each batch of dabs gets its own, so
+/// strokes queued behind each other keep the lead they were drawn with.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct PencilUniform {
@@ -140,6 +142,15 @@ impl PencilUniform {
             _pad: [0.0; 3],
         }
     }
+
+    fn upload(self, gpu: &GpuContext) -> wgpu::Buffer {
+        gpu.device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("pencil_lead"),
+                contents: bytemuck::bytes_of(&self),
+                usage: wgpu::BufferUsages::UNIFORM,
+            })
+    }
 }
 
 struct Buffers {
@@ -154,7 +165,6 @@ struct Buffers {
     face_load: wgpu::Buffer,
     face_delta: wgpu::Buffer,
     face_sums: wgpu::Buffer,
-    pencil: wgpu::Buffer,
     bristles: BristleBuffers,
 }
 
@@ -172,12 +182,6 @@ impl Buffers {
             face_load: storage_buffer(gpu, "mixing_knife_face_load", FACE_LOAD_BYTES),
             face_delta: storage_buffer(gpu, "mixing_knife_face_delta", FACE_DELTA_BYTES),
             face_sums: storage_buffer(gpu, "mixing_knife_face_sums", FACE_SUMS_BYTES),
-            pencil: gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("pencil_lead"),
-                size: PENCIL_BYTES,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
             bristles: BristleBuffers::new(gpu),
         }
     }
@@ -310,9 +314,7 @@ impl PaintEngine for WetOilEngine {
             return;
         }
         self.first_rest.take(&mut placements);
-        let lead = PencilUniform::of(batch.brush);
-        gpu.queue
-            .write_buffer(&self.buffers.pencil, 0, bytemuck::bytes_of(&lead));
+        let pencil_lead = PencilUniform::of(batch.brush).upload(gpu);
         let dab_records = upload_dab_records(gpu, &placements);
         self.dab_passes.fit_scratch(gpu, &placements);
         let resources = DabResources {
@@ -324,7 +326,7 @@ impl PaintEngine for WetOilEngine {
                 .works_the_face()
                 .then(|| FaceSettings::of(&self.params, self.strokes_begun)),
         };
-        let bind_groups = self.dab_passes.bind_groups(&resources);
+        let bind_groups = self.dab_passes.bind_groups(&resources, &pencil_lead);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("dab_exchange"),
             timestamp_writes: None,

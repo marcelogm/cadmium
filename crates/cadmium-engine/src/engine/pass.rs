@@ -113,7 +113,12 @@ impl DabPasses {
         self.contact.fit(gpu, placements);
     }
 
-    pub(super) fn bind_groups(&self, resources: &DabResources<'_>) -> DabBindGroups {
+    /// The bind groups for one batch of dabs, `pencil_lead` holding that batch's lead.
+    pub(super) fn bind_groups(
+        &self,
+        resources: &DabResources<'_>,
+        pencil_lead: &wgpu::Buffer,
+    ) -> DabBindGroups {
         DabBindGroups {
             bristles: self.bristles.bind_group(resources),
             contact: self.contact.bind_group(resources),
@@ -122,7 +127,7 @@ impl DabPasses {
             apply: self.apply.bind_group(resources),
             refill: self.refill.bind_group(resources),
             wipe: self.wipe.bind_group(resources),
-            graphite: self.graphite.bind_group(resources),
+            graphite: self.graphite.bind_group(resources, pencil_lead),
             blade: self.blade.bind_group(resources),
             face: resources
                 .face_settings
