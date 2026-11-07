@@ -11,12 +11,11 @@ use cadmium_engine::{
 use crate::entries::{Entries, read_entries};
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT,
-    FORMAT_1_STATE_ENTRIES, TempDir,
+    FORMAT_1_STATE_ENTRIES, SKETCH_DENSITY, TempDir,
     painted_session, painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
 };
 use crate::support::session;
 
-const SKETCH_DENSITY: f32 = 0.75;
 const LARGE_WIDTH: u32 = 2048;
 const LARGE_HEIGHT: u32 = 1536;
 const MAX_ONE_STROKE_PAINTING_BYTES: u64 = 1 << 20;

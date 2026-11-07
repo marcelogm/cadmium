@@ -22,6 +22,7 @@ use cadmium_engine::{
 use crate::support::encode_frame;
 
 const CURRENT_FORMAT: u32 = 5;
+const SKETCH_DENSITY: f32 = 0.75;
 const BLANK_WIDTH: u32 = 64;
 const BLANK_HEIGHT: u32 = 32;
 const FORMAT_1_DRY_HEIGHT: &str = "state/dry_height.zst";

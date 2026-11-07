@@ -190,7 +190,18 @@ impl DocumentSnapshot {
         }
     }
 
+    fn holds_graphite(&self) -> bool {
+        self.states
+            .iter()
+            .filter(|state| state.which == StateTexture::Graphite)
+            .any(|state| state.texels().iter().any(|byte| *byte != 0))
+    }
+
     fn file_format(&self) -> u32 {
+        // Older builds would open a sketch and drop it, so only the current format carries one.
+        if self.holds_graphite() {
+            return FORMAT_VERSION;
+        }
         match &self.tray {
             // Read from format 3 and written without being opened: keeps its old tray and format.
             Some(tray) if [tray.spec.width, tray.spec.height] == LEGACY_TRAY => TRAY_FORMAT,

@@ -10,8 +10,8 @@ use cadmium_engine::{
 
 use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
 use crate::{
-    CURRENT_FORMAT, INVALID_THICKNESS, TempDir, painted_session, painted_spec, squeeze_on_the_tray,
-    squeeze_on_the_tray_at,
+    CURRENT_FORMAT, INVALID_THICKNESS, SKETCH_DENSITY, TempDir, painted_session, painted_spec,
+    squeeze_on_the_tray, squeeze_on_the_tray_at,
 };
 
 const TRAY_WET_VOLUME: &str = "tray/state/wet_vol.zst";
@@ -176,6 +176,45 @@ fn a_format_two_painting_saved_again_still_opens() {
     read_entries(entries).unwrap().write(&resaved).unwrap();
     let opened = document::open(&gpu, &resaved).unwrap();
     assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
+}
+
+fn sketch_on_the_painting(gpu: &GpuContext, s: &mut PaintSession) {
+    let texels = (s.canvas.spec.width * s.canvas.spec.height) as usize;
+    let mut sketch = vec![0.0; texels];
+    sketch[0] = SKETCH_DENSITY;
+    s.canvas.write_f32(gpu, StateTexture::Graphite, &sketch);
+}
+
+#[test]
+fn a_legacy_tray_painting_with_graphite_saves_in_the_current_format() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-3-graphite");
+    let mut s = painted_session(&gpu);
+    squeeze_on_the_tray_at(&gpu, &mut s, middle_of_the_tray());
+    sketch_on_the_painting(&gpu, &mut s);
+    let path = dir.file("tray.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let resaved = dir.file("resaved.cadmium");
+    read_entries(Entries::saved_as_format_3(&path))
+        .unwrap()
+        .write(&resaved)
+        .unwrap();
+    assert_eq!(saved_format(&resaved), CURRENT_FORMAT);
+}
+
+#[test]
+fn a_trayless_painting_with_graphite_saves_in_the_current_format() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-2-graphite");
+    let (mut s, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
+    sketch_on_the_painting(&gpu, &mut s);
+    document::save(&gpu, &mut s, &path).unwrap();
+    let resaved = dir.file("resaved.cadmium");
+    read_entries(Entries::saved_as_format_2(&path))
+        .unwrap()
+        .write(&resaved)
+        .unwrap();
+    assert_eq!(saved_format(&resaved), CURRENT_FORMAT);
 }
 
 fn saved_format(path: &Path) -> serde_json::Value {
