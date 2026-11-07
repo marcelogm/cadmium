@@ -40,7 +40,9 @@ impl StateTexture {
 
     pub fn format(self) -> wgpu::TextureFormat {
         match self {
-            StateTexture::WetVol | StateTexture::DryHeight | StateTexture::Graphite => wgpu::TextureFormat::R32Float,
+            StateTexture::WetVol | StateTexture::DryHeight | StateTexture::Graphite => {
+                wgpu::TextureFormat::R32Float
+            }
             _ => wgpu::TextureFormat::Rgba16Float,
         }
     }
