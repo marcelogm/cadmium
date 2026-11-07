@@ -23,7 +23,7 @@ fn only_points_on_the_tray_image_are_on_the_tray() {
 
 #[test]
 fn a_short_widget_leaves_room_beside_the_tray() {
-    let viewport = (384, 200);
+    let viewport = (384, 150);
     assert!(is_on_tray(tray_point(viewport, 1.0, 100.0, 100.0)));
     assert!(!is_on_tray(tray_point(viewport, 1.0, 383.0, 100.0)));
 }
@@ -31,23 +31,23 @@ fn a_short_widget_leaves_room_beside_the_tray() {
 #[test]
 fn a_tall_widget_leaves_room_below_the_tray() {
     let viewport = (384, 400);
-    assert!(is_on_tray(tray_point(viewport, 1.0, 383.0, 255.0)));
+    assert!(is_on_tray(tray_point(viewport, 1.0, 383.0, 191.0)));
     assert!(!is_on_tray(tray_point(viewport, 1.0, 100.0, 300.0)));
 }
 
 #[test]
 fn the_widget_corners_are_the_tray_corners() {
-    let viewport = (768, 512);
+    let viewport = (768, 384);
     assert_eq!(tray_point(viewport, 2.0, 0.0, 0.0), (0.0, 0.0));
     assert_eq!(
-        tray_point(viewport, 2.0, 384.0, 256.0),
+        tray_point(viewport, 2.0, 384.0, 192.0),
         (f64::from(TRAY_WIDTH), f64::from(TRAY_HEIGHT))
     );
 }
 
 #[test]
-fn the_tray_is_two_thirds_as_tall_as_it_is_wide() {
-    assert_eq!(tray_height_for_width(384), 256);
+fn the_tray_is_half_as_tall_as_it_is_wide() {
+    assert_eq!(tray_height_for_width(384), 192);
     assert_eq!(tray_height_for_width(TRAY_WIDTH as i32), TRAY_HEIGHT as i32);
 }
 
