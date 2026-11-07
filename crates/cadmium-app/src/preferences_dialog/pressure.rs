@@ -5,3 +5,6 @@ mod plot;
 
 #[allow(dead_code)] // Used by the group in the next commit.
 mod editing;
+
+#[allow(dead_code)] // Used by the group in the next commit.
+mod scribble;
