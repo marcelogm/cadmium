@@ -1,6 +1,12 @@
 use super::*;
+use crate::pressure_curve::PressureCurve;
 
 const AXIS_COUNT: usize = 12;
+
+/// Every pressure becomes 0.5: shows plainly whether the curve was applied.
+fn flat_half() -> PressureCurve {
+    PressureCurve::from_points(&[(0.0, 0.5), (1.0, 0.5)]).unwrap()
+}
 
 fn fallback() -> StrokeSample {
     StrokeSample {
@@ -36,7 +42,12 @@ fn backlog_entry_reads_pressure_and_tilt_in_degrees() {
         | gdk::AxisFlags::XTILT
         | gdk::AxisFlags::YTILT;
     let coord = gdk::TimeCoord::new(90, axes, flags);
-    let sample = history_sample(&coord, |x, y| (x * 2.0, y + 1.0), &fallback());
+    let sample = history_sample(
+        &coord,
+        |x, y| (x * 2.0, y + 1.0),
+        &fallback(),
+        &PressureCurve::linear(),
+    );
     assert_eq!((sample.x, sample.y), (20.0, 21.0));
     assert_eq!(sample.pressure, 0.25);
     assert_eq!(sample.tilt_x_deg, 45.0);
@@ -52,7 +63,7 @@ fn backlog_entry_without_pen_axes_keeps_the_current_pressure_and_tilt() {
         (gdk::AxisUse::Pressure, 0.9),
     ]);
     let coord = gdk::TimeCoord::new(95, axes, gdk::AxisFlags::X | gdk::AxisFlags::Y);
-    let sample = history_sample(&coord, |x, y| (x, y), &fallback());
+    let sample = history_sample(&coord, |x, y| (x, y), &fallback(), &PressureCurve::linear());
     assert_eq!((sample.x, sample.y), (3.0, 4.0));
     assert_eq!(sample.pressure, 0.7);
     assert_eq!(sample.tilt_x_deg, 5.0);
@@ -64,14 +75,49 @@ fn backlog_entries_are_widget_points_mapped_like_the_motion_event() {
     let axes = axes_with(&[(gdk::AxisUse::X, 12.0), (gdk::AxisUse::Y, 34.0)]);
     let coord = gdk::TimeCoord::new(80, axes, gdk::AxisFlags::X | gdk::AxisFlags::Y);
     let widget_to_canvas = |x: f64, y: f64| (x / 2.0 + 100.0, y / 2.0 + 50.0);
-    let sample = history_sample(&coord, widget_to_canvas, &fallback());
+    let sample = history_sample(
+        &coord,
+        widget_to_canvas,
+        &fallback(),
+        &PressureCurve::linear(),
+    );
     assert_eq!((sample.x, sample.y), widget_to_canvas(12.0, 34.0));
 }
 
 #[test]
-fn missing_pressure_axis_means_a_mouse_at_full_pressure() {
-    assert_eq!(pressure_or(None, MOUSE_PRESSURE), 1.0);
-    assert_eq!(pressure_or(Some(1.4), MOUSE_PRESSURE), 1.0);
+fn missing_pressure_axis_means_a_mouse_at_full_pressure_whatever_the_curve() {
+    assert_eq!(pressure_or(None, MOUSE_PRESSURE, &flat_half()), 1.0);
+}
+
+#[test]
+fn a_reading_above_one_counts_as_full_pressure() {
+    assert_eq!(
+        pressure_or(Some(1.4), MOUSE_PRESSURE, &PressureCurve::linear()),
+        1.0
+    );
+}
+
+#[test]
+fn the_curve_shapes_a_real_pressure_reading() {
+    assert_eq!(pressure_or(Some(0.25), MOUSE_PRESSURE, &flat_half()), 0.5);
+}
+
+#[test]
+fn a_backlog_entry_with_pressure_goes_through_the_curve() {
+    let axes = axes_with(&[(gdk::AxisUse::Pressure, 0.25)]);
+    let flags = gdk::AxisFlags::X | gdk::AxisFlags::Y | gdk::AxisFlags::PRESSURE;
+    let coord = gdk::TimeCoord::new(90, axes, flags);
+    let sample = history_sample(&coord, |x, y| (x, y), &fallback(), &flat_half());
+    assert_eq!(sample.pressure, 0.5);
+}
+
+/// The fallback is the event's own sample, already shaped: shaping it again would bend twice.
+#[test]
+fn a_backlog_entry_without_pressure_keeps_the_shaped_current_pressure() {
+    let axes = axes_with(&[(gdk::AxisUse::X, 3.0)]);
+    let coord = gdk::TimeCoord::new(95, axes, gdk::AxisFlags::X | gdk::AxisFlags::Y);
+    let sample = history_sample(&coord, |x, y| (x, y), &fallback(), &flat_half());
+    assert_eq!(sample.pressure, 0.7);
 }
 
 #[test]

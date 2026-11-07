@@ -4,6 +4,7 @@ use gtk::glib::translate::IntoGlib;
 use gtk::prelude::*;
 
 use super::nav_drag::PenButtons;
+use crate::pressure_curve::PressureCurve;
 
 const TILT_AXIS_TO_DEGREES: f64 = 90.0;
 const MOUSE_PRESSURE: f32 = 1.0;
@@ -12,8 +13,11 @@ fn axis_index(axis: gdk::AxisUse) -> usize {
     axis.into_glib() as usize
 }
 
-fn pressure_or(value: Option<f64>, fallback: f32) -> f32 {
-    value.map_or(fallback, |pressure| pressure.clamp(0.0, 1.0) as f32)
+/// The reading shaped by `curve`, or `fallback` as it is when the device has no pressure.
+fn pressure_or(value: Option<f64>, fallback: f32, curve: &PressureCurve) -> f32 {
+    value.map_or(fallback, |pressure| {
+        curve.apply(pressure.clamp(0.0, 1.0) as f32)
+    })
 }
 
 fn tilt_degrees_or(value: Option<f64>, fallback: f32) -> f32 {
@@ -43,6 +47,7 @@ fn history_sample(
     coord: &gdk::TimeCoord,
     to_canvas: impl Fn(f64, f64) -> (f64, f64),
     fallback: &StrokeSample,
+    curve: &PressureCurve,
 ) -> StrokeSample {
     let axes = coord.axes();
     let flags = coord.flags();
@@ -59,6 +64,7 @@ fn history_sample(
         pressure: pressure_or(
             axis(gdk::AxisUse::Pressure, gdk::AxisFlags::PRESSURE),
             fallback.pressure,
+            curve,
         ),
         tilt_x_deg: tilt_degrees_or(
             axis(gdk::AxisUse::Xtilt, gdk::AxisFlags::XTILT),
@@ -73,18 +79,19 @@ fn history_sample(
 }
 
 /// The pen's state at widget point (`x`, `y`), the point mapped by `to_canvas` onto what
-/// is painted.
+/// is painted, its pressure shaped by `curve`.
 pub(crate) fn event_sample(
     event: &gdk::Event,
     x: f64,
     y: f64,
     to_canvas: impl Fn(f64, f64) -> (f64, f64),
+    curve: &PressureCurve,
 ) -> StrokeSample {
     let (canvas_x, canvas_y) = to_canvas(x, y);
     StrokeSample {
         x: canvas_x,
         y: canvas_y,
-        pressure: pressure_or(event.axis(gdk::AxisUse::Pressure), MOUSE_PRESSURE),
+        pressure: pressure_or(event.axis(gdk::AxisUse::Pressure), MOUSE_PRESSURE, curve),
         tilt_x_deg: tilt_degrees_or(event.axis(gdk::AxisUse::Xtilt), 0.0),
         tilt_y_deg: tilt_degrees_or(event.axis(gdk::AxisUse::Ytilt), 0.0),
         time_ms: event.time(),
@@ -98,8 +105,9 @@ pub(crate) fn motion_samples(
     x: f64,
     y: f64,
     to_canvas: impl Fn(f64, f64) -> (f64, f64),
+    curve: &PressureCurve,
 ) -> Vec<StrokeSample> {
-    let current = event_sample(event, x, y, &to_canvas);
+    let current = event_sample(event, x, y, &to_canvas, curve);
     let Some(event_position) = event.position() else {
         return vec![current];
     };
@@ -114,6 +122,7 @@ pub(crate) fn motion_samples(
                 to_canvas(widget_x, widget_y)
             },
             &current,
+            curve,
         )
     }));
     samples.push(current);
