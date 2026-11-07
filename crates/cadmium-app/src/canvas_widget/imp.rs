@@ -92,8 +92,8 @@ impl WidgetImpl for CadmiumCanvas {
             );
             snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Nearest, &bounds);
         }
-        if let Some((colour, marks)) = canvas.provisional_marks() {
-            append_provisional(snapshot, colour, &marks);
+        if let Some((colour, opacity, marks)) = canvas.provisional_marks() {
+            append_provisional(snapshot, colour, opacity, &marks);
         }
         if let Some((x, y)) = self.hover.get()
             && let Some(outline) = canvas.cursor_outline()

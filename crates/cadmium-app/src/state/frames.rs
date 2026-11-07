@@ -40,17 +40,22 @@ impl AppState {
     fn capture_provisional(&mut self) {
         let pending = self.session.queued_dabs_on(Surface::Painting);
         let shown_in_colour = self.session.view_mode == ViewMode::Color;
-        self.provisional.presented = self
+        let colour = self
             .provisional
             .colour
-            .filter(|_| shown_in_colour && !pending.is_empty())
-            .map(|colour| ProvisionalTrail::of(colour, &pending, self.view));
+            .filter(|_| shown_in_colour && !pending.is_empty());
+        let opacity = self
+            .provisional
+            .fade
+            .advance(self.now_ms(), colour.is_some());
+        self.provisional.presented =
+            colour.map(|colour| ProvisionalTrail::of(colour, &pending, self.view).faded(opacity));
     }
 
     fn prepare_frame(&mut self) {
         if self.pacing.brush_measure_waits && !self.session.has_queued_dabs() {
             self.pacing.brush_measure_waits = false;
-            self.measure_brush();
+            self.pacing.brush_measured = self.measure_brush().is_some();
         }
         let allowance = self.pacing.allowance(&self.gpu);
         self.session.limit_dabs_per_frame(Some(allowance));
