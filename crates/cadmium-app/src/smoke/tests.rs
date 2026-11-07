@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use super::brushes::{BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep};
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
-    PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
+    PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY, TRAY_PAINT,
 };
 use super::steps::{
     STROKE_PRESSURE_END, STROKE_PRESSURE_START, STROKE_SAMPLES, SmokeDialog, SmokeStep,
@@ -140,6 +140,22 @@ fn tray_opens_after_the_page_and_before_the_screenshot() {
         [
             SmokeStep::ShowPage("lab".to_string()),
             SmokeStep::ShowTray,
+            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+            SmokeStep::Quit,
+        ]
+    );
+}
+
+#[test]
+fn tray_paint_opens_the_tray_and_squeezes_paint_on_it() {
+    let config =
+        SmokeConfig::from_lookup(lookup(&[(TRAY_PAINT, "1"), (SCREENSHOT, "/tmp/shot.png")]))
+            .unwrap();
+    assert_eq!(
+        config.steps(),
+        [
+            SmokeStep::ShowTray,
+            SmokeStep::PaintTray,
             SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
             SmokeStep::Quit,
         ]

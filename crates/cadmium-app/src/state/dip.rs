@@ -1,6 +1,6 @@
 use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
 use cadmium_engine::canvas::PaintTotals;
-use cadmium_engine::engine::{BrushReadout, FULL_DIP};
+use cadmium_engine::engine::{BrushReadout, FULL_DIP, Tip};
 use cadmium_engine::pigments::Mixture;
 use cadmium_engine::surface::Surface;
 
@@ -92,7 +92,11 @@ impl AppState {
     /// Cleans the tool the side panel describes.
     pub fn clean_brush(&mut self) {
         self.put_down_stroke_tool();
-        self.clean_focused();
+        if self.shows_tray_tip() {
+            self.session.clean_tray_tip(&self.gpu);
+        } else {
+            self.clean_focused();
+        }
         self.measure_brush_once_painted();
         self.wake();
     }
@@ -165,6 +169,12 @@ impl AppState {
         self.knife_mixture = mean_mixture(&readout.knife);
         self.knife_volume = readout.knife.volume as f32;
         self.note_face(&readout);
+        if self.focus == Surface::Tray {
+            match self.session.read_tip(&self.gpu, Tip::Tray) {
+                Ok(tray) => self.tray_tip_mixture = tray.tip_mean,
+                Err(_) => self.wake(),
+            }
+        }
         Some(readout)
     }
 }

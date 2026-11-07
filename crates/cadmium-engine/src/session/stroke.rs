@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::engine::Tip;
 use crate::gpu::GpuContext;
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
 use crate::surface::Surface;
@@ -15,11 +16,17 @@ impl PaintSession {
     /// Queues a stroke behind whatever is still waiting to paint; the engine crosses into
     /// it only once the strokes and brush changes ahead of it are encoded.
     pub fn begin_stroke_on(&mut self, surface: Surface, sample: StrokeSample) {
+        self.begin_stroke_with(surface, Tip::Painting, sample);
+    }
+
+    /// Queues a stroke on `surface` worked by `tip`: the tray's tools work the tray's own
+    /// tip, so they never soil the painting brush.
+    pub fn begin_stroke_with(&mut self, surface: Surface, tip: Tip, sample: StrokeSample) {
         self.end_hold();
         self.end_stroke();
         let brush = self.brush.clone();
         let mut builder = StrokeBuilder::new(brush.stroke_geometry());
-        let mut stroke = QueuedStroke::new(surface, brush);
+        let mut stroke = QueuedStroke::new(surface, tip, brush);
         stroke.dabs.extend(builder.push(sample));
         let first_in_line = self.queued.is_empty();
         self.queued.push_back(Queued::Stroke(stroke));

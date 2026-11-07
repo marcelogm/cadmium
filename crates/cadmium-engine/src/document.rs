@@ -2,7 +2,9 @@ use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 
-use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TexelBlock};
+use crate::canvas::{
+    Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TRAY_REFLECTANCE, TexelBlock,
+};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
 use crate::session::PaintSession;
 use crate::surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, tray_spec};
@@ -10,6 +12,7 @@ use crate::surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, tray_spec};
 mod export;
 mod read;
 mod relief;
+mod tray_ground;
 mod write;
 
 pub use export::ExportedImage;
@@ -179,7 +182,9 @@ impl DocumentSnapshot {
         upload_states_into(gpu, &mut session.canvas, self.states, painting);
         if let Some(tray) = self.tray {
             let middle = middle_block(&session.tray.spec, &tray.spec);
-            upload_states_into(gpu, &mut session.tray, tray.states, middle);
+            let mut states = tray.states;
+            on_todays_tray_ground(&mut states);
+            upload_states_into(gpu, &mut session.tray, states, middle);
         }
     }
 
@@ -218,6 +223,22 @@ fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, 
             bytes: padded.to_vec(),
         }
     })
+}
+
+/// Moves a saved tray's bare ground to today's (see `tray_ground`).
+fn on_todays_tray_ground(states: &mut [StateBytes]) {
+    let mut low = None;
+    let mut high = None;
+    for state in states.iter_mut() {
+        match state.which {
+            StateTexture::DryRefl0 => low = Some(&mut state.bytes),
+            StateTexture::DryRefl1 => high = Some(&mut state.bytes),
+            _ => {}
+        }
+    }
+    if let (Some(low), Some(high)) = (low, high) {
+        tray_ground::rebase_tray_ground(low, high, TRAY_REFLECTANCE);
+    }
 }
 
 /// The block a `saved` tray takes in the middle of a `full` one.

@@ -27,6 +27,13 @@ pub fn fit_view(canvas_size: (u32, u32), viewport_px: (f64, f64), margin_px: f64
     }
 }
 
+/// The part of a `viewport_px` viewport above a bar `bottom_inset_px` tall lying over its
+/// foot, for a fit to keep the canvas clear of the bar.
+pub fn above_inset(viewport_px: (f64, f64), bottom_inset_px: f64) -> (f64, f64) {
+    let inset = bottom_inset_px.max(0.0);
+    (viewport_px.0, (viewport_px.1 - inset).max(1.0))
+}
+
 /// The canvas covering the whole viewport, centred: scaled by the larger of the two ratios,
 /// so it fills the viewport edge to edge and the overflow is cropped.
 pub fn cover_view(canvas_size: (u32, u32), viewport_px: (u32, u32)) -> ViewTransform {

@@ -1,6 +1,7 @@
-use crate::engine::{BrushOutline, BrushReadout};
+use crate::canvas::PaintTotals;
+use crate::engine::{BrushOutline, BrushReadout, Tip};
 use crate::gpu::{GpuContext, GpuLost};
-use crate::pigments::Mixture;
+use crate::pigments::{MAX_SLOTS, Mixture};
 use crate::stroke::StrokeSample;
 use crate::tool::Holder;
 
@@ -62,12 +63,39 @@ impl PaintSession {
 
     pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         self.flush(gpu);
-        self.engine.tip_mean_mixture(gpu)
+        self.on_tip(Tip::Painting, |session| {
+            session.engine.tip_mean_mixture(gpu)
+        })
     }
 
     pub fn read_brush(&mut self, gpu: &GpuContext) -> Result<BrushReadout, GpuLost> {
+        self.read_tip(gpu, Tip::Painting)
+    }
+
+    /// What `tip` holds: the painting brush's, or the tray's own tools'.
+    /// A session without the tray's tip (a headless one) reads it as empty.
+    pub fn read_tip(&mut self, gpu: &GpuContext, tip: Tip) -> Result<BrushReadout, GpuLost> {
+        if tip == Tip::Tray && !self.engine.has_tray_tip() {
+            return Ok(BrushReadout {
+                tip_mean: Mixture {
+                    volume_um: 0.0,
+                    fractions: [0.0; MAX_SLOTS],
+                },
+                reserve: PaintTotals::default(),
+                knife: PaintTotals::default(),
+                face: PaintTotals::default(),
+            });
+        }
         self.flush(gpu);
-        self.engine.read_brush(gpu)
+        self.on_tip(tip, |session| session.engine.read_brush(gpu))
+    }
+
+    /// Does nothing without the tray's tip, so it never cleans the painting brush instead.
+    pub fn clean_tray_tip(&mut self, gpu: &GpuContext) {
+        if !self.engine.has_tray_tip() {
+            return;
+        }
+        self.change_brush(gpu, BrushChange::CleanTrayTip);
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {

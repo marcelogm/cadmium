@@ -81,6 +81,7 @@ pub(super) enum SmokeStep {
     ShowTray,
     ChooseTrayTool(TrayTool),
     MixOnTray,
+    PaintTray,
     Screenshot(PathBuf),
     Quit,
 }
@@ -98,7 +99,8 @@ impl SmokeStep {
             | SmokeStep::OpenDialog(_)
             | SmokeStep::ShowPage(_)
             | SmokeStep::ShowTray
-            | SmokeStep::ChooseTrayTool(_) => true,
+            | SmokeStep::ChooseTrayTool(_)
+            | SmokeStep::PaintTray => true,
             SmokeStep::MixOnTray => window.canvas().presented_frames() > 0,
             SmokeStep::Brush(step) => step.is_ready(window),
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
@@ -137,6 +139,7 @@ impl SmokeStep {
             SmokeStep::ShowTray => window.show_tray(),
             SmokeStep::ChooseTrayTool(tool) => choose_tray_tool(window, *tool),
             SmokeStep::MixOnTray => mix_on_tray(window),
+            SmokeStep::PaintTray => super::tray_paint::paint_tray(window),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
                     return false;
@@ -156,8 +159,8 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, tray, tray tool, tray mix, brush editor,
-    /// sheet stroke, screenshot, quit.
+    /// open, export, brush export, brush delete, page, tray, tray tool, tray mix, tray paint,
+    /// brush editor, sheet stroke, screenshot, quit.
     /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
     /// it at start-up.
     pub(super) fn steps(&self) -> Vec<SmokeStep> {
@@ -173,12 +176,15 @@ impl SmokeConfig {
         steps.extend(self.export.clone().map(SmokeStep::Export));
         steps.extend(self.brushes.after_files());
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
-        if self.tray {
+        if self.tray || self.tray_paint {
             steps.push(SmokeStep::ShowTray);
         }
         steps.extend(self.tray_tool.map(SmokeStep::ChooseTrayTool));
         if self.tray_mix {
             steps.push(SmokeStep::MixOnTray);
+        }
+        if self.tray_paint {
+            steps.push(SmokeStep::PaintTray);
         }
         steps.extend(self.brushes.editor_steps());
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));

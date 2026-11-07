@@ -18,6 +18,7 @@ pub(super) const DIALOG: &str = "CADMIUM_SMOKE_DIALOG";
 pub(super) const STROKE: &str = "CADMIUM_SMOKE_STROKE";
 pub(super) const PAGE: &str = "CADMIUM_SMOKE_PAGE";
 pub(super) const TRAY: &str = "CADMIUM_SMOKE_TRAY";
+pub(super) const TRAY_PAINT: &str = "CADMIUM_SMOKE_TRAY_PAINT";
 pub(super) const TOOL: &str = "CADMIUM_SMOKE_TOOL";
 pub(super) const SAVE: &str = "CADMIUM_SMOKE_SAVE";
 pub(super) const OPEN: &str = "CADMIUM_SMOKE_OPEN";
@@ -35,20 +36,19 @@ impl SmokeConfig {
         let exit_after_frames = lookup(EXIT_AFTER_FRAMES);
         let screenshot = lookup_path(&lookup, SCREENSHOT);
         let dialog = lookup(DIALOG);
-        let tool = lookup(TOOL).filter(|value| !value.is_empty());
-        let tray_tool = lookup(TRAY_TOOL).filter(|value| !value.is_empty());
+        let tool = non_empty(&lookup, TOOL);
+        let tray_tool = non_empty(&lookup, TRAY_TOOL);
         let config = SmokeConfig {
             exit_after_frames: DEFAULT_EXIT_AFTER_FRAMES,
             screenshot,
             dialog: None,
             tool: None,
             stroke: lookup_flag(&lookup, STROKE),
-            page: lookup(PAGE)
-                .filter(|value| !value.is_empty())
-                .map(|value| value.to_string_lossy().into_owned()),
+            page: non_empty(&lookup, PAGE).map(|value| value.to_string_lossy().into_owned()),
             tray: lookup_flag(&lookup, TRAY),
             tray_tool: None,
             tray_mix: lookup_flag(&lookup, TRAY_MIX),
+            tray_paint: lookup_flag(&lookup, TRAY_PAINT),
             save: lookup_path(&lookup, SAVE),
             open: lookup_path(&lookup, OPEN),
             export: lookup_path(&lookup, EXPORT),
@@ -80,6 +80,7 @@ impl SmokeConfig {
             && self.page.is_none()
             && !self.tray
             && !self.tray_mix
+            && !self.tray_paint
             && self.save.is_none()
             && self.open.is_none()
             && self.export.is_none()
@@ -95,6 +96,11 @@ pub(super) fn lookup_path(
     lookup(name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
+}
+
+/// The variable `name`, unless it is unset or empty.
+fn non_empty(lookup: &impl Fn(&str) -> Option<OsString>, name: &str) -> Option<OsString> {
+    lookup(name).filter(|value| !value.is_empty())
 }
 
 pub(super) fn lookup_flag(lookup: &impl Fn(&str) -> Option<OsString>, name: &str) -> bool {

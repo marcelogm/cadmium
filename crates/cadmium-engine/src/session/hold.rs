@@ -1,6 +1,6 @@
 use crate::canvas::{Canvas, PaintTotals, tiles_in_rect};
 use crate::draw_up::{DrawUp, DrawUpRegion, DrawUpRequest, DrawnUp, draw_up_region};
-use crate::engine::PaintEngine;
+use crate::engine::{PaintEngine, Tip};
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::History;
 use crate::surface::Surface;
@@ -78,6 +78,7 @@ impl PaintSession {
             canvas,
             region,
         });
+        self.engine.select_tip(Tip::Painting);
         let (taken, level) = self
             .engine
             .draw_up(gpu, into_knife, |room_um| match source {

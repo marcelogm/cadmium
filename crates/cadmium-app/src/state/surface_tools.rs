@@ -1,3 +1,5 @@
+use cadmium_engine::engine::Tip;
+use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 
 use super::AppState;
@@ -22,6 +24,11 @@ impl AppState {
         }
     }
 
+    /// Whether the side panel shows the tray blender's own tip rather than the brush.
+    pub(crate) fn shows_tray_tip(&self) -> bool {
+        self.focus == Surface::Tray && self.tray_tool == TrayTool::Blender
+    }
+
     /// The tool the side panel and the pigment piles answer to.
     pub(crate) fn focused_tool(&self) -> PanelTool {
         let tool_in_hand = self.session.brush.tool;
@@ -29,6 +36,16 @@ impl AppState {
             Surface::Painting => PanelTool::of_painting(self.ui_tool, tool_in_hand),
             Surface::Tray => self.tray_tool.panel_tool(self.ui_tool, tool_in_hand),
         }
+    }
+}
+
+/// The tip a stroke of `tool` on `surface` works: on the tray, the tools that hold no paint
+/// (its blender and rag) work the tray's own tip, so they never soil the painting brush.
+pub(crate) fn tip_for(surface: Surface, tool: Tool) -> Tip {
+    if surface == Surface::Tray && tool.profile().holder.is_none() {
+        Tip::Tray
+    } else {
+        Tip::Painting
     }
 }
 

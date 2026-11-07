@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::canvas::{Canvas, StateTexture, TILE_CHANGE_HEADER_WORDS, TILE_SIZE, TileCoord};
+use crate::canvas::{Canvas, Primer, StateTexture, TILE_CHANGE_HEADER_WORDS, TILE_SIZE, TileCoord};
 use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
 use crate::gpu::GpuContext;
 use crate::params::SimParams;
@@ -63,10 +63,13 @@ struct ShadeParams {
     view_mode: u32,
     view_slot: u32,
     first_possible_tile: u32,
+    /// Nonzero on the tray: its bare plate catches the glass's reflection.
+    glass: u32,
+    padding: [u32; 3],
 }
 
 impl ShadeParams {
-    fn new(params: &SimParams, mode: ViewMode, first_possible_tile: u32) -> Self {
+    fn new(params: &SimParams, mode: ViewMode, first_possible_tile: u32, primer: Primer) -> Self {
         let (view_mode, view_slot) = mode.shader_selector();
         ShadeParams {
             xyz_weights: xyz_weight_vec4s(),
@@ -78,6 +81,8 @@ impl ShadeParams {
             view_mode,
             view_slot,
             first_possible_tile,
+            glass: u32::from(primer == Primer::Tray),
+            padding: [0; 3],
         }
     }
 }
@@ -122,7 +127,12 @@ impl Renderer {
         }
         let tile_list: Vec<[u32; 2]> = tiles.list.iter().map(|tile| [tile.x, tile.y]).collect();
         let tile_buffer = shade_tile_buffer(gpu, &tile_list);
-        let params = ShadeParams::new(request.params, request.mode, tiles.first_possible);
+        let params = ShadeParams::new(
+            request.params,
+            request.mode,
+            tiles.first_possible,
+            canvas.spec.primer,
+        );
         let params_buffer = shade_params_buffer(gpu, &params);
         let bind_group = self.shade_bind_group(gpu, canvas, &params_buffer, &tile_buffer);
         self.compute.encode(
