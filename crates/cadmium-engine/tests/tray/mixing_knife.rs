@@ -1,4 +1,5 @@
 mod scene;
+mod streaks;
 
 use std::ops::Range;
 

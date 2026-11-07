@@ -54,7 +54,9 @@ fn face_shader() -> String {
     );
     shader_source(
         &BLADE_SNIPPETS,
-        &(constants + include_str!("../../shaders/face.wgsl")),
+        &(constants
+            + include_str!("../../shaders/face_edge.wgsl")
+            + include_str!("../../shaders/face.wgsl")),
     )
 }
 

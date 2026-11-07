@@ -11,7 +11,11 @@ struct FaceSettings {
     pickup_rate: f32,
     lay_rate: f32,
     smear: f32,
-    padding: f32,
+    edge_unevenness: f32,
+    edge_seed: u32,
+    padding_a: u32,
+    padding_b: u32,
+    padding_c: u32,
 };
 
 struct FaceState {
@@ -24,6 +28,9 @@ const GRANT_LAY: u32 = 0u;
 const GRANT_ROOM: u32 = 1u;
 const GRANT_SHARES: u32 = 2u;
 const FACE_THREADS: u32 = 256u;
+/// Paint this far above the blade's plane is scraped at the full rate; thinner
+/// paint proportionally less, so the knife takes the heaps and leaves the film.
+const FULL_SCRAPE_UM: f32 = 100.0;
 
 var<workgroup> reduced: array<f32, FACE_THREADS>;
 
@@ -184,9 +191,11 @@ fn exchange(@builtin(global_invocation_id) id: vec3<u32>) {
     let delta_base = cell * BLADE_DELTA_CHANNELS;
     let volume = textureLoad(wet_vol, pixel).x;
     let surface = textureLoad(dry_height, pixel).x + volume;
-    let deposit_q = max(quantize_down(cover * face_grant[grant_base + GRANT_LAY]), 0);
+    let contact = cover * edge_contact(position.y);
+    let deposit_q = max(quantize_down(contact * face_grant[grant_base + GRANT_LAY]), 0);
     let above = min(max(surface - face.plane, 0.0), max(volume - dab.residual_um, 0.0));
-    let scraped = pickup_share() * cover * face_grant[grant_base + GRANT_ROOM] * above;
+    let heap = min(above / FULL_SCRAPE_UM, 1.0);
+    let scraped = pickup_share() * contact * face_grant[grant_base + GRANT_ROOM] * above * heap;
     let pickup_q = clamp(quantize(scraped), 0, max(quantize_down(volume), 0));
     if (deposit_q == 0 && pickup_q == 0) {
         return;

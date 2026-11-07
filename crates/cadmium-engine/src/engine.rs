@@ -158,6 +158,8 @@ pub struct WetOilEngine {
     buffers: Buffers,
     first_rest: FirstRest,
     previous_dab: Option<PreviousDab>,
+    /// Counts strokes, seeding what varies from one stroke to the next.
+    strokes_begun: u32,
     bristles: BristleRig,
     dab_passes: DabPasses,
     pick_pass: PickPass,
@@ -175,6 +177,7 @@ impl WetOilEngine {
             buffers: Buffers::new(gpu),
             first_rest: FirstRest::new(),
             previous_dab: None,
+            strokes_begun: 0,
             bristles: BristleRig::new(),
             dab_passes: DabPasses::new(gpu),
             pick_pass: PickPass::new(gpu),
@@ -247,6 +250,7 @@ impl WetOilEngine {
 
 impl PaintEngine for WetOilEngine {
     fn begin_stroke(&mut self) {
+        self.strokes_begun = self.strokes_begun.wrapping_add(1);
         self.first_rest.begin_stroke();
         self.previous_dab = None;
         self.bristles.begin_stroke();
@@ -276,7 +280,7 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &dab_records,
             buffers: &self.buffers,
-            face_settings: FaceSettings::of(&self.params),
+            face_settings: FaceSettings::of(&self.params, self.strokes_begun),
         };
         let bind_groups = self.dab_passes.bind_groups(&resources);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -311,7 +315,7 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &records,
             buffers: &self.buffers,
-            face_settings: FaceSettings::of(&self.params),
+            face_settings: FaceSettings::of(&self.params, self.strokes_begun),
         };
         self.dab_passes.encode_bristles_alone(&resources, encoder);
     }

@@ -167,7 +167,7 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         group: ParamGroup::Tools,
         min: 0.0,
         max: 1.0,
-        default: 0.1,
+        default: 0.15,
     },
     ParamSpec {
         key: "face_lay_rate",
@@ -175,7 +175,7 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         group: ParamGroup::Tools,
         min: 0.0,
         max: 1.0,
-        default: 0.30,
+        default: 0.08,
     },
     ParamSpec {
         key: "face_smear",
@@ -184,6 +184,14 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         min: 0.0,
         max: 1.0,
         default: 0.15,
+    },
+    ParamSpec {
+        key: "face_edge_unevenness",
+        label: "Face Edge Unevenness",
+        group: ParamGroup::Tools,
+        min: 0.0,
+        max: 1.0,
+        default: 0.9,
     },
     ParamSpec {
         key: "impasto_scale",

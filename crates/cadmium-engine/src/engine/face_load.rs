@@ -31,16 +31,22 @@ pub(super) struct FaceSettings {
     pickup_rate: f32,
     lay_rate: f32,
     smear: f32,
-    padding: f32,
+    edge_unevenness: f32,
+    edge_seed: u32,
+    padding: [u32; 3],
 }
 
 impl FaceSettings {
-    pub(super) fn of(params: &SimParams) -> FaceSettings {
+    /// The settings for a batch of the stroke seeded `edge_seed`, which picks the
+    /// blade's uneven contact for that stroke.
+    pub(super) fn of(params: &SimParams, edge_seed: u32) -> FaceSettings {
         FaceSettings {
             pickup_rate: params.get("face_pickup_rate"),
             lay_rate: params.get("face_lay_rate"),
             smear: params.get("face_smear"),
-            padding: 0.0,
+            edge_unevenness: params.get("face_edge_unevenness"),
+            edge_seed,
+            padding: [0; 3],
         }
     }
 }
