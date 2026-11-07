@@ -2,6 +2,7 @@ use super::*;
 use crate::state::test_support::{
     painting_state, present_one_tray_frame, sample_at, squeeze_blob_on_tray,
 };
+use crate::tools::panel::PanelTool;
 use crate::tools::{TrayTool, UiTool};
 
 #[test]
@@ -58,4 +59,17 @@ fn the_eraser_end_wipes_the_tray_while_the_pencil_is_chosen() {
     state.release();
     present_one_tray_frame(&mut state);
     assert!(state.session.tray.wet_totals(&state.gpu).unwrap().volume < before);
+}
+
+#[test]
+fn touching_a_surface_shows_its_tool_in_the_side_panel() {
+    let mut state = painting_state();
+    state.set_ui_tool(UiTool::Paint(Tool::Knife));
+    state.set_tray_tool(TrayTool::MixingKnife);
+    state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
+    state.release();
+    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Knife));
+    state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), false);
+    state.release();
+    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::MixingKnife));
 }
