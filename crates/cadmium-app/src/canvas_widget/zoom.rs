@@ -7,10 +7,10 @@ use gtk::subclass::prelude::*;
 use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
-use crate::input::nav_drag::{NavMode, held_mode};
 use crate::state::Mark;
-use crate::surface_scale::device_scale;
-use crate::view::auto_fit::AutoFit;
+use crate::state::stroking_or_busy;
+use crate::surface_scale::{device_scale, widget_centre};
+use crate::view::auto_fit::{AutoFit, update_auto_fit};
 use crate::view::{self, ViewStep};
 
 const FIT_MARGIN: f64 = 24.0;
@@ -50,12 +50,12 @@ impl CadmiumCanvas {
             f64::from(self.height()) * scale,
         );
         self.set_view(view::fit_view(spec_size, viewport, FIT_MARGIN * scale));
-        self.with_auto_fit(AutoFit::fitted);
+        update_auto_fit(&self.imp().auto_fit, AutoFit::fitted);
     }
 
     pub fn zoom_in(&self) {
         self.apply_view_step(ViewStep::Zoom {
-            anchor: self.widget_centre(),
+            anchor: widget_centre(self),
             factor: ZOOM_STEP,
         });
     }
@@ -63,10 +63,10 @@ impl CadmiumCanvas {
     pub fn zoom_out(&self) {
         // Kept off `ViewStep::Zoom` on purpose: `zoom * ZOOM_STEP.recip()` can differ from
         // `zoom / ZOOM_STEP` in the last bit.
-        let (x, y) = self.widget_centre();
+        let (x, y) = widget_centre(self);
         let scale = self.device_scale();
         let current = self.state().borrow().view;
-        self.with_auto_fit(AutoFit::moved_by_user);
+        update_auto_fit(&self.imp().auto_fit, AutoFit::moved_by_user);
         self.set_view(view::zoom_around(
             current,
             x * scale,
@@ -92,39 +92,28 @@ impl CadmiumCanvas {
     /// otherwise anticlockwise.
     pub fn rotate_step(&self, clockwise: bool) {
         let delta = if clockwise { ROTATE_STEP } else { -ROTATE_STEP };
-        let (x, y) = self.widget_centre();
+        let (x, y) = widget_centre(self);
         self.rotate_around(x, y, delta);
-    }
-
-    /// The widget's centre, in widget px.
-    pub fn widget_centre(&self) -> (f64, f64) {
-        (
-            f64::from(self.width()) / 2.0,
-            f64::from(self.height()) / 2.0,
-        )
     }
 
     /// Whether the window holds Space down for the canvas.
     pub(crate) fn space_held(&self) -> bool {
-        self.imp().space_held.get()
+        self.imp().held_keys.space_held()
     }
 
     /// Records which navigation keys are held (Space, and Ctrl or Shift among `modifiers`);
     /// the pointer shows the mode they have ready.
     pub(crate) fn set_held_keys(&self, space_held: bool, modifiers: gdk::ModifierType) {
-        self.imp().space_held.set(space_held);
-        let mode = held_mode(space_held, modifiers);
-        if self.imp().held_mode.replace(mode) != mode {
-            self.set_cursor_from_name(Some(
-                mode.map_or(super::CANVAS_CURSOR, NavMode::cursor_name),
-            ));
+        let held = &self.imp().held_keys;
+        if let Some(cursor) = held.set(space_held, modifiers, super::CANVAS_CURSOR) {
+            self.set_cursor_from_name(Some(cursor));
         }
     }
 
     /// Applies one step of a navigation gesture or key to the view.
     pub(crate) fn apply_view_step(&self, step: ViewStep) {
         let current = self.state().borrow().view;
-        self.with_auto_fit(AutoFit::moved_by_user);
+        update_auto_fit(&self.imp().auto_fit, AutoFit::moved_by_user);
         self.show_view(view::step(current, step, self.device_scale()));
     }
 
@@ -166,18 +155,11 @@ impl CadmiumCanvas {
     /// The widget's size or scale changed; `sized` when it has a size. Fits the view if the
     /// auto-fit rule says so.
     pub(super) fn fit_if_due(&self, sized: bool) {
-        if self.with_auto_fit(|fit| fit.on_size_change(sized, || self.stroking())) {
+        let stroking = || stroking_or_busy(self.imp().state.get());
+        if update_auto_fit(&self.imp().auto_fit, |fit| {
+            fit.on_size_change(sized, stroking)
+        }) {
             self.zoom_fit();
         }
-    }
-
-    /// Runs `f` on a copy of the auto-fit rule and stores the result back. `f` must not call
-    /// `with_auto_fit`.
-    pub(super) fn with_auto_fit<R>(&self, f: impl FnOnce(&mut AutoFit) -> R) -> R {
-        let cell = &self.imp().auto_fit;
-        let mut fit = cell.get();
-        let result = f(&mut fit);
-        cell.set(fit);
-        result
     }
 }

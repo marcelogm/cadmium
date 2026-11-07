@@ -1,5 +1,5 @@
 use super::*;
-use crate::input::nav_drag::NavMode;
+use crate::input::nav_drag::HeldKeys;
 
 #[derive(Default)]
 pub struct TrayView {
@@ -13,8 +13,7 @@ pub struct TrayView {
     /// Where the pointer is, on the tray or not; `hover` is only kept on the tray.
     pub pointer: Cell<Option<(f64, f64)>>,
     pub auto_fit: Cell<AutoFit>,
-    pub(crate) space_held: Cell<bool>,
-    pub(crate) held_mode: Cell<Option<NavMode>>,
+    pub(crate) held_keys: HeldKeys,
     pub(super) shown_ring: Cell<Option<ShownRing>>,
     pub released_handlers: RefCell<Vec<TrayHandler>>,
     pub colour_picked_handlers: RefCell<Vec<PickHandler>>,

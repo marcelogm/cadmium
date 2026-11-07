@@ -1,5 +1,5 @@
 use super::*;
-use crate::input::nav_drag::NavMode;
+use crate::input::nav_drag::HeldKeys;
 use crate::provisional_overlay::append_provisional;
 use crate::view::auto_fit::AutoFit;
 
@@ -23,8 +23,7 @@ pub struct CadmiumCanvas {
     pub gpu_lost_handlers: RefCell<Vec<CanvasHandler>>,
     pub released_handlers: RefCell<Vec<CanvasHandler>>,
     pub gpu_lost_announced: Cell<bool>,
-    pub(crate) space_held: Cell<bool>,
-    pub(crate) held_mode: Cell<Option<NavMode>>,
+    pub(crate) held_keys: HeldKeys,
 }
 
 #[glib::object_subclass]

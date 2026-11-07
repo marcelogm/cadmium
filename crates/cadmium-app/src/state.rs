@@ -57,6 +57,14 @@ const UNMOVED_VIEW: ViewTransform = ViewTransform {
 
 pub type SharedState = Rc<RefCell<AppState>>;
 
+/// Whether a stroke is running on `state`; a borrowed or missing state counts as one, so
+/// nothing that waits for the stroke goes ahead.
+pub fn stroking_or_busy(state: Option<&SharedState>) -> bool {
+    state
+        .and_then(|state| state.try_borrow().ok().map(|state| state.is_stroking()))
+        .unwrap_or(true)
+}
+
 fn starting_session(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
     let mut session = PaintSession::new(gpu, spec)?;
     session.brush.recipe = starting_recipe(&session.canvas.spec.pigment_slots);

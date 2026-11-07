@@ -1,6 +1,8 @@
 //! When a surface (the canvas or the tray) fits itself to its widget: on a new size or
 //! scale, unless the painter has moved the view, and not in the middle of a stroke.
 
+use std::cell::Cell;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AutoFit {
     user_moved: bool,
@@ -34,6 +36,15 @@ impl AutoFit {
         self.held_back = stroking();
         !self.held_back
     }
+}
+
+/// Runs `f` on a copy of the rule kept in `cell` and stores the result back. `f` must not
+/// reach `cell` itself.
+pub(crate) fn update_auto_fit<R>(cell: &Cell<AutoFit>, f: impl FnOnce(&mut AutoFit) -> R) -> R {
+    let mut fit = cell.get();
+    let result = f(&mut fit);
+    cell.set(fit);
+    result
 }
 
 #[cfg(test)]

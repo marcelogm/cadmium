@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::state::test_support::painting_state;
+use crate::state::{SharedState, stroking_or_busy};
 
 // `clear_tray` stands in for any state change: it wakes the views, and `wake` is private.
 
@@ -38,4 +39,13 @@ fn the_waker_of_a_view_that_is_gone_is_dropped_on_the_next_wake() {
     assert!(state.wakers.is_empty());
     state.clear_tray();
     assert_eq!(wakes.get(), 1);
+}
+
+#[test]
+fn a_missing_or_borrowed_state_counts_as_stroking() {
+    assert!(stroking_or_busy(None));
+    let state: SharedState = Rc::new(std::cell::RefCell::new(painting_state()));
+    assert!(!stroking_or_busy(Some(&state)));
+    let _held = state.borrow_mut();
+    assert!(stroking_or_busy(Some(&state)));
 }

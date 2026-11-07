@@ -11,11 +11,10 @@ use self::geometry::{is_on_tray, tray_point};
 use self::ring::{ShownRing, append_load_ring};
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
-use crate::input::nav_drag::held_mode;
 use crate::input::{NavigableSurface, PaintSurfaceWidget};
 use crate::presenter::{FramePresenter, PresentSource};
 use crate::state::SharedState;
-use crate::surface_scale::{SurfaceScaleWatch, device_scale};
+use crate::surface_scale::{SurfaceScaleWatch, device_scale, widget_centre};
 use crate::view::ViewStep;
 use crate::view::auto_fit::AutoFit;
 
@@ -166,7 +165,7 @@ impl PaintSurfaceWidget for TrayView {
     }
 
     fn holds_navigation(&self, modifiers: gdk::ModifierType) -> bool {
-        held_mode(self.space_held(), modifiers).is_some()
+        self.imp().held_keys.hold_navigation(modifiers)
     }
 }
 
@@ -176,7 +175,7 @@ impl NavigableSurface for TrayView {
     }
 
     fn widget_centre(&self) -> (f64, f64) {
-        TrayView::widget_centre(self)
+        widget_centre(self)
     }
 
     fn pointer(&self) -> Option<(f64, f64)> {

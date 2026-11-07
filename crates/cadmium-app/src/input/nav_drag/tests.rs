@@ -300,3 +300,29 @@ fn a_claimed_space_press_keeps_being_swallowed_until_released() {
     assert_eq!(space_press(true, false), SpacePress::Release);
     assert_eq!(space_press(false, false), SpacePress::Pass);
 }
+
+#[test]
+fn held_keys_show_their_mode_s_cursor_only_when_it_changes() {
+    let held = HeldKeys::default();
+    let none = gdk::ModifierType::empty();
+    assert_eq!(held.set(false, none, "idle"), None);
+    assert_eq!(held.set(true, none, "idle"), Some("grab"));
+    assert!(held.space_held());
+    assert_eq!(held.set(true, none, "idle"), None);
+    assert_eq!(
+        held.set(true, gdk::ModifierType::CONTROL_MASK, "idle"),
+        Some("zoom-in")
+    );
+    assert_eq!(held.set(false, none, "idle"), Some("idle"));
+    assert!(!held.space_held());
+}
+
+#[test]
+fn held_keys_or_the_contact_s_modifiers_hold_navigation() {
+    let held = HeldKeys::default();
+    let none = gdk::ModifierType::empty();
+    assert!(!held.hold_navigation(none));
+    assert!(held.hold_navigation(gdk::ModifierType::SHIFT_MASK));
+    held.set(true, none, "idle");
+    assert!(held.hold_navigation(none));
+}
