@@ -50,7 +50,7 @@ impl AppState {
     fn prepare_frame(&mut self) {
         if self.pacing.brush_measure_waits && !self.session.has_queued_dabs() {
             self.pacing.brush_measure_waits = false;
-            self.measure_brush();
+            self.pacing.brush_measured = self.measure_brush().is_some();
         }
         let allowance = self.pacing.allowance(&self.gpu);
         self.session.limit_dabs_per_frame(Some(allowance));
