@@ -58,14 +58,24 @@ impl PenButtonAction {
     }
 }
 
+/// The share of the window height the tray takes by default, and the least and most it may take.
+pub const DEFAULT_TRAY_SHARE: f32 = 0.35;
+pub const MIN_TRAY_SHARE: f32 = 0.15;
+pub const MAX_TRAY_SHARE: f32 = 0.85;
+
 /// The painter's preferences. They are read through [`Settings::from_json`], which gives each
 /// field its own fallback, so this does not derive `Deserialize`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Settings {
     /// The barrel button nearer the tip.
     pub lower_pen_button: PenButtonAction,
     /// The barrel button further from the tip.
     pub upper_pen_button: PenButtonAction,
+    /// The share of the window height the tray takes, between `MIN_TRAY_SHARE` and
+    /// `MAX_TRAY_SHARE`.
+    pub tray_share: f32,
+    /// Whether the tray is showing under the canvas.
+    pub tray_shown: bool,
 }
 
 impl Default for Settings {
@@ -73,6 +83,8 @@ impl Default for Settings {
         Settings {
             lower_pen_button: PenButtonAction::PickColour,
             upper_pen_button: PenButtonAction::Pan,
+            tray_share: DEFAULT_TRAY_SHARE,
+            tray_shown: true,
         }
     }
 }
@@ -94,6 +106,15 @@ impl Settings {
         Settings {
             lower_pen_button: field("lower_pen_button", defaults.lower_pen_button),
             upper_pen_button: field("upper_pen_button", defaults.upper_pen_button),
+            tray_share: fields
+                .get("tray_share")
+                .and_then(serde_json::Value::as_f64)
+                .map(|share| (share as f32).clamp(MIN_TRAY_SHARE, MAX_TRAY_SHARE))
+                .unwrap_or(defaults.tray_share),
+            tray_shown: fields
+                .get("tray_shown")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(defaults.tray_shown),
         }
     }
 
@@ -101,6 +122,21 @@ impl Settings {
     pub fn to_json(self) -> String {
         serde_json::to_string_pretty(&self).expect("settings serialise")
     }
+}
+
+/// Where the paned divider sits, from the top, for a tray taking `share` of `height`.
+#[cfg_attr(not(test), expect(dead_code))] // Used once the tray pane lays itself out from the settings.
+pub fn divider_position(share: f32, height: i32) -> i32 {
+    (height as f32 * (1.0 - share)).round() as i32
+}
+
+/// The tray's share of `height` with the divider at `position`.
+#[cfg_attr(not(test), expect(dead_code))] // Used once the tray pane lays itself out from the settings.
+pub fn tray_share_at(position: i32, height: i32) -> f32 {
+    if height <= 0 {
+        return DEFAULT_TRAY_SHARE;
+    }
+    (1.0 - position as f32 / height as f32).clamp(MIN_TRAY_SHARE, MAX_TRAY_SHARE)
 }
 
 /// The settings and the file they are kept in; without a file they live in memory only.
