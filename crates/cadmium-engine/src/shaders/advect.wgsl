@@ -60,41 +60,64 @@ fn store_amounts(pixel: vec2<i32>, amounts: array<f32, 9>) {
     textureStore(wet_pig1, pixel, vec4<f32>(fractions[4], fractions[5], fractions[6], fractions[7]));
 }
 
-fn advect_pixel(pixel: vec2<i32>) -> bool {
-    let own = motion(pixel);
-    let own_amounts = amounts_at(pixel);
-    var amounts = own_amounts;
-    var changed = false;
-    let kept = 1.0 - outflow(own.velocity);
-    if (kept < 1.0) {
-        changed = true;
-        for (var channel = 0u; channel < AMOUNT_CHANNELS; channel++) {
-            amounts[channel] = own_amounts[channel] * kept;
-        }
-    }
+struct Flow {
+    inflow: f32,
+    exchange: f32,
+};
+
+fn side_offset(side: u32) -> vec2<i32> {
     let offsets = array<vec2<i32>, 4>(
         vec2<i32>(1, 0),
         vec2<i32>(-1, 0),
         vec2<i32>(0, 1),
         vec2<i32>(0, -1),
     );
-    for (var side = 0u; side < 4u; side++) {
-        let neighbour = pixel + offsets[side];
-        let theirs = motion(neighbour);
-        let inflow = max(dot(theirs.velocity, -vec2<f32>(offsets[side])), 0.0);
-        let exchange = NEIGHBOUR_SHARE * min(own.diffusion, theirs.diffusion);
-        if (inflow <= 0.0 && exchange <= 0.0) {
-            continue;
-        }
-        changed = true;
-        let their_amounts = amounts_at(neighbour);
+    return offsets[side];
+}
+
+fn side_flow(pixel: vec2<i32>, own: Motion, side: u32) -> Flow {
+    let theirs = motion(pixel + side_offset(side));
+    let inflow = max(dot(theirs.velocity, -vec2<f32>(side_offset(side))), 0.0);
+    return Flow(inflow, NEIGHBOUR_SHARE * min(own.diffusion, theirs.diffusion));
+}
+
+fn moves(flow: Flow) -> bool {
+    return !(flow.inflow <= 0.0 && flow.exchange <= 0.0);
+}
+
+fn advected(pixel: vec2<i32>, kept: f32, flows: array<Flow, 4>) -> array<f32, 9> {
+    let own_amounts = amounts_at(pixel);
+    var amounts = own_amounts;
+    if (kept < 1.0) {
         for (var channel = 0u; channel < AMOUNT_CHANNELS; channel++) {
-            amounts[channel] += their_amounts[channel] * inflow
-                + exchange * (their_amounts[channel] - own_amounts[channel]);
+            amounts[channel] = own_amounts[channel] * kept;
         }
     }
+    for (var side = 0u; side < 4u; side++) {
+        let flow = flows[side];
+        if (!moves(flow)) {
+            continue;
+        }
+        let their_amounts = amounts_at(pixel + side_offset(side));
+        for (var channel = 0u; channel < AMOUNT_CHANNELS; channel++) {
+            amounts[channel] += their_amounts[channel] * flow.inflow
+                + flow.exchange * (their_amounts[channel] - own_amounts[channel]);
+        }
+    }
+    return amounts;
+}
+
+fn advect_pixel(pixel: vec2<i32>) -> bool {
+    let own = motion(pixel);
+    let kept = 1.0 - outflow(own.velocity);
+    var changed = kept < 1.0;
+    var flows: array<Flow, 4>;
+    for (var side = 0u; side < 4u; side++) {
+        flows[side] = side_flow(pixel, own, side);
+        changed = changed || moves(flows[side]);
+    }
     if (changed) {
-        store_amounts(pixel, amounts);
+        store_amounts(pixel, advected(pixel, kept, flows));
     }
     return changed;
 }

@@ -9,7 +9,7 @@ use crate::compute::{read_buffer, storage_buffer};
 use crate::engine::{TIP_CHANNELS, TIP_TEXELS, VOLUME_CHANNEL, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 
-pub(crate) const BRISTLE_WORKGROUP_SIZE: u32 = 256;
+pub(crate) const BRISTLE_WORKGROUP_SIZE: u32 = 512;
 pub(crate) const BRISTLES_PER_THREAD: u32 = MAX_BRISTLES as u32 / BRISTLE_WORKGROUP_SIZE;
 pub(crate) const BRISTLE_STATE_VECTORS: usize = 3 * BRISTLE_VERTICES + 1;
 pub(crate) const BRISTLE_SOLVER_ITERATIONS: u32 = 6;
