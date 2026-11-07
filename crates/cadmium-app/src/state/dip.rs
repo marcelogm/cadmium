@@ -9,7 +9,7 @@ use super::recipe::{
 };
 use super::{AppState, EMPTY_MIXTURE};
 
-fn fill_level(volume: f32, capacity: f32) -> f32 {
+pub(super) fn fill_level(volume: f32, capacity: f32) -> f32 {
     if capacity > 0.0 && volume.is_finite() {
         (volume / capacity).clamp(0.0, 1.0)
     } else {
@@ -89,9 +89,10 @@ impl AppState {
         self.measure_brush_once_painted();
     }
 
+    /// Cleans the tool the side panel describes.
     pub fn clean_brush(&mut self) {
         self.put_down_stroke_tool();
-        self.session.clean_brush(&self.gpu);
+        self.clean_focused();
         self.measure_brush_once_painted();
         self.wake();
     }
@@ -163,6 +164,7 @@ impl AppState {
         self.reserve_mixture = mean_mixture(&readout.reserve);
         self.knife_mixture = mean_mixture(&readout.knife);
         self.knife_volume = readout.knife.volume as f32;
+        self.note_face(&readout);
         Some(readout)
     }
 }

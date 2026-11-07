@@ -24,7 +24,7 @@ impl AppState {
             }
             Press::Stroke(tool) => {
                 self.begin_stroke_on(surface, tool, sample);
-                true
+                self.is_stroking()
             }
         };
         self.wake();

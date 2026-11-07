@@ -41,7 +41,7 @@ impl CadmiumWindow {
             ));
     }
 
-    fn select_tray_tool(&self, name: &str) {
+    pub(crate) fn select_tray_tool(&self, name: &str) {
         let Some(tool) = TrayTool::from_name(name) else {
             glib::g_warning!(LOG_DOMAIN, "unknown tray tool {name:?}");
             return;

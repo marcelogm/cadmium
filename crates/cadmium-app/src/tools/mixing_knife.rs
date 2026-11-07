@@ -11,7 +11,7 @@ upright it scrapes paint up onto its face; each pass mixes a little more";
 pub(super) const MIXING_KNIFE: UiToolProfile = UiToolProfile {
     name: "mixing-knife",
     label: "Mixing Knife",
-    icon: "cadmium-knife-symbolic",
+    icon: "cadmium-mixing-knife-symbolic",
     tooltip: "Mixing Knife (Shift+2): upright scrapes paint onto its face, laid flat spreads it; every pass mixes a little more",
     keys: &[],
     keypad_keys: &[],

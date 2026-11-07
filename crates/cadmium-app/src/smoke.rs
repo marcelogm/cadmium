@@ -6,7 +6,7 @@ use gtk::glib;
 
 use crate::dmabuf::ModifierPolicy;
 use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 use crate::window::CadmiumWindow;
 
 mod brushes;
@@ -15,6 +15,7 @@ mod editor;
 mod steps;
 #[cfg(test)]
 mod tests;
+mod tray;
 
 use brushes::SmokeBrushes;
 use steps::{FileWork, SmokeDialog, SmokeStep, quit};
@@ -30,6 +31,8 @@ pub struct SmokeConfig {
     stroke: bool,
     page: Option<String>,
     tray: bool,
+    tray_tool: Option<TrayTool>,
+    tray_mix: bool,
     save: Option<PathBuf>,
     open: Option<PathBuf>,
     export: Option<PathBuf>,

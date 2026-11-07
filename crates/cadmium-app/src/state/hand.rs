@@ -36,7 +36,11 @@ impl AppState {
         self.session.brush.medium = medium;
     }
 
+    /// Picks the painting's tool; one the tool header doesn't offer is ignored.
     pub fn set_ui_tool(&mut self, tool: UiTool) {
+        if !UiTool::ALL.contains(&tool) {
+            return;
+        }
         self.focus = Surface::Painting;
         self.ui_tool = tool;
         let UiTool::Paint(paint_tool) = tool else {

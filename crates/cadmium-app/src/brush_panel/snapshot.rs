@@ -1,6 +1,7 @@
 use cadmium_engine::canvas::primer_srgb8;
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
+use cadmium_engine::tool::Holder;
 
 use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
 use crate::state::AppState;
@@ -23,6 +24,8 @@ pub(super) struct Snapshot {
     pub(super) tooltips: Vec<String>,
     pub(super) addable: Vec<PigmentChoice>,
     pub(super) recipe: Vec<(usize, f32)>,
+    /// What the held paint is made of, to name it.
+    pub(super) held_recipe: Vec<(usize, f32)>,
     pub(super) held_is_clean: bool,
     pub(super) palette_colour: [u8; 3],
     pub(super) held_colour: [u8; 3],
@@ -60,11 +63,15 @@ impl Snapshot {
             addable: addable_pigments(db, &slots),
             slots,
             recipe: session.brush.recipe.clone(),
+            held_recipe: match tool.holder() {
+                Some(Holder::Face) => state.mixing_knife_recipe(),
+                _ => session.brush.recipe.clone(),
+            },
             held_is_clean,
             palette_colour,
             held_colour,
             held_level,
-            diameter_px: session.brush.geometry.max_diameter_px,
+            diameter_px: state.focused_size(),
             load: session.brush.load,
             plate_gap: session.engine.params().get(PLATE_GAP_KEY),
             medium: session.brush.medium,
@@ -100,18 +107,22 @@ fn held_paint(
     tool: PanelTool,
     colour_of: impl Fn(&Mixture) -> [u8; 3],
 ) -> ([u8; 3], f32, bool) {
-    if tool.holds_knife() {
-        (
+    match tool.holder() {
+        Some(Holder::Blade) => (
             colour_of(&state.knife_mixture),
             state.knife_level(),
             state.knife_is_clean(),
-        )
-    } else {
-        (
+        ),
+        Some(Holder::Face) => (
+            colour_of(&state.mixing_knife_mixture()),
+            state.mixing_knife_level(),
+            state.mixing_knife_is_clean(),
+        ),
+        Some(Holder::Reservoir) | None => (
             colour_of(&state.tip_mixture),
             state.reserve_level(),
             state.brush_is_clean(),
-        )
+        ),
     }
 }
 

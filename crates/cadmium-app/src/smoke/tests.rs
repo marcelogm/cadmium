@@ -11,7 +11,7 @@ use super::steps::{
 };
 use super::*;
 
-fn lookup<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
+pub(super) fn lookup<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
     move |name| {
         vars.iter()
             .find(|(key, _)| *key == name)
