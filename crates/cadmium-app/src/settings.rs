@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::LOG_DOMAIN;
 use crate::atomic_file;
+use crate::pressure_curve::PressureCurve;
 
 /// What a pen barrel button does on the painting canvas.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,12 +61,14 @@ impl PenButtonAction {
 
 /// The painter's preferences. They are read through [`Settings::from_json`], which gives each
 /// field its own fallback, so this does not derive `Deserialize`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Settings {
     /// The barrel button nearer the tip.
     pub lower_pen_button: PenButtonAction,
     /// The barrel button further from the tip.
     pub upper_pen_button: PenButtonAction,
+    /// How the pen's pressure maps onto the brush's.
+    pub pressure_curve: PressureCurve,
 }
 
 impl Default for Settings {
@@ -73,6 +76,7 @@ impl Default for Settings {
         Settings {
             lower_pen_button: PenButtonAction::PickColour,
             upper_pen_button: PenButtonAction::Pan,
+            pressure_curve: PressureCurve::linear(),
         }
     }
 }
@@ -94,6 +98,10 @@ impl Settings {
         Settings {
             lower_pen_button: field("lower_pen_button", defaults.lower_pen_button),
             upper_pen_button: field("upper_pen_button", defaults.upper_pen_button),
+            pressure_curve: fields
+                .get("pressure_curve")
+                .and_then(PressureCurve::from_json)
+                .unwrap_or(defaults.pressure_curve),
         }
     }
 

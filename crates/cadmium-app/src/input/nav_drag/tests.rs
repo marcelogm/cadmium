@@ -45,6 +45,7 @@ fn pen_buttons_follow_their_bindings() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::Rotate,
         upper_pen_button: PenButtonAction::Zoom,
+        ..Settings::default()
     };
     assert_eq!(
         nav_mode(press(NavButton::Middle), settings),
@@ -66,6 +67,7 @@ fn on_wayland_the_lower_binding_drives_the_secondary_button() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::Rotate,
         upper_pen_button: PenButtonAction::Zoom,
+        ..Settings::default()
     };
     let wayland = |button| NavPress {
         pen_buttons: PenButtons::Wayland,
@@ -86,6 +88,7 @@ fn each_backend_numbers_the_barrel_buttons_its_own_way() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::Rotate,
         upper_pen_button: PenButtonAction::Zoom,
+        ..Settings::default()
     };
     let lower = Some(PenButtonAction::Rotate);
     let upper = Some(PenButtonAction::Zoom);
@@ -112,6 +115,7 @@ fn mouse_buttons_ignore_the_pen_bindings() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::Nothing,
         upper_pen_button: PenButtonAction::Rotate,
+        ..Settings::default()
     };
     let mouse = |button| NavPress {
         from_pen: false,
@@ -167,6 +171,7 @@ fn colour_picking_follows_the_bindings_for_a_pen_and_the_right_button_for_a_mous
     let settings = Settings {
         lower_pen_button: PenButtonAction::PickColour,
         upper_pen_button: PenButtonAction::Pan,
+        ..Settings::default()
     };
     let other = PenButtons::Other;
     assert!(picks_colour(NavButton::Middle, true, other, settings));
@@ -182,6 +187,7 @@ fn on_wayland_the_lower_button_picks_through_the_secondary_button() {
     let settings = Settings {
         lower_pen_button: PenButtonAction::PickColour,
         upper_pen_button: PenButtonAction::Pan,
+        ..Settings::default()
     };
     let wayland = PenButtons::Wayland;
     assert!(picks_colour(NavButton::Secondary, true, wayland, settings));
