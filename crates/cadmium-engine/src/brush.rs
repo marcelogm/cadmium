@@ -28,6 +28,8 @@ pub const DEFAULT_LOAD: f32 = 0.8;
 pub const DEFAULT_MEDIUM: f32 = 0.1;
 pub const MAX_MEDIUM: f32 = 0.95;
 pub const KNIFE_MAX_STEP_PX: f32 = 2.0;
+/// HB: halfway between the softest B lead (0) and the hardest H lead (1).
+pub const DEFAULT_PENCIL_HARDNESS: f32 = 0.5;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BrushSettings {
@@ -38,6 +40,8 @@ pub struct BrushSettings {
     pub load: f32,
     pub medium: f32,
     pub recipe: Vec<(usize, f32)>,
+    /// 0 is the softest B lead, 1 the hardest H lead.
+    pub pencil_hardness: f32,
 }
 
 impl Default for BrushSettings {
@@ -55,6 +59,7 @@ impl Default for BrushSettings {
             load: DEFAULT_LOAD,
             medium: DEFAULT_MEDIUM,
             recipe: vec![(0, 1.0)],
+            pencil_hardness: DEFAULT_PENCIL_HARDNESS,
         }
     }
 }

@@ -1,4 +1,7 @@
-use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, FULL_RESERVOIR_VOLUME_UM};
+use crate::brush::{
+    BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_PENCIL_HARDNESS, FULL_RESERVOIR_VOLUME_UM,
+    within,
+};
 use crate::canvas::{Canvas, TileCoord};
 use crate::compute::storage_buffer;
 use crate::gpu::{GpuContext, GpuLost};
@@ -119,6 +122,26 @@ const BODY_BYTES: u64 = std::mem::size_of::<BodyState>() as u64;
 
 const WANTED_BYTES: u64 = 2 * std::mem::size_of::<u32>() as u64;
 
+/// What the pencil pass needs to know about the lead, once per stroke.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct PencilUniform {
+    hardness: f32,
+    _pad: [f32; 3],
+}
+
+const PENCIL_BYTES: u64 = std::mem::size_of::<PencilUniform>() as u64;
+const _: () = assert!(PENCIL_BYTES == 16);
+
+impl PencilUniform {
+    fn of(brush: &BrushSettings) -> PencilUniform {
+        PencilUniform {
+            hardness: within(brush.pencil_hardness, [0.0, 1.0], DEFAULT_PENCIL_HARDNESS),
+            _pad: [0.0; 3],
+        }
+    }
+}
+
 struct Buffers {
     tip: wgpu::Buffer,
     tip_delta: wgpu::Buffer,
@@ -131,6 +154,7 @@ struct Buffers {
     face_load: wgpu::Buffer,
     face_delta: wgpu::Buffer,
     face_sums: wgpu::Buffer,
+    pencil: wgpu::Buffer,
     bristles: BristleBuffers,
 }
 
@@ -148,6 +172,12 @@ impl Buffers {
             face_load: storage_buffer(gpu, "mixing_knife_face_load", FACE_LOAD_BYTES),
             face_delta: storage_buffer(gpu, "mixing_knife_face_delta", FACE_DELTA_BYTES),
             face_sums: storage_buffer(gpu, "mixing_knife_face_sums", FACE_SUMS_BYTES),
+            pencil: gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pencil_lead"),
+                size: PENCIL_BYTES,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
             bristles: BristleBuffers::new(gpu),
         }
     }
@@ -280,6 +310,9 @@ impl PaintEngine for WetOilEngine {
             return;
         }
         self.first_rest.take(&mut placements);
+        let lead = PencilUniform::of(batch.brush);
+        gpu.queue
+            .write_buffer(&self.buffers.pencil, 0, bytemuck::bytes_of(&lead));
         let dab_records = upload_dab_records(gpu, &placements);
         self.dab_passes.fit_scratch(gpu, &placements);
         let resources = DabResources {

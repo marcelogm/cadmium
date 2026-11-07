@@ -39,6 +39,11 @@ const TOOTH_BAND_HALF_HEIGHT: usize = 1;
 const TOOTH_BAND_FROM_X: usize = 100;
 const TOOTH_BAND_TO_X: usize = 400;
 const RUBBED_OUT_BELOW: f32 = 0.5;
+const SOFTEST: f32 = 0.0;
+const HARDEST: f32 = 1.0;
+const SOFT_OVER_HARD_RATIO: f32 = 2.0;
+const HARD_DARKEST_DENSITY: f32 = 0.65;
+const BARE_BELOW: f32 = 0.01;
 
 fn sketch_row(gpu: &GpuContext, s: &mut PaintSession, density: f32) {
     let mut sketch = vec![0.0; (WIDTH * HEIGHT) as usize];
@@ -243,6 +248,24 @@ fn total_graphite(gpu: &GpuContext, pressure: f32) -> f32 {
     graphite(gpu, &s).iter().sum()
 }
 
+fn graphite_of_lead(gpu: &GpuContext, hardness: f32) -> Vec<f32> {
+    let mut s = session(gpu);
+    s.brush.pencil_hardness = hardness;
+    pencil_line(gpu, &mut s, FIRM_PRESSURE);
+    graphite(gpu, &s)
+}
+
+fn tooth_band() -> Vec<usize> {
+    let rows = SKETCH_ROW - TOOTH_BAND_HALF_HEIGHT..=SKETCH_ROW + TOOTH_BAND_HALF_HEIGHT;
+    rows.flat_map(|y| (TOOTH_BAND_FROM_X..TOOTH_BAND_TO_X).map(move |x| y * WIDTH as usize + x))
+        .collect()
+}
+
+fn bare_in_line(density: &[f32]) -> usize {
+    let bare = |&&i: &&usize| density[i] < BARE_BELOW;
+    tooth_band().iter().filter(bare).count()
+}
+
 fn mean(values: &[f32]) -> f32 {
     values.iter().sum::<f32>() / values.len() as f32
 }
@@ -276,10 +299,7 @@ fn a_light_touch_catches_the_tooth_of_the_linen() {
     pencil_line(&gpu, &mut s, LIGHT_PRESSURE);
     let density = graphite(&gpu, &s);
     let heights = weave_heights(Weave::Linen, WIDTH, HEIGHT);
-    let rows = SKETCH_ROW - TOOTH_BAND_HALF_HEIGHT..=SKETCH_ROW + TOOTH_BAND_HALF_HEIGHT;
-    let band: Vec<usize> = rows
-        .flat_map(|y| (TOOTH_BAND_FROM_X..TOOTH_BAND_TO_X).map(move |x| y * WIDTH as usize + x))
-        .collect();
+    let band = tooth_band();
     let mut band_heights: Vec<f32> = band.iter().map(|&i| heights[i]).collect();
     band_heights.sort_by(f32::total_cmp);
     let median = band_heights[band_heights.len() / 2];
@@ -347,4 +367,29 @@ fn a_pencil_sketch_leaves_nothing_to_dry() {
     assert!(without_wgpu_errors(&gpu, || s.dry(&gpu)));
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
     assert!(graphite(&gpu, &s).iter().all(|&density| density == 0.0));
+}
+
+#[test]
+fn a_soft_lead_leaves_more_graphite_than_a_hard_one() {
+    let gpu = GpuContext::new().unwrap();
+    let soft: f32 = graphite_of_lead(&gpu, SOFTEST).iter().sum();
+    let hard: f32 = graphite_of_lead(&gpu, HARDEST).iter().sum();
+    assert!(soft > hard * SOFT_OVER_HARD_RATIO, "{soft} vs {hard}");
+}
+
+#[test]
+fn a_hard_lead_never_gets_very_dark() {
+    let gpu = GpuContext::new().unwrap();
+    let darkest = graphite_of_lead(&gpu, HARDEST)
+        .into_iter()
+        .fold(0.0, f32::max);
+    assert!(darkest <= HARD_DARKEST_DENSITY, "{darkest}");
+}
+
+#[test]
+fn a_hard_lead_skips_more_of_the_grain() {
+    let gpu = GpuContext::new().unwrap();
+    let soft = bare_in_line(&graphite_of_lead(&gpu, SOFTEST));
+    let hard = bare_in_line(&graphite_of_lead(&gpu, HARDEST));
+    assert!(hard > soft, "{hard} bare vs {soft}");
 }

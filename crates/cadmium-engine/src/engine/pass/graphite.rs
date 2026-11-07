@@ -1,6 +1,6 @@
 use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::StateTexture;
-use crate::compute::{ComputeStage, texture_binding, texture_entry};
+use crate::compute::{ComputeStage, buffer_binding, texture_binding, texture_entry, uniform_entry};
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
@@ -21,6 +21,7 @@ const SURFACE_TEXTURES: [(u32, StateTexture, wgpu::StorageTextureAccess); 3] = [
         wgpu::StorageTextureAccess::ReadOnly,
     ),
 ];
+const LEAD_BINDING: u32 = 4;
 
 pub(super) struct GraphitePass {
     compute: ComputeStage,
@@ -33,6 +34,7 @@ impl GraphitePass {
         entries.extend(SURFACE_TEXTURES.map(|(binding, _, access)| {
             texture_entry(binding, access, wgpu::TextureFormat::R32Float)
         }));
+        entries.push(uniform_entry(LEAD_BINDING, None));
         let compute = ComputeStage::new(
             gpu,
             "pencil",
@@ -51,6 +53,7 @@ impl GraphitePass {
             SURFACE_TEXTURES
                 .map(|(binding, which, _)| texture_binding(binding, resources.canvas, which)),
         );
+        entries.push(buffer_binding(LEAD_BINDING, &resources.buffers.pencil));
         self.compute.bind_group(resources.gpu, &entries)
     }
 

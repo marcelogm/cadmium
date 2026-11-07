@@ -1,17 +1,23 @@
 // Graphite is scraped off the lead by the tooth: every texel has a fixed grain (the canvas
 // relief plus a fine speckle), and pressure decides which grains are high enough to catch it.
 // A texel only darkens towards the coverage its grain allows, so going over a line builds
-// it up gently instead of filling the grain in solid.
+// it up gently instead of filling the grain in solid. A soft B lead catches on lower grains
+// and lays more down; a hard H lead only marks the peaks and never gets very dark.
 const TOOTH_REACH_PX: i32 = 3;
 const NEIGHBOUR_SHARE: f32 = 0.25;
 const RELIEF_SPAN_UM: f32 = 12.0;
 const RELIEF_SHARE: f32 = 0.4;
 const SPECKLE_SHARE: f32 = 0.6;
-const THRESHOLD_LIGHT: f32 = 0.72;
-const THRESHOLD_FIRM: f32 = 0.28;
+const SOFT_THRESHOLD_LIGHT: f32 = 0.52;
+const SOFT_THRESHOLD_FIRM: f32 = 0.1;
+const SOFT_COVERAGE_LIGHT: f32 = 0.7;
+const SOFT_COVERAGE_FIRM: f32 = 1.25;
+const HARD_THRESHOLD_LIGHT: f32 = 0.9;
+const HARD_THRESHOLD_FIRM: f32 = 0.45;
+const HARD_COVERAGE_LIGHT: f32 = 0.22;
+const HARD_COVERAGE_FIRM: f32 = 0.65;
 const THRESHOLD_SOFTNESS: f32 = 0.12;
-const COVERAGE_LIGHT: f32 = 0.45;
-const COVERAGE_FIRM: f32 = 0.95;
+const FULL_DENSITY: f32 = 1.0;
 const HASH_MULTIPLIER: u32 = 747796405u;
 const HASH_INCREMENT: u32 = 2891336453u;
 const HASH_MIX: u32 = 277803737u;
@@ -26,6 +32,14 @@ const NOISE_RANGE: f32 = 16777216.0;
 @group(0) @binding(1) var graphite: texture_storage_2d<r32float, read_write>;
 @group(0) @binding(2) var dry_height: texture_storage_2d<r32float, read>;
 @group(0) @binding(3) var wet_vol: texture_storage_2d<r32float, read>;
+@group(0) @binding(4) var<uniform> lead: Lead;
+
+struct Lead {
+    hardness: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
 
 fn hash(value: u32) -> u32 {
     let state = value * HASH_MULTIPLIER + HASH_INCREMENT;
@@ -60,13 +74,18 @@ fn grain(pixel: vec2<i32>) -> f32 {
 }
 
 fn coverage(pixel: vec2<i32>) -> f32 {
-    let threshold = mix(THRESHOLD_LIGHT, THRESHOLD_FIRM, dab.pressure);
+    let hardness = clamp(lead.hardness, 0.0, 1.0);
+    let threshold_light = mix(SOFT_THRESHOLD_LIGHT, HARD_THRESHOLD_LIGHT, hardness);
+    let threshold_firm = mix(SOFT_THRESHOLD_FIRM, HARD_THRESHOLD_FIRM, hardness);
+    let coverage_light = mix(SOFT_COVERAGE_LIGHT, HARD_COVERAGE_LIGHT, hardness);
+    let coverage_firm = mix(SOFT_COVERAGE_FIRM, HARD_COVERAGE_FIRM, hardness);
+    let threshold = mix(threshold_light, threshold_firm, dab.pressure);
     let caught = smoothstep(
         threshold - THRESHOLD_SOFTNESS,
         threshold + THRESHOLD_SOFTNESS,
         grain(pixel)
     );
-    return caught * mix(COVERAGE_LIGHT, COVERAGE_FIRM, dab.pressure);
+    return min(caught * mix(coverage_light, coverage_firm, dab.pressure), FULL_DENSITY);
 }
 
 @compute @workgroup_size(8, 8)
