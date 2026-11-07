@@ -22,10 +22,7 @@ impl AppState {
                 self.begin_loading(tool, sample);
                 true
             }
-            Press::Stroke(tool) => {
-                self.begin_stroke_on(surface, tool, sample);
-                self.is_stroking()
-            }
+            Press::Stroke(tool) => self.begin_stroke_on(surface, tool, sample),
         };
         self.wake();
         began

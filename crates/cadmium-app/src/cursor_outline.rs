@@ -106,3 +106,6 @@ pub(crate) fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
     snapshot.append_stroke(&path.to_path(), &gsk::Stroke::new(ring.width), &ring.colour);
     snapshot.restore();
 }
+
+#[cfg(test)]
+mod tests;

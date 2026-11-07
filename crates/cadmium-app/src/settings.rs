@@ -66,6 +66,22 @@ pub const MIN_TRAY_SHARE: f32 = 0.15;
 /// The most share of the window height the tray may take.
 pub const MAX_TRAY_SHARE: f32 = 0.85;
 
+/// The mixing knife's blade length by default.
+pub const DEFAULT_MIXING_KNIFE_DIAMETER_PX: f32 = 80.0;
+/// The shortest blade the mixing knife may have, as short as the size slider goes.
+pub const MIN_MIXING_KNIFE_DIAMETER_PX: f32 = 4.0;
+/// The longest blade the mixing knife may have, as long as the size slider goes.
+pub const MAX_MIXING_KNIFE_DIAMETER_PX: f32 = 500.0;
+
+/// A mixing knife size the knife can have; one that isn't a size gives the default.
+pub fn mixing_knife_diameter(diameter_px: f32) -> f32 {
+    if diameter_px.is_finite() {
+        diameter_px.clamp(MIN_MIXING_KNIFE_DIAMETER_PX, MAX_MIXING_KNIFE_DIAMETER_PX)
+    } else {
+        DEFAULT_MIXING_KNIFE_DIAMETER_PX
+    }
+}
+
 /// The painter's preferences. They are read through [`Settings::from_json`], which gives each
 /// field its own fallback, so this does not derive `Deserialize`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -82,6 +98,8 @@ pub struct Settings {
     pub tray_share: f32,
     /// Whether the tray is showing under the canvas.
     pub tray_shown: bool,
+    /// The mixing knife's blade length, in canvas px.
+    pub mixing_knife_diameter_px: f32,
 }
 
 /// Writes `share` to three decimals, so an f32 like 0.35 doesn't show its widening noise.
@@ -97,6 +115,7 @@ impl Default for Settings {
             pressure_curve: PressureCurve::linear(),
             tray_share: DEFAULT_TRAY_SHARE,
             tray_shown: true,
+            mixing_knife_diameter_px: DEFAULT_MIXING_KNIFE_DIAMETER_PX,
         }
     }
 }
@@ -131,6 +150,11 @@ impl Settings {
                 .get("tray_shown")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(defaults.tray_shown),
+            mixing_knife_diameter_px: fields
+                .get("mixing_knife_diameter_px")
+                .and_then(serde_json::Value::as_f64)
+                .map(|diameter| mixing_knife_diameter(diameter as f32))
+                .unwrap_or(defaults.mixing_knife_diameter_px),
         }
     }
 

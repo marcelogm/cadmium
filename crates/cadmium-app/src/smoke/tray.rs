@@ -72,7 +72,7 @@ pub(super) fn mix_on_tray(window: &CadmiumWindow) {
 fn squeeze_cord(state: &mut AppState, slot: usize, y: f64) {
     state.set_tray_tool(TrayTool::Tube);
     state.set_tube_slot(slot);
-    state.press(Surface::Tray, at(CORD_FROM_X, y, 1.0, 0), false);
+    press_tray(state, at(CORD_FROM_X, y, 1.0, 0));
     for step in 1..=CORD_STEPS {
         let t = f64::from(step) / f64::from(CORD_STEPS);
         let x = CORD_FROM_X + t * (CORD_TO_X - CORD_FROM_X);
@@ -88,7 +88,7 @@ fn pass_down(state: &mut AppState, x: f64, tilt_deg: f32) {
         ..sample
     };
     let first = tilted(at(x, PASS_TOP_Y, MIXING_PRESSURE, 0));
-    state.press(Surface::Tray, first, false);
+    press_tray(state, first);
     let samples: Vec<_> = (1..=PASS_STEPS)
         .map(|step| {
             let t = f64::from(step) / f64::from(PASS_STEPS);
@@ -98,6 +98,13 @@ fn pass_down(state: &mut AppState, x: f64, tilt_deg: f32) {
         .collect();
     state.motion(&samples);
     state.release();
+}
+
+fn press_tray(state: &mut AppState, sample: StrokeSample) {
+    if !state.press(Surface::Tray, sample, false) {
+        let tool = state.tray_tool();
+        glib::g_warning!(LOG_DOMAIN, "smoke tray mix: {tool:?} refused the press");
+    }
 }
 
 fn at(x: f64, y: f64, pressure: f32, step: u32) -> StrokeSample {

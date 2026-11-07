@@ -156,9 +156,8 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, tray, tray tool, tray mix, brush
-    /// editor, sheet stroke,
-    /// screenshot, quit.
+    /// open, export, brush export, brush delete, page, tray, tray tool, tray mix, brush editor,
+    /// sheet stroke, screenshot, quit.
     /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
     /// it at start-up.
     pub(super) fn steps(&self) -> Vec<SmokeStep> {

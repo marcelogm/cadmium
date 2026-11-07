@@ -37,13 +37,19 @@ impl AppState {
         self.begin_stroke_on(Surface::Painting, tool, sample);
     }
 
-    /// Starts a stroke, unless `tool` doesn't work on `surface`.
-    pub(super) fn begin_stroke_on(&mut self, surface: Surface, tool: Tool, sample: StrokeSample) {
+    /// Starts a stroke, unless `tool` doesn't work on `surface`; whether it started.
+    pub(super) fn begin_stroke_on(
+        &mut self,
+        surface: Surface,
+        tool: Tool,
+        sample: StrokeSample,
+    ) -> bool {
         if !strokes_on(tool, surface) {
-            return;
+            return false;
         }
         let preparation = stroke_preparation(tool, self.reload_each_stroke, self.clean_each_stroke);
         self.begin_prepared_stroke(surface, tool, sample, preparation);
+        true
     }
 
     pub(super) fn begin_prepared_stroke(

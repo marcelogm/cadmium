@@ -29,7 +29,7 @@ fn worn_brush_spec(window: &CadmiumWindow) -> (BrushSpec, Option<usize>) {
     let (name, index) = export_name(&state.brushes, state.worn_library_brush(), settings);
     let spec = BrushSpec {
         name,
-        size_px: settings.geometry.max_diameter_px,
+        size_px: state.brush_diameter_px(),
         head: settings.head,
         hair: settings.hair,
     };

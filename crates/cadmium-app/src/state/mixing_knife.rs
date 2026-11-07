@@ -3,19 +3,20 @@ use cadmium_engine::engine::BrushReadout;
 use cadmium_engine::pigments::Mixture;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
+use cadmium_engine::tool::Holder;
+use gtk::glib;
 
 use super::AppState;
 use super::dip::{fill_level, mean_mixture};
 use super::recipe::recipe_from_fractions;
+use crate::LOG_DOMAIN;
+use crate::settings::mixing_knife_diameter;
 use crate::tools::panel::PanelTool;
 
-pub(super) const MIXING_KNIFE_DIAMETER_PX: f32 = 80.0;
-
-/// The tray's mixing knife: a blade of its own size, whose face keeps the paint it
-/// scrapes up from one pass to the next.
+/// The tray's mixing knife: a blade of its own size (kept in the settings), whose
+/// face keeps the paint it scrapes up from one pass to the next.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct MixingKnife {
-    diameter_px: f32,
     /// The brush's own size while the mixing knife's stands in for it in a stroke.
     brush_diameter_px: Option<f32>,
     face: Mixture,
@@ -24,7 +25,6 @@ pub(super) struct MixingKnife {
 impl Default for MixingKnife {
     fn default() -> Self {
         MixingKnife {
-            diameter_px: MIXING_KNIFE_DIAMETER_PX,
             brush_diameter_px: None,
             face: super::EMPTY_MIXTURE,
         }
@@ -38,7 +38,14 @@ pub(super) fn strokes_on(tool: Tool, surface: Surface) -> bool {
 
 impl AppState {
     pub fn mixing_knife_diameter_px(&self) -> f32 {
-        self.mixing_knife.diameter_px
+        self.settings.get().mixing_knife_diameter_px
+    }
+
+    /// The brush's own size, even while a mixing knife stroke wears the knife's.
+    pub fn brush_diameter_px(&self) -> f32 {
+        self.mixing_knife
+            .brush_diameter_px
+            .unwrap_or(self.session.brush.geometry.max_diameter_px)
     }
 
     fn mixing_knife_is_focused(&self) -> bool {
@@ -48,9 +55,9 @@ impl AppState {
     /// The size of the tool the side panel describes.
     pub fn focused_size(&self) -> f32 {
         if self.mixing_knife_is_focused() {
-            self.mixing_knife.diameter_px
+            self.mixing_knife_diameter_px()
         } else {
-            self.session.brush.geometry.max_diameter_px
+            self.brush_diameter_px()
         }
     }
 
@@ -61,8 +68,12 @@ impl AppState {
             return;
         }
         self.release();
-        if diameter_px.is_finite() && diameter_px > 0.0 {
-            self.mixing_knife.diameter_px = diameter_px;
+        let diameter_px = mixing_knife_diameter(diameter_px);
+        let saved = self
+            .settings
+            .update(|settings| settings.mixing_knife_diameter_px = diameter_px);
+        if let Err(error) = saved {
+            glib::g_warning!(LOG_DOMAIN, "couldn't save the mixing knife size: {error}");
         }
     }
 
@@ -73,7 +84,7 @@ impl AppState {
         }
         let geometry = &mut self.session.brush.geometry;
         self.mixing_knife.brush_diameter_px = Some(geometry.max_diameter_px);
-        geometry.max_diameter_px = self.mixing_knife.diameter_px;
+        geometry.max_diameter_px = self.settings.get().mixing_knife_diameter_px;
         self.session.resize_tip();
     }
 
@@ -87,11 +98,9 @@ impl AppState {
     /// The diameter `tool` strokes at.
     pub(crate) fn stroke_diameter_px(&self, tool: Tool) -> f32 {
         if tool.profile().holds_on_face() {
-            self.mixing_knife.diameter_px
+            self.mixing_knife_diameter_px()
         } else {
-            self.mixing_knife
-                .brush_diameter_px
-                .unwrap_or(self.session.brush.geometry.max_diameter_px)
+            self.brush_diameter_px()
         }
     }
 
@@ -116,7 +125,7 @@ impl AppState {
         let capacity = self
             .session
             .engine
-            .blade_full_dip_volume(FULL_RESERVOIR_VOLUME_UM, self.mixing_knife.diameter_px);
+            .blade_full_dip_volume(FULL_RESERVOIR_VOLUME_UM, self.mixing_knife_diameter_px());
         fill_level(self.mixing_knife.face.volume_um, capacity)
     }
 
@@ -126,9 +135,7 @@ impl AppState {
 
     /// Cleans the mixing knife's face, leaving the brush in hand as it is.
     pub(super) fn clean_mixing_knife(&mut self) {
-        self.session.brush.tool = Tool::MixingKnife;
-        self.session.clean_brush(&self.gpu);
-        self.session.brush.tool = self.resting_tool;
+        self.session.clean_holder(&self.gpu, Some(Holder::Face));
     }
 
     /// Cleans what the side panel describes: the mixing knife's face, or the brush.
