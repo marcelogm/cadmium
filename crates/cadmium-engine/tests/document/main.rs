@@ -104,12 +104,16 @@ fn painted_session_with_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64
 }
 
 fn squeeze_on_the_tray(gpu: &GpuContext, s: &mut PaintSession) {
+    squeeze_on_the_tray_at(gpu, s, [300.0, 300.0]);
+}
+
+fn squeeze_on_the_tray_at(gpu: &GpuContext, s: &mut PaintSession, at: [f32; 2]) {
     s.begin_hold(gpu, Surface::Tray);
     s.squeeze(
         gpu,
         Nozzle {
-            from: [300.0, 300.0],
-            to: [300.0, 300.0],
+            from: at,
+            to: at,
             radius: 12.0,
             slot: 1,
             pressure: 1.0,

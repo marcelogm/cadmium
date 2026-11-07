@@ -10,6 +10,7 @@ use crate::side_panel::panel_root;
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::Swatch;
 use crate::thumbnails::{ThumbnailCache, ThumbnailKey};
+use crate::tools::panel::PanelTool;
 use crate::window::CadmiumWindow;
 
 mod build;
@@ -22,9 +23,8 @@ mod thumbnail_job;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
-    PanelTool, RackEntry, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text,
-    size_to_slider, slider_needs_sync, tool_group_description, tool_hint, tool_wording,
-    visible_controls,
+    RackEntry, describe_recipe, percent_text, pile_is_highlighted, plate_gap_text, size_to_slider,
+    slider_needs_sync, tool_group_description, tool_hint,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -121,7 +121,7 @@ impl BrushPanel {
     }
 
     fn show_held_paint(&self, snapshot: &Snapshot) {
-        let wording = tool_wording(snapshot.tool);
+        let wording = snapshot.tool.wording();
         let group = &self.tool_group;
         group.loaded_swatch.set_colour(snapshot.palette_colour);
         group
@@ -201,7 +201,7 @@ impl BrushPanel {
     }
 
     fn show_wording_for(&self, tool: PanelTool) {
-        let wording = tool_wording(tool);
+        let wording = tool.wording();
         let group = &self.tool_group;
         self.pigments.group.set_description(Some(wording.pigments));
         group.loaded_row.set_title(wording.loaded_title);
@@ -230,7 +230,7 @@ impl BrushPanel {
     }
 
     fn show_visible_controls_for(&self, tool: PanelTool, group_description: Option<&str>) {
-        let shown = visible_controls(tool);
+        let shown = tool.controls();
         let group = &self.tool_group;
         self.pigments.group.set_visible(shown.pigments);
         group.group.set_visible(shown.tool_group());

@@ -36,12 +36,12 @@ fn reading_a_missing_file_is_an_io_error() {
 #[test]
 fn future_format_version_is_unsupported() {
     let entries = Entries::blank().edit_manifest(|m| {
-        m["format"] = 4.into();
+        m["format"] = 5.into();
         m["spec"] = serde_json::json!({ "something": "new" });
     });
     assert!(matches!(
         read_entries(entries),
-        Err(DocumentError::UnsupportedVersion(4))
+        Err(DocumentError::UnsupportedVersion(5))
     ));
 }
 

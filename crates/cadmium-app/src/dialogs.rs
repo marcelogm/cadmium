@@ -3,7 +3,7 @@ use gtk::glib;
 
 use crate::application::ACCELERATORS;
 use crate::input::nav_drag::NavMode;
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 
 const APPLICATION_ICON: &str = "io.github.marcelogm.Cadmium";
 const PIGMENT_DATA_CREDIT: &str =
@@ -45,6 +45,7 @@ pub const ACTION_SHORTCUTS: [(&str, &[(&str, &str)]); 3] = [
             ("Rotate Left", "win.rotate-left"),
             ("Rotate Right", "win.rotate-right"),
             ("Show or Hide Sidebar", "win.toggle-sidebar"),
+            ("Show or Hide Tray", "win.toggle-tray"),
             ("Preferences", "win.preferences"),
             ("Keyboard Shortcuts", "app.shortcuts"),
         ],
@@ -83,6 +84,7 @@ pub fn about_dialog() -> adw::AboutDialog {
 pub fn shortcuts_dialog() -> adw::ShortcutsDialog {
     let dialog = adw::ShortcutsDialog::new();
     dialog.add(tool_shortcuts());
+    dialog.add(tray_tool_shortcuts());
     for (title, entries) in ACTION_SHORTCUTS {
         dialog.add(action_shortcuts(title, entries));
     }
@@ -111,6 +113,21 @@ fn tool_shortcuts() -> adw::ShortcutsSection {
         tools.add(item);
     }
     tools
+}
+
+pub fn tray_tool_accelerator(tool: TrayTool) -> String {
+    format!("<Shift>{}", tool.key().name().unwrap_or_default())
+}
+
+fn tray_tool_shortcuts() -> adw::ShortcutsSection {
+    let section = adw::ShortcutsSection::new(Some("Tray Tools"));
+    for tool in TrayTool::ALL {
+        section.add(adw::ShortcutsItem::new(
+            tool.label(),
+            &tray_tool_accelerator(tool),
+        ));
+    }
+    section
 }
 
 fn action_shortcuts(title: &str, entries: &[(&str, &str)]) -> adw::ShortcutsSection {

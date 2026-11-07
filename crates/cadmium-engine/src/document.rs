@@ -2,10 +2,10 @@ use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 
-use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE};
+use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TexelBlock};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
 use crate::session::PaintSession;
-use crate::surface::tray_spec;
+use crate::surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, tray_spec};
 
 mod export;
 mod read;
@@ -14,9 +14,12 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 3;
+const FORMAT_VERSION: u32 = 4;
 const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
 const TRAYLESS_FORMAT: u32 = 2;
+/// The format that saved the tray, at its old size.
+const TRAY_FORMAT: u32 = 3;
+const LEGACY_TRAY: [u32; 2] = [LEGACY_TRAY_WIDTH, LEGACY_TRAY_HEIGHT];
 const PAINTING_PREFIX: &str = "";
 const TRAY_PREFIX: &str = "tray/";
 const DRY_RELIEF_NAME: &str = "dry_relief";
@@ -120,10 +123,15 @@ impl StateBytes {
     }
 }
 
+struct TraySnapshot {
+    spec: CanvasSpec,
+    states: Vec<StateBytes>,
+}
+
 pub struct DocumentSnapshot {
     spec: CanvasSpec,
     states: Vec<StateBytes>,
-    tray: Option<Vec<StateBytes>>,
+    tray: Option<TraySnapshot>,
 }
 
 impl DocumentSnapshot {
@@ -135,7 +143,11 @@ impl DocumentSnapshot {
         let states = capture_canvas(gpu, &session.canvas)?;
         let tray = (session.tray.spec == tray_spec(&session.canvas.spec.pigment_slots))
             .then(|| capture_canvas(gpu, &session.tray))
-            .transpose()?;
+            .transpose()?
+            .map(|states| TraySnapshot {
+                spec: session.tray.spec.clone(),
+                states,
+            });
         Ok(DocumentSnapshot {
             spec: session.canvas.spec.clone(),
             states,
@@ -160,14 +172,21 @@ impl DocumentSnapshot {
     }
 
     fn upload(self, gpu: &GpuContext, session: &mut PaintSession) {
-        upload_states(gpu, &mut session.canvas, self.states);
+        let painting = TexelBlock {
+            origin: [0, 0],
+            size: [self.spec.width, self.spec.height],
+        };
+        upload_states_into(gpu, &mut session.canvas, self.states, painting);
         if let Some(tray) = self.tray {
-            upload_states(gpu, &mut session.tray, tray);
+            let middle = middle_block(&session.tray.spec, &tray.spec);
+            upload_states_into(gpu, &mut session.tray, tray.states, middle);
         }
     }
 
     fn file_format(&self) -> u32 {
-        match self.tray {
+        match &self.tray {
+            // Read from format 3 and written without being opened: keeps its old tray and format.
+            Some(tray) if [tray.spec.width, tray.spec.height] == LEGACY_TRAY => TRAY_FORMAT,
             Some(_) => FORMAT_VERSION,
             None => TRAYLESS_FORMAT,
         }
@@ -201,14 +220,36 @@ fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, 
     })
 }
 
-fn upload_states(gpu: &GpuContext, canvas: &mut Canvas, states: Vec<StateBytes>) {
+/// The block a `saved` tray takes in the middle of a `full` one.
+fn middle_block(full: &CanvasSpec, saved: &CanvasSpec) -> TexelBlock {
+    let margin = |full: u32, saved: u32| {
+        full.checked_sub(saved)
+            .expect("the saved tray fits the tray")
+            / 2
+    };
+    TexelBlock {
+        origin: [
+            margin(full.width, saved.width),
+            margin(full.height, saved.height),
+        ],
+        size: [saved.width, saved.height],
+    }
+}
+
+/// Writes `states` into `block` of `canvas`; the rest of the canvas keeps what it had.
+fn upload_states_into(
+    gpu: &GpuContext,
+    canvas: &mut Canvas,
+    states: Vec<StateBytes>,
+    block: TexelBlock,
+) {
     for state in states {
         let (which, raw) = (state.which, state.texels());
-        canvas.write_bytes(gpu, which, &raw);
+        canvas.write_bytes_at(gpu, which, &raw, block);
         gpu.queue.submit([]);
         let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
         if which == StateTexture::WetVol {
-            mark_wet_tiles(canvas, &raw);
+            mark_wet_tiles(canvas, &raw, block);
         }
     }
     canvas.dirty.mark_all();
@@ -234,10 +275,11 @@ pub fn export_png(
     ExportedImage::render(gpu, session)?.write_png(path)
 }
 
-fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
-    let width = canvas.spec.width as usize;
+fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8], block: TexelBlock) {
+    let (left, top) = (block.origin[0] as usize, block.origin[1] as usize);
+    let block_width = block.size[0] as usize;
     let tile = TILE_SIZE as usize;
-    let columns = width.div_ceil(tile);
+    let columns = (canvas.spec.width as usize).div_ceil(tile);
     let rows = (canvas.spec.height as usize).div_ceil(tile);
     let mut wet = vec![false; columns * rows];
     for (index, texel) in wet_volume
@@ -247,7 +289,7 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
         .enumerate()
     {
         if f32::from_le_bytes(*texel) > 0.0 {
-            let (x, y) = (index % width, index / width);
+            let (x, y) = (left + index % block_width, top + index / block_width);
             wet[(y / tile) * columns + x / tile] = true;
         }
     }

@@ -49,6 +49,13 @@
                   </object>
                 </child>
                 <child type="end">
+                  <object class="GtkToggleButton" id="tray_toggle">
+                    <property name="icon-name">view-dual-symbolic</property>
+                    <property name="tooltip-text">Toggle tray (F8)</property>
+                    <property name="action-name">win.toggle-tray</property>
+                  </object>
+                </child>
+                <child type="end">
                   <object class="GtkButton">
                     <property name="icon-name">weather-clear-symbolic</property>
                     <property name="tooltip-text">Dry (Ctrl+D)</property>
@@ -60,57 +67,126 @@
             <property name="content">
               <object class="AdwToastOverlay" id="toast_overlay">
                 <property name="child">
-                  <object class="GtkOverlay" id="canvas_overlay">
-                    <property name="child">
-                      <object class="GtkBox" id="canvas_slot">
-                        <property name="hexpand">True</property>
-                        <property name="vexpand">True</property>
+                  <object class="GtkPaned" id="tray_paned">
+                    <property name="orientation">vertical</property>
+                    <property name="wide-handle">True</property>
+                    <property name="shrink-start-child">False</property>
+                    <property name="shrink-end-child">False</property>
+                    <property name="start-child">
+                      <object class="GtkOverlay" id="canvas_overlay">
+                        <property name="child">
+                          <object class="GtkBox" id="canvas_slot">
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                        </property>
+                        <child type="overlay">
+                          <object class="GtkBox" id="zoom_osd">
+                            <property name="halign">start</property>
+                            <property name="valign">end</property>
+                            <property name="margin-start">12</property>
+                            <property name="margin-end">12</property>
+                            <property name="margin-top">12</property>
+                            <property name="margin-bottom">12</property>
+                            <style>
+                              <class name="osd"/>
+                              <class name="toolbar"/>
+                            </style>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-out-symbolic</property>
+                                <property name="tooltip-text">Zoom out (Ctrl+−)</property>
+                                <property name="action-name">win.zoom-out</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="zoom_label">
+                                <property name="label">100%</property>
+                                <property name="width-chars">5</property>
+                                <style>
+                                  <class name="numeric"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-in-symbolic</property>
+                                <property name="tooltip-text">Zoom in (Ctrl++)</property>
+                                <property name="action-name">win.zoom-in</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-fit-best-symbolic</property>
+                                <property name="tooltip-text">Fit to window (Ctrl+0)</property>
+                                <property name="action-name">win.zoom-fit</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                     </property>
-                    <child type="overlay">
-                      <object class="GtkBox" id="zoom_osd">
-                        <property name="halign">start</property>
-                        <property name="valign">end</property>
-                        <property name="margin-start">12</property>
-                        <property name="margin-end">12</property>
-                        <property name="margin-top">12</property>
-                        <property name="margin-bottom">12</property>
-                        <style>
-                          <class name="osd"/>
-                          <class name="toolbar"/>
-                        </style>
+                    <property name="end-child">
+                      <object class="GtkBox" id="tray_pane">
+                        <property name="orientation">vertical</property>
                         <child>
-                          <object class="GtkButton">
-                            <property name="icon-name">zoom-out-symbolic</property>
-                            <property name="tooltip-text">Zoom out (Ctrl+−)</property>
-                            <property name="action-name">win.zoom-out</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel" id="zoom_label">
-                            <property name="label">100%</property>
-                            <property name="width-chars">5</property>
+                          <object class="GtkBox">
+                            <property name="spacing">6</property>
+                            <property name="margin-start">6</property>
+                            <property name="margin-end">6</property>
+                            <property name="margin-top">6</property>
                             <style>
-                              <class name="numeric"/>
+                              <class name="toolbar"/>
                             </style>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label">Tray</property>
+                                <property name="margin-start">6</property>
+                                <property name="margin-end">6</property>
+                                <style>
+                                  <class name="heading"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwToggleGroup" id="tray_tool_group">
+                                <property name="hexpand">True</property>
+                                <property name="halign">start</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-fit-best-symbolic</property>
+                                <property name="tooltip-text">Fit tray</property>
+                                <property name="action-name">win.fit-tray</property>
+                                <style>
+                                  <class name="flat"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">edit-clear-all-symbolic</property>
+                                <property name="tooltip-text">Clear tray</property>
+                                <property name="action-name">win.clear-tray</property>
+                                <style>
+                                  <class name="flat"/>
+                                </style>
+                              </object>
+                            </child>
                           </object>
                         </child>
                         <child>
-                          <object class="GtkButton">
-                            <property name="icon-name">zoom-in-symbolic</property>
-                            <property name="tooltip-text">Zoom in (Ctrl++)</property>
-                            <property name="action-name">win.zoom-in</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkButton">
-                            <property name="icon-name">zoom-fit-best-symbolic</property>
-                            <property name="tooltip-text">Fit to window (Ctrl+0)</property>
-                            <property name="action-name">win.zoom-fit</property>
+                          <object class="GtkBox" id="tray_slot">
+                            <property name="vexpand">True</property>
+                            <property name="margin-start">6</property>
+                            <property name="margin-end">6</property>
+                            <property name="margin-top">6</property>
+                            <property name="margin-bottom">6</property>
                           </object>
                         </child>
                       </object>
-                    </child>
+                    </property>
                   </object>
                 </property>
               </object>
@@ -139,95 +215,41 @@
               </object>
             </child>
             <property name="content">
-              <object class="AdwBottomSheet" id="tray_sheet">
-                <property name="open">False</property>
-                <property name="modal">False</property>
-                <property name="content">
-                  <object class="AdwViewStack" id="sidebar_stack">
-                    <child>
-                      <object class="AdwViewStackPage">
-                        <property name="name">brush</property>
-                        <property name="title">Brush</property>
-                        <property name="icon-name">cadmium-brush-symbolic</property>
+              <object class="AdwViewStack" id="sidebar_stack">
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">brush</property>
+                    <property name="title">Brush</property>
+                    <property name="icon-name">cadmium-brush-symbolic</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
                         <property name="child">
-                          <object class="GtkScrolledWindow">
-                            <property name="hscrollbar-policy">never</property>
-                            <property name="child">
-                              <object class="GtkBox" id="brush_panel_slot">
-                                <property name="orientation">vertical</property>
-                              </object>
-                            </property>
+                          <object class="GtkBox" id="brush_panel_slot">
+                            <property name="orientation">vertical</property>
                           </object>
                         </property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwViewStackPage">
-                        <property name="name">lab</property>
-                        <property name="title">Lab</property>
-                        <property name="icon-name">applications-science-symbolic</property>
-                        <property name="child">
-                          <object class="GtkScrolledWindow">
-                            <property name="hscrollbar-policy">never</property>
-                            <property name="child">
-                              <object class="GtkBox" id="lab_panel_slot">
-                                <property name="orientation">vertical</property>
-                              </object>
-                            </property>
-                          </object>
-                        </property>
-                      </object>
-                    </child>
-                  </object>
-                </property>
-                <property name="bottom-bar">
-                  <object class="GtkLabel">
-                    <property name="label">Tray</property>
-                    <property name="margin-top">12</property>
-                    <property name="margin-bottom">12</property>
-                    <style>
-                      <class name="heading"/>
-                    </style>
-                  </object>
-                </property>
-                <property name="sheet">
-                  <object class="AdwToolbarView">
-                    <child type="top">
-                      <object class="AdwHeaderBar">
-                        <property name="show-title">False</property>
-                        <property name="show-start-title-buttons">False</property>
-                        <property name="show-end-title-buttons">False</property>
-                        <child type="start">
-                          <object class="GtkLabel">
-                            <property name="label">Tray</property>
-                            <property name="margin-start">6</property>
-                            <style>
-                              <class name="heading"/>
-                            </style>
-                          </object>
-                        </child>
-                        <child type="end">
-                          <object class="GtkButton">
-                            <property name="icon-name">edit-clear-all-symbolic</property>
-                            <property name="tooltip-text">Clear tray</property>
-                            <property name="action-name">win.clear-tray</property>
-                            <style>
-                              <class name="flat"/>
-                            </style>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                    <property name="content">
-                      <object class="GtkBox" id="tray_slot">
-                        <property name="margin-start">12</property>
-                        <property name="margin-end">12</property>
-                        <property name="margin-top">12</property>
-                        <property name="margin-bottom">12</property>
                       </object>
                     </property>
                   </object>
-                </property>
+                </child>
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">lab</property>
+                    <property name="title">Lab</property>
+                    <property name="icon-name">applications-science-symbolic</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="child">
+                          <object class="GtkBox" id="lab_panel_slot">
+                            <property name="orientation">vertical</property>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
               </object>
             </property>
           </object>

@@ -11,7 +11,6 @@ pub(super) const MOVE: UiToolProfile = UiToolProfile {
     tooltip: "Move (H)",
     keys: &[gdk::Key::h],
     keypad_keys: &[],
-    on_tray: Press::Pan,
     on_painting: Press::Pan,
     controls: NO_CONTROLS,
     wording: BRUSH_WORDING,

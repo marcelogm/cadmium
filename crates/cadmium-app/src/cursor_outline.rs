@@ -1,9 +1,10 @@
 use cadmium_engine::stroke::StrokeSample;
+use cadmium_engine::surface::Surface;
 use gtk::prelude::*;
 use gtk::{gdk, graphene, gsk};
 
 use crate::state::AppState;
-use crate::tools::UiTool;
+use crate::tools::Press;
 
 const OUTLINE_WIDTH: f32 = 1.0;
 const OUTLINE_MIN_RADIUS: f32 = 2.0;
@@ -24,9 +25,9 @@ impl CursorOutline {
         }
     }
 
-    pub(crate) fn of_brush(state: &AppState, to_widget: f32) -> CursorOutline {
+    pub(crate) fn of_brush(state: &AppState, surface: Surface, to_widget: f32) -> CursorOutline {
         let mut brush = state.session.brush.clone();
-        if let UiTool::Paint(tool) = state.ui_tool {
+        if let Press::Stroke(tool) | Press::LoadFromPile(tool) = state.press_for(surface) {
             brush.tool = tool;
         }
         let pen = StrokeSample {

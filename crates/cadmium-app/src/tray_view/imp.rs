@@ -1,4 +1,5 @@
 use super::*;
+use crate::input::nav_drag::HeldKeys;
 
 #[derive(Default)]
 pub struct TrayView {
@@ -9,6 +10,10 @@ pub struct TrayView {
     pub tick: RefCell<Option<gtk::TickCallbackId>>,
     pub scale_watch: SurfaceScaleWatch,
     pub hover: Cell<Option<(f64, f64)>>,
+    /// Where the pointer is, on the tray or not; `hover` is only kept on the tray.
+    pub pointer: Cell<Option<(f64, f64)>>,
+    pub auto_fit: Cell<AutoFit>,
+    pub(crate) held_keys: HeldKeys,
     pub(super) shown_ring: Cell<Option<ShownRing>>,
     pub released_handlers: RefCell<Vec<TrayHandler>>,
     pub colour_picked_handlers: RefCell<Vec<PickHandler>>,
@@ -31,6 +36,7 @@ impl ObjectImpl for TrayView {
             .replace(FramePresenter::showing(PresentSource::Tray));
         let tray = self.obj();
         tray.set_hexpand(true);
+        tray.set_vexpand(true);
         tray.add_css_class(TRAY_FRAME_CLASS);
         tray.set_overflow(gtk::Overflow::Hidden);
         tray.set_cursor_from_name(Some(TRAY_CURSOR));
@@ -39,25 +45,11 @@ impl ObjectImpl for TrayView {
 }
 
 impl WidgetImpl for TrayView {
-    fn request_mode(&self) -> gtk::SizeRequestMode {
-        gtk::SizeRequestMode::HeightForWidth
-    }
-
-    fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {
-        if orientation == gtk::Orientation::Horizontal {
-            return (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1);
+    fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
+        match orientation {
+            gtk::Orientation::Horizontal => (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1),
+            _ => (TRAY_MIN_HEIGHT, TRAY_MIN_HEIGHT, -1, -1),
         }
-        let width = if for_size < 0 {
-            TRAY_MIN_WIDTH
-        } else {
-            for_size
-        };
-        (
-            tray_height_for_width(TRAY_MIN_WIDTH.min(width)),
-            tray_height_for_width(width),
-            -1,
-            -1,
-        )
     }
 
     fn realize(&self) {
@@ -107,21 +99,11 @@ impl WidgetImpl for TrayView {
 }
 
 fn append_tray_image(snapshot: &gtk::Snapshot, texture: &gdk::Texture, scale: f64) {
-    let size = (texture.width() as u32, texture.height() as u32);
-    let to_widget = tray_screen_zoom(size, scale);
     let bounds = graphene::Rect::new(
         0.0,
         0.0,
-        size.0 as f32 / scale as f32,
-        size.1 as f32 / scale as f32,
+        texture.width() as f32 / scale as f32,
+        texture.height() as f32 / scale as f32,
     );
-    let image = graphene::Rect::new(
-        0.0,
-        0.0,
-        TRAY_WIDTH as f32 * to_widget,
-        TRAY_HEIGHT as f32 * to_widget,
-    );
-    snapshot.push_clip(&image);
     snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Linear, &bounds);
-    snapshot.pop();
 }

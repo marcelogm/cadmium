@@ -9,11 +9,12 @@ use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
+use cadmium_engine::surface::Surface;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::settings::SettingsStore;
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
 use gesture::Contact;
@@ -39,6 +40,7 @@ mod pen;
 mod provisional;
 mod recipe;
 mod studio_paint;
+mod surface_tools;
 mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
@@ -46,7 +48,22 @@ const EMPTY_MIXTURE: Mixture = Mixture {
     fractions: [0.0; MAX_SLOTS],
 };
 
+const UNMOVED_VIEW: ViewTransform = ViewTransform {
+    origin_x: 0.0,
+    origin_y: 0.0,
+    zoom: 1.0,
+    rotation: 0.0,
+};
+
 pub type SharedState = Rc<RefCell<AppState>>;
+
+/// Whether a stroke is running on `state`; a borrowed or missing state counts as one, so
+/// nothing that waits for the stroke goes ahead.
+pub fn stroking_or_busy(state: Option<&SharedState>) -> bool {
+    state
+        .and_then(|state| state.try_borrow().ok().map(|state| state.is_stroking()))
+        .unwrap_or(true)
+}
 
 fn starting_session(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
     let mut session = PaintSession::new(gpu, spec)?;
@@ -70,6 +87,9 @@ pub struct AppState {
     worn_brush_index: Option<usize>,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
+    tray_tool: TrayTool,
+    /// The surface whose tool was chosen last; the side panel describes that tool.
+    focus: Surface,
     pub tube_slot: usize,
     edits: EditCounter,
     pub file: Option<PathBuf>,
@@ -83,8 +103,10 @@ pub struct AppState {
     knife_volume: f32,
     contact: Option<Contact>,
     hold_clock: Option<Instant>,
-    tray_zoom: f32,
-    painting_device_scale: f32,
+    /// How the tray widget shows the tray, in device px.
+    pub tray_view: ViewTransform,
+    /// Device px per widget px on the tray's screen.
+    tray_device_scale: f64,
     resting_tool: Tool,
     samples_since_frame: u32,
     pacing: FramePacing,
@@ -104,13 +126,10 @@ impl AppState {
             brushes: BrushLibrary::factory_only(),
             settings: SettingsStore::default(),
             worn_brush_index: None,
-            view: ViewTransform {
-                origin_x: 0.0,
-                origin_y: 0.0,
-                zoom: 1.0,
-                rotation: 0.0,
-            },
+            view: UNMOVED_VIEW,
             ui_tool: UiTool::default(),
+            tray_tool: TrayTool::default(),
+            focus: Surface::Painting,
             tube_slot: 0,
             edits: EditCounter::default(),
             file: None,
@@ -124,8 +143,8 @@ impl AppState {
             knife_volume: 0.0,
             contact: None,
             hold_clock: None,
-            tray_zoom: 1.0,
-            painting_device_scale: 1.0,
+            tray_view: UNMOVED_VIEW,
+            tray_device_scale: 1.0,
             resting_tool,
             samples_since_frame: 0,
             pacing: FramePacing::default(),

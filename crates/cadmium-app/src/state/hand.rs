@@ -1,4 +1,5 @@
 use cadmium_engine::brush::BrushSpec;
+use cadmium_engine::surface::Surface;
 
 use super::AppState;
 use crate::tools::UiTool;
@@ -36,6 +37,7 @@ impl AppState {
     }
 
     pub fn set_ui_tool(&mut self, tool: UiTool) {
+        self.focus = Surface::Painting;
         self.ui_tool = tool;
         let UiTool::Paint(paint_tool) = tool else {
             return;

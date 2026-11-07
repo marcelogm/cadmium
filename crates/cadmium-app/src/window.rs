@@ -15,6 +15,8 @@ mod imp;
 mod navigation_keys;
 mod surface_events;
 mod tool_toggles;
+mod tray_divider;
+mod tray_pane;
 
 pub type PanelRefresher = Rc<dyn Fn()>;
 
@@ -134,12 +136,6 @@ impl CadmiumWindow {
         } else {
             glib::g_warning!(LOG_DOMAIN, "no sidebar page named {name:?}");
         }
-    }
-
-    pub fn show_tray(&self) {
-        let imp = self.imp();
-        imp.split_view.set_show_sidebar(true);
-        imp.tray_sheet.set_open(true);
     }
 
     fn keep_window_buttons_reachable(&self) {

@@ -10,6 +10,14 @@ pub(crate) fn device_scale(widget: &impl IsA<gtk::Widget>) -> f64 {
         .map_or(f64::from(widget.scale_factor()), |surface| surface.scale())
 }
 
+/// The widget's centre, in widget px.
+pub(crate) fn widget_centre(widget: &impl IsA<gtk::Widget>) -> (f64, f64) {
+    (
+        f64::from(widget.width()) / 2.0,
+        f64::from(widget.height()) / 2.0,
+    )
+}
+
 pub(crate) fn viewport_px(widget: &impl IsA<gtk::Widget>) -> (u32, u32) {
     let scale = device_scale(widget);
     (

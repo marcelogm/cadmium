@@ -2,7 +2,7 @@ use cadmium_engine::session::ClearOutcome;
 
 use super::AppState;
 use super::recipe::PigmentClick;
-use crate::tools::UiTool;
+use crate::tools::panel::PanelTool;
 
 impl AppState {
     pub fn slot_count(&self) -> usize {
@@ -18,9 +18,9 @@ impl AppState {
     }
 
     pub fn click_pile(&mut self, slot: usize, click: PigmentClick) {
-        match self.ui_tool {
-            UiTool::Tube => self.set_tube_slot(slot),
-            UiTool::Move | UiTool::Paint(_) => self.choose_pigment(slot, click),
+        match self.focused_tool() {
+            PanelTool::Tube => self.set_tube_slot(slot),
+            PanelTool::Paint(_) => self.choose_pigment(slot, click),
         }
     }
 

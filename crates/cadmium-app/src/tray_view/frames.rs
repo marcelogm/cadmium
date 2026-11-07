@@ -4,7 +4,6 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use super::TrayView;
-use super::geometry::tray_screen_zoom;
 use crate::handlers::run_handlers;
 use crate::presenter::FramePresenter;
 use crate::state::AppState;
@@ -26,6 +25,7 @@ impl TrayView {
     }
 
     fn advance_frame(&self) -> glib::ControlFlow {
+        self.fit_if_held_back();
         self.present_if_needed();
         let ring_moving = self.follow_load_ring();
         if ring_moving || self.wants_frame() {
@@ -90,7 +90,6 @@ impl TrayView {
             return false;
         }
         let (width_px, height_px) = viewport_px(self);
-        state.set_tray_zoom(tray_screen_zoom((width_px, height_px), self.device_scale()));
         let Some(texture) = presenter.present(&mut state, &native, width_px, height_px) else {
             return false;
         };

@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::ViewStep;
 
 #[test]
 fn only_points_on_the_tray_image_are_on_the_tray() {
@@ -21,57 +22,106 @@ fn only_points_on_the_tray_image_are_on_the_tray() {
     }
 }
 
-#[test]
-fn a_short_widget_leaves_room_beside_the_tray() {
-    let viewport = (384, 200);
-    assert!(is_on_tray(tray_point(viewport, 1.0, 100.0, 100.0)));
-    assert!(!is_on_tray(tray_point(viewport, 1.0, 383.0, 100.0)));
-}
-
-#[test]
-fn a_tall_widget_leaves_room_below_the_tray() {
-    let viewport = (384, 400);
-    assert!(is_on_tray(tray_point(viewport, 1.0, 383.0, 255.0)));
-    assert!(!is_on_tray(tray_point(viewport, 1.0, 100.0, 300.0)));
-}
-
-#[test]
-fn the_widget_corners_are_the_tray_corners() {
-    let viewport = (768, 512);
-    assert_eq!(tray_point(viewport, 2.0, 0.0, 0.0), (0.0, 0.0));
-    assert_eq!(
-        tray_point(viewport, 2.0, 384.0, 256.0),
-        (f64::from(TRAY_WIDTH), f64::from(TRAY_HEIGHT))
+fn assert_near((x, y): (f64, f64), (ex, ey): (f64, f64)) {
+    assert!(
+        (x - ex).abs() < 1e-3 && (y - ey).abs() < 1e-3,
+        "{x},{y} vs {ex},{ey}"
     );
 }
 
 #[test]
-fn the_tray_is_two_thirds_as_tall_as_it_is_wide() {
-    assert_eq!(tray_height_for_width(384), 256);
-    assert_eq!(tray_height_for_width(TRAY_WIDTH as i32), TRAY_HEIGHT as i32);
-}
-
-#[test]
-fn the_tray_image_fills_the_width_its_height_was_measured_for() {
-    for width in [180, 316, 317, 331, 356] {
-        let viewport = (width as u32, tray_height_for_width(width) as u32);
-        let zoom = tray_view(viewport).zoom;
-        assert_eq!(zoom, width as f32 / TRAY_WIDTH as f32, "{width}");
-        assert!(TRAY_HEIGHT as f32 * zoom <= viewport.1 as f32, "{width}");
+fn the_tray_covers_a_wide_pane_edge_to_edge_cropping_top_and_bottom() {
+    let viewport = (2000, 400);
+    let view = tray_cover(viewport);
+    // Every widget corner is on the tray, and the centres line up.
+    for corner in [(0.0, 0.0), (1999.0, 0.0), (0.0, 399.0), (1999.0, 399.0)] {
         assert!(
-            viewport.1 as f32 - TRAY_HEIGHT as f32 * zoom < 1.0,
-            "{width}"
+            is_on_tray(tray_point(view, 1.0, corner.0, corner.1)),
+            "{corner:?}"
         );
     }
+    assert_near(
+        tray_point(view, 1.0, 1000.0, 200.0),
+        (f64::from(TRAY_WIDTH) / 2.0, f64::from(TRAY_HEIGHT) / 2.0),
+    );
+    // The width fits exactly; the height overflows evenly.
+    assert_near(
+        tray_point(view, 1.0, 0.0, 200.0),
+        (0.0, f64::from(TRAY_HEIGHT) / 2.0),
+    );
+    let (_, top) = tray_point(view, 1.0, 1000.0, 0.0);
+    let (_, bottom) = tray_point(view, 1.0, 1000.0, 400.0);
+    assert!(top > 0.0 && bottom < f64::from(TRAY_HEIGHT));
+    assert!((top - (f64::from(TRAY_HEIGHT) - bottom)).abs() < 1e-3);
 }
 
 #[test]
-fn a_widget_pixel_covers_one_over_the_screen_zoom_tray_pixels() {
-    for (viewport, scale) in [((384, 400), 1.0), ((600, 300), 1.5), ((768, 900), 2.0)] {
-        let zoom = f64::from(tray_screen_zoom(viewport, scale));
-        let (x0, y0) = tray_point(viewport, scale, 10.0, 20.0);
-        let (x1, y1) = tray_point(viewport, scale, 11.0, 23.0);
-        assert!(((x1 - x0) - 1.0 / zoom).abs() < 1e-3);
-        assert!(((y1 - y0) - 3.0 / zoom).abs() < 1e-3);
+fn the_tray_covers_a_tall_pane_edge_to_edge_cropping_the_sides() {
+    let viewport = (300, 600);
+    let view = tray_cover(viewport);
+    assert_near(
+        tray_point(view, 1.0, 150.0, 300.0),
+        (f64::from(TRAY_WIDTH) / 2.0, f64::from(TRAY_HEIGHT) / 2.0),
+    );
+    let (_, top) = tray_point(view, 1.0, 150.0, 0.0);
+    let (_, bottom) = tray_point(view, 1.0, 150.0, 600.0);
+    assert_near((top, bottom), (0.0, f64::from(TRAY_HEIGHT)));
+    let (left, _) = tray_point(view, 1.0, 0.0, 300.0);
+    let (right, _) = tray_point(view, 1.0, 300.0, 300.0);
+    assert!(left > 0.0 && right < f64::from(TRAY_WIDTH));
+}
+
+#[test]
+fn a_widget_point_maps_through_a_moved_view_and_back() {
+    let moved = view::step(
+        view::step(
+            tray_cover((800, 400)),
+            ViewStep::Pan {
+                dx: -120.0,
+                dy: 35.0,
+            },
+            2.0,
+        ),
+        ViewStep::Zoom {
+            anchor: (90.0, 60.0),
+            factor: 3.0,
+        },
+        2.0,
+    );
+    let scale = 2.0;
+    for (x, y) in [(0.0, 0.0), (90.0, 60.0), (321.5, 177.25)] {
+        let on_tray = tray_point(moved, scale, x, y);
+        let (px, py) = view::canvas_to_viewport(moved, on_tray.0, on_tray.1);
+        assert_near((px / scale, py / scale), (x, y));
     }
+    // The zoom anchor stays over the same tray point.
+    let before = tray_point(
+        view::step(
+            tray_cover((800, 400)),
+            ViewStep::Pan {
+                dx: -120.0,
+                dy: 35.0,
+            },
+            2.0,
+        ),
+        scale,
+        90.0,
+        60.0,
+    );
+    assert_near(tray_point(moved, scale, 90.0, 60.0), before);
+}
+
+#[test]
+fn zoomed_out_the_widget_shows_room_around_the_tray() {
+    let view = view::step(
+        tray_cover((800, 400)),
+        ViewStep::Zoom {
+            anchor: (400.0, 200.0),
+            factor: 0.5,
+        },
+        1.0,
+    );
+    assert!(is_on_tray(tray_point(view, 1.0, 400.0, 200.0)));
+    assert!(!is_on_tray(tray_point(view, 1.0, 5.0, 5.0)));
+    assert!(!is_on_tray(tray_point(view, 1.0, 795.0, 395.0)));
 }

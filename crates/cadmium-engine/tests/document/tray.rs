@@ -1,16 +1,18 @@
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use cadmium_engine::{
-    canvas::{Canvas, CanvasSpec, StateTexture},
+    canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE, TileCoord},
     document::{self, DocumentSnapshot},
     gpu::GpuContext,
     session::PaintSession,
-    surface::tray_spec,
+    surface::{TRAY_HEIGHT, TRAY_WIDTH, tray_spec},
 };
 
 use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
-use crate::{INVALID_THICKNESS, TempDir, painted_session, painted_spec, squeeze_on_the_tray};
+use crate::{
+    INVALID_THICKNESS, TempDir, painted_session, painted_spec, squeeze_on_the_tray,
+    squeeze_on_the_tray_at,
+};
 
 const TRAY_WET_VOLUME: &str = "tray/state/wet_vol.zst";
 const TRAY_TOLERANCE: f64 = 1e-3;
@@ -30,6 +32,10 @@ fn assert_same_tray_paint(gpu: &GpuContext, opened: &PaintSession, saved: &Paint
     for (opened, saved) in opened.pigment.iter().zip(saved.pigment) {
         assert!(close(*opened, saved), "{opened} {saved}");
     }
+}
+
+fn middle_of_the_tray() -> [f32; 2] {
+    [TRAY_WIDTH as f32 / 2.0, TRAY_HEIGHT as f32 / 2.0]
 }
 
 fn saved_painting_with_a_wet_tray(gpu: &GpuContext, dir: &TempDir) -> (PaintSession, PathBuf) {
@@ -55,6 +61,64 @@ fn the_tray_is_saved_and_opened_with_the_painting() {
             .unwrap(),
         s.canvas.read_bytes(&gpu, StateTexture::WetVol).unwrap()
     );
+}
+
+#[test]
+fn a_format_three_tray_opens_in_the_middle_of_the_larger_tray() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-3-tray");
+    let mut s = painted_session(&gpu);
+    squeeze_on_the_tray_at(&gpu, &mut s, middle_of_the_tray());
+    let path = dir.file("tray.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let opened = read_entries(Entries::saved_as_format_3(&path))
+        .unwrap()
+        .into_session(&gpu)
+        .unwrap();
+    assert_eq!(
+        opened.tray.spec,
+        tray_spec(&opened.canvas.spec.pigment_slots)
+    );
+    assert_same_tray_paint(&gpu, &opened, &s);
+    for t in StateTexture::PAINT_STATE {
+        assert_eq!(
+            opened.tray.read_bytes(&gpu, t).unwrap(),
+            s.tray.read_bytes(&gpu, t).unwrap(),
+            "the old tray's {t:?} lands where it was cut from, the margins stay clean"
+        );
+    }
+    let under_the_squeeze = TileCoord {
+        x: TRAY_WIDTH / 2 / TILE_SIZE,
+        y: TRAY_HEIGHT / 2 / TILE_SIZE,
+    };
+    assert!(opened.tray.wet_tiles.contains(under_the_squeeze));
+    assert!(!opened.tray.wet_tiles.contains(TileCoord { x: 0, y: 0 }));
+}
+
+#[test]
+fn a_format_three_painting_saved_again_keeps_its_tray() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-3-resaved");
+    let mut s = painted_session(&gpu);
+    squeeze_on_the_tray_at(&gpu, &mut s, middle_of_the_tray());
+    let path = dir.file("tray.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let resaved = dir.file("resaved.cadmium");
+    read_entries(Entries::saved_as_format_3(&path))
+        .unwrap()
+        .write(&resaved)
+        .unwrap();
+    assert_eq!(saved_format(&resaved), 3);
+    let opened = document::open(&gpu, &resaved).unwrap();
+    assert_same_tray_paint(&gpu, &opened, &s);
+}
+
+#[test]
+fn a_painting_with_a_wet_tray_saves_in_format_four() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("format-4");
+    let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
+    assert_eq!(saved_format(&path), 4);
 }
 
 #[test]
@@ -114,26 +178,18 @@ fn a_format_two_painting_saved_again_still_opens() {
     assert_eq!(opened.tray.wet_totals(&gpu).unwrap().volume, 0.0);
 }
 
-fn saved_format(path: &Path) -> u64 {
-    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
-    let mut manifest = String::new();
-    archive
-        .by_name("manifest.json")
-        .unwrap()
-        .read_to_string(&mut manifest)
-        .unwrap();
-    let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
-    manifest["format"].as_u64().unwrap()
+fn saved_format(path: &Path) -> serde_json::Value {
+    Entries::saved(path).manifest()["format"].clone()
 }
 
 #[test]
-fn a_clean_tray_is_still_saved_as_format_three() {
+fn a_clean_tray_is_still_saved_as_format_four() {
     let gpu = GpuContext::new().unwrap();
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("clean-tray");
     let path = dir.file("clean.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
-    assert_eq!(saved_format(&path), 3);
+    assert_eq!(saved_format(&path), 4);
     assert!(
         Entries::saved(&path)
             .0
@@ -172,9 +228,9 @@ fn a_painting_whose_tray_could_not_be_rebuilt_saves_without_it_and_reopens() {
 }
 
 #[test]
-fn a_format_three_painting_missing_its_tray_is_a_format_error() {
+fn a_painting_missing_its_tray_is_a_format_error() {
     let gpu = GpuContext::new().unwrap();
-    let dir = TempDir::new("format-3-trayless");
+    let dir = TempDir::new("trayless");
     let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
     let reason = format_reason(read_entries(Entries::saved(&path).without(TRAY_WET_VOLUME)));
     assert!(

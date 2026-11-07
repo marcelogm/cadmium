@@ -6,16 +6,15 @@ use crate::canvas::{CanvasSpec, StateTexture};
 use crate::gpu::TexelRows;
 use crate::pigments::PigmentDb;
 use crate::spectral::BANDS;
-use crate::surface::tray_spec;
+use crate::surface::{legacy_tray_spec, tray_spec};
 
 use super::relief::dry_height_over_weave;
 use super::{
     ABSOLUTE_DRY_HEIGHT_FORMAT, DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY,
-    Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES, THICKNESS_UNITS, TRAY_PREFIX,
-    state_entry,
+    Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES, THICKNESS_UNITS, TRAY_FORMAT,
+    TRAY_PREFIX, TraySnapshot, state_entry,
 };
 
-const TRAY_FORMAT: u32 = 3;
 const OLDEST_READABLE_FORMAT: u32 = ABSOLUTE_DRY_HEIGHT_FORMAT;
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
 
@@ -29,18 +28,25 @@ impl DocumentSnapshot {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
         let (format, spec) = read_manifest(&mut archive)?;
         let states = read_states(&mut archive, format, PAINTING_PREFIX, &spec)?;
-        let tray = if format >= TRAY_FORMAT {
-            Some(read_states(
-                &mut archive,
-                format,
-                TRAY_PREFIX,
-                &tray_spec(&spec.pigment_slots),
-            )?)
-        } else {
-            None
-        };
+        let tray = read_tray(&mut archive, format, &spec)?;
         Ok(DocumentSnapshot { spec, states, tray })
     }
+}
+
+fn read_tray<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    format: u32,
+    spec: &CanvasSpec,
+) -> Result<Option<TraySnapshot>, DocumentError> {
+    let tray_spec = match format {
+        ..TRAY_FORMAT => return Ok(None),
+        TRAY_FORMAT => legacy_tray_spec(&spec.pigment_slots),
+        _ => tray_spec(&spec.pigment_slots),
+    };
+    Ok(Some(TraySnapshot {
+        states: read_states(archive, format, TRAY_PREFIX, &tray_spec)?,
+        spec: tray_spec,
+    }))
 }
 
 fn read_manifest<R: Read + std::io::Seek>(

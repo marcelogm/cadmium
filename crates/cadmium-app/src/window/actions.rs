@@ -14,12 +14,14 @@ type Activate = fn(&CadmiumWindow);
 
 const ACTIONS: &[(&str, Activate)] = &[
     ("toggle-sidebar", CadmiumWindow::toggle_sidebar),
+    ("toggle-tray", CadmiumWindow::toggle_tray),
     ("new", CadmiumWindow::open_new_painting_dialog),
     ("clean-brush", CadmiumWindow::clean_brush),
     ("undo", CadmiumWindow::undo),
     ("redo", CadmiumWindow::redo),
     ("dry", CadmiumWindow::dry),
     ("clear-tray", CadmiumWindow::clear_tray),
+    ("fit-tray", CadmiumWindow::fit_tray),
     ("zoom-in", CadmiumWindow::zoom_in),
     ("zoom-out", CadmiumWindow::zoom_out),
     ("zoom-fit", CadmiumWindow::zoom_fit),
@@ -93,6 +95,12 @@ impl CadmiumWindow {
     fn clear_tray(&self) {
         self.state().borrow_mut().clear_tray();
         self.after_contact();
+    }
+
+    fn fit_tray(&self) {
+        if let Some(tray) = self.imp().tray.get() {
+            tray.fit_view();
+        }
     }
 
     fn new_brush(&self) {

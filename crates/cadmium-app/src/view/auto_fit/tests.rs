@@ -66,3 +66,12 @@ fn the_stroke_is_only_asked_about_when_a_fit_is_due() {
     assert!(!AutoFit::default().on_size_change(false, || panic!("not asked")));
     assert!(!AutoFit::default().on_frame(|| panic!("not asked")));
 }
+
+#[test]
+fn a_rule_kept_in_a_cell_is_changed_in_place() {
+    let cell = std::cell::Cell::new(AutoFit::default());
+    update_auto_fit(&cell, AutoFit::moved_by_user);
+    assert!(!update_auto_fit(&cell, |fit| fit.on_size_change(true, calm)));
+    update_auto_fit(&cell, AutoFit::fitted);
+    assert!(update_auto_fit(&cell, |fit| fit.on_size_change(true, calm)));
+}

@@ -1,8 +1,8 @@
 use gtk::gdk;
 
 pub use cadmium_engine::stroke::Tool;
-use cadmium_engine::surface::Surface;
 use panel::{ToolWording, VisibleControls};
+pub use tray_tool::TrayTool;
 
 mod blender;
 mod brush;
@@ -12,18 +12,19 @@ pub(crate) mod knife;
 mod moving;
 pub(crate) mod panel;
 mod rag;
-mod tube;
+pub(crate) mod tray_tool;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
     Move,
     Paint(Tool),
-    Tube,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Press {
     Pan,
+    /// The tip does nothing here; the eraser end still wipes.
+    Nothing,
     PickColour,
     Stroke(Tool),
     LoadFromPile(Tool),
@@ -37,20 +38,10 @@ pub(crate) struct UiToolProfile {
     pub(crate) tooltip: &'static str,
     pub(crate) keys: &'static [gdk::Key],
     keypad_keys: &'static [gdk::Key],
-    on_tray: Press,
-    on_painting: Press,
+    pub(crate) on_painting: Press,
     pub(crate) controls: VisibleControls,
     pub(crate) wording: ToolWording,
     handling: Option<&'static str>,
-}
-
-impl UiToolProfile {
-    pub(crate) fn press_on(&self, surface: Surface) -> Press {
-        match surface {
-            Surface::Tray => self.on_tray,
-            Surface::Painting => self.on_painting,
-        }
-    }
 }
 
 impl Default for UiTool {
@@ -60,14 +51,13 @@ impl Default for UiTool {
 }
 
 impl UiTool {
-    pub const ALL: [UiTool; 7] = [
+    pub const ALL: [UiTool; 6] = [
         UiTool::Move,
         UiTool::Paint(Tool::Brush),
         UiTool::Paint(Tool::Knife),
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
         UiTool::Paint(Tool::Eyedropper),
-        UiTool::Tube,
     ];
 
     pub(crate) const fn profile(self) -> &'static UiToolProfile {
@@ -78,7 +68,6 @@ impl UiTool {
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
             UiTool::Paint(Tool::Eyedropper) => &eyedropper::EYEDROPPER,
-            UiTool::Tube => &tube::TUBE,
         }
     }
 

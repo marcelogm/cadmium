@@ -1,7 +1,7 @@
 use cadmium_engine::stroke::StrokeSample;
 use cadmium_engine::surface::Surface;
 
-use super::{Contact, Squeezing};
+use super::Contact;
 use crate::state::AppState;
 
 impl AppState {
@@ -9,27 +9,23 @@ impl AppState {
         self.contact.is_some()
     }
 
+    /// Holds only happen on the tray.
     pub fn holds_on(&self, surface: Surface) -> bool {
-        self.hold_surface() == Some(surface)
+        surface == Surface::Tray
+            && matches!(
+                self.contact,
+                Some(Contact::Loading(_) | Contact::Squeezing(_))
+            )
     }
 
     pub fn contact_on(&self, surface: Surface) -> bool {
         self.contact_surface() == Some(surface)
     }
 
-    pub(super) fn hold_surface(&self) -> Option<Surface> {
-        match self.contact? {
-            Contact::Stroke { .. } => None,
-            _ => self.contact_surface(),
-        }
-    }
-
     fn contact_surface(&self) -> Option<Surface> {
         match self.contact? {
-            Contact::Stroke { surface } | Contact::Squeezing(Squeezing { surface, .. }) => {
-                Some(surface)
-            }
-            Contact::Loading(_) => Some(Surface::Tray),
+            Contact::Stroke { surface } => Some(surface),
+            Contact::Loading(_) | Contact::Squeezing(_) => Some(Surface::Tray),
         }
     }
 

@@ -1,5 +1,6 @@
 use super::*;
 use crate::tools::knife::KNIFE_HANDLING;
+use crate::tools::{Tool, UiTool};
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
 
 #[test]
@@ -23,11 +24,11 @@ fn empty_recipe_reads_as_a_clean_brush() {
 
 #[test]
 fn brush_shows_every_control_and_eyedropper_only_the_hint() {
-    let brush = visible_controls(PanelTool::Paint(Tool::Brush));
+    let brush = PanelTool::Paint(Tool::Brush).controls();
     assert!(brush.pigments && brush.loaded && brush.size && brush.load && brush.medium);
     assert!(brush.shape && brush.stroke_loading && brush.clean && !brush.hint);
     assert!(!brush.plate_gap);
-    let eyedropper = visible_controls(PanelTool::Paint(Tool::Eyedropper));
+    let eyedropper = PanelTool::Paint(Tool::Eyedropper).controls();
     assert!(eyedropper.hint);
     assert!(!eyedropper.pigments && !eyedropper.loaded && !eyedropper.size);
     assert!(!eyedropper.load && !eyedropper.medium && !eyedropper.plate_gap);
@@ -37,7 +38,7 @@ fn brush_shows_every_control_and_eyedropper_only_the_hint() {
 
 #[test]
 fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() {
-    let knife = visible_controls(PanelTool::Paint(Tool::Knife));
+    let knife = PanelTool::Paint(Tool::Knife).controls();
     assert!(knife.pigments && knife.loaded && knife.size && knife.load);
     assert!(knife.plate_gap && knife.stroke_loading && knife.clean && knife.hint);
     assert!(!knife.medium && !knife.shape);
@@ -45,7 +46,7 @@ fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() 
 
 #[test]
 fn rag_shows_only_the_size() {
-    let shown = visible_controls(PanelTool::Paint(Tool::Rag));
+    let shown = PanelTool::Paint(Tool::Rag).controls();
     assert!(shown.size);
     assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
     assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
@@ -54,13 +55,13 @@ fn rag_shows_only_the_size() {
 
 #[test]
 fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
-    let knife = tool_wording(PanelTool::Paint(Tool::Knife));
+    let knife = PanelTool::Paint(Tool::Knife).wording();
     assert_eq!(knife.clean_button, "Clean Knife");
     assert_eq!(knife.loaded_title, "On the Knife");
     assert_eq!(knife.size_title, "Size");
     assert_eq!(tool_hint(PanelTool::Paint(Tool::Knife)), KNIFE_HANDLING);
     assert_eq!(
-        tool_wording(PanelTool::Paint(Tool::Brush)).clean_button,
+        PanelTool::Paint(Tool::Brush).wording().clean_button,
         "Clean Brush"
     );
     assert_eq!(
@@ -71,7 +72,7 @@ fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
 
 #[test]
 fn the_tube_shows_only_pigments_and_nozzle_size() {
-    let tube = visible_controls(PanelTool::Tube);
+    let tube = PanelTool::Tube.controls();
     assert!(tube.pigments && tube.size && tube.tool_group());
     assert!(!tube.loaded && !tube.load && !tube.medium && !tube.plate_gap);
     assert!(!tube.shape && !tube.stroke_loading && !tube.clean && !tube.hint);
@@ -79,28 +80,24 @@ fn the_tube_shows_only_pigments_and_nozzle_size() {
 
 #[test]
 fn the_tube_names_its_size_nozzle_without_a_subtitle() {
-    let tube = tool_wording(PanelTool::Tube);
+    let tube = PanelTool::Tube.wording();
     assert_eq!(tube.size_title, "Nozzle");
     assert_eq!(tube.size_subtitle, None);
 }
 
 #[test]
 fn the_tube_asks_for_a_pile_to_squeeze() {
-    assert_eq!(
-        tool_wording(PanelTool::Tube).pigments,
-        "Click to pick the tube"
-    );
+    assert_eq!(PanelTool::Tube.wording().pigments, "Click to pick the tube");
 }
 
 #[test]
 fn moving_keeps_the_panel_of_the_tool_in_hand() {
     assert_eq!(
-        panel_tool(UiTool::Move, Tool::Knife),
+        PanelTool::of_painting(UiTool::Move, Tool::Knife),
         PanelTool::Paint(Tool::Knife)
     );
-    assert_eq!(panel_tool(UiTool::Tube, Tool::Knife), PanelTool::Tube);
     assert_eq!(
-        panel_tool(UiTool::Paint(Tool::Rag), Tool::Brush),
+        PanelTool::of_painting(UiTool::Paint(Tool::Rag), Tool::Brush),
         PanelTool::Paint(Tool::Rag)
     );
 }

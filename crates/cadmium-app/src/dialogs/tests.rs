@@ -37,11 +37,6 @@ fn rag_lists_both_of_its_keys() {
 }
 
 #[test]
-fn the_tube_answers_to_six() {
-    assert_eq!(tool_accelerator(UiTool::Tube), "6");
-}
-
-#[test]
 fn zoom_in_lists_both_of_its_accelerators() {
     assert_eq!(
         action_accelerator("win.zoom-in").as_deref(),
@@ -66,4 +61,16 @@ fn listed_navigation_keys_start_the_mode_they_name() {
             "{label}"
         );
     }
+}
+
+#[test]
+fn tray_tool_accelerators_are_shifted_digits() {
+    let accelerators: Vec<_> = TrayTool::ALL
+        .into_iter()
+        .map(tray_tool_accelerator)
+        .collect();
+    assert_eq!(
+        accelerators,
+        ["<Shift>1", "<Shift>4", "<Shift>5", "<Shift>6"]
+    );
 }

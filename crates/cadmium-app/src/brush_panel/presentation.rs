@@ -1,13 +1,11 @@
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
-use cadmium_engine::stroke::Tool;
 use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
 use crate::sliders::format_param;
 use crate::state::PigmentClick;
-use crate::tools::UiTool;
-use crate::tools::panel::{CLEAN_LABEL, ToolWording, VisibleControls};
+use crate::tools::panel::{CLEAN_LABEL, PanelTool};
 
 const PERCENT: f64 = 100.0;
 const MIN_LISTED_SHARE: f32 = 0.01;
@@ -21,47 +19,8 @@ The right mouse button, or a pen button set to Pick Colour, picks a colour with 
 /// What a rack row calls a head or hair that matches no factory one.
 const CUSTOM_PART: &str = "Custom";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum PanelTool {
-    Paint(Tool),
-    Tube,
-}
-
-impl PanelTool {
-    fn ui_tool(self) -> UiTool {
-        match self {
-            PanelTool::Paint(tool) => UiTool::Paint(tool),
-            PanelTool::Tube => UiTool::Tube,
-        }
-    }
-
-    pub(super) fn label(self) -> &'static str {
-        self.ui_tool().label()
-    }
-
-    pub(super) fn holds_knife(self) -> bool {
-        matches!(self, PanelTool::Paint(tool) if tool.profile().holds_on_blade())
-    }
-}
-
-pub(super) fn panel_tool(ui_tool: UiTool, tool_in_hand: Tool) -> PanelTool {
-    match ui_tool {
-        UiTool::Paint(tool) => PanelTool::Paint(tool),
-        UiTool::Move => PanelTool::Paint(tool_in_hand),
-        UiTool::Tube => PanelTool::Tube,
-    }
-}
-
-pub(super) fn tool_wording(tool: PanelTool) -> ToolWording {
-    tool.ui_tool().profile().wording
-}
-
 pub(super) fn tool_hint(tool: PanelTool) -> &'static str {
-    tool.ui_tool().handling().unwrap_or(EYEDROPPER_HINT)
-}
-
-pub(super) fn visible_controls(tool: PanelTool) -> VisibleControls {
-    tool.ui_tool().profile().controls
+    tool.handling().unwrap_or(EYEDROPPER_HINT)
 }
 
 pub(super) fn pile_is_highlighted(

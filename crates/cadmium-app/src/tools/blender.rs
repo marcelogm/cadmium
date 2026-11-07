@@ -11,7 +11,6 @@ pub(super) const BLENDER: UiToolProfile = UiToolProfile {
     tooltip: "Blender (3)",
     keys: &[gdk::Key::_3],
     keypad_keys: &[gdk::Key::KP_3],
-    on_tray: Press::Stroke(Tool::Blender),
     on_painting: Press::Stroke(Tool::Blender),
     controls: VisibleControls {
         size: true,

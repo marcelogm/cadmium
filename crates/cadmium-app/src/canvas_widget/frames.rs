@@ -1,4 +1,3 @@
-use cadmium_engine::surface::Surface;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
@@ -7,7 +6,9 @@ use super::CadmiumCanvas;
 use crate::handlers::{announce_gpu_loss_once, run_handlers};
 use crate::presenter::FramePresenter;
 use crate::state::AppState;
+use crate::state::stroking_or_busy;
 use crate::surface_scale::viewport_px;
+use crate::view::auto_fit::update_auto_fit;
 
 impl CadmiumCanvas {
     pub fn queue_present(&self) {
@@ -42,7 +43,6 @@ impl CadmiumCanvas {
             || state.session.has_pending_work()
             || state.brush_measure_due()
             || state.session.bristles_settling(state.now_ms())
-            || state.holds_on(Surface::Painting)
             || !presenter.matches_size(width_px, height_px)
     }
 
@@ -68,7 +68,8 @@ impl CadmiumCanvas {
     }
 
     fn present_if_needed(&self) {
-        if self.with_auto_fit(|fit| fit.on_frame(|| self.stroking())) {
+        let stroking = || stroking_or_busy(self.imp().state.get());
+        if update_auto_fit(&self.imp().auto_fit, |fit| fit.on_frame(stroking)) {
             self.zoom_fit();
         }
         let presented = self.present_texture();

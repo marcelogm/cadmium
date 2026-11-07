@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::f64::consts::{PI, TAU};
 
 use gtk::gdk;
@@ -139,6 +140,38 @@ pub(crate) fn held_mode(space_held: bool, modifiers: gdk::ModifierType) -> Optio
         Some(NavMode::Rotate)
     } else {
         space_held.then_some(NavMode::Pan)
+    }
+}
+
+/// The navigation keys the window holds for a surface, and the mode they have ready.
+#[derive(Debug, Default)]
+pub(crate) struct HeldKeys {
+    space_held: Cell<bool>,
+    mode: Cell<Option<NavMode>>,
+}
+
+impl HeldKeys {
+    pub(crate) fn space_held(&self) -> bool {
+        self.space_held.get()
+    }
+
+    /// Records which keys are held (Space, and Ctrl or Shift among `modifiers`). When the
+    /// mode they have ready changes, the cursor to show: the mode's, or `idle_cursor`.
+    pub(crate) fn set(
+        &self,
+        space_held: bool,
+        modifiers: gdk::ModifierType,
+        idle_cursor: &'static str,
+    ) -> Option<&'static str> {
+        self.space_held.set(space_held);
+        let mode = held_mode(space_held, modifiers);
+        (self.mode.replace(mode) != mode).then(|| mode.map_or(idle_cursor, NavMode::cursor_name))
+    }
+
+    /// Whether the held keys, or `modifiers` from a contact's event, have the primary contact
+    /// navigate instead of paint.
+    pub(crate) fn holds_navigation(&self, modifiers: gdk::ModifierType) -> bool {
+        held_mode(self.space_held(), modifiers).is_some()
     }
 }
 

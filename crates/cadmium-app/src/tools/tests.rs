@@ -12,15 +12,7 @@ fn toggle_names_match_the_header_tool_group() {
     let names: Vec<_> = UiTool::ALL.iter().map(|tool| tool.name()).collect();
     assert_eq!(
         names,
-        [
-            "move",
-            "brush",
-            "knife",
-            "blender",
-            "rag",
-            "eyedropper",
-            "tube"
-        ]
+        ["move", "brush", "knife", "blender", "rag", "eyedropper"]
     );
 }
 
@@ -39,9 +31,11 @@ fn every_toggle_tooltip_names_the_tool_and_its_first_key() {
 }
 
 #[test]
-fn the_tube_is_not_an_engine_tool() {
-    assert_eq!(UiTool::from_name(UiTool::Tube.name()), Some(UiTool::Tube));
-    assert_eq!(UiTool::Tube.label(), "Tube");
+fn the_tube_is_not_a_painting_tool() {
+    assert_eq!(UiTool::from_name("tube"), None);
+    for tool in UiTool::ALL {
+        assert_ne!(tool.profile().on_painting, Press::Squeeze, "{tool:?}");
+    }
 }
 
 #[test]
@@ -65,34 +59,20 @@ fn app_starts_with_the_brush() {
 }
 
 #[test]
-fn a_paint_tool_strokes_and_loads_as_itself() {
-    let presses = UiTool::ALL.into_iter().flat_map(|tool| {
-        let profile = tool.profile();
-        [(tool, profile.on_tray), (tool, profile.on_painting)]
-    });
-    for (tool, press) in presses {
-        if let Press::Stroke(pressed) | Press::LoadFromPile(pressed) = press {
-            assert_eq!(UiTool::Paint(pressed), tool);
-        }
+fn no_painting_tool_loads_on_the_painting() {
+    for tool in UiTool::ALL {
+        assert!(
+            !matches!(tool.profile().on_painting, Press::LoadFromPile(_)),
+            "{tool:?}"
+        );
     }
 }
 
 #[test]
-fn only_tools_that_hold_paint_load_and_only_from_the_tray() {
+fn a_paint_tool_strokes_as_itself() {
     for tool in UiTool::ALL {
-        let holds_paint = match tool {
-            UiTool::Paint(painted) => painted.profile().holder.is_some(),
-            UiTool::Move | UiTool::Tube => false,
-        };
-        let profile = tool.profile();
-        assert_eq!(
-            matches!(profile.on_tray, Press::LoadFromPile(_)),
-            holds_paint,
-            "{tool:?}"
-        );
-        assert!(
-            !matches!(profile.on_painting, Press::LoadFromPile(_)),
-            "{tool:?}"
-        );
+        if let Press::Stroke(pressed) = tool.profile().on_painting {
+            assert_eq!(UiTool::Paint(pressed), tool);
+        }
     }
 }

@@ -8,18 +8,17 @@ use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
 use crate::handlers::run_handlers;
-use crate::input::PaintSurfaceWidget;
-use crate::input::nav_drag::held_mode;
+use crate::input::{NavigableSurface, PaintSurfaceWidget};
 use crate::presenter::FramePresenter;
 use crate::state::SharedState;
-use crate::surface_scale::SurfaceScaleWatch;
+use crate::surface_scale::{SurfaceScaleWatch, widget_centre};
+use crate::view::ViewStep;
 
 const CANVAS_CURSOR: &str = "crosshair";
 
 type CanvasHandler = Box<dyn Fn(&CadmiumCanvas)>;
 type PickHandler = Box<dyn Fn(&CadmiumCanvas, bool)>;
 
-mod auto_fit;
 mod frames;
 mod imp;
 mod zoom;
@@ -50,15 +49,6 @@ impl CadmiumCanvas {
             .get()
             .expect("canvas is created with its state")
             .clone()
-    }
-
-    /// Whether a stroke is running; a borrowed or missing state counts as one.
-    fn stroking(&self) -> bool {
-        self.imp()
-            .state
-            .get()
-            .and_then(|state| state.try_borrow().ok().map(|state| state.is_stroking()))
-            .unwrap_or(true)
     }
 
     pub fn presented_frames(&self) -> u64 {
@@ -163,7 +153,25 @@ impl PaintSurfaceWidget for CadmiumCanvas {
     }
 
     fn holds_navigation(&self, modifiers: gdk::ModifierType) -> bool {
-        held_mode(self.space_held(), modifiers).is_some()
+        self.imp().held_keys.holds_navigation(modifiers)
+    }
+}
+
+impl NavigableSurface for CadmiumCanvas {
+    fn space_held(&self) -> bool {
+        CadmiumCanvas::space_held(self)
+    }
+
+    fn widget_centre(&self) -> (f64, f64) {
+        widget_centre(self)
+    }
+
+    fn pointer(&self) -> Option<(f64, f64)> {
+        self.hover()
+    }
+
+    fn apply_view_step(&self, step: ViewStep) {
+        CadmiumCanvas::apply_view_step(self, step);
     }
 }
 

@@ -1,9 +1,20 @@
 use super::*;
 use crate::state::test_support::{
     WHITE_SLOT, brush_totals, painting_state, present_one_frame, present_one_tray_frame, sample_at,
-    settle_both_surfaces, squeeze_blob_on_tray, wet_volume,
+    settle_both_surfaces, squeeze_blob_on_tray,
 };
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
+use cadmium_engine::present::ViewTransform;
+
+/// A tray view at `zoom` device px per tray px.
+fn zoomed(zoom: f32) -> ViewTransform {
+    ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom,
+        rotation: 0.0,
+    }
+}
 
 #[test]
 fn load_is_cancelled_past_the_threshold() {
@@ -14,22 +25,35 @@ fn load_is_cancelled_past_the_threshold() {
 
 #[test]
 fn the_cancel_distance_is_measured_on_screen() {
-    for (drag, cancels) in [(10.0, false), (20.0, true)] {
+    for ((zoom, scale), (drag, cancels)) in [
+        ((0.25, 1.0), (10.0, false)),
+        ((0.25, 1.0), (20.0, true)),
+        // On a 2x screen the same zoom in widget px is twice the device zoom.
+        ((0.5, 2.0), (10.0, false)),
+        ((0.5, 2.0), (20.0, true)),
+    ] {
         let mut state = painting_state();
-        state.set_tray_zoom(0.25);
+        state.set_tray_view(zoomed(zoom), scale);
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         state.motion(&[sample_at(300.0 + drag, 300.0, 0.9)]);
-        assert_eq!(!state.holds_on(Surface::Tray), cancels, "{drag}");
+        assert_eq!(
+            !state.holds_on(Surface::Tray),
+            cancels,
+            "{zoom} {scale} {drag}"
+        );
         state.release();
     }
 }
 
 #[test]
-fn a_tray_zoom_that_is_not_a_scale_is_ignored() {
+fn a_tray_view_that_is_not_a_scale_is_ignored() {
     let mut state = painting_state();
     for zoom in [0.0, -1.0, f32::NAN, f32::INFINITY] {
-        state.set_tray_zoom(zoom);
+        state.set_tray_view(zoomed(zoom), 1.0);
+    }
+    for scale in [0.0, -1.0, f64::NAN] {
+        state.set_tray_view(zoomed(0.25), scale);
     }
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
@@ -41,7 +65,7 @@ fn a_tray_zoom_that_is_not_a_scale_is_ignored() {
 #[test]
 fn a_hold_step_of_no_real_time_squeezes_nothing() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(f32::NAN);
     state.release();
@@ -53,10 +77,10 @@ fn a_hold_step_of_no_real_time_squeezes_nothing() {
 }
 
 #[test]
-fn squeezing_off_the_canvas_is_not_an_edit() {
+fn squeezing_off_the_tray_is_not_an_edit() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
-    state.press(Surface::Painting, sample_at(-1000.0, -1000.0, 1.0), false);
+    state.set_tray_tool(TrayTool::Tube);
+    state.press(Surface::Tray, sample_at(-1000.0, -1000.0, 1.0), false);
     state.advance_hold(MAX_HOLD_STEP_SECONDS);
     state.release();
     assert!(!state.has_unsaved_edits());
@@ -69,27 +93,9 @@ fn tray_volume(state: &AppState) -> f64 {
 }
 
 #[test]
-fn a_hold_on_the_painting_advances_only_with_painting_frames() {
-    let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
-    state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
-    for _ in 0..2 {
-        present_one_tray_frame(&mut state);
-        std::thread::sleep(FRAME_GAP);
-    }
-    assert_eq!(wet_volume(&state), 0.0);
-    for _ in 0..2 {
-        present_one_frame(&mut state);
-        std::thread::sleep(FRAME_GAP);
-    }
-    state.release();
-    assert!(wet_volume(&state) > 0.0);
-}
-
-#[test]
 fn a_hold_on_the_tray_advances_only_with_tray_frames() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     for _ in 0..2 {
         present_one_frame(&mut state);
@@ -156,7 +162,7 @@ fn a_load_that_takes_nothing_is_not_an_edit() {
 fn a_tray_hold_leaves_the_painting_with_no_pending_work() {
     let mut state = painting_state();
     settle_both_surfaces(&mut state);
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(MAX_HOLD_STEP_SECONDS);
     assert!(state.session.tray_has_pending_work());
@@ -244,40 +250,40 @@ fn a_stroke_grown_from_a_load_keeps_what_was_loaded() {
 fn the_tube_squeezes_its_own_pigment_and_leaves_the_brush_alone() {
     let mut state = painting_state();
     state.clean_brush();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.set_tube_slot(1);
-    state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
+    state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(0.2);
     state.release();
-    let totals = state.session.canvas.wet_totals(&state.gpu).unwrap();
+    let totals = state.session.tray.wet_totals(&state.gpu).unwrap();
     assert!(totals.pigment[1] > 0.0 && totals.pigment[0] == 0.0);
     assert!(state.brush_is_clean());
     assert!(state.has_unsaved_edits());
 }
 
-fn painting_height_at(state: &AppState, x: usize, y: usize) -> f32 {
+fn tray_height_at(state: &AppState, x: usize, y: usize) -> f32 {
     let volume = state
         .session
-        .canvas
+        .tray
         .read_f32(&state.gpu, cadmium_engine::canvas::StateTexture::WetVol)
         .unwrap();
-    volume[y * state.session.canvas.spec.width as usize + x]
+    volume[y * state.session.tray.spec.width as usize + x]
 }
 
 #[test]
-fn a_tube_on_a_zoomed_out_painting_keeps_growing_through_a_trembling_hand() {
+fn a_tube_on_a_zoomed_out_tray_keeps_growing_through_a_trembling_hand() {
     let mut state = painting_state();
     state.set_brush_size(10.0);
-    state.view.zoom = 0.25;
-    state.set_ui_tool(UiTool::Tube);
-    let one_screen_px = 1.0 / f64::from(state.view.zoom);
+    state.set_tray_view(zoomed(0.25), 1.0);
+    state.set_tray_tool(TrayTool::Tube);
+    let one_screen_px = 1.0 / f64::from(state.tray_screen_zoom());
     let shaken = |frame: usize| {
         let shake = if frame.is_multiple_of(2) {
             one_screen_px
         } else {
             -one_screen_px
         };
-        sample_at(200.5 + shake, 200.5, 0.5)
+        sample_at(300.5 + shake, 300.5, 0.5)
     };
     let tremble = |state: &mut AppState, frames: std::ops::Range<usize>| {
         for frame in frames {
@@ -285,11 +291,11 @@ fn a_tube_on_a_zoomed_out_painting_keeps_growing_through_a_trembling_hand() {
             state.advance_hold(0.05);
         }
     };
-    state.press(Surface::Painting, sample_at(200.5, 200.5, 0.5), false);
+    state.press(Surface::Tray, sample_at(300.5, 300.5, 0.5), false);
     tremble(&mut state, 0..10);
-    let early = painting_height_at(&state, 200, 200);
+    let early = tray_height_at(&state, 300, 300);
     tremble(&mut state, 10..30);
-    let later = painting_height_at(&state, 200, 200);
+    let later = tray_height_at(&state, 300, 300);
     state.release();
     assert!(later > early, "{early} -> {later}");
 }
@@ -299,7 +305,7 @@ fn a_hold_step_never_lasts_longer_than_a_tenth_of_a_second() {
     let mut once = painting_state();
     let mut long = painting_state();
     for state in [&mut once, &mut long] {
-        state.set_ui_tool(UiTool::Tube);
+        state.set_tray_tool(TrayTool::Tube);
         state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     }
     once.advance_hold(MAX_HOLD_STEP_SECONDS);

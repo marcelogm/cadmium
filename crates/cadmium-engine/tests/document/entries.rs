@@ -5,6 +5,7 @@ use cadmium_engine::{
     canvas::{CanvasSpec, Primer, Weave},
     document::{DocumentError, DocumentSnapshot},
     pigments::PigmentDb,
+    surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, TRAY_HEIGHT, TRAY_WIDTH},
 };
 
 use crate::{
@@ -100,6 +101,32 @@ impl Entries {
             .edit_manifest(|m| m["format"] = 2.into())
     }
 
+    /// The saved entries as format 3 wrote them: the tray cut down to the 768×512 one it had,
+    /// keeping the middle of the current tray.
+    pub(super) fn saved_as_format_3(path: &Path) -> Entries {
+        let mut entries = Entries::saved(path);
+        for (name, bytes) in entries
+            .0
+            .iter_mut()
+            .filter(|(name, _)| name.starts_with(TRAY_PREFIX))
+        {
+            let raw = zstd::decode_all(bytes.as_slice()).unwrap();
+            let cut = middle_of_tray(&raw, name);
+            *bytes = zstd::encode_all(cut.as_slice(), 3).unwrap();
+        }
+        entries.edit_manifest(|m| m["format"] = 3.into())
+    }
+
+    pub(super) fn manifest(&self) -> serde_json::Value {
+        let bytes = &self
+            .0
+            .iter()
+            .find(|(name, _)| name == "manifest.json")
+            .unwrap()
+            .1;
+        serde_json::from_slice(bytes).unwrap()
+    }
+
     fn without_tray(mut self) -> Entries {
         self.0.retain(|(entry, _)| !entry.starts_with(TRAY_PREFIX));
         self
@@ -120,6 +147,22 @@ impl Entries {
         }
         writer.finish().unwrap();
     }
+}
+
+fn middle_of_tray(raw: &[u8], name: &str) -> Vec<u8> {
+    let (width, height) = (TRAY_WIDTH as usize, TRAY_HEIGHT as usize);
+    let texels = width * height;
+    assert_eq!(raw.len() % texels, 0, "{name}");
+    let texel = raw.len() / texels;
+    let (old_w, old_h) = (LEGACY_TRAY_WIDTH as usize, LEGACY_TRAY_HEIGHT as usize);
+    let x0 = (width - old_w) / 2;
+    let y0 = (height - old_h) / 2;
+    let mut cut = Vec::with_capacity(old_w * old_h * texel);
+    for y in y0..y0 + old_h {
+        let start = (y * width + x0) * texel;
+        cut.extend_from_slice(&raw[start..start + old_w * texel]);
+    }
+    cut
 }
 
 pub(super) fn read_entries(entries: Entries) -> Result<DocumentSnapshot, DocumentError> {

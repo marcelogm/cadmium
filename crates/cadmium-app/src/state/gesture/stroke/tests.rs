@@ -7,13 +7,13 @@ use crate::state::test_support::{
     finish_painting, holding_the_knife, knife_totals, paint_stroke, painting_state,
     present_one_tray_frame, reserve_volume, row_samples, sample_at, settle_both_surfaces,
 };
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 
 #[test]
 fn a_tray_stroke_leaves_the_painting_with_no_pending_work() {
     let mut state = painting_state();
     settle_both_surfaces(&mut state);
-    state.set_ui_tool(UiTool::Paint(Tool::Blender));
+    state.set_tray_tool(TrayTool::Blender);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
     state.motion(&[sample_at(340.0, 300.0, 0.9)]);
     assert!(state.session.tray_has_pending_work());

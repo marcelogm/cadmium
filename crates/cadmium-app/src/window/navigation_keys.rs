@@ -60,7 +60,7 @@ impl CadmiumWindow {
     /// auto-repeats until the key is released.
     fn space_pressed(&self, modifiers: gdk::ModifierType) -> glib::Propagation {
         let claimed = self.imp().space_claimed.get();
-        match space_press(claimed, self.space_navigates()) {
+        match space_press(claimed, self.window_keys_are_free()) {
             SpacePress::Pass => return glib::Propagation::Proceed,
             SpacePress::Hold => self.show_held_keys(true, modifiers),
             SpacePress::Release => self.show_held_keys(false, gdk::ModifierType::empty()),
@@ -77,20 +77,25 @@ impl CadmiumWindow {
             .is_some_and(|canvas| canvas.space_held())
     }
 
-    /// Tells the canvas which navigation keys are held; while a dialog is up, none are.
+    /// Tells the canvas and the tray which navigation keys are held; while a dialog is up,
+    /// none are.
     fn show_held_keys(&self, space_held: bool, modifiers: gdk::ModifierType) {
-        let Some(canvas) = self.imp().canvas.get() else {
-            return;
-        };
-        if self.visible_dialog().is_some() {
-            canvas.set_held_keys(false, gdk::ModifierType::empty());
+        let (space_held, modifiers) = if self.visible_dialog().is_some() {
+            (false, gdk::ModifierType::empty())
         } else {
+            (space_held, modifiers)
+        };
+        if let Some(canvas) = self.imp().canvas.get() {
             canvas.set_held_keys(space_held, modifiers);
+        }
+        if let Some(tray) = self.imp().tray.get() {
+            tray.set_held_keys(space_held, modifiers);
         }
     }
 
-    /// Whether Space is free for navigation: no dialog is up and no text field has focus.
-    fn space_navigates(&self) -> bool {
+    /// Whether the window may take keys for itself (Space for navigation, Shift+digit for
+    /// the tray): no dialog is up and no text field has focus.
+    pub(super) fn window_keys_are_free(&self) -> bool {
         let typing = gtk::prelude::RootExt::focus(self)
             .is_some_and(|focus| focus.dynamic_cast_ref::<gtk::Editable>().is_some());
         self.visible_dialog().is_none() && !typing
