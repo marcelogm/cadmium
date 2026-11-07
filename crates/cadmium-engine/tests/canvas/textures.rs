@@ -74,7 +74,10 @@ fn state_texture_formats_match_the_layout() {
 #[test]
 fn graphite_is_paint_state_kept_as_one_float_per_texel() {
     assert!(StateTexture::PAINT_STATE.contains(&StateTexture::Graphite));
-    assert_eq!(StateTexture::Graphite.format(), wgpu::TextureFormat::R32Float);
+    assert_eq!(
+        StateTexture::Graphite.format(),
+        wgpu::TextureFormat::R32Float
+    );
     assert_eq!(StateTexture::Graphite.label(), "graphite");
 }
 

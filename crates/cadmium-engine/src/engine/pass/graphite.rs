@@ -5,9 +5,21 @@ use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
 const SURFACE_TEXTURES: [(u32, StateTexture, wgpu::StorageTextureAccess); 3] = [
-    (1, StateTexture::Graphite, wgpu::StorageTextureAccess::ReadWrite),
-    (2, StateTexture::DryHeight, wgpu::StorageTextureAccess::ReadOnly),
-    (3, StateTexture::WetVol, wgpu::StorageTextureAccess::ReadOnly),
+    (
+        1,
+        StateTexture::Graphite,
+        wgpu::StorageTextureAccess::ReadWrite,
+    ),
+    (
+        2,
+        StateTexture::DryHeight,
+        wgpu::StorageTextureAccess::ReadOnly,
+    ),
+    (
+        3,
+        StateTexture::WetVol,
+        wgpu::StorageTextureAccess::ReadOnly,
+    ),
 ];
 
 pub(super) struct GraphitePass {

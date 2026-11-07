@@ -9,13 +9,12 @@ use cadmium_engine::{
 };
 
 use crate::entries::{Entries, read_entries};
+use crate::support::session;
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT,
-    FORMAT_1_STATE_ENTRIES, TempDir,
-    painted_session, painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
-    sketch_on_the_painting,
+    FORMAT_1_STATE_ENTRIES, TempDir, painted_session, painted_session_with_stroke, painted_spec,
+    sample, session_with_ended_stroke, sketch_on_the_painting,
 };
-use crate::support::session;
 
 const LARGE_WIDTH: u32 = 2048;
 const LARGE_HEIGHT: u32 = 1536;
@@ -76,7 +75,10 @@ fn saving_keeps_the_graphite_sketch() {
     let path = dir.file("graphite.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
     let opened = document::open(&gpu, &path).unwrap();
-    let reopened = opened.canvas.read_f32(&gpu, StateTexture::Graphite).unwrap();
+    let reopened = opened
+        .canvas
+        .read_f32(&gpu, StateTexture::Graphite)
+        .unwrap();
     assert_eq!(reopened, sketch);
 }
 

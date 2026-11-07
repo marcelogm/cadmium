@@ -120,7 +120,10 @@ fn graphite_shows_through_a_dried_glaze() {
     let sketched = dried_glaze_reflectance(&gpu, true);
     let clean = dried_glaze_reflectance(&gpu, false);
     for (band, (over_graphite, over_canvas)) in sketched.iter().zip(&clean).enumerate() {
-        assert!(over_graphite <= over_canvas, "band {band}: {over_graphite} vs {over_canvas}");
+        assert!(
+            over_graphite <= over_canvas,
+            "band {band}: {over_graphite} vs {over_canvas}"
+        );
     }
     let sketched_total: f32 = sketched.iter().sum();
     let clean_total: f32 = clean.iter().sum();
@@ -148,7 +151,11 @@ fn shown_under_wet_paint(
     paint(gpu, &mut s);
     assert!(s.canvas.read_f32(gpu, StateTexture::WetVol).unwrap()[centre()] > 0.0);
     frame(gpu, &mut s);
-    rgb_sum_at(&presented_rgba(gpu, &s, WIDTH, HEIGHT), CENTRE_X, SKETCH_ROW)
+    rgb_sum_at(
+        &presented_rgba(gpu, &s, WIDTH, HEIGHT),
+        CENTRE_X,
+        SKETCH_ROW,
+    )
 }
 
 fn thick_white(gpu: &GpuContext, s: &mut PaintSession) {
@@ -160,7 +167,13 @@ fn thick_white(gpu: &GpuContext, s: &mut PaintSession) {
 }
 
 fn thin_glaze(gpu: &GpuContext, s: &mut PaintSession) {
-    let glaze = line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, GLAZE_PRESSURE, GLAZE_TILT_DEG);
+    let glaze = line(
+        SKETCH_ROW as f64,
+        STROKE_FROM,
+        STROKE_TO,
+        GLAZE_PRESSURE,
+        GLAZE_TILT_DEG,
+    );
     drag(gpu, s, &glaze);
 }
 
@@ -190,7 +203,10 @@ fn graphite_shows_through_a_wet_glaze() {
     let gpu = GpuContext::new().unwrap();
     let over_graphite = shown_under_wet_paint(&gpu, true, thin_glaze);
     let over_canvas = shown_under_wet_paint(&gpu, false, thin_glaze);
-    assert!(over_graphite < over_canvas, "{over_graphite} vs {over_canvas}");
+    assert!(
+        over_graphite < over_canvas,
+        "{over_graphite} vs {over_canvas}"
+    );
 }
 
 #[test]
@@ -207,7 +223,13 @@ fn undoing_a_dry_brings_the_graphite_back() {
 
 fn pencil_line(gpu: &GpuContext, s: &mut PaintSession, pressure: f32) {
     s.brush.tool = Tool::Pencil;
-    let samples = line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, pressure, PENCIL_TILT_DEG);
+    let samples = line(
+        SKETCH_ROW as f64,
+        STROKE_FROM,
+        STROKE_TO,
+        pressure,
+        PENCIL_TILT_DEG,
+    );
     drag(gpu, s, &samples);
 }
 
@@ -233,7 +255,10 @@ fn the_pencil_draws_graphite_and_no_paint() {
     pencil_line(&gpu, &mut s, FIRM_PRESSURE);
     assert!(graphite(&gpu, &s)[centre()] > 0.0);
     assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
-    assert_eq!(s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap(), relief);
+    assert_eq!(
+        s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap(),
+        relief
+    );
 }
 
 #[test]
@@ -262,7 +287,10 @@ fn a_light_touch_catches_the_tooth_of_the_linen() {
         band.iter().partition(|&&i| heights[i] > median);
     let on = |texels: &[usize]| mean(&texels.iter().map(|&i| density[i]).collect::<Vec<_>>());
     let (peak_mean, valley_mean) = (on(&peaks), on(&valleys));
-    assert!(peak_mean > valley_mean * TOOTH_RATIO, "peaks {peak_mean} vs valleys {valley_mean}");
+    assert!(
+        peak_mean > valley_mean * TOOTH_RATIO,
+        "peaks {peak_mean} vs valleys {valley_mean}"
+    );
 }
 
 #[test]
@@ -276,7 +304,17 @@ fn undo_takes_back_a_pencil_line() {
 
 fn rag_line(gpu: &GpuContext, s: &mut PaintSession) {
     s.brush.tool = Tool::Rag;
-    drag(gpu, s, &line(SKETCH_ROW as f64, STROKE_FROM, STROKE_TO, FIRM_PRESSURE, PENCIL_TILT_DEG));
+    drag(
+        gpu,
+        s,
+        &line(
+            SKETCH_ROW as f64,
+            STROKE_FROM,
+            STROKE_TO,
+            FIRM_PRESSURE,
+            PENCIL_TILT_DEG,
+        ),
+    );
 }
 
 #[test]
