@@ -234,7 +234,7 @@ impl WetOilEngine {
             ferrule_press_share: params.get("ferrule_press_share"),
             diffusion: spreading.diffusion,
             blade_gap_um: blade_gap_um(params, dab.pressure, dab.altitude),
-            rag_strength: params.get("rag_strength"),
+            tool_strength: params.get(profile.strength_param),
             rest_follow: profile.rest_follow,
             blade_capacity_um: blade_capacity_um(dab.altitude),
             blade_spill_share: KNIFE_SPILL_SHARE,

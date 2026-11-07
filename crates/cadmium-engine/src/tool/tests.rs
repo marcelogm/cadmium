@@ -1,4 +1,5 @@
 use super::{BLADE_MODES, DabStage, Holder, TOOL_MODE_MIXING_KNIFE};
+use crate::params::SimParams;
 use crate::stroke::Tool;
 
 #[test]
@@ -66,6 +67,17 @@ fn only_the_face_holder_works_the_face() {
             profile.works_the_face(),
             profile.holds_on_face(),
             "{tool:?}"
+        );
+    }
+}
+
+#[test]
+fn every_tool_reads_its_strength_from_a_known_param() {
+    for tool in Tool::ALL {
+        let key = tool.profile().strength_param;
+        assert!(
+            SimParams::specs().iter().any(|spec| spec.key == key),
+            "{tool:?}: {key}"
         );
     }
 }

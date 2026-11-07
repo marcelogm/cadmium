@@ -18,6 +18,7 @@ const CONTACT_REST_FOLLOW: f32 = 0.25;
 /// The shader modes whose dabs are a flat rectangular blade rather than a tuft;
 /// the WGSL `is_blade_mode` is generated from this list.
 pub(crate) const BLADE_MODES: [u32; 2] = [TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE];
+const RAG_STRENGTH_PARAM: &str = "rag_strength";
 
 #[derive(Debug)]
 pub struct ToolProfile {
@@ -27,6 +28,8 @@ pub struct ToolProfile {
     pub(crate) footprint: Option<FootprintShape>,
     pub(crate) rest_follow: f32,
     pub(crate) dab_stages: &'static [DabStage],
+    /// Param read into the dab's tool strength; only the rag and pencil shaders use it.
+    pub(crate) strength_param: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

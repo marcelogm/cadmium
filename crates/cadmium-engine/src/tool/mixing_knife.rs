@@ -1,6 +1,6 @@
 use super::{
-    CONTACT_REST_FOLLOW, DabStage, FootprintShape, Holder, Spreading, TOOL_MODE_MIXING_KNIFE,
-    ToolProfile,
+    CONTACT_REST_FOLLOW, DabStage, FootprintShape, Holder, RAG_STRENGTH_PARAM, Spreading,
+    TOOL_MODE_MIXING_KNIFE, ToolProfile,
 };
 
 /// Lighter than the painting knife's drag: the face, not the push, moves the paint.
@@ -14,4 +14,5 @@ pub(super) const MIXING_KNIFE: ToolProfile = ToolProfile {
     footprint: Some(FootprintShape::Blade),
     rest_follow: CONTACT_REST_FOLLOW,
     dab_stages: &[DabStage::Spread, DabStage::Face],
+    strength_param: RAG_STRENGTH_PARAM,
 };

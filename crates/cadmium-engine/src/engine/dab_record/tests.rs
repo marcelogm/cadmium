@@ -79,7 +79,7 @@ const RUST_DAB_OFFSETS: [(&str, usize); 55] = [
     field!(blade_gap_um),
     field!(spread_origin),
     field!(spread_size),
-    field!(rag_strength),
+    field!(tool_strength),
     field!(rest_follow),
     field!(blade_capacity_um),
     field!(blade_spill_share),
