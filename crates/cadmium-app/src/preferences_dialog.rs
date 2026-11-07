@@ -43,9 +43,11 @@ pub fn preferences_dialog(state: &SharedState) -> adw::PreferencesDialog {
             state,
             #[weak_allow_none]
             dialog,
-            move |curve| save(&state, dialog.as_ref(), |settings| settings
-                .pressure_curve =
-                curve)
+            move |curve| {
+                save(&state, dialog.as_ref(), |settings| {
+                    settings.pressure_curve = curve;
+                });
+            }
         ),
     ));
     dialog.add(&page);

@@ -76,8 +76,8 @@ fn attach_click(area: &gtk::DrawingArea, editing: &Rc<Editing>) -> gtk::GestureC
             let plot = plot_of(&area);
             match presses {
                 1 => {
-                    // Only a press that took a point claims the touch; one on nothing leaves
-                    // it to the page to scroll.
+                    // A press that took or added a point claims the touch; one with no room
+                    // for a point leaves it to the page to scroll.
                     if hold(&editing, plot, (x, y)) {
                         click.set_state(gtk::EventSequenceState::Claimed);
                     }
