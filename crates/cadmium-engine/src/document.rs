@@ -182,7 +182,8 @@ impl DocumentSnapshot {
         upload_states_into(gpu, &mut session.canvas, self.states, painting);
         if let Some(tray) = self.tray {
             let middle = middle_block(&session.tray.spec, &tray.spec);
-            let states = tray.states.into_iter().map(on_todays_tray_ground).collect();
+            let mut states = tray.states;
+            on_todays_tray_ground(&mut states);
             upload_states_into(gpu, &mut session.tray, states, middle);
         }
     }
@@ -224,11 +225,20 @@ fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, 
     })
 }
 
-/// A saved tray state with its bare ground moved to today's (see `tray_ground`).
-fn on_todays_tray_ground(state: StateBytes) -> StateBytes {
-    let mut bytes = state.bytes;
-    tray_ground::rebase_tray_ground(state.which, &mut bytes, TRAY_REFLECTANCE);
-    StateBytes { bytes, ..state }
+/// Moves a saved tray's bare ground to today's (see `tray_ground`).
+fn on_todays_tray_ground(states: &mut [StateBytes]) {
+    let mut low = None;
+    let mut high = None;
+    for state in states.iter_mut() {
+        match state.which {
+            StateTexture::DryRefl0 => low = Some(&mut state.bytes),
+            StateTexture::DryRefl1 => high = Some(&mut state.bytes),
+            _ => {}
+        }
+    }
+    if let (Some(low), Some(high)) = (low, high) {
+        tray_ground::rebase_tray_ground(low, high, TRAY_REFLECTANCE);
+    }
 }
 
 /// The block a `saved` tray takes in the middle of a `full` one.

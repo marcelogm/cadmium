@@ -9,25 +9,26 @@ fn texel(bands: [f32; 4]) -> Vec<u8> {
 
 #[test]
 fn bare_texels_of_an_old_tray_move_onto_todays_ground() {
-    let mut raw = [texel([0.75; 4]), texel([0.75; 4])].concat();
-    rebase_tray_ground(StateTexture::DryRefl0, &mut raw, 0.4);
-    assert_eq!(raw, [texel([0.4; 4]), texel([0.4; 4])].concat());
+    let old = [texel([0.75; 4]), texel([0.75; 4])].concat();
+    let (mut low, mut high) = (old.clone(), old);
+    rebase_tray_ground(&mut low, &mut high, 0.4);
+    let today = [texel([0.4; 4]), texel([0.4; 4])].concat();
+    assert_eq!((low, high), (today.clone(), today));
 }
 
 #[test]
-fn dried_paint_and_other_states_keep_what_they_hold() {
-    let paint = texel([0.75, 0.2, 0.75, 0.75]);
-    let mut raw = paint.clone();
-    rebase_tray_ground(StateTexture::DryRefl1, &mut raw, 0.4);
-    assert_eq!(raw, paint);
-    let mut volume = texel([0.75; 4]);
-    rebase_tray_ground(StateTexture::WetPig0, &mut volume, 0.4);
-    assert_eq!(volume, texel([0.75; 4]));
+fn a_texel_is_ground_only_when_all_eight_bands_are() {
+    // Dried paint that happens to show 0.75 in its four lower bands keeps them.
+    let mut low = texel([0.75; 4]);
+    let mut high = texel([0.75, 0.2, 0.75, 0.75]);
+    let (low_before, high_before) = (low.clone(), high.clone());
+    rebase_tray_ground(&mut low, &mut high, 0.4);
+    assert_eq!((low, high), (low_before, high_before));
 }
 
 #[test]
 fn a_tray_on_todays_ground_is_left_alone() {
-    let mut raw = texel([0.4; 4]);
-    rebase_tray_ground(StateTexture::DryRefl0, &mut raw, 0.4);
-    assert_eq!(raw, texel([0.4; 4]));
+    let (mut low, mut high) = (texel([0.4; 4]), texel([0.4; 4]));
+    rebase_tray_ground(&mut low, &mut high, 0.4);
+    assert_eq!((low, high), (texel([0.4; 4]), texel([0.4; 4])));
 }

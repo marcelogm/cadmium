@@ -275,3 +275,18 @@ fn a_settled_view_has_a_sane_zoom_and_rotation() {
     assert!((f64::from(settled.rotation) - 0.71681).abs() < TOLERANCE);
     assert_eq!((settled.origin_x, settled.origin_y), (1.0, 2.0));
 }
+
+#[test]
+fn a_fit_above_a_bottom_bar_keeps_the_canvas_clear_of_it() {
+    let (width, height, bar) = (1000.0, 800.0, 50.0);
+    let view = fit_view((2000, 1000), above_inset((width, height), bar), 24.0);
+    let (_, bottom) = canvas_to_viewport(view, 1000.0, 1000.0);
+    assert!(bottom <= height - bar - 24.0 + 1e-3, "{bottom}");
+    let (_, top) = canvas_to_viewport(view, 1000.0, 0.0);
+    assert!(
+        ((top - 24.0) - (height - bar - 24.0 - bottom)).abs() < 1e-3,
+        "centred above it"
+    );
+    assert_eq!(above_inset((width, height), -5.0), (width, height));
+    assert_eq!(above_inset((width, 10.0), 50.0), (width, 1.0));
+}

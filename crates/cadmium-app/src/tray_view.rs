@@ -7,7 +7,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
-use self::geometry::{is_on_tray, tray_height_request, tray_point};
+use self::geometry::{TRAY_MIN_HEIGHT, TRAY_NATURAL_HEIGHT, is_on_tray, tray_point};
 use self::ring::{ShownRing, append_load_ring};
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;

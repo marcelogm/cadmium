@@ -13,6 +13,8 @@ pub struct CadmiumCanvas {
     pub scale_watch: SurfaceScaleWatch,
     pub hover: Cell<Option<(f64, f64)>>,
     pub auto_fit: Cell<AutoFit>,
+    /// The height, in widget px, of the bar over the canvas's foot that fits keep clear of.
+    pub fit_inset: Cell<i32>,
     pub allocated: Cell<(i32, i32)>,
     pub presented_frames: Cell<u64>,
     pub view_changed_handlers: RefCell<Vec<CanvasHandler>>,

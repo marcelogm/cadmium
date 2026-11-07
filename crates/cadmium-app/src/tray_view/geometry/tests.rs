@@ -125,10 +125,3 @@ fn zoomed_out_the_widget_shows_room_around_the_tray() {
     assert!(!is_on_tray(tray_point(view, 1.0, 5.0, 5.0)));
     assert!(!is_on_tray(tray_point(view, 1.0, 795.0, 395.0)));
 }
-
-#[test]
-fn the_tray_asks_for_a_comfortable_height_and_settles_for_less() {
-    let (minimum, natural) = tray_height_request();
-    assert_eq!((minimum, natural), (TRAY_MIN_HEIGHT, TRAY_NATURAL_HEIGHT));
-    assert!(minimum < natural);
-}

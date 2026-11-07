@@ -1,22 +1,22 @@
 //! Trays saved before the glass palette rest on a lighter grey; their bare texels move onto
 //! today's ground as they open, so an old tray matches a new one.
 
-use crate::canvas::{StateTexture, f32_to_half};
+use crate::canvas::f32_to_half;
 
 /// The flat reflectance the tray's ground had before the glass palette.
 const OLD_TRAY_REFLECTANCE: f32 = 0.75;
 const BYTES_PER_TEXEL: usize = 8;
 
-/// Rewrites the texels of a saved tray's dry reflectance (`raw`, `which`) that show the old
-/// ground in every band to `ground`; dried paint and the other states are left alone.
-pub(super) fn rebase_tray_ground(which: StateTexture, raw: &mut [u8], ground: f32) {
-    if !matches!(which, StateTexture::DryRefl0 | StateTexture::DryRefl1) {
-        return;
-    }
+/// Rewrites to `ground` the texels of a saved tray's dry reflectance (its lower bands in
+/// `low`, its upper in `high`, laid out alike) that show the old ground in all eight bands;
+/// dried paint keeps what it shows.
+pub(super) fn rebase_tray_ground(low: &mut [u8], high: &mut [u8], ground: f32) {
     let (old, new) = (flat_texel(OLD_TRAY_REFLECTANCE), flat_texel(ground));
-    for texel in raw.as_chunks_mut::<BYTES_PER_TEXEL>().0 {
-        if *texel == old {
-            *texel = new;
+    let low = low.as_chunks_mut::<BYTES_PER_TEXEL>().0;
+    let high = high.as_chunks_mut::<BYTES_PER_TEXEL>().0;
+    for (low, high) in low.iter_mut().zip(high) {
+        if *low == old && *high == old {
+            (*low, *high) = (new, new);
         }
     }
 }

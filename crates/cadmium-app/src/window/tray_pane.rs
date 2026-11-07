@@ -160,6 +160,9 @@ impl CadmiumWindow {
             move |sheet: &adw::BottomSheet| {
                 let margin = zoom_osd_margin(sheet.bottom_bar_height(), sheet.sheet_height());
                 window.imp().zoom_osd.set_margin_bottom(margin);
+                if let Some(canvas) = window.imp().canvas.get() {
+                    canvas.set_fit_inset(sheet.bottom_bar_height());
+                }
             }
         );
         sheet.connect_bottom_bar_height_notify(lift.clone());
