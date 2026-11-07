@@ -27,6 +27,7 @@ pub(super) mod dip;
 pub(super) mod dry;
 mod exchange;
 mod face;
+pub(super) mod face_sum;
 pub(super) mod pick;
 mod refill;
 mod spread;

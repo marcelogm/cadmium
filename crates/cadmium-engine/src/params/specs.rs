@@ -167,7 +167,7 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         group: ParamGroup::Tools,
         min: 0.0,
         max: 1.0,
-        default: 0.06,
+        default: 0.1,
     },
     ParamSpec {
         key: "face_lay_rate",

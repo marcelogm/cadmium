@@ -11,7 +11,7 @@ struct FaceSettings {
     pickup_rate: f32,
     lay_rate: f32,
     smear: f32,
-    capacity_um: f32,
+    padding: f32,
 };
 
 struct FaceState {
@@ -38,9 +38,19 @@ var<workgroup> reduced: array<f32, FACE_THREADS>;
 @group(0) @binding(8) var<storage, read_write> face: FaceState;
 @group(0) @binding(9) var<uniform> settings: FaceSettings;
 
+/// The columns this blade's width spreads over: about a pixel each, so every column
+/// meets paint as the blade moves, up to FACE_DEPTH on the widest blades. A blade
+/// resized mid-life keeps whatever sits in columns it no longer reaches until it
+/// grows back or is cleaned.
+fn face_columns() -> u32 {
+    let wide = round(2.0 * semi_axes().x / FACE_COLUMN_PX);
+    return u32(clamp(wide, 1.0, f32(FACE_DEPTH)));
+}
+
 fn face_column(position: vec2<f32>) -> u32 {
+    let columns = face_columns();
     let across = position.x / semi_axes().x * 0.5 + 0.5;
-    return u32(clamp(i32(floor(across * f32(FACE_DEPTH))), 0, i32(FACE_DEPTH) - 1));
+    return u32(clamp(i32(floor(across * f32(columns))), 0, i32(columns) - 1));
 }
 
 fn face_cell(position: vec2<f32>) -> u32 {
@@ -65,7 +75,8 @@ fn over_step(rate: f32) -> f32 {
     return 1.0 - pow(kept, max(dab.step_ratio, 0.0));
 }
 
-/// Laid flat and pressed lightly, the face leaves more of what it carries.
+/// Laid flat and pressed lightly, the face leaves more of what it carries; held
+/// fully upright it lays nothing, only scraping up.
 fn lay_share() -> f32 {
     let pressure = clamp(dab.pressure, 0.0, 1.0);
     return over_step(settings.lay_rate * (1.0 - upright_share()) * (1.0 - 0.5 * pressure));
@@ -78,7 +89,7 @@ fn pickup_share() -> f32 {
 }
 
 fn cell_area_px() -> f32 {
-    return 2.0 * semi_axes().x / f32(FACE_DEPTH);
+    return 2.0 * semi_axes().x / f32(face_columns());
 }
 
 /// The face cells over the blade's rows, as (cell, whether it is on the blade).
@@ -142,19 +153,18 @@ fn grant(@builtin(global_invocation_id) id: vec3<u32>) {
     let base = cell * TIP_CHANNELS;
     let grant_base = cell * FACE_GRANT_CHANNELS;
     let held = face_load[base + VOLUME_CHANNEL];
+    // The cell lays its share among the pixels under it by cover. A cell over less
+    // than one whole pixel lays only that part of its share: dividing by the
+    // smaller cover would pour the whole share into a pixel the cell barely meets.
     var lay = 0.0;
     if (weight > 0.0 && held > EMPTY_VOLUME_UM) {
         lay = lay_share() * held / max(weight, 1.0) * GRANT_SAFETY;
     }
-    let capacity = settings.capacity_um * cell_area_px();
+    let capacity = FACE_CAPACITY_UM * cell_area_px();
     face_grant[grant_base + GRANT_LAY] = lay;
     face_grant[grant_base + GRANT_ROOM] = clamp(1.0 - held / max(capacity, EMPTY_VOLUME_UM), 0.0, 1.0);
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-        var share = 0.0;
-        if (held > EMPTY_VOLUME_UM) {
-            share = max(face_load[base + slot], 0.0) / held;
-        }
-        face_grant[grant_base + GRANT_SHARES + slot] = share;
+        face_grant[grant_base + GRANT_SHARES + slot] = held_share(face_load[base + slot], held);
     }
 }
 
@@ -181,21 +191,16 @@ fn exchange(@builtin(global_invocation_id) id: vec3<u32>) {
     if (deposit_q == 0 && pickup_q == 0) {
         return;
     }
-    let deposit = dequantize(deposit_q);
-    let pickup = dequantize(pickup_q);
-    let fractions = read_fractions(pixel);
-    var amounts = array<f32, 8>();
+    var shares = array<f32, 8>();
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-        let deposit_slot_q = max(quantize_down(deposit * face_grant[grant_base + GRANT_SHARES + slot]), 0);
-        let pickup_slot_q = max(quantize(pickup * fractions[slot]), 0);
-        amounts[slot] = fractions[slot] * volume + dequantize(deposit_slot_q) - dequantize(pickup_slot_q);
-        let change = pickup_slot_q - deposit_slot_q;
-        if (change != 0) {
-            atomicAdd(&face_delta[delta_base + slot], change);
+        shares[slot] = face_grant[grant_base + GRANT_SHARES + slot];
+    }
+    let gained = trade(pixel, volume, deposit_q, pickup_q, shares);
+    for (var channel = 0u; channel < TIP_CHANNELS; channel++) {
+        if (gained[channel] != 0) {
+            atomicAdd(&face_delta[delta_base + channel], gained[channel]);
         }
     }
-    atomicAdd(&face_delta[delta_base + VOLUME_CHANNEL], pickup_q - deposit_q);
-    store_paint(pixel, volume - pickup + deposit, amounts);
 }
 
 @compute @workgroup_size(8, 8)
@@ -234,7 +239,7 @@ fn even_out(first: u32, second: u32) {
 fn smear_across(id: vec2<u32>, parity: u32) {
     let column = parity + 2u * id.x;
     let touched = touched_cell(vec2<u32>(column, id.y));
-    if (touched.y == 1u && column + 1u < FACE_DEPTH) {
+    if (touched.y == 1u && column + 1u < face_columns()) {
         even_out(touched.x, touched.x + 1u);
     }
 }

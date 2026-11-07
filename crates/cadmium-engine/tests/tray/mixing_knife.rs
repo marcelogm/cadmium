@@ -11,13 +11,18 @@ use scene::*;
 
 const UPRIGHT_TILT_DEG: f32 = 0.0;
 const VOLUME_TOLERANCE: f64 = 1e-6;
+const READOUT_TOLERANCE: f64 = 1e-4;
+/// The tray keeps pigment as half-precision fractions of each pixel's volume, so
+/// every rewrite of a pixel rounds its pigment; the drift runs a little negative
+/// because `within_whole_volume` trims rounded fractions that overshoot the whole.
 const PIGMENT_TOLERANCE: f64 = 1e-3;
 const FIRST_PASS_KEEPS: f64 = 0.6;
-const EIGHT_PASSES_LEAVE: f64 = 0.35;
+const EIGHT_PASSES_LEAVE: f64 = 0.15;
 const MONOTONE_SLACK: f64 = 1.05;
 const SMEARED: f32 = 0.6;
 const UNSMEARED: f32 = 0.0;
 const SMEAR_PASSES: usize = 3;
+const SMEAR_GAIN: f64 = 0.95;
 const STREAK_X: Range<usize> = 250..451;
 const STREAK_Y: Range<usize> = 280..341;
 const STAMP_Y: f64 = 560.0;
@@ -97,7 +102,7 @@ fn more_smear_mixes_sooner() {
     let smeared = streaks_with_smear(&gpu, SMEARED);
     let unsmeared = streaks_with_smear(&gpu, UNSMEARED);
     eprintln!("smeared {smeared}, unsmeared {unsmeared}");
-    assert!(smeared < unsmeared);
+    assert!(smeared < SMEAR_GAIN * unsmeared);
 }
 
 fn scrape_across_both_cords(gpu: &GpuContext, s: &mut PaintSession) {
@@ -165,7 +170,11 @@ fn cleaning_the_mixing_knife_empties_its_face() {
     let gpu = GpuContext::new().unwrap();
     let mut s = mixing_session(&gpu);
     scrape_across_both_cords(&gpu, &mut s);
-    assert!(face_totals(&gpu, &s).volume > 0.0);
+    let held = face_totals(&gpu, &s);
+    let read = s.read_brush(&gpu).unwrap().face;
+    assert!(held.volume > 0.0);
+    assert!((read.volume - held.volume).abs() < READOUT_TOLERANCE * held.volume);
+    assert!((read.pigment[0] - held.pigment[0]).abs() < READOUT_TOLERANCE * held.volume);
     s.clean_brush(&gpu);
     assert_eq!(face_totals(&gpu, &s).volume, 0.0);
     assert_eq!(s.read_brush(&gpu).unwrap().face.volume, 0.0);

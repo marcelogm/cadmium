@@ -17,16 +17,21 @@ pub(super) const FACE_DELTA_BYTES: u64 =
     (FACE_CELLS * BLADE_DELTA_CHANNELS * std::mem::size_of::<i32>()) as u64;
 /// How thick a layer a face cell can carry before it stops picking up: past it the
 /// cell takes nothing more, so nothing has to spill.
-const FACE_CAPACITY_UM: f32 = 1000.0;
+pub(super) const FACE_CAPACITY_UM: f32 = 1000.0;
+/// The width of a face column on the canvas, so a blade uses as many columns as
+/// it is pixels wide (up to `FACE_DEPTH`).
+pub(super) const FACE_COLUMN_PX: f32 = 1.0;
+/// The face's totals as the GPU sums them for a readout: one value per channel.
+pub(super) const FACE_SUMS_BYTES: u64 = (TIP_CHANNELS * std::mem::size_of::<f32>()) as u64;
 
-/// The face's exchange rates for one batch of dabs, read from the parameters.
+/// The face's exchange rates, read from the parameters for each batch of dabs.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub(super) struct FaceSettings {
     pickup_rate: f32,
     lay_rate: f32,
     smear: f32,
-    capacity_um: f32,
+    padding: f32,
 }
 
 impl FaceSettings {
@@ -35,7 +40,7 @@ impl FaceSettings {
             pickup_rate: params.get("face_pickup_rate"),
             lay_rate: params.get("face_lay_rate"),
             smear: params.get("face_smear"),
-            capacity_um: FACE_CAPACITY_UM,
+            padding: 0.0,
         }
     }
 }

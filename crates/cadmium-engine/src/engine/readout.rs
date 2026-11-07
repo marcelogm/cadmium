@@ -38,7 +38,7 @@ impl WetOilEngine {
             &self.buffers.tip_sums,
             &self.buffers.body,
             &self.buffers.blade_load,
-            &self.buffers.face_load,
+            &self.buffers.face_sums,
         ];
         let staging = staging_buffer(
             gpu,
@@ -47,6 +47,7 @@ impl WetOilEngine {
         );
         let mut encoder = new_encoder(gpu, "brush_readout");
         self.encode_sum_tip(gpu, &mut encoder);
+        self.face_sum_pass.encode(gpu, &self.buffers, &mut encoder);
         let mut offset = 0;
         for source in sources {
             encoder.copy_buffer_to_buffer(source, 0, &staging, offset, source.size());

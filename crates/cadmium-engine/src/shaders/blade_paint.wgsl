@@ -60,3 +60,38 @@ fn centre_dry_height() -> f32 {
     let pixel = clamp(vec2<i32>(floor(dab.center)), vec2<i32>(0), size - vec2<i32>(1));
     return textureLoad(dry_height, pixel).x;
 }
+
+/// A pigment's share of what a blade cell holds, or nothing while it is empty.
+fn held_share(amount: f32, held: f32) -> f32 {
+    if (held <= EMPTY_VOLUME_UM) {
+        return 0.0;
+    }
+    return max(amount, 0.0) / held;
+}
+
+/// Lays `deposit_q` of a blade cell's paint, mixed as `shares`, onto `pixel`
+/// holding `volume`, and takes `pickup_q` of the pixel's own paint up. Stores the
+/// pixel and returns what the cell gains per channel, quantised, for the caller
+/// to add to its deltas: every unit leaving one side reaches the other.
+fn trade(
+    pixel: vec2<i32>,
+    volume: f32,
+    deposit_q: i32,
+    pickup_q: i32,
+    shares: array<f32, 8>,
+) -> array<i32, TIP_CHANNELS> {
+    let deposit = dequantize(deposit_q);
+    let pickup = dequantize(pickup_q);
+    let fractions = read_fractions(pixel);
+    var amounts = array<f32, 8>();
+    var gained = array<i32, TIP_CHANNELS>();
+    for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
+        let deposit_slot_q = max(quantize_down(deposit * shares[slot]), 0);
+        let pickup_slot_q = max(quantize(pickup * fractions[slot]), 0);
+        amounts[slot] = fractions[slot] * volume + dequantize(deposit_slot_q) - dequantize(pickup_slot_q);
+        gained[slot] = pickup_slot_q - deposit_slot_q;
+    }
+    gained[VOLUME_CHANNEL] = pickup_q - deposit_q;
+    store_paint(pixel, volume - pickup + deposit, amounts);
+    return gained;
+}

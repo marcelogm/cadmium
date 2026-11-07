@@ -125,11 +125,7 @@ fn grant(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     blade_grant[base + GRANT_RATIO_CHANNEL] = ratio;
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-        var share = 0.0;
-        if (held > EMPTY_VOLUME_UM) {
-            share = max(blade_load[base + slot], 0.0) / held;
-        }
-        blade_grant[base + slot] = share;
+        blade_grant[base + slot] = held_share(blade_load[base + slot], held);
     }
 }
 
@@ -155,21 +151,16 @@ fn lay(@builtin(global_invocation_id) id: vec3<u32>) {
     if (deposit_q == 0 && pickup_q == 0) {
         return;
     }
-    let deposit = dequantize(deposit_q);
-    let pickup = dequantize(pickup_q);
-    let fractions = read_fractions(pixel);
-    var amounts = array<f32, 8>();
+    var shares = array<f32, 8>();
     for (var slot = 0u; slot < PIGMENT_CHANNELS; slot++) {
-        let deposit_slot_q = max(quantize_down(deposit * blade_grant[grant_base + slot]), 0);
-        let pickup_slot_q = max(quantize(pickup * fractions[slot]), 0);
-        amounts[slot] = fractions[slot] * volume + dequantize(deposit_slot_q) - dequantize(pickup_slot_q);
-        let change = pickup_slot_q - deposit_slot_q;
-        if (change != 0) {
-            atomicAdd(&blade_delta[delta_base + slot], change);
+        shares[slot] = blade_grant[grant_base + slot];
+    }
+    let gained = trade(pixel, volume, deposit_q, pickup_q, shares);
+    for (var channel = 0u; channel < TIP_CHANNELS; channel++) {
+        if (gained[channel] != 0) {
+            atomicAdd(&blade_delta[delta_base + channel], gained[channel]);
         }
     }
-    atomicAdd(&blade_delta[delta_base + VOLUME_CHANNEL], pickup_q - deposit_q);
-    store_paint(pixel, volume - pickup + deposit, amounts);
 }
 
 @compute @workgroup_size(BLADE_THREADS)

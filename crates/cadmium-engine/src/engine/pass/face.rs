@@ -1,13 +1,13 @@
-use wgpu::util::DeviceExt;
-
 use super::{DabResources, PlacedDab, bind_at_dab, dab_record_binding, dab_record_entry, dispatch};
 use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_buffer, storage_entry, texture_binding, texture_entry,
-    uniform_entry,
+    uniform_buffer, uniform_entry,
 };
 use crate::engine::dab_record::{KNIFE_LAID_ALTITUDE_RAD, KNIFE_UPRIGHT_ALTITUDE_RAD};
-use crate::engine::face_load::{FACE_CELLS, FACE_DEPTH, FACE_GRANT_CHANNELS};
+use crate::engine::face_load::{
+    FACE_CAPACITY_UM, FACE_CELLS, FACE_COLUMN_PX, FACE_DEPTH, FACE_GRANT_CHANNELS, FaceSettings,
+};
 use crate::engine::shader::{BLADE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
@@ -47,6 +47,8 @@ fn face_shader() -> String {
     let constants = format!(
         "const FACE_DEPTH: u32 = {FACE_DEPTH}u;\n\
          const FACE_GRANT_CHANNELS: u32 = {FACE_GRANT_CHANNELS}u;\n\
+         const FACE_CAPACITY_UM: f32 = {FACE_CAPACITY_UM:?};\n\
+         const FACE_COLUMN_PX: f32 = {FACE_COLUMN_PX:?};\n\
          const FACE_LAID_ALTITUDE_RAD: f32 = {KNIFE_LAID_ALTITUDE_RAD:?};\n\
          const FACE_UPRIGHT_ALTITUDE_RAD: f32 = {KNIFE_UPRIGHT_ALTITUDE_RAD:?};\n"
     );
@@ -61,6 +63,7 @@ pub(super) struct FacePass {
     pipelines: FacePipelines,
     face_grant: wgpu::Buffer,
     face_state: wgpu::Buffer,
+    settings: wgpu::Buffer,
 }
 
 impl FacePass {
@@ -89,20 +92,24 @@ impl FacePass {
             pipelines: FacePipelines::new(gpu, &compute),
             face_grant: storage_buffer(gpu, "mixing_knife_face_grant", FACE_GRANT_BYTES),
             face_state: storage_buffer(gpu, "mixing_knife_face_state", FACE_STATE_BYTES),
+            settings: uniform_buffer(
+                gpu,
+                "mixing_knife_face_settings",
+                std::mem::size_of::<FaceSettings>() as u64,
+            ),
             compute,
         }
     }
 
     pub(super) fn bind_group(&self, resources: &DabResources<'_>) -> wgpu::BindGroup {
         let canvas = resources.canvas;
-        let settings = resources
-            .gpu
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("mixing_knife_face_settings"),
-                contents: bytemuck::bytes_of(&resources.face_settings),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
+        // Every batch encoded before the next submit shares this write: the
+        // parameters do not change between the batches of one frame.
+        resources.gpu.queue.write_buffer(
+            &self.settings,
+            0,
+            bytemuck::bytes_of(&resources.face_settings),
+        );
         self.compute.bind_group(
             resources.gpu,
             &[
@@ -115,7 +122,7 @@ impl FacePass {
                 buffer_binding(6, &resources.buffers.face_delta),
                 buffer_binding(7, &self.face_grant),
                 buffer_binding(8, &self.face_state),
-                buffer_binding(9, &settings),
+                buffer_binding(9, &self.settings),
             ],
         )
     }

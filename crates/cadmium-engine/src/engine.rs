@@ -28,9 +28,10 @@ pub(crate) use pass::pick::PickRequest;
 
 use bristles::{BristleBuffers, BristleRig, BristleTuning, LayoutRequest, MAX_BRISTLES};
 use dab_record::{upload_dab_records, upload_records};
-use face_load::{FACE_DELTA_BYTES, FACE_LOAD_BYTES, FaceSettings};
+use face_load::{FACE_DELTA_BYTES, FACE_LOAD_BYTES, FACE_SUMS_BYTES, FaceSettings};
 use pass::dip::DipPass;
 use pass::dry::DryPass;
+use pass::face_sum::FaceSumPass;
 use pass::pick::PickPass;
 use pass::{DabPasses, DabResources};
 use placement::{FirstRest, PreviousDab, mark_dab_regions};
@@ -127,6 +128,7 @@ struct Buffers {
     blade_delta: wgpu::Buffer,
     face_load: wgpu::Buffer,
     face_delta: wgpu::Buffer,
+    face_sums: wgpu::Buffer,
     bristles: BristleBuffers,
 }
 
@@ -143,6 +145,7 @@ impl Buffers {
             blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
             face_load: storage_buffer(gpu, "mixing_knife_face_load", FACE_LOAD_BYTES),
             face_delta: storage_buffer(gpu, "mixing_knife_face_delta", FACE_DELTA_BYTES),
+            face_sums: storage_buffer(gpu, "mixing_knife_face_sums", FACE_SUMS_BYTES),
             bristles: BristleBuffers::new(gpu),
         }
     }
@@ -160,6 +163,7 @@ pub struct WetOilEngine {
     pick_pass: PickPass,
     dry_pass: DryPass,
     dip_pass: DipPass,
+    face_sum_pass: FaceSumPass,
 }
 
 impl WetOilEngine {
@@ -176,6 +180,7 @@ impl WetOilEngine {
             pick_pass: PickPass::new(gpu),
             dry_pass: DryPass::new(gpu),
             dip_pass: DipPass::new(gpu),
+            face_sum_pass: FaceSumPass::new(gpu),
         }
     }
 
