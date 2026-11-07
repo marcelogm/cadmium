@@ -2,7 +2,7 @@ struct HandleState {
     ferrule: vec3<f32>,
     substep_seconds: f32,
     axis: vec3<f32>,
-    _pad0: f32,
+    drop_px: f32,
     velocity: vec3<f32>,
     _pad1: f32,
     orientation: vec2<f32>,
@@ -41,6 +41,7 @@ fn anchor_slot(bristle: u32, vertex: u32) -> u32 {
     return state_slot(bristle) + 2u * BRISTLE_VERTICES + vertex;
 }
 
+/// The hair's remembered bend in `xy`, its steady wetness in `z`, `WETNESS_KNOWN` in `w`.
 fn bend_slot(bristle: u32) -> u32 {
     return state_slot(bristle) + 3u * BRISTLE_VERTICES;
 }

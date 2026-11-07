@@ -1,6 +1,6 @@
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 
-use cadmium_engine::brush::HeadSpec;
+use cadmium_engine::brush::{HeadSpec, factory_brushes};
 use cadmium_engine::canvas::StateTexture;
 use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::gpu::GpuContext;
@@ -8,6 +8,7 @@ use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::{Dab, StrokeSample};
 
 use crate::hull::{convex_hull, distance_to_hull, touching_segment_ends};
+use crate::patches::{flood, patch_areas_px2};
 use crate::support::{drag, line, session, spec, without_wgpu_errors, write_png};
 
 const TINY_DIAMETER_PX: f32 = 2.0;
@@ -20,6 +21,14 @@ const TINY_PRESSURE: f32 = 0.8;
 const TINY_TILT_DEG: f32 = 20.0;
 const TINY_SETTLE_PX: usize = 10;
 const MIN_MARKED_COLUMN_SHARE: f64 = 0.85;
+const FINE_DIAMETER_PX: f32 = 8.0;
+const LIGHT_PRESSURE: f32 = 0.1;
+const FINE_SHAPED_BRUSHES: [&str; 4] = [
+    "Round · Kolinsky Sable",
+    "Filbert · Mongoose",
+    "Angular · Synthetic",
+    "Dagger · Synthetic",
+];
 const VISIBLE_UM: f32 = 0.5;
 const PAINTED_UM: f32 = 1e-3;
 const MAX_ISLAND_PX2: usize = 2;
@@ -92,6 +101,35 @@ fn density_extremes() -> [f32; 2] {
 }
 
 #[test]
+fn a_light_touch_with_a_fine_shaped_brush_draws_an_unbroken_line() {
+    let gpu = GpuContext::new().unwrap();
+    for brush in factory_brushes()
+        .into_iter()
+        .filter(|brush| FINE_SHAPED_BRUSHES.contains(&brush.name.as_str()))
+    {
+        let mut s = session(&gpu);
+        s.brush.wear(&brush);
+        s.brush.geometry.max_diameter_px = FINE_DIAMETER_PX;
+        s.reload_brush(&gpu);
+        let samples = line(
+            TINY_ROW_PX,
+            TINY_FROM_PX,
+            TINY_TO_PX,
+            LIGHT_PRESSURE,
+            TINY_TILT_DEG,
+        );
+        drag(&gpu, &mut s, &samples);
+        let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+        let mark = tiny_mark(&volume, s.canvas.spec.width as usize);
+        assert_eq!(
+            mark.marked_column_share, 1.0,
+            "{} breaks a light line into dots",
+            brush.name
+        );
+    }
+}
+
+#[test]
 fn a_two_pixel_brush_still_leaves_a_mark() {
     let gpu = GpuContext::new().unwrap();
     for density_per_px in density_extremes() {
@@ -140,52 +178,13 @@ fn pixel_centre(index: usize) -> [f32; 2] {
     ]
 }
 
-fn neighbours(index: usize) -> impl Iterator<Item = usize> {
-    let side = LARGE_CANVAS_PX as i64;
-    let (x, y) = (
-        (index % LARGE_CANVAS_PX) as i64,
-        (index / LARGE_CANVAS_PX) as i64,
-    );
-    (-1..=1)
-        .flat_map(move |dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
-        .filter(move |&(nx, ny)| {
-            (nx, ny) != (x, y) && (0..side).contains(&nx) && (0..side).contains(&ny)
-        })
-        .map(move |(nx, ny)| (ny * side + nx) as usize)
-}
-
-fn flood(open: &[bool], seen: &mut [bool], seeds: impl IntoIterator<Item = usize>) -> usize {
-    let mut queue: VecDeque<usize> = seeds.into_iter().filter(|&seed| open[seed]).collect();
-    for &seed in &queue {
-        seen[seed] = true;
-    }
-    let mut reached = 0;
-    while let Some(index) = queue.pop_front() {
-        reached += 1;
-        let fresh: Vec<usize> = neighbours(index)
-            .filter(|&next| open[next] && !seen[next])
-            .collect();
-        for next in fresh {
-            seen[next] = true;
-            queue.push_back(next);
-        }
-    }
-    reached
-}
-
 fn island_areas_px2(volume: &[f32], hull: &[[f32; 2]]) -> Vec<usize> {
     let open: Vec<bool> = volume.iter().map(|&v| v <= PAINTED_UM).collect();
     let mut seen = vec![false; open.len()];
     let outside =
         (0..open.len()).filter(|&index| distance_to_hull(pixel_centre(index), hull) > 0.0);
-    flood(&open, &mut seen, outside);
-    let mut islands = Vec::new();
-    for index in 0..open.len() {
-        if open[index] && !seen[index] {
-            islands.push(flood(&open, &mut seen, [index]));
-        }
-    }
-    islands
+    flood(&open, &mut seen, LARGE_CANVAS_PX, outside);
+    patch_areas_px2(&open, &mut seen, LARGE_CANVAS_PX)
 }
 
 #[test]
