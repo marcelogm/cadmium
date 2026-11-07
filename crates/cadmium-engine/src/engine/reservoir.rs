@@ -1,4 +1,5 @@
 use super::bristles::disc_texel_count;
+use super::pass::dip::Fill;
 use super::{FULL_DIP, MAX_TIP_THICKNESS_UM, PIGMENT_CHANNELS, VOLUME_CHANNEL, WetOilEngine};
 use crate::brush::{DEFAULT_LOAD, FULL_RESERVOIR_VOLUME_UM};
 use crate::canvas::PaintTotals;
@@ -31,11 +32,34 @@ impl DipRecord {
 
 impl WetOilEngine {
     pub fn load_reservoir(&mut self, gpu: &GpuContext, mixture: &Mixture) {
-        self.clean_brush(gpu);
-        self.dip(gpu, mixture, FULL_DIP);
+        self.submit(gpu, "load_reservoir", |engine, encoder| {
+            engine.encode_load_reservoir(gpu, mixture, encoder);
+        });
+    }
+
+    pub fn encode_load_reservoir(
+        &mut self,
+        gpu: &GpuContext,
+        mixture: &Mixture,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.encode_clean_brush(encoder);
+        self.encode_dip(gpu, mixture, FULL_DIP, encoder);
     }
 
     pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) {
+        self.submit(gpu, "brush_dip", |engine, encoder| {
+            engine.encode_dip(gpu, mixture, amount, encoder);
+        });
+    }
+
+    pub fn encode_dip(
+        &mut self,
+        gpu: &GpuContext,
+        mixture: &Mixture,
+        amount: f32,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         let Some(thickness) = dip_thickness(mixture) else {
             return;
         };
@@ -51,11 +75,22 @@ impl WetOilEngine {
             body_limit_um: self.reserve_volume(MAX_TIP_THICKNESS_UM),
             _pad: [0.0; 3],
         };
-        self.submit_fill(gpu, &record, true);
+        self.encode_fill(gpu, &record, true, encoder);
         self.loaded_thickness_um = thickness;
     }
 
     pub fn restore_reserve(&mut self, gpu: &GpuContext, mixture: &Mixture) {
+        self.submit(gpu, "restore_reserve", |engine, encoder| {
+            engine.encode_restore_reserve(gpu, mixture, encoder);
+        });
+    }
+
+    pub fn encode_restore_reserve(
+        &mut self,
+        gpu: &GpuContext,
+        mixture: &Mixture,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         let Some(thickness) = dip_thickness(mixture) else {
             return;
         };
@@ -69,8 +104,19 @@ impl WetOilEngine {
             body_limit_um: full_reserve,
             _pad: [0.0; 3],
         };
-        self.submit_fill(gpu, &record, false);
+        self.encode_fill(gpu, &record, false, encoder);
         self.loaded_thickness_um = thickness;
+    }
+
+    pub(super) fn submit(
+        &mut self,
+        gpu: &GpuContext,
+        label: &str,
+        work: impl FnOnce(&mut WetOilEngine, &mut wgpu::CommandEncoder),
+    ) {
+        let mut encoder = new_encoder(gpu, label);
+        work(self, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
     }
 
     pub(crate) fn draw_up(
@@ -114,12 +160,24 @@ impl WetOilEngine {
             body_limit_um: f32::MAX,
             _pad: [0.0; 3],
         };
-        self.submit_fill(gpu, &record, false);
+        let mut encoder = new_encoder(gpu, "add_to_reserve");
+        self.encode_fill(gpu, &record, false, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
     }
 
-    fn submit_fill(&self, gpu: &GpuContext, record: &DipRecord, fills_tip: bool) {
-        self.dip_pass
-            .submit_fill(gpu, record, &self.buffers, fills_tip);
+    fn encode_fill(
+        &self,
+        gpu: &GpuContext,
+        record: &DipRecord,
+        fills_tip: bool,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let fill = Fill {
+            record,
+            buffers: &self.buffers,
+            fills_tip,
+        };
+        self.dip_pass.encode_fill(gpu, fill, encoder);
     }
 
     pub fn full_reserve_volume(&self) -> f32 {
@@ -131,13 +189,17 @@ impl WetOilEngine {
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        let mut encoder = new_encoder(gpu, "clean_brush");
+        self.submit(gpu, "clean_brush", |engine, encoder| {
+            engine.encode_clean_brush(encoder);
+        });
+    }
+
+    pub fn encode_clean_brush(&mut self, encoder: &mut wgpu::CommandEncoder) {
         encoder.clear_buffer(&self.buffers.tip, 0, None);
         encoder.clear_buffer(&self.buffers.tip_delta, 0, None);
         encoder.clear_buffer(&self.buffers.body, 0, None);
         encoder.clear_buffer(&self.buffers.wanted, 0, None);
         encoder.clear_buffer(&self.buffers.capillary_pools, 0, None);
-        gpu.queue.submit([encoder.finish()]);
         self.bristles.reset();
     }
 

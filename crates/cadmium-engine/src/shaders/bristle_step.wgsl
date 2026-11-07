@@ -279,11 +279,12 @@ fn step(@builtin(local_invocation_index) thread: u32) {
     if resetting {
         hang_owned_at_rest(thread, start, wetness);
     }
+    share_pulls(thread, wetness);
     storageBarrier();
     for (var substep = 0u; substep < substeps; substep++) {
         advance_owned(thread, motion_of(travel, substep), wetness);
         storageBarrier();
-        clump_owned(thread, wetness);
+        clump_owned(thread);
     }
     record_owned_loads(thread, base_px);
     if thread == 0u {

@@ -4,8 +4,8 @@ use super::*;
 use crate::state::recipe::PARTIAL_DIP;
 use crate::state::test_support::{
     PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals,
-    holding_the_knife, knife_totals, painting_state, present_one_tray_frame, reserve_volume,
-    row_samples, sample_at, settle_both_surfaces, stroke,
+    finish_painting, holding_the_knife, knife_totals, paint_stroke, painting_state,
+    present_one_tray_frame, reserve_volume, row_samples, sample_at, settle_both_surfaces,
 };
 use crate::tools::UiTool;
 
@@ -21,6 +21,7 @@ fn a_tray_stroke_leaves_the_painting_with_no_pending_work() {
     state.release();
     assert!(state.session.tray_has_pending_work());
     assert!(!state.session.has_pending_work());
+    finish_painting(&mut state, present_one_tray_frame);
     present_one_tray_frame(&mut state);
     assert!(!state.session.tray_has_pending_work());
 }
@@ -49,7 +50,7 @@ fn single_pigment(state: &AppState, slot: usize) -> Mixture {
 fn each_stroke_tops_the_reserve_back_up_while_the_tip_keeps_its_dirt() {
     let mut state = painting_state();
     let full = reserve_volume(&state);
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     assert!(reserve_volume(&state) < full);
     let white = single_pigment(&state, WHITE_SLOT);
     state
@@ -66,7 +67,7 @@ fn each_stroke_tops_the_reserve_back_up_while_the_tip_keeps_its_dirt() {
 fn without_reloading_the_reserve_keeps_running_down() {
     let mut state = painting_state();
     state.reload_each_stroke = false;
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let worn = reserve_volume(&state);
     let samples = row_samples(RAG_ROW_Y);
     state.begin_stroke(Tool::Brush, samples[0]);

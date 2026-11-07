@@ -32,16 +32,29 @@ fn given(rate: f32, amount: f32) -> u32 {
     return u32(floor(rate * amount * dab.capillary_scale));
 }
 
-@compute @workgroup_size(8, 8)
-fn gather(@builtin(global_invocation_id) id: vec3<u32>) {
+const GATHER_THREADS: u32 = BLOCK_SIDE_PX * BLOCK_SIDE_PX;
+
+var<workgroup> gathered_owners: array<u32, GATHER_THREADS>;
+var<workgroup> gathered: array<atomic<u32>, GATHER_THREADS * TIP_CHANNELS>;
+var<workgroup> gathered_members: array<atomic<u32>, GATHER_THREADS>;
+
+fn gathering_owner(id: vec3<u32>) -> u32 {
     if (!in_window(id)) {
-        return;
+        return OUTSIDE_TIP;
     }
-    let texel = capillary_texel(id);
-    let bristle = owner_of(texel);
-    if (bristle == OUTSIDE_TIP) {
-        return;
+    return owner_of(capillary_texel(id));
+}
+
+fn first_sharing(thread: u32, bristle: u32) -> u32 {
+    for (var other = 0u; other < thread; other++) {
+        if (gathered_owners[other] == bristle) {
+            return other;
+        }
     }
+    return thread;
+}
+
+fn give_to_group(texel: vec2<u32>, gatherer: u32) {
     let base = tip_index(texel);
     for (var channel = 0u; channel < TIP_CHANNELS; channel++) {
         let amount = max(tip[base + channel], 0.0);
@@ -50,9 +63,37 @@ fn gather(@builtin(global_invocation_id) id: vec3<u32>) {
             continue;
         }
         tip[base + channel] -= f32(along_bristle) / dab.capillary_scale;
-        atomicAdd(&pools[POOL_START + bristle * TIP_CHANNELS + channel], along_bristle);
+        atomicAdd(&gathered[gatherer * TIP_CHANNELS + channel], along_bristle);
     }
-    atomicAdd(&pools[MEMBERS_START + bristle], 1u);
+    atomicAdd(&gathered_members[gatherer], 1u);
+}
+
+fn pool_gathered(bristle: u32, gatherer: u32) {
+    for (var channel = 0u; channel < TIP_CHANNELS; channel++) {
+        let along_bristle = atomicLoad(&gathered[gatherer * TIP_CHANNELS + channel]);
+        if (along_bristle != 0u) {
+            atomicAdd(&pools[POOL_START + bristle * TIP_CHANNELS + channel], along_bristle);
+        }
+    }
+    atomicAdd(&pools[MEMBERS_START + bristle], atomicLoad(&gathered_members[gatherer]));
+}
+
+@compute @workgroup_size(BLOCK_SIDE_PX, BLOCK_SIDE_PX)
+fn gather(
+    @builtin(global_invocation_id) id: vec3<u32>,
+    @builtin(local_invocation_index) thread: u32,
+) {
+    let bristle = gathering_owner(id);
+    gathered_owners[thread] = bristle;
+    workgroupBarrier();
+    let gatherer = first_sharing(thread, bristle);
+    if (bristle != OUTSIDE_TIP) {
+        give_to_group(capillary_texel(id), gatherer);
+    }
+    workgroupBarrier();
+    if (bristle != OUTSIDE_TIP && gatherer == thread) {
+        pool_gathered(bristle, gatherer);
+    }
 }
 
 @compute @workgroup_size(64)

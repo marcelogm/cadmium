@@ -34,7 +34,7 @@ impl HeldStroke {
 
     fn press_in(gpu: &GpuContext, mut s: PaintSession) -> HeldStroke {
         let mut frame_clock_ms = FRAME_CLOCK_START_MS;
-        s.begin_stroke(gpu, pressed_sample(0));
+        s.begin_stroke(pressed_sample(0));
         frame_at(gpu, &mut s, frame_clock_ms);
         for index in 1..STROKE_SAMPLES {
             s.add_samples(&[pressed_sample(index)]);
@@ -75,8 +75,8 @@ impl HeldStroke {
         }
     }
 
-    fn stroke_off_the_canvas(&mut self, gpu: &GpuContext) {
-        self.session.begin_stroke(gpu, off_canvas_sample(0));
+    fn stroke_off_the_canvas(&mut self) {
+        self.session.begin_stroke(off_canvas_sample(0));
         for index in 1..OFF_CANVAS_SAMPLES {
             self.session.add_samples(&[off_canvas_sample(index)]);
         }
@@ -193,7 +193,7 @@ fn a_stroke_that_never_reaches_the_canvas_asks_for_no_settling_frames() {
     let gpu = GpuContext::new().unwrap();
     let mut held = HeldStroke::lift(&gpu);
     held.settle_fully(&gpu);
-    held.stroke_off_the_canvas(&gpu);
+    held.stroke_off_the_canvas();
     let stroked_ms = held.frame_clock_ms;
     for _ in 0..SETTLE_TICK_LIMIT {
         held.tick(&gpu);
@@ -218,7 +218,7 @@ fn first_dab_of_next_stroke(gpu: &GpuContext, s: &mut PaintSession, frame_clock_
         y: NEXT_STROKE_Y,
         ..pressed_sample(0)
     };
-    s.begin_stroke(gpu, start);
+    s.begin_stroke(start);
     frame_at(gpu, s, frame_clock_ms);
 }
 

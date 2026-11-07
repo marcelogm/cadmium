@@ -5,9 +5,15 @@ use crate::compute::{ComputeStage, WORKGROUP_SIZE, buffer_binding, storage_entry
 use crate::engine::reservoir::DipRecord;
 use crate::engine::shader::{EYEDROPPER_SNIPPETS, shader_source};
 use crate::engine::{Buffers, TIP_SIZE};
-use crate::gpu::{GpuContext, new_encoder};
+use crate::gpu::GpuContext;
 
 const TIP_GROUPS: u32 = TIP_SIZE.div_ceil(WORKGROUP_SIZE);
+
+pub(in crate::engine) struct Fill<'a> {
+    pub(in crate::engine) record: &'a DipRecord,
+    pub(in crate::engine) buffers: &'a Buffers,
+    pub(in crate::engine) fills_tip: bool,
+}
 
 pub(in crate::engine) struct DipPass {
     compute: ComputeStage,
@@ -40,26 +46,22 @@ impl DipPass {
         }
     }
 
-    pub(in crate::engine) fn submit_fill(
+    pub(in crate::engine) fn encode_fill(
         &self,
         gpu: &GpuContext,
-        record: &DipRecord,
-        buffers: &Buffers,
-        fills_tip: bool,
+        fill: Fill<'_>,
+        encoder: &mut wgpu::CommandEncoder,
     ) {
-        let bind_group = self.bind_group(gpu, record, buffers);
-        let mut encoder = new_encoder(gpu, "brush_dip");
+        let bind_group = self.bind_group(gpu, fill.record, fill.buffers);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("brush_dip"),
             timestamp_writes: None,
         });
         pass.set_bind_group(0, &bind_group, &[]);
         dispatch(&mut pass, &self.fill_body, [1, 1]);
-        if fills_tip {
+        if fill.fills_tip {
             dispatch(&mut pass, &self.fill_tip, [TIP_GROUPS, TIP_GROUPS]);
         }
-        drop(pass);
-        gpu.queue.submit([encoder.finish()]);
     }
 
     pub(in crate::engine) fn encode_sum_tip(

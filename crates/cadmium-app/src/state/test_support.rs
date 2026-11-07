@@ -17,6 +17,7 @@ pub(super) const TEST_BRUSH_DIAMETER_PX: f32 = 16.0;
 pub(crate) const PAINT_ROW_Y: f64 = 60.0;
 pub(super) const RAG_ROW_Y: f64 = 200.0;
 const STROKE_STEPS: u32 = 20;
+const PAINTING_FRAME_LIMIT: u32 = 1000;
 
 pub(crate) fn painting_state() -> AppState {
     let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
@@ -48,6 +49,25 @@ pub(crate) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample])
     state.begin_stroke(tool, samples[0]);
     state.add_samples(&samples[1..]);
     state.release();
+}
+
+/// Presents frames with `present` until the queued dabs are painted and the brush is read
+/// after them, as the app does over the frames that follow a stroke.
+pub(crate) fn finish_painting(state: &mut AppState, present: fn(&mut AppState)) {
+    let mut frames = 0;
+    while state.session.has_queued_dabs() || state.pacing.brush_measure_waits {
+        present(state);
+        frames += 1;
+        assert!(
+            frames < PAINTING_FRAME_LIMIT,
+            "the queued dabs never got painted"
+        );
+    }
+}
+
+pub(crate) fn paint_stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
+    stroke(state, tool, samples);
+    finish_painting(state, present_one_frame);
 }
 
 pub(crate) fn present_one_frame(state: &mut AppState) {

@@ -62,7 +62,7 @@ fn paint_light_stroke(gpu: &GpuContext, s: &mut PaintSession) {
             time_ms: i * SAMPLE_INTERVAL_MS,
         };
         if i == 0 {
-            s.begin_stroke(gpu, sample)
+            s.begin_stroke(sample)
         } else {
             s.add_samples(&[sample])
         }

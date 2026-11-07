@@ -1,15 +1,12 @@
 alias Wetness = array<f32, BRISTLES_PER_THREAD>;
-alias OwnedChains = array<Chain, BRISTLES_PER_THREAD>;
-alias OwnedFloors = array<Floors, BRISTLES_PER_THREAD>;
-
-struct Clumped {
-    chain: Chain,
-    floors: Floors,
-};
+const MOVING_VERTICES: u32 = BRISTLE_VERTICES - 1u;
+const CLUMP_ITEMS_PER_THREAD: u32 = BRISTLES_PER_THREAD * MOVING_VERTICES;
+alias MovedVertices = array<vec4<f32>, CLUMP_ITEMS_PER_THREAD>;
 
 const OVERLAP_SHARE_PER_SIDE: f32 = 0.5;
 
 var<workgroup> centroids: array<vec3<f32>, CLUSTER_CENTROIDS>;
+var<workgroup> pulls: array<f32, MAX_BRISTLES>;
 
 fn cluster_start(cluster: u32) -> u32 {
     return clusters[CLUSTER_SPAN_WORDS * cluster];
@@ -102,43 +99,52 @@ fn floor_after_move(held: vec4<f32>, moved_to: vec2<f32>) -> f32 {
     return surface_px(moved_to);
 }
 
-fn clumped(bristle: u32, wetness: f32) -> Clumped {
+fn clumped_vertex(bristle: u32, vertex: u32) -> vec4<f32> {
     let rest = rests[bristle];
-    let pull = tuning.clumping * wetness;
-    var result: Clumped;
-    let root = states[position_slot(bristle, 0u)];
-    result.chain[0] = root.xyz;
-    result.floors[0] = root.w;
-    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        let held = states[position_slot(bristle, vertex)];
-        let centroid = centroids[rest.cluster * BRISTLE_VERTICES + vertex];
-        let pushed = spaced(mix(held.xyz, centroid, pull), bristle, vertex, pull);
-        let floor_px = floor_after_move(held, pushed.xy);
-        result.chain[vertex] = vec3<f32>(pushed.xy, max(pushed.z, floor_px));
-        result.floors[vertex] = floor_px;
-    }
-    return result;
+    let pull = pulls[bristle];
+    let held = states[position_slot(bristle, vertex)];
+    let centroid = centroids[rest.cluster * BRISTLE_VERTICES + vertex];
+    let pushed = spaced(mix(held.xyz, centroid, pull), bristle, vertex, pull);
+    let floor_px = floor_after_move(held, pushed.xy);
+    return vec4<f32>(pushed.xy, max(pushed.z, floor_px), floor_px);
 }
 
-fn clump_owned(thread: u32, wetness: Wetness) {
-    gather_centroids(thread);
-    workgroupBarrier();
-    var chains: OwnedChains;
-    var floors: OwnedFloors;
+fn share_pulls(thread: u32, wetness: Wetness) {
     for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
         let bristle = owned_bristle(thread, share);
         if bristle < dab.bristle_total {
-            let result = clumped(bristle, wetness[share]);
-            chains[share] = result.chain;
-            floors[share] = result.floors;
+            pulls[bristle] = tuning.clumping * wetness[share];
         }
     }
-    storageBarrier();
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            store_positions(bristle, chains[share], floors[share]);
+    workgroupBarrier();
+}
+
+fn clumped_bristle(item: u32) -> u32 {
+    return item / MOVING_VERTICES;
+}
+
+fn clumped_vertex_index(item: u32) -> u32 {
+    return 1u + item % MOVING_VERTICES;
+}
+
+fn clump_owned(thread: u32) {
+    gather_centroids(thread);
+    workgroupBarrier();
+    var moved: MovedVertices;
+    for (var share = 0u; share < CLUMP_ITEMS_PER_THREAD; share++) {
+        let item = owned_bristle(thread, share);
+        if clumped_bristle(item) >= dab.bristle_total {
+            break;
         }
+        moved[share] = clumped_vertex(clumped_bristle(item), clumped_vertex_index(item));
+    }
+    storageBarrier();
+    for (var share = 0u; share < CLUMP_ITEMS_PER_THREAD; share++) {
+        let item = owned_bristle(thread, share);
+        if clumped_bristle(item) >= dab.bristle_total {
+            break;
+        }
+        states[position_slot(clumped_bristle(item), clumped_vertex_index(item))] = moved[share];
     }
     storageBarrier();
 }

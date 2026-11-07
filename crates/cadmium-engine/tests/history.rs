@@ -173,7 +173,7 @@ fn lifting_the_pen_after_every_dab_was_painted_makes_the_stroke_undoable() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     let samples = line(128.0, 40.0, 470.0, 0.8, 20.0);
-    s.begin_stroke(&gpu, samples[0]);
+    s.begin_stroke(samples[0]);
     s.add_samples(&samples[1..]);
     frame(&gpu, &mut s);
     s.end_stroke();

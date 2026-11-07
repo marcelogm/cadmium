@@ -127,7 +127,9 @@ fn reference(@builtin(local_invocation_index) thread: u32) {
         for (var index = first_lane_index(low, thread); index <= high; index += REFERENCE_THREADS) {
             let pixel = dab.canvas_origin + vec2<i32>(vec2<u32>(index % width, index / width));
             let cover = contact_at(pixel).coverage;
-            weighted += cover * surface_height(pixel);
+            if (cover != 0.0) {
+                weighted += cover * surface_height(pixel);
+            }
             weight += cover;
         }
     }

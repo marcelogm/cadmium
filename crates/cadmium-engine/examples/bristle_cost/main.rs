@@ -11,12 +11,16 @@
 //! The long-stroke scenarios paint the S-curve four times back and forth in one stroke and
 //! also report each quarter of it, so a cost that grows along a stroke shows up.
 //! `CADMIUM_SCENARIO=<text>` measures only the scenarios whose name contains the text.
+//! `CADMIUM_PEN_SPEED=<px/s>` draws the strokes at that speed instead of 800 px/s.
+//! `CADMIUM_PACED=1` paces the dabs over frames the way the app does, and also prints how
+//! many frames a stroke kept painting after the pen lifted.
 
 mod bench;
 mod scenarios;
 mod timing;
 
 use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
+use cadmium_engine::frame_budget::DabBudget;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 
@@ -27,6 +31,7 @@ use timing::{FrameCost, Timestamps, report, report_quarters, timestamps};
 const CANVAS_WIDTH_PX: u32 = 2048;
 const CANVAS_HEIGHT_PX: u32 = 1536;
 const SCENARIO_FILTER_VARIABLE: &str = "CADMIUM_SCENARIO";
+const PACED_VARIABLE: &str = "CADMIUM_PACED";
 const PIGMENTS: [&str; 3] = ["cadmium_red", "ultramarine_blue", "titanium_white"];
 
 fn measure(
@@ -47,18 +52,27 @@ fn measure(
         timestamps,
         present_target: None,
         frame_index: 0,
+        pacing: std::env::var_os(PACED_VARIABLE).map(|_| DabBudget::default()),
+        frames_after_lift: 0,
     };
     if scenario.ground == Ground::Impasto {
         bench.lay_impasto();
     }
     bench.take_up(scenario);
-    match scenario.motion {
+    let costs = match scenario.motion {
         Motion::Stroke => bench.stroke(&s_curve(STROKE_PRESSURE)),
         Motion::LongStroke => bench.stroke(&long_stroke(STROKE_PRESSURE)),
         Motion::Settle => bench.settle(),
         Motion::Shade => bench.shade(),
         Motion::Present => bench.present(),
+    };
+    if bench.pacing.is_some() && bench.frames_after_lift > 0 {
+        println!(
+            "  painting {} frames after the pen lifted",
+            bench.frames_after_lift
+        );
     }
+    costs
 }
 
 fn selected(scenario: &Scenario) -> bool {

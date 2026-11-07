@@ -17,7 +17,6 @@ impl PaintSession {
         self.end_hold();
         self.stroke = None;
         self.queued.clear();
-        self.step_open = false;
         self.history.clear();
         let previous = self.swap_in_placeholders(gpu)?;
         let replaced = self.replace_canvas(gpu, spec, previous);

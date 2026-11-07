@@ -87,7 +87,7 @@ fn painted_spec() -> CanvasSpec {
 
 fn session_with_ended_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64)) -> PaintSession {
     let mut s = PaintSession::new(gpu, painted_spec()).unwrap();
-    s.begin_stroke(gpu, sample(from.0, from.1, 0));
+    s.begin_stroke(sample(from.0, from.1, 0));
     s.add_samples(&[sample(to.0, to.1, 200)]);
     s.end_stroke();
     s

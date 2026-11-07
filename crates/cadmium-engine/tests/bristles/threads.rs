@@ -130,7 +130,7 @@ fn paint_and_track(gpu: &GpuContext, s: &mut PaintSession) -> ClumpTracks {
     };
     for (index, sample) in line_samples().iter().enumerate() {
         if index == 0 {
-            s.begin_stroke(gpu, *sample);
+            s.begin_stroke(*sample);
         } else {
             s.add_samples(&[*sample]);
         }
@@ -222,7 +222,7 @@ fn a_draining_brush_keeps_its_belly_wet_while_its_outer_hairs_run_dry() {
     let draining = &samples[..(samples.len() as f64 * DRAINING_SHARE) as usize];
     for (index, sample) in draining.iter().enumerate() {
         if index == 0 {
-            s.begin_stroke(&gpu, *sample);
+            s.begin_stroke(*sample);
         } else {
             s.add_samples(&[*sample]);
         }

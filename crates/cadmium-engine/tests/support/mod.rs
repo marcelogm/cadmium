@@ -63,7 +63,7 @@ pub fn frame(gpu: &GpuContext, s: &mut PaintSession) {
 pub fn drag(gpu: &GpuContext, s: &mut PaintSession, samples: &[StrokeSample]) {
     for (i, sample) in samples.iter().enumerate() {
         if i == 0 {
-            s.begin_stroke(gpu, *sample)
+            s.begin_stroke(*sample)
         } else {
             s.add_samples(&[*sample])
         }

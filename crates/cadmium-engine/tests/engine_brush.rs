@@ -39,7 +39,7 @@ fn stroke(gpu: &GpuContext, s: &mut PaintSession, y: f64, from: f64, to: f64) {
             time_ms: i * 4,
         };
         if i == 0 {
-            s.begin_stroke(gpu, sample)
+            s.begin_stroke(sample)
         } else {
             s.add_samples(&[sample])
         }
@@ -184,17 +184,14 @@ fn a_dab_marks_its_tiles_wet_and_dirty_including_the_apron() {
     let mut e = gpu.device.create_command_encoder(&Default::default());
     s.encode_frame(&gpu, support::FROZEN_FRAME_CLOCK_MS, &mut e);
     gpu.queue.submit([e.finish()]);
-    s.begin_stroke(
-        &gpu,
-        StrokeSample {
-            x: 64.0 + 0.5,
-            y: 100.0,
-            pressure: 1.0,
-            tilt_x_deg: 0.0,
-            tilt_y_deg: 0.0,
-            time_ms: 0,
-        },
-    );
+    s.begin_stroke(StrokeSample {
+        x: 64.0 + 0.5,
+        y: 100.0,
+        pressure: 1.0,
+        tilt_x_deg: 0.0,
+        tilt_y_deg: 0.0,
+        time_ms: 0,
+    });
     s.end_stroke();
     assert!(s.has_pending_work());
     let mut e = gpu.device.create_command_encoder(&Default::default());

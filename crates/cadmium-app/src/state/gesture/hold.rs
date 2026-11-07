@@ -181,7 +181,7 @@ impl AppState {
         held_on(tool, self.knife_level(), self.reserve_level())
     }
 
-    fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
+    pub(super) fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
         let held = held_on(tool, &self.knife_mixture, &self.reserve_mixture);
         (!held.is_empty()).then(|| self.srgb8_of(&held.fractions))
     }

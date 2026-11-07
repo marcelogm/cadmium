@@ -47,7 +47,7 @@ fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
         ..painted_spec()
     };
     let mut s = PaintSession::new(&gpu, spec).unwrap();
-    s.begin_stroke(&gpu, sample(10.0, 30.0, 0));
+    s.begin_stroke(sample(10.0, 30.0, 0));
     s.add_samples(&[sample(90.0, 32.0, 200)]);
     s.end_stroke();
     let dir = TempDir::new("unaligned");
@@ -136,7 +136,7 @@ fn a_large_painting_with_one_stroke_saves_without_its_weave() {
         },
     )
     .unwrap();
-    s.begin_stroke(&gpu, sample(300.0, 700.0, 0));
+    s.begin_stroke(sample(300.0, 700.0, 0));
     s.add_samples(&[sample(1700.0, 800.0, 400)]);
     s.end_stroke();
     let dir = TempDir::new("large");

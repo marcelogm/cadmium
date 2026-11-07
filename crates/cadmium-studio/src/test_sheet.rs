@@ -96,7 +96,7 @@ impl TestSheet {
             medium: self.paint.medium,
         };
         wear(&mut self.session, gpu, &self.brush, loading);
-        self.session.begin_stroke(gpu, sample);
+        self.session.begin_stroke(sample);
     }
 
     /// Carries the stroke under way on through `samples`; without one, does nothing.

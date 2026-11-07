@@ -116,7 +116,7 @@ fn queued_dabs_land_on_the_surface_they_were_painted_on() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     load_slot(&gpu, &mut s, 1);
-    s.begin_stroke_on(&gpu, Surface::Tray, sample(40.0, 100.0, 0));
+    s.begin_stroke_on(Surface::Tray, sample(40.0, 100.0, 0));
     for i in 1..=40 {
         s.add_samples(&[sample(40.0 + 10.0 * f64::from(i), 100.0, 8 * i)]);
     }

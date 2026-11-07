@@ -8,6 +8,7 @@ use super::auto_fit::AutoFit;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
 use crate::input::nav_drag::{NavMode, held_mode};
+use crate::state::Mark;
 use crate::surface_scale::device_scale;
 use crate::view::{self, ViewStep};
 
@@ -145,6 +146,12 @@ impl CadmiumCanvas {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
         Some(CursorOutline::of_brush(&state, to_widget).turned(state.view.rotation))
+    }
+
+    pub(super) fn provisional_marks(&self) -> Option<([u8; 3], Vec<Mark>)> {
+        let state = self.imp().state.get()?.try_borrow().ok()?;
+        let trail = state.provisional_trail()?;
+        Some((trail.colour, trail.widget_marks(self.device_scale() as f32)))
     }
 
     pub(super) fn note_device_scale(&self) {

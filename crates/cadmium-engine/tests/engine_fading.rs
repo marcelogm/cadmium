@@ -60,7 +60,7 @@ fn line_samples() -> Vec<StrokeSample> {
 fn paint_line(gpu: &GpuContext, s: &mut PaintSession) {
     for (i, sample) in line_samples().into_iter().enumerate() {
         if i == 0 {
-            s.begin_stroke(gpu, sample)
+            s.begin_stroke(sample)
         } else {
             s.add_samples(&[sample])
         }

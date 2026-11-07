@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
 use crate::draw_up::DrawUp;
@@ -7,18 +9,22 @@ use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ShadeRequest, ViewMode};
-use crate::stroke::{Dab, StrokeBuilder};
+use crate::stroke::StrokeBuilder;
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
 use crate::tube::Tube;
 
 mod brush;
+mod command;
 mod hold;
+mod queue;
 mod removal;
 mod replacement;
 mod settle;
 mod stroke;
+mod walk;
 
 use hold::Hold;
+use queue::Queued;
 use settle::MotionAnchor;
 
 const PICK_RADIUS_PX: f32 = 4.0;
@@ -49,10 +55,10 @@ pub struct PaintSession {
     pub view_mode: ViewMode,
     pub db: PigmentDb,
     stroke: Option<StrokeBuilder>,
-    stroke_brush: BrushSettings,
-    queued: Vec<Dab>,
-    step_open: bool,
-    stroke_surface: Surface,
+    queued: VecDeque<Queued>,
+    frame_dab_limit: Option<usize>,
+    last_frame_dabs: usize,
+    walked_surface: Surface,
     hold: Option<Hold>,
     motion_anchor: Option<MotionAnchor>,
     tube: Tube,
@@ -106,10 +112,10 @@ impl PaintSession {
             view_mode: ViewMode::Color,
             db,
             stroke: None,
-            stroke_brush: BrushSettings::default(),
-            queued: Vec::new(),
-            step_open: false,
-            stroke_surface: Surface::Painting,
+            queued: VecDeque::new(),
+            frame_dab_limit: None,
+            last_frame_dabs: 0,
+            walked_surface: Surface::Painting,
             hold: None,
             motion_anchor: None,
             tube: Tube::new(gpu),
@@ -133,6 +139,9 @@ impl PaintSession {
         Ok(slot)
     }
 
+    /// Paints what this frame may of the queue, then shades the painting. The encoder must
+    /// be submitted before the next frame is encoded: a knife load waiting in the queue
+    /// reads the blade back at the start of a frame and must see the frames before it.
     pub fn encode_frame(
         &mut self,
         gpu: &GpuContext,
@@ -148,7 +157,7 @@ impl PaintSession {
         gpu: &GpuContext,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        self.encode_queued_dabs(gpu, encoder);
+        self.flush(gpu);
         self.encode_painting_shade(gpu, encoder);
     }
 
@@ -217,8 +226,8 @@ impl PaintSession {
         x: f32,
         y: f32,
     ) -> Result<Option<Mixture>, GpuLost> {
+        self.flush(gpu);
         let mut encoder = new_encoder(gpu, "pick_colour");
-        self.encode_queued_dabs(gpu, &mut encoder);
         let request = PickRequest {
             center: [x, y],
             radius: PICK_RADIUS_PX,

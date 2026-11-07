@@ -72,7 +72,7 @@ impl Painter {
         let Some((&first, rest)) = samples.split_first() else {
             return;
         };
-        self.session.begin_stroke(&self.gpu, first);
+        self.session.begin_stroke(first);
         self.frame();
         for chunk in rest.chunks(SAMPLES_PER_FRAME) {
             self.session.add_samples(chunk);

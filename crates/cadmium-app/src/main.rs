@@ -22,6 +22,7 @@ mod new_painting_dialog;
 mod preferences_dialog;
 mod presenter;
 mod presets;
+mod provisional_overlay;
 mod settings;
 mod side_panel;
 mod sliders;
