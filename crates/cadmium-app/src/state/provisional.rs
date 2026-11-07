@@ -69,28 +69,31 @@ fn mark_of(dab: &Dab) -> Mark {
     }
 }
 
-fn far_enough(kept: &Mark, next: &Mark) -> bool {
-    let gap = (next.centre.0 - kept.centre.0).hypot(next.centre.1 - kept.centre.1);
-    gap >= THINNING_SHARE_OF_RADIUS * kept.radius.min(next.radius)
+/// The cell of a canvas grid about half the dab's radius wide that holds the dab, with the
+/// grid's size, which doubles in steps so dabs of nearly the same size share a grid.
+fn cell_of(dab: &Dab) -> (i32, i32, i32) {
+    let scale = (THINNING_SHARE_OF_RADIUS * dab.radius)
+        .max(1.0)
+        .log2()
+        .floor() as i32;
+    let size = 2.0_f32.powi(scale);
+    let cell = |coordinate: f32| (coordinate / size).floor() as i32;
+    (cell(dab.x), cell(dab.y), scale)
 }
 
-/// The dabs as marks, dropping those that sit within half a radius of the mark kept before
-/// them; the last dab, the stroke's tip, always stays.
+/// The dabs as marks, keeping a dab only where it steps into another grid cell than the dab
+/// before it. That depends on the dab and its neighbour alone, never on where the queue
+/// starts, so painting the head of the queue leaves the marks behind it in place. The head
+/// and the stroke's tip always stay.
 fn thinned(dabs: &[Dab]) -> Vec<Mark> {
-    let mut marks: Vec<Mark> = Vec::new();
-    for dab in dabs {
-        let mark = mark_of(dab);
-        match marks.last() {
-            Some(kept) if !far_enough(kept, &mark) => {}
-            _ => marks.push(mark),
-        }
-    }
-    if let (Some(tip), Some(kept)) = (dabs.last().map(mark_of), marks.last())
-        && *kept != tip
-    {
-        marks.push(tip);
-    }
-    marks
+    let last = dabs.len().saturating_sub(1);
+    dabs.iter()
+        .enumerate()
+        .filter(|&(index, dab)| {
+            index == 0 || index == last || cell_of(&dabs[index - 1]) != cell_of(dab)
+        })
+        .map(|(_, dab)| mark_of(dab))
+        .collect()
 }
 
 #[cfg(test)]

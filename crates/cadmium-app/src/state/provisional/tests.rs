@@ -32,7 +32,7 @@ fn row(count: usize, step_px: f32, radius: f32) -> Vec<Dab> {
 fn dabs_closer_than_half_a_radius_collapse_into_fewer_marks() {
     let trail = ProvisionalTrail::of(BLUE, &row(100, 1.0, 20.0), UPRIGHT);
     let marks = trail.canvas_marks();
-    assert!(marks.len() <= 11, "{} marks", marks.len());
+    assert!(marks.len() <= 14, "{} marks", marks.len());
     assert!(
         marks
             .windows(2)
@@ -73,4 +73,18 @@ fn no_queued_dabs_leave_no_marks() {
             .canvas_marks()
             .is_empty()
     );
+}
+
+#[test]
+fn painting_the_head_of_the_queue_leaves_the_marks_behind_it_in_place() {
+    let queued = row(100, 1.0, 20.0);
+    let before = ProvisionalTrail::of(BLUE, &queued, UPRIGHT);
+    let after = ProvisionalTrail::of(BLUE, &queued[3..], UPRIGHT);
+    for mark in &after.canvas_marks()[1..] {
+        assert!(
+            before.canvas_marks().contains(mark),
+            "the mark at {:?} moved",
+            mark.centre
+        );
+    }
 }
