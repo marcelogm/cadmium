@@ -318,11 +318,11 @@ fn held_keys_show_their_mode_s_cursor_only_when_it_changes() {
 }
 
 #[test]
-fn held_keys_or_the_contact_s_modifiers_hold_navigation() {
+fn held_keys_or_the_contact_s_modifiers_holds_navigation() {
     let held = HeldKeys::default();
     let none = gdk::ModifierType::empty();
-    assert!(!held.hold_navigation(none));
-    assert!(held.hold_navigation(gdk::ModifierType::SHIFT_MASK));
+    assert!(!held.holds_navigation(none));
+    assert!(held.holds_navigation(gdk::ModifierType::SHIFT_MASK));
     held.set(true, none, "idle");
-    assert!(held.hold_navigation(none));
+    assert!(held.holds_navigation(none));
 }

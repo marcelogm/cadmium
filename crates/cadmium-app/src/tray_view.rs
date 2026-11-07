@@ -165,7 +165,7 @@ impl PaintSurfaceWidget for TrayView {
     }
 
     fn holds_navigation(&self, modifiers: gdk::ModifierType) -> bool {
-        self.imp().held_keys.hold_navigation(modifiers)
+        self.imp().held_keys.holds_navigation(modifiers)
     }
 }
 

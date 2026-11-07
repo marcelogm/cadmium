@@ -170,7 +170,7 @@ impl HeldKeys {
 
     /// Whether the held keys, or `modifiers` from a contact's event, have the primary contact
     /// navigate instead of paint.
-    pub(crate) fn hold_navigation(&self, modifiers: gdk::ModifierType) -> bool {
+    pub(crate) fn holds_navigation(&self, modifiers: gdk::ModifierType) -> bool {
         held_mode(self.space_held(), modifiers).is_some()
     }
 }
