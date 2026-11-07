@@ -5,7 +5,7 @@ use gtk::{gdk, gio, glib};
 use super::CadmiumWindow;
 use crate::LOG_DOMAIN;
 use crate::tools::UiTool;
-use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS};
+use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS, is_number_row_digit};
 
 impl CadmiumWindow {
     pub(super) fn fill_tool_group(&self) {
@@ -67,7 +67,12 @@ impl CadmiumWindow {
         let controller = gtk::ShortcutController::new();
         controller.set_scope(gtk::ShortcutScope::Global);
         controller.set_propagation_phase(gtk::PropagationPhase::Bubble);
-        for (key, tool) in TOOL_KEYS.into_iter().chain(KEYPAD_TOOL_KEYS) {
+        // The number row is the window's digit keys' (`setup_digit_keys`).
+        let keys = TOOL_KEYS
+            .into_iter()
+            .filter(|&(key, _)| !is_number_row_digit(key))
+            .chain(KEYPAD_TOOL_KEYS);
+        for (key, tool) in keys {
             let shortcut = gtk::Shortcut::builder()
                 .trigger(&gtk::KeyvalTrigger::new(key, gdk::ModifierType::empty()))
                 .action(&gtk::NamedAction::new("win.tool"))

@@ -104,3 +104,13 @@ fn other_modifiers_keys_without_a_digit_and_the_keypad_pick_nothing_here() {
     assert_eq!(pick((gdk::Key::KP_End, gdk::Key::KP_1), SHIFT), None);
     assert_eq!(digit_pick(None, None, NONE), None);
 }
+
+#[test]
+fn only_the_number_row_digits_are_number_row_digits() {
+    for key in [gdk::Key::_0, gdk::Key::_1, gdk::Key::_9] {
+        assert!(is_number_row_digit(key), "{key:?}");
+    }
+    for key in [gdk::Key::KP_1, gdk::Key::exclam, gdk::Key::h, gdk::Key::r] {
+        assert!(!is_number_row_digit(key), "{key:?}");
+    }
+}

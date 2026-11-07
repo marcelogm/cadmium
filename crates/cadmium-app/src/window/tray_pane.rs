@@ -137,8 +137,9 @@ impl CadmiumWindow {
 
     fn show_tray_pane(&self, shown: bool) {
         let imp = self.imp();
+        let showing_now = shown && !imp.tray_pane.is_visible();
         imp.tray_pane.set_visible(shown);
-        if shown {
+        if showing_now {
             let mut divider = imp.tray_divider.get();
             divider.forget_layout();
             imp.tray_divider.set(divider);

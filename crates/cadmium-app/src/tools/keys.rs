@@ -52,6 +52,12 @@ const fn bound_keys<const N: usize>(row: KeyRow) -> [(gdk::Key, UiTool); N] {
     bound
 }
 
+/// Whether `key` is a number-row digit; the window's digit keys take those (see
+/// [`digit_pick`]), so the tool shortcuts leave them out.
+pub(crate) fn is_number_row_digit(key: gdk::Key) -> bool {
+    (gdk::Key::_0..=gdk::Key::_9).contains(&key)
+}
+
 /// What a number-row press picks: a digit picks the painting's tool, Shift and a digit the
 /// tray's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,7 +84,7 @@ pub(crate) fn digit_pick(
     let digit = [unshifted, shifted]
         .into_iter()
         .flatten()
-        .find(|key| (gdk::Key::_0..=gdk::Key::_9).contains(key))?;
+        .find(|&key| is_number_row_digit(key))?;
     let modifiers = modifiers & SHORTCUT_MODIFIERS;
     if modifiers.is_empty() {
         TOOL_KEYS
