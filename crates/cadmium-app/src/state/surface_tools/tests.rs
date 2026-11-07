@@ -5,6 +5,7 @@ use crate::state::PigmentClick;
 use crate::state::test_support::{
     painting_state, present_one_tray_frame, sample_at, squeeze_blob_on_tray,
 };
+use crate::tools::panel::PanelTool;
 use crate::tools::{Press, TrayTool, UiTool};
 
 #[test]
@@ -35,11 +36,11 @@ fn the_side_panel_follows_the_tool_chosen_last() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.set_tray_tool(TrayTool::Tube);
-    assert_eq!(state.focused_tool(), UiTool::Tube);
+    assert_eq!(state.focused_tool(), PanelTool::Tube);
     state.set_ui_tool(UiTool::Paint(Tool::Knife));
-    assert_eq!(state.focused_tool(), UiTool::Paint(Tool::Knife));
+    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Knife));
     state.set_tray_tool(TrayTool::Load);
-    assert_eq!(state.focused_tool(), UiTool::Paint(Tool::Knife));
+    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Knife));
 }
 
 #[test]

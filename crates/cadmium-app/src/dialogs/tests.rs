@@ -37,11 +37,6 @@ fn rag_lists_both_of_its_keys() {
 }
 
 #[test]
-fn the_tube_answers_to_six() {
-    assert_eq!(tool_accelerator(UiTool::Tube), "6");
-}
-
-#[test]
 fn zoom_in_lists_both_of_its_accelerators() {
     assert_eq!(
         action_accelerator("win.zoom-in").as_deref(),

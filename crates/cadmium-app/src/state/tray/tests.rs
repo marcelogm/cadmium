@@ -3,14 +3,14 @@ use crate::state::test_support::{
     ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals, painting_state, settle_both_surfaces,
     squeeze_blob_on_tray,
 };
-use crate::tools::UiTool;
+use crate::tools::TrayTool;
 
 const YELLOW_SLOT: usize = 1;
 
 #[test]
 fn a_pile_click_with_the_tube_only_chooses_the_tube() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     let before = brush_totals(&state);
     let recipe = state.session.brush.recipe.clone();
     state.click_pile(ULTRAMARINE_SLOT, PigmentClick::Mix);
@@ -34,7 +34,7 @@ fn adding_a_pigment_while_holding_the_tube_makes_it_the_tube_and_leaves_the_brus
     let mut spec = state.session.canvas.spec.clone();
     spec.pigment_slots.truncate(ULTRAMARINE_SLOT + 1);
     state.start_painting(spec).unwrap();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     let before = brush_totals(&state);
     let recipe = state.session.brush.recipe.clone();
     let slot = state.add_pile("burnt_umber").unwrap();

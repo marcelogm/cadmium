@@ -13,13 +13,11 @@ mod moving;
 pub(crate) mod panel;
 mod rag;
 pub(crate) mod tray_tool;
-mod tube;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
     Move,
     Paint(Tool),
-    Tube,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,14 +51,13 @@ impl Default for UiTool {
 }
 
 impl UiTool {
-    pub const ALL: [UiTool; 7] = [
+    pub const ALL: [UiTool; 6] = [
         UiTool::Move,
         UiTool::Paint(Tool::Brush),
         UiTool::Paint(Tool::Knife),
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
         UiTool::Paint(Tool::Eyedropper),
-        UiTool::Tube,
     ];
 
     pub(crate) const fn profile(self) -> &'static UiToolProfile {
@@ -71,7 +68,6 @@ impl UiTool {
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
             UiTool::Paint(Tool::Eyedropper) => &eyedropper::EYEDROPPER,
-            UiTool::Tube => &tube::TUBE,
         }
     }
 

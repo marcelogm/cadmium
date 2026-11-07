@@ -2,11 +2,10 @@ use adw::prelude::*;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
-use super::presentation::{
-    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, PanelTool, SIZE_STEP, plate_gap_spec, tool_wording,
-};
+use super::presentation::{EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, plate_gap_spec};
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
+use crate::tools::panel::PanelTool;
 
 const PIGMENT_SPACING: u32 = 4;
 const PIGMENT_BOX_MARGIN: i32 = 10;
@@ -57,7 +56,7 @@ pub(super) fn pigments_group() -> PigmentsGroup {
     pigment_card.append(&flow);
     let group = adw::PreferencesGroup::builder()
         .title("Pigments")
-        .description(tool_wording(PanelTool::Paint(Tool::Brush)).pigments)
+        .description(PanelTool::Paint(Tool::Brush).wording().pigments)
         .build();
     group.add(&pigment_card);
     PigmentsGroup { group, flow }
@@ -136,7 +135,7 @@ fn loaded_row() -> (adw::ActionRow, Swatch, gtk::LevelBar) {
 
 fn size_row() -> SliderRow {
     slider_row(
-        tool_wording(PanelTool::Paint(Tool::Brush)).size_title,
+        PanelTool::Paint(Tool::Brush).wording().size_title,
         MIN_SIZE_PX.ln(),
         MAX_SIZE_PX.ln(),
         SIZE_STEP,

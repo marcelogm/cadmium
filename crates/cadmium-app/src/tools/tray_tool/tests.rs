@@ -1,4 +1,5 @@
 use super::*;
+use crate::tools::panel::PanelTool;
 
 #[test]
 fn names_round_trip_and_match_the_tray_header() {
@@ -27,7 +28,6 @@ fn load_loads_the_painting_tool_that_holds_paint() {
     );
     for tool in [
         UiTool::Move,
-        UiTool::Tube,
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
         UiTool::Paint(Tool::Eyedropper),
@@ -99,13 +99,33 @@ fn tray_keys_are_shifted_digits_and_tooltips_name_them() {
 }
 
 #[test]
-fn every_tray_tool_shows_as_a_ui_tool_in_the_panel() {
+fn every_tray_tool_shows_in_the_panel() {
     let brush = UiTool::Paint(Tool::Brush);
-    assert_eq!(TrayTool::Load.panel_tool(brush), brush);
     assert_eq!(
-        TrayTool::Blender.panel_tool(brush),
-        UiTool::Paint(Tool::Blender)
+        TrayTool::Load.panel_tool(brush, Tool::Brush),
+        PanelTool::Paint(Tool::Brush)
     );
-    assert_eq!(TrayTool::Rag.panel_tool(brush), UiTool::Paint(Tool::Rag));
-    assert_eq!(TrayTool::Tube.panel_tool(brush), UiTool::Tube);
+    assert_eq!(
+        TrayTool::Load.panel_tool(UiTool::Move, Tool::Knife),
+        PanelTool::Paint(Tool::Knife)
+    );
+    assert_eq!(
+        TrayTool::Blender.panel_tool(brush, Tool::Brush),
+        PanelTool::Paint(Tool::Blender)
+    );
+    assert_eq!(
+        TrayTool::Rag.panel_tool(brush, Tool::Brush),
+        PanelTool::Paint(Tool::Rag)
+    );
+    assert_eq!(
+        TrayTool::Tube.panel_tool(brush, Tool::Brush),
+        PanelTool::Tube
+    );
+}
+
+#[test]
+fn the_tray_tube_keeps_the_tube_wording() {
+    assert_eq!(PanelTool::Tube.label(), "Tube");
+    assert_eq!(PanelTool::Tube.wording().size_title, "Nozzle");
+    assert!(PanelTool::Tube.controls().pigments);
 }

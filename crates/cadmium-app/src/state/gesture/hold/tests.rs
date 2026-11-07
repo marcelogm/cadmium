@@ -1,7 +1,7 @@
 use super::*;
 use crate::state::test_support::{
     WHITE_SLOT, brush_totals, painting_state, present_one_frame, present_one_tray_frame, sample_at,
-    settle_both_surfaces, squeeze_blob_on_tray, wet_volume,
+    settle_both_surfaces, squeeze_blob_on_tray,
 };
 use crate::tools::{TrayTool, UiTool};
 
@@ -53,10 +53,10 @@ fn a_hold_step_of_no_real_time_squeezes_nothing() {
 }
 
 #[test]
-fn squeezing_off_the_canvas_is_not_an_edit() {
+fn squeezing_off_the_tray_is_not_an_edit() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
-    state.press(Surface::Painting, sample_at(-1000.0, -1000.0, 1.0), false);
+    state.set_tray_tool(TrayTool::Tube);
+    state.press(Surface::Tray, sample_at(-1000.0, -1000.0, 1.0), false);
     state.advance_hold(MAX_HOLD_STEP_SECONDS);
     state.release();
     assert!(!state.has_unsaved_edits());
@@ -66,24 +66,6 @@ const FRAME_GAP: std::time::Duration = std::time::Duration::from_millis(20);
 
 fn tray_volume(state: &AppState) -> f64 {
     state.session.tray.wet_totals(&state.gpu).unwrap().volume
-}
-
-#[test]
-fn a_hold_on_the_painting_advances_only_with_painting_frames() {
-    let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
-    state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
-    for _ in 0..2 {
-        present_one_tray_frame(&mut state);
-        std::thread::sleep(FRAME_GAP);
-    }
-    assert_eq!(wet_volume(&state), 0.0);
-    for _ in 0..2 {
-        present_one_frame(&mut state);
-        std::thread::sleep(FRAME_GAP);
-    }
-    state.release();
-    assert!(wet_volume(&state) > 0.0);
 }
 
 #[test]
@@ -244,40 +226,40 @@ fn a_stroke_grown_from_a_load_keeps_what_was_loaded() {
 fn the_tube_squeezes_its_own_pigment_and_leaves_the_brush_alone() {
     let mut state = painting_state();
     state.clean_brush();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.set_tube_slot(1);
-    state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
+    state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(0.2);
     state.release();
-    let totals = state.session.canvas.wet_totals(&state.gpu).unwrap();
+    let totals = state.session.tray.wet_totals(&state.gpu).unwrap();
     assert!(totals.pigment[1] > 0.0 && totals.pigment[0] == 0.0);
     assert!(state.brush_is_clean());
     assert!(state.has_unsaved_edits());
 }
 
-fn painting_height_at(state: &AppState, x: usize, y: usize) -> f32 {
+fn tray_height_at(state: &AppState, x: usize, y: usize) -> f32 {
     let volume = state
         .session
-        .canvas
+        .tray
         .read_f32(&state.gpu, cadmium_engine::canvas::StateTexture::WetVol)
         .unwrap();
-    volume[y * state.session.canvas.spec.width as usize + x]
+    volume[y * state.session.tray.spec.width as usize + x]
 }
 
 #[test]
-fn a_tube_on_a_zoomed_out_painting_keeps_growing_through_a_trembling_hand() {
+fn a_tube_on_a_zoomed_out_tray_keeps_growing_through_a_trembling_hand() {
     let mut state = painting_state();
     state.set_brush_size(10.0);
-    state.view.zoom = 0.25;
-    state.set_ui_tool(UiTool::Tube);
-    let one_screen_px = 1.0 / f64::from(state.view.zoom);
+    state.set_tray_zoom(0.25);
+    state.set_tray_tool(TrayTool::Tube);
+    let one_screen_px = 1.0 / f64::from(state.tray_zoom);
     let shaken = |frame: usize| {
         let shake = if frame.is_multiple_of(2) {
             one_screen_px
         } else {
             -one_screen_px
         };
-        sample_at(200.5 + shake, 200.5, 0.5)
+        sample_at(300.5 + shake, 300.5, 0.5)
     };
     let tremble = |state: &mut AppState, frames: std::ops::Range<usize>| {
         for frame in frames {
@@ -285,11 +267,11 @@ fn a_tube_on_a_zoomed_out_painting_keeps_growing_through_a_trembling_hand() {
             state.advance_hold(0.05);
         }
     };
-    state.press(Surface::Painting, sample_at(200.5, 200.5, 0.5), false);
+    state.press(Surface::Tray, sample_at(300.5, 300.5, 0.5), false);
     tremble(&mut state, 0..10);
-    let early = painting_height_at(&state, 200, 200);
+    let early = tray_height_at(&state, 300, 300);
     tremble(&mut state, 10..30);
-    let later = painting_height_at(&state, 200, 200);
+    let later = tray_height_at(&state, 300, 300);
     state.release();
     assert!(later > early, "{early} -> {later}");
 }

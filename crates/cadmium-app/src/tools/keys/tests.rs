@@ -15,9 +15,13 @@ fn keypad_digits_choose_the_same_tools_as_the_number_row() {
 }
 
 #[test]
-fn six_chooses_the_tube_on_both_rows() {
-    assert!(TOOL_KEYS.contains(&(gdk::Key::_6, UiTool::Tube)));
-    assert!(KEYPAD_TOOL_KEYS.contains(&(gdk::Key::KP_6, UiTool::Tube)));
+fn six_chooses_no_painting_tool() {
+    assert!(!TOOL_KEYS.iter().any(|(key, _)| *key == gdk::Key::_6));
+    assert!(
+        !KEYPAD_TOOL_KEYS
+            .iter()
+            .any(|(key, _)| *key == gdk::Key::KP_6)
+    );
 }
 
 #[test]

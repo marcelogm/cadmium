@@ -1,7 +1,8 @@
 use cadmium_engine::surface::Surface;
 
 use super::AppState;
-use crate::tools::{Press, TrayTool, UiTool};
+use crate::tools::panel::PanelTool;
+use crate::tools::{Press, TrayTool};
 
 impl AppState {
     pub fn tray_tool(&self) -> TrayTool {
@@ -22,10 +23,11 @@ impl AppState {
     }
 
     /// The tool the side panel and the pigment piles answer to.
-    pub fn focused_tool(&self) -> UiTool {
+    pub(crate) fn focused_tool(&self) -> PanelTool {
+        let tool_in_hand = self.session.brush.tool;
         match self.focus {
-            Surface::Painting => self.ui_tool,
-            Surface::Tray => self.tray_tool.panel_tool(self.ui_tool),
+            Surface::Painting => PanelTool::of_painting(self.ui_tool, tool_in_hand),
+            Surface::Tray => self.tray_tool.panel_tool(self.ui_tool, tool_in_hand),
         }
     }
 }

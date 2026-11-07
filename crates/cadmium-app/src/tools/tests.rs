@@ -12,15 +12,7 @@ fn toggle_names_match_the_header_tool_group() {
     let names: Vec<_> = UiTool::ALL.iter().map(|tool| tool.name()).collect();
     assert_eq!(
         names,
-        [
-            "move",
-            "brush",
-            "knife",
-            "blender",
-            "rag",
-            "eyedropper",
-            "tube"
-        ]
+        ["move", "brush", "knife", "blender", "rag", "eyedropper"]
     );
 }
 
@@ -39,9 +31,11 @@ fn every_toggle_tooltip_names_the_tool_and_its_first_key() {
 }
 
 #[test]
-fn the_tube_is_not_an_engine_tool() {
-    assert_eq!(UiTool::from_name(UiTool::Tube.name()), Some(UiTool::Tube));
-    assert_eq!(UiTool::Tube.label(), "Tube");
+fn the_tube_is_not_a_painting_tool() {
+    assert_eq!(UiTool::from_name("tube"), None);
+    for tool in UiTool::ALL {
+        assert_ne!(tool.profile().on_painting, Press::Squeeze, "{tool:?}");
+    }
 }
 
 #[test]
