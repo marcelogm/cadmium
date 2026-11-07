@@ -60,7 +60,7 @@ fn begin_nav(
                 .is_some_and(|event| comes_from_a_pen(&event)),
             // The pointer event's own modifier state is current; key events' is one step behind.
             held: held_mode(canvas.space_held(), drag.current_event_state()),
-            tool_pans: state.ui_tool.profile().press_on(canvas.surface()) == Press::Pan,
+            tool_pans: state.press_for(canvas.surface()) == Press::Pan,
             stroking: state.is_stroking(),
             pen_buttons: pen_buttons_of(canvas),
         };

@@ -9,11 +9,12 @@ use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
+use cadmium_engine::surface::Surface;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::settings::SettingsStore;
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
 use gesture::Contact;
@@ -39,11 +40,19 @@ mod pen;
 mod provisional;
 mod recipe;
 mod studio_paint;
+mod surface_tools;
 mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
     volume_um: 0.0,
     fractions: [0.0; MAX_SLOTS],
+};
+
+const UNMOVED_VIEW: ViewTransform = ViewTransform {
+    origin_x: 0.0,
+    origin_y: 0.0,
+    zoom: 1.0,
+    rotation: 0.0,
 };
 
 pub type SharedState = Rc<RefCell<AppState>>;
@@ -70,6 +79,9 @@ pub struct AppState {
     worn_brush_index: Option<usize>,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
+    tray_tool: TrayTool,
+    /// The surface whose tool was chosen last; the side panel describes that tool.
+    focus: Surface,
     pub tube_slot: usize,
     edits: EditCounter,
     pub file: Option<PathBuf>,
@@ -104,13 +116,10 @@ impl AppState {
             brushes: BrushLibrary::factory_only(),
             settings: SettingsStore::default(),
             worn_brush_index: None,
-            view: ViewTransform {
-                origin_x: 0.0,
-                origin_y: 0.0,
-                zoom: 1.0,
-                rotation: 0.0,
-            },
+            view: UNMOVED_VIEW,
             ui_tool: UiTool::default(),
+            tray_tool: TrayTool::default(),
+            focus: Surface::Painting,
             tube_slot: 0,
             edits: EditCounter::default(),
             file: None,

@@ -1,10 +1,7 @@
 use gtk::gdk;
 
 pub use cadmium_engine::stroke::Tool;
-use cadmium_engine::surface::Surface;
 use panel::{ToolWording, VisibleControls};
-// Unused until the app state holds the tray's tool.
-#[expect(unused_imports)]
 pub use tray_tool::TrayTool;
 
 mod blender;
@@ -15,7 +12,6 @@ pub(crate) mod knife;
 mod moving;
 pub(crate) mod panel;
 mod rag;
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) mod tray_tool;
 mod tube;
 
@@ -42,20 +38,10 @@ pub(crate) struct UiToolProfile {
     pub(crate) tooltip: &'static str,
     pub(crate) keys: &'static [gdk::Key],
     keypad_keys: &'static [gdk::Key],
-    on_tray: Press,
-    on_painting: Press,
+    pub(crate) on_painting: Press,
     pub(crate) controls: VisibleControls,
     pub(crate) wording: ToolWording,
     handling: Option<&'static str>,
-}
-
-impl UiToolProfile {
-    pub(crate) fn press_on(&self, surface: Surface) -> Press {
-        match surface {
-            Surface::Tray => self.on_tray,
-            Surface::Painting => self.on_painting,
-        }
-    }
 }
 
 impl Default for UiTool {

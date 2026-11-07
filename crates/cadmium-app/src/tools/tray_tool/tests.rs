@@ -1,5 +1,4 @@
 use super::*;
-use crate::tools::{Press, Tool, UiTool};
 
 #[test]
 fn names_round_trip_and_match_the_tray_header() {

@@ -3,7 +3,7 @@ use crate::state::test_support::{
     WHITE_SLOT, brush_totals, painting_state, present_one_frame, present_one_tray_frame, sample_at,
     settle_both_surfaces, squeeze_blob_on_tray, wet_volume,
 };
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 
 #[test]
 fn load_is_cancelled_past_the_threshold() {
@@ -41,7 +41,7 @@ fn a_tray_zoom_that_is_not_a_scale_is_ignored() {
 #[test]
 fn a_hold_step_of_no_real_time_squeezes_nothing() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(f32::NAN);
     state.release();
@@ -89,7 +89,7 @@ fn a_hold_on_the_painting_advances_only_with_painting_frames() {
 #[test]
 fn a_hold_on_the_tray_advances_only_with_tray_frames() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     for _ in 0..2 {
         present_one_frame(&mut state);
@@ -156,7 +156,7 @@ fn a_load_that_takes_nothing_is_not_an_edit() {
 fn a_tray_hold_leaves_the_painting_with_no_pending_work() {
     let mut state = painting_state();
     settle_both_surfaces(&mut state);
-    state.set_ui_tool(UiTool::Tube);
+    state.set_tray_tool(TrayTool::Tube);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(MAX_HOLD_STEP_SECONDS);
     assert!(state.session.tray_has_pending_work());
@@ -299,7 +299,7 @@ fn a_hold_step_never_lasts_longer_than_a_tenth_of_a_second() {
     let mut once = painting_state();
     let mut long = painting_state();
     for state in [&mut once, &mut long] {
-        state.set_ui_tool(UiTool::Tube);
+        state.set_tray_tool(TrayTool::Tube);
         state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     }
     once.advance_hold(MAX_HOLD_STEP_SECONDS);

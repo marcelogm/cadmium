@@ -44,7 +44,7 @@ impl Snapshot {
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
         let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
-        let tool = panel_tool(state.ui_tool, session.brush.tool);
+        let tool = panel_tool(state.focused_tool(), session.brush.tool);
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| mixture_colour(db, &slots, primer, mixture);
         let palette_colour = colour_of(&state.palette_mixture());

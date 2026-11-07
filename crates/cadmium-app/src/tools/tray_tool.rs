@@ -17,7 +17,10 @@ pub(crate) struct TrayToolProfile {
     name: &'static str,
     label: &'static str,
     icon: &'static str,
+    // Read once the tray's header shows its tools.
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) tooltip: &'static str,
+    #[cfg_attr(not(test), expect(dead_code))]
     key: gdk::Key,
 }
 
@@ -75,6 +78,7 @@ impl TrayTool {
         TrayTool::ALL.into_iter().find(|tool| tool.name() == name)
     }
 
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn key(self) -> gdk::Key {
         self.profile().key
     }

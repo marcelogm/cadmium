@@ -11,7 +11,6 @@ pub(super) const TUBE: UiToolProfile = UiToolProfile {
     tooltip: "Tube (6): squeezes pure pigment onto the tray or the canvas; pressure squeezes the tube",
     keys: &[gdk::Key::_6],
     keypad_keys: &[gdk::Key::KP_6],
-    on_tray: Press::Squeeze,
     on_painting: Press::Squeeze,
     controls: VisibleControls {
         pigments: true,

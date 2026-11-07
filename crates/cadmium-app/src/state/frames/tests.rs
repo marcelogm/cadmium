@@ -4,7 +4,7 @@ use crate::state::test_support::{
     present_one_frame, present_one_tray_frame, row_samples, sample_at, scripted_painting_state,
     stroke, wet_volume,
 };
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 use cadmium_engine::engine::BRISTLE_SETTLE_MS;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
@@ -50,7 +50,7 @@ fn an_eraser_stroke_on_the_tray_puts_the_rag_down_after_the_tray_frame() {
 #[test]
 fn tray_frames_report_the_pen_samples_they_drew() {
     let mut state = painting_state();
-    state.set_ui_tool(UiTool::Paint(Tool::Blender));
+    state.set_tray_tool(TrayTool::Blender);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
     state.motion(&[sample_at(320.0, 300.0, 0.9), sample_at(340.0, 300.0, 0.9)]);
     present_one_tray_frame(&mut state);

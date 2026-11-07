@@ -11,7 +11,6 @@ pub(super) const EYEDROPPER: UiToolProfile = UiToolProfile {
     tooltip: "Eyedropper (5)",
     keys: &[gdk::Key::_5],
     keypad_keys: &[gdk::Key::KP_5],
-    on_tray: Press::PickColour,
     on_painting: Press::PickColour,
     controls: VisibleControls {
         hint: true,

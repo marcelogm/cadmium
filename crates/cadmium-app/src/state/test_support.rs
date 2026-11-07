@@ -9,7 +9,7 @@ use cadmium_engine::surface::Surface;
 use super::AppState;
 use super::clock::Clock;
 use crate::presets::starting_canvas_spec;
-use crate::tools::UiTool;
+use crate::tools::{TrayTool, UiTool};
 
 const TEST_CANVAS: (u32, u32) = (512, 256);
 
@@ -139,11 +139,13 @@ pub(super) fn present_one_tray_frame(state: &mut AppState) {
 }
 
 pub(super) fn squeeze_blob_on_tray(state: &mut AppState, slot: usize) {
-    state.set_ui_tool(UiTool::Tube);
+    let tray_tool = state.tray_tool();
+    state.set_tray_tool(TrayTool::Tube);
     state.set_tube_slot(slot);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(1.0);
     state.release();
+    state.set_tray_tool(tray_tool);
 }
 
 pub(super) fn settle_both_surfaces(state: &mut AppState) {

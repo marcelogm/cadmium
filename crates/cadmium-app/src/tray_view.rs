@@ -112,7 +112,7 @@ impl TrayView {
     fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = tray_screen_zoom(viewport_px(self), self.device_scale());
-        Some(CursorOutline::of_brush(&state, to_widget))
+        Some(CursorOutline::of_brush(&state, Surface::Tray, to_widget))
     }
 }
 

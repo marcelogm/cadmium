@@ -18,7 +18,7 @@ impl AppState {
     }
 
     pub fn click_pile(&mut self, slot: usize, click: PigmentClick) {
-        match self.ui_tool {
+        match self.focused_tool() {
             UiTool::Tube => self.set_tube_slot(slot),
             UiTool::Move | UiTool::Paint(_) => self.choose_pigment(slot, click),
         }

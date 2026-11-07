@@ -94,7 +94,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         return;
     }
     let state = widget.state();
-    let press = state.borrow().ui_tool.profile().press_on(widget.surface());
+    let press = state.borrow().press_for(widget.surface());
     let eraser = is_eraser(&event);
     match down_outcome(press, eraser) {
         DownOutcome::Ignore => return,

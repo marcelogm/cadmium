@@ -10,7 +10,7 @@ impl AppState {
         let press = if eraser {
             Press::Stroke(Tool::Rag)
         } else {
-            self.ui_tool.profile().press_on(surface)
+            self.press_for(surface)
         };
         let began = match press {
             Press::Pan | Press::PickColour => false,
