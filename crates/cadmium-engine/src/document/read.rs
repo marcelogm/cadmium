@@ -44,8 +44,8 @@ fn read_tray<R: Read + std::io::Seek>(
         _ => tray_spec(&spec.pigment_slots),
     };
     Ok(Some(TraySnapshot {
-        size: [tray_spec.width, tray_spec.height],
         states: read_states(archive, format, TRAY_PREFIX, &tray_spec)?,
+        spec: tray_spec,
     }))
 }
 

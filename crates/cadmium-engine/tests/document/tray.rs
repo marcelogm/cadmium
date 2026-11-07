@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use cadmium_engine::{
-    canvas::{Canvas, CanvasSpec, StateTexture},
+    canvas::{Canvas, CanvasSpec, StateTexture, TILE_SIZE, TileCoord},
     document::{self, DocumentSnapshot},
     gpu::GpuContext,
     session::PaintSession,
@@ -87,7 +87,12 @@ fn a_format_three_tray_opens_in_the_middle_of_the_larger_tray() {
             "the old tray's {t:?} lands where it was cut from, the margins stay clean"
         );
     }
-    assert!(!opened.tray.wet_tiles.is_empty());
+    let under_the_squeeze = TileCoord {
+        x: TRAY_WIDTH / 2 / TILE_SIZE,
+        y: TRAY_HEIGHT / 2 / TILE_SIZE,
+    };
+    assert!(opened.tray.wet_tiles.contains(under_the_squeeze));
+    assert!(!opened.tray.wet_tiles.contains(TileCoord { x: 0, y: 0 }));
 }
 
 #[test]
