@@ -318,7 +318,7 @@ fn held_keys_show_their_mode_s_cursor_only_when_it_changes() {
 }
 
 #[test]
-fn held_keys_or_the_contact_s_modifiers_holds_navigation() {
+fn held_keys_or_the_contact_s_modifiers_make_it_hold_navigation() {
     let held = HeldKeys::default();
     let none = gdk::ModifierType::empty();
     assert!(!held.holds_navigation(none));

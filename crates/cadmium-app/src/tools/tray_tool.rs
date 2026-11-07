@@ -76,7 +76,7 @@ impl TrayTool {
         TrayTool::ALL.into_iter().find(|tool| tool.name() == name)
     }
 
-    /// The tool's own name, without the painting tool Load would act on.
+    /// The tool's fixed name; `label_for` adds the painting tool Load acts on.
     pub fn label(self) -> &'static str {
         self.profile().label
     }
