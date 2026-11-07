@@ -259,7 +259,7 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         .read_to_string(&mut manifest)
         .unwrap();
     let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
-    assert_eq!(manifest["format"], 3);
+    assert_eq!(manifest["format"], 4);
     assert_eq!(manifest["bands"], 8);
     assert_eq!(manifest["units"], "um");
     drop(archive);

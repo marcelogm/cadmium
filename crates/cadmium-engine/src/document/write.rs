@@ -49,8 +49,12 @@ impl DocumentSnapshot {
             &self.states,
         )?;
         if let Some(tray) = &self.tray {
-            let tray_spec = tray_spec(&self.spec.pigment_slots);
-            write_states(&mut archive, format, TRAY_PREFIX, &tray_spec, tray)?;
+            let tray_spec = CanvasSpec {
+                width: tray.size[0],
+                height: tray.size[1],
+                ..tray_spec(&self.spec.pigment_slots)
+            };
+            write_states(&mut archive, format, TRAY_PREFIX, &tray_spec, &tray.states)?;
         }
         archive.finish()?;
         Ok(())

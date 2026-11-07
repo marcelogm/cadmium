@@ -28,6 +28,13 @@ pub const TILE_SIZE: u32 = 64;
 const BANDS_PER_VEC4: usize = 4;
 const CHANNELS_PER_PIGMENT_TEXTURE: usize = 4;
 
+/// A rectangle of texels: its top-left corner and its width and height.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TexelBlock {
+    pub origin: [u32; 2],
+    pub size: [u32; 2],
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PaintTotals {
     pub volume: f64,
@@ -191,21 +198,54 @@ impl Canvas {
     }
 
     pub fn write_bytes(&self, gpu: &GpuContext, which: StateTexture, data: &[u8]) {
-        let row_bytes = self.spec.width * which.bytes_per_texel();
+        let whole = TexelBlock {
+            origin: [0, 0],
+            size: [self.spec.width, self.spec.height],
+        };
+        self.write_bytes_at(gpu, which, data, whole);
+    }
+
+    /// Writes `data`, the texels of `block`, into that block of the texture.
+    pub fn write_bytes_at(
+        &self,
+        gpu: &GpuContext,
+        which: StateTexture,
+        data: &[u8],
+        block: TexelBlock,
+    ) {
+        let TexelBlock { origin, size } = block;
+        let row_bytes = size[0] * which.bytes_per_texel();
         assert_eq!(
             data.len(),
-            (row_bytes * self.spec.height) as usize,
-            "texel data does not cover the {which:?} texture"
+            (row_bytes * size[1]) as usize,
+            "texel data does not cover the {}×{} {which:?} block",
+            size[0],
+            size[1]
+        );
+        assert!(
+            origin[0] + size[0] <= self.spec.width && origin[1] + size[1] <= self.spec.height,
+            "the {which:?} block does not fit the texture"
         );
         gpu.queue.write_texture(
-            self.texture(which).as_image_copy(),
+            wgpu::TexelCopyTextureInfo {
+                origin: wgpu::Origin3d {
+                    x: origin[0],
+                    y: origin[1],
+                    z: 0,
+                },
+                ..self.texture(which).as_image_copy()
+            },
             data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(row_bytes),
-                rows_per_image: Some(self.spec.height),
+                rows_per_image: Some(size[1]),
             },
-            self.extent(),
+            wgpu::Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            },
         );
     }
 
