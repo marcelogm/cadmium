@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, VecDeque};
 
-use cadmium_engine::brush::HeadSpec;
+use cadmium_engine::brush::{HeadSpec, factory_brushes};
 use cadmium_engine::canvas::StateTexture;
 use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::gpu::GpuContext;
@@ -20,6 +20,14 @@ const TINY_PRESSURE: f32 = 0.8;
 const TINY_TILT_DEG: f32 = 20.0;
 const TINY_SETTLE_PX: usize = 10;
 const MIN_MARKED_COLUMN_SHARE: f64 = 0.85;
+const FINE_DIAMETER_PX: f32 = 8.0;
+const LIGHT_PRESSURE: f32 = 0.1;
+const FINE_SHAPED_BRUSHES: [&str; 4] = [
+    "Round · Kolinsky Sable",
+    "Filbert · Mongoose",
+    "Angular · Synthetic",
+    "Dagger · Synthetic",
+];
 const VISIBLE_UM: f32 = 0.5;
 const PAINTED_UM: f32 = 1e-3;
 const MAX_ISLAND_PX2: usize = 2;
@@ -89,6 +97,35 @@ fn tiny_mark(volume: &[f32], width: usize) -> Mark {
 
 fn density_extremes() -> [f32; 2] {
     HeadSpec::DENSITY_RANGE_PER_PX
+}
+
+#[test]
+fn a_light_touch_with_a_fine_shaped_brush_draws_an_unbroken_line() {
+    let gpu = GpuContext::new().unwrap();
+    for brush in factory_brushes()
+        .into_iter()
+        .filter(|brush| FINE_SHAPED_BRUSHES.contains(&brush.name.as_str()))
+    {
+        let mut s = session(&gpu);
+        s.brush.wear(&brush);
+        s.brush.geometry.max_diameter_px = FINE_DIAMETER_PX;
+        s.reload_brush(&gpu);
+        let samples = line(
+            TINY_ROW_PX,
+            TINY_FROM_PX,
+            TINY_TO_PX,
+            LIGHT_PRESSURE,
+            TINY_TILT_DEG,
+        );
+        drag(&gpu, &mut s, &samples);
+        let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+        let mark = tiny_mark(&volume, s.canvas.spec.width as usize);
+        assert_eq!(
+            mark.marked_column_share, 1.0,
+            "{} breaks a light line into dots",
+            brush.name
+        );
+    }
 }
 
 #[test]

@@ -2,7 +2,7 @@ struct HandleState {
     ferrule: vec3<f32>,
     substep_seconds: f32,
     axis: vec3<f32>,
-    _pad0: f32,
+    drop_px: f32,
     velocity: vec3<f32>,
     _pad1: f32,
     orientation: vec2<f32>,

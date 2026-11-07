@@ -11,6 +11,9 @@
 
 // Mirrors MIN_AXIS_RISE in engine/bristles/handle.rs.
 const MIN_AXIS_RISE: f32 = 0.0175;
+/// Share of the handle's drop beyond its resting slack given back over one reference dab step
+/// while the hairs touch.
+const DROP_RELAX_SHARE: f32 = 0.25;
 
 struct Travel {
     start: Pose,
@@ -66,6 +69,68 @@ fn hang_at_rest(bristle: u32, pose: Pose, wetness: f32) {
         states[anchor_slot(bristle, vertex)] = vec4<f32>(0.0);
     }
     states[bend_slot(bristle)] = vec4<f32>(0.0);
+}
+
+fn hung_clearance_px(bristle: u32, pose: Pose, wetness: f32) -> f32 {
+    var lowest = NO_FLOOR_PX;
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        let at = hung_vertex(rests[bristle], pose, wetness, vertex);
+        lowest = min(lowest, at.z - surface_px(at.xy));
+    }
+    return lowest;
+}
+
+/// How far the lifted handle must still come down before its lowest hanging hair touches.
+fn slack_px(thread: u32, base_px: f32, wetness: Wetness) -> f32 {
+    let lifted = lifted_pose(base_px);
+    var lowest = NO_FLOOR_PX;
+    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
+        let bristle = owned_bristle(thread, share);
+        if bristle < dab.bristle_total {
+            lowest = min(lowest, hung_clearance_px(bristle, lifted, wetness[share]));
+        }
+    }
+    return lowest_over_workgroup(thread, lowest);
+}
+
+fn lowest_over_workgroup(thread: u32, lowest: f32) -> f32 {
+    let bounds = workgroup_range(thread, vec2<f32>(lowest, -NO_FLOOR_PX));
+    return select(max(bounds.x, 0.0), 0.0, bounds.x >= NO_FLOOR_PX);
+}
+
+/// How far above the canvas the hairs hung after the last dab: 0 once any of them touches.
+fn hovering_px(thread: u32) -> f32 {
+    var lowest = NO_FLOOR_PX;
+    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
+        let bristle = owned_bristle(thread, share);
+        if bristle < dab.bristle_total {
+            for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+                let at = states[position_slot(bristle, vertex)];
+                lowest = min(lowest, at.z - at.w);
+            }
+        }
+    }
+    return lowest_over_workgroup(thread, lowest);
+}
+
+fn lifted_off() -> bool {
+    return dab.handle_height_px > dab.handle_rest_height_px;
+}
+
+/// How far the handle comes down below where the pressure alone puts it, so the lightest
+/// touch still lands its lowest hair: the hanging bundle's slack, plus however far the hairs
+/// were left hovering by clumping and drag, given back gradually while they touch.
+fn handle_drop_px(thread: u32, base_px: f32, wetness: Wetness) -> f32 {
+    let resting = slack_px(thread, base_px, wetness);
+    let hovering = hovering_px(thread);
+    if lifted_off() {
+        return 0.0;
+    }
+    if dab.bristle_reset != 0u {
+        return resting;
+    }
+    let keep = pow(1.0 - DROP_RELAX_SHARE, max(dab.step_ratio, 0.0));
+    return resting + max(handle.drop_px + hovering - resting, 0.0) * keep;
 }
 
 fn resting_floor_px(bristle: u32) -> f32 {
@@ -216,12 +281,12 @@ fn owned_bristle(thread: u32, share: u32) -> u32 {
     return thread + share * BRISTLE_WORKGROUP_SIZE;
 }
 
-fn remember_pose(pose: Pose, substep_seconds: f32, velocity: vec3<f32>) {
+fn remember_pose(pose: Pose, substep_seconds: f32, velocity: vec3<f32>, drop_px: f32) {
     handle = HandleState(
         pose.ferrule,
         substep_seconds,
         pose.axis,
-        0.0,
+        drop_px,
         velocity,
         0.0,
         pose.orientation,
@@ -263,7 +328,9 @@ fn advance_owned(thread: u32, motion: Motion, wetness: Wetness) {
 fn step(@builtin(local_invocation_index) thread: u32) {
     let resetting = dab.bristle_reset != 0u;
     let wetness = owned_wetness(thread);
-    let base_px = resting_base_px(thread, wetness);
+    let found_base_px = resting_base_px(thread, wetness);
+    let drop_px = handle_drop_px(thread, found_base_px, wetness);
+    let base_px = found_base_px - drop_px;
     let start = starting_pose(base_px);
     let end = current_pose(base_px);
     let velocity = handle_velocity(start, end);
@@ -288,6 +355,6 @@ fn step(@builtin(local_invocation_index) thread: u32) {
     }
     record_owned_loads(thread, base_px);
     if thread == 0u {
-        remember_pose(end, travel.seconds, velocity);
+        remember_pose(end, travel.seconds, velocity, drop_px);
     }
 }
