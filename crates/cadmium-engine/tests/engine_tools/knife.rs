@@ -15,9 +15,9 @@ use crate::{
 
 const SLOT_COUNT: usize = 3;
 const FULL_DIP: f32 = 1.0;
-const LAID_TILT_DEG: f32 = 60.0;
+pub(crate) const LAID_TILT_DEG: f32 = 60.0;
 const UPRIGHT_TILT_DEG: f32 = 0.0;
-const PLATE_PRESSURE: f32 = 0.5;
+pub(crate) const PLATE_PRESSURE: f32 = 0.5;
 const LIGHT_PRESSURE: f32 = 0.3;
 const HEAVY_PRESSURE: f32 = 0.8;
 const FEATHER_PRESSURE: f32 = 0.1;
@@ -61,7 +61,7 @@ fn a_knife_tap_without_motion_leaves_the_canvas_untouched() {
     );
 }
 
-fn dip_knife(gpu: &GpuContext, s: &mut PaintSession) {
+pub(crate) fn dip_knife(gpu: &GpuContext, s: &mut PaintSession) {
     s.brush.tool = Tool::Knife;
     let mixture = s.brush.reservoir_mixture(SLOT_COUNT);
     s.dip(gpu, &mixture, FULL_DIP).unwrap();

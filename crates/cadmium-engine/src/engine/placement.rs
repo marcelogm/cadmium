@@ -1,7 +1,7 @@
 use super::dab_record::{
     DabRecord, blade_capacity_um, blade_gap_um, capillary_scale, rate_over_step,
 };
-use super::footprint::Footprint;
+use super::footprint::{Footprint, blade_half_length, turned_blade};
 use super::{MAX_TIP_RADIUS, TIP_HALF, WetOilEngine};
 use crate::brush::{BrushSettings, DEFAULT_MAX_DIAMETER_PX, DEFAULT_SPACING, HairSpec};
 use crate::canvas::Canvas;
@@ -23,16 +23,21 @@ const _: () = assert!(DEFAULT_SPACING * 2.0 * MAX_TIP_RADIUS < MAX_SWEEP_PX);
 pub(super) struct PreviousDab {
     at: [f32; 2],
     placed: bool,
+    blade_orientation: Option<f32>,
 }
 
 struct DabStep {
     px: f32,
     sweep: [f32; 2],
+    /// Where a blade lies, turned from the stroke's previous dab; none for a tool
+    /// without a blade or a dab with no stroke behind it.
+    blade_orientation: Option<f32>,
 }
 
 const STILL_STEP: DabStep = DabStep {
     px: REFERENCE_STEP_PX,
     sweep: [0.0; 2],
+    blade_orientation: None,
 };
 
 struct DabRegions {
@@ -102,9 +107,19 @@ impl WetOilEngine {
         brush: &BrushSettings,
         dab: &Dab,
     ) -> Option<Placement> {
-        let step = self.step_since_previous_dab(dab);
+        let mut step = self.step_since_previous_dab(dab);
+        // The step comes with the previous dab's blade; this dab's turns from it.
+        if brush.tool.profile().has_blade_footprint() && heading_known(dab) {
+            step.blade_orientation = Some(turned_blade(
+                step.blade_orientation,
+                dab.direction,
+                step.px,
+                blade_half_length(brush),
+            ));
+        }
+        let blade_orientation = step.blade_orientation;
         let mut placement = self.place(canvas, brush, dab, step)?;
-        self.mark_previous_dab_placed();
+        self.mark_previous_dab_placed(blade_orientation);
         if placement.profile.moves_bristles() {
             self.bristles
                 .advance(&mut placement.record, dab, &self.params);
@@ -119,8 +134,14 @@ impl WetOilEngine {
         let previous = self.previous_dab.replace(PreviousDab {
             at: [dab.x, dab.y],
             placed: false,
+            blade_orientation: None,
         });
-        let Some(PreviousDab { at: [x, y], placed }) = previous else {
+        let Some(PreviousDab {
+            at: [x, y],
+            placed,
+            blade_orientation,
+        }) = previous
+        else {
             return STILL_STEP;
         };
         let back = [x - dab.x, y - dab.y];
@@ -129,12 +150,14 @@ impl WetOilEngine {
         DabStep {
             px: step,
             sweep: if sweeps { back } else { [0.0; 2] },
+            blade_orientation,
         }
     }
 
-    fn mark_previous_dab_placed(&mut self) {
+    fn mark_previous_dab_placed(&mut self, blade_orientation: Option<f32>) {
         if let Some(previous) = self.previous_dab.as_mut() {
             previous.placed = true;
+            previous.blade_orientation = blade_orientation;
         }
     }
 
@@ -162,7 +185,7 @@ impl WetOilEngine {
         if profile.has_blade_footprint() && !heading_known(dab) {
             return None;
         }
-        let footprint = Footprint::of(dab, brush, self.tip_radius);
+        let footprint = Footprint::of(dab, brush, self.tip_radius, step.blade_orientation);
         let regions = DabRegions::around(dab, step.sweep, footprint, canvas)?;
         Some(Placement {
             record: self.record(brush, dab, step, &regions),
