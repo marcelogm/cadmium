@@ -22,7 +22,7 @@ pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use pen::PenReadout;
 use provisional::Provisional;
-pub use provisional::{Mark, PROVISIONAL_OPACITY, ProvisionalTrail};
+pub use provisional::{Mark, ProvisionalTrail};
 pub use recipe::PigmentClick;
 
 mod clock;
