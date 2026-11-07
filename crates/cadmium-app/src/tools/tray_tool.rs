@@ -1,7 +1,6 @@
 use gtk::gdk;
 
-use super::brush::BRUSH_WORDING;
-use super::panel::{NO_CONTROLS, PanelTool, ToolWording, VisibleControls};
+use super::panel::{PanelTool, TUBE_LABEL};
 use super::{Press, Tool, UiTool};
 
 /// What the pen does on the tray, chosen in the tray's own header.
@@ -17,7 +16,7 @@ pub enum TrayTool {
 
 pub(crate) struct TrayToolProfile {
     name: &'static str,
-    pub(super) label: &'static str,
+    label: &'static str,
     icon: &'static str,
     // Read once the tray's header shows its tools.
     #[cfg_attr(not(test), expect(dead_code))]
@@ -47,22 +46,9 @@ const RAG: TrayToolProfile = TrayToolProfile {
     tooltip: "Rag (Shift+5): wipes paint off the tray",
     key: gdk::Key::_5,
 };
-pub(super) const TUBE_CONTROLS: VisibleControls = VisibleControls {
-    pigments: true,
-    size: true,
-    ..NO_CONTROLS
-};
-
-pub(super) const TUBE_WORDING: ToolWording = ToolWording {
-    pigments: "Click to pick the tube",
-    size_title: "Nozzle",
-    size_subtitle: None,
-    ..BRUSH_WORDING
-};
-
 const TUBE: TrayToolProfile = TrayToolProfile {
     name: "tray-tube",
-    label: "Tube",
+    label: TUBE_LABEL,
     icon: "cadmium-tube-symbolic",
     tooltip: "Tube (Shift+6): squeezes pure pigment onto the tray",
     key: gdk::Key::_6,

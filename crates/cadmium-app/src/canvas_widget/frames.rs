@@ -1,4 +1,3 @@
-use cadmium_engine::surface::Surface;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
@@ -41,7 +40,6 @@ impl CadmiumCanvas {
         self.imp().needs_present.get()
             || state.session.has_pending_work()
             || state.session.bristles_settling(state.now_ms())
-            || state.holds_on(Surface::Painting)
             || !presenter.matches_size(width_px, height_px)
     }
 

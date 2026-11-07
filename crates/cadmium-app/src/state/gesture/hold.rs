@@ -37,19 +37,6 @@ impl AppState {
         }
     }
 
-    pub fn set_painting_device_scale(&mut self, scale: f32) {
-        if scale.is_finite() && scale > 0.0 {
-            self.painting_device_scale = scale;
-        }
-    }
-
-    fn screen_zoom(&self, surface: Surface) -> f32 {
-        match surface {
-            Surface::Tray => self.tray_zoom,
-            Surface::Painting => self.view.zoom / self.painting_device_scale,
-        }
-    }
-
     pub(super) fn follow_squeezing(
         &mut self,
         squeezing: Squeezing,
@@ -107,7 +94,6 @@ impl AppState {
 
     fn advance_squeezing(&mut self, squeezing: Squeezing, seconds: f32, radius: f32) {
         let Squeezing {
-            surface,
             pen,
             nozzle_at,
             squeezed,
@@ -121,11 +107,10 @@ impl AppState {
                 slot: self.tube_slot,
                 pressure: pen.pressure,
                 seconds,
-                still_reach_px: STILL_TUBE_SCREEN_PX / self.screen_zoom(surface),
+                still_reach_px: STILL_TUBE_SCREEN_PX / self.tray_zoom,
             },
         );
         self.contact = Some(Contact::Squeezing(Squeezing {
-            surface,
             pen,
             nozzle_at: (pen.x, pen.y),
             squeezed: squeezed || squeezed_now,
@@ -153,8 +138,9 @@ impl AppState {
         true
     }
 
-    pub(in crate::state) fn advance_hold_by_clock(&mut self, frame_surface: Surface) {
-        if self.hold_surface() != Some(frame_surface) {
+    /// Advances the hold, which is always on the tray, by the time since the last tray frame.
+    pub(in crate::state) fn advance_hold_by_clock(&mut self) {
+        if !self.holds_on(Surface::Tray) {
             return;
         }
         let now = Instant::now();

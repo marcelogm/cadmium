@@ -31,7 +31,6 @@ pub(super) struct Loading {
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Squeezing {
-    surface: Surface,
     pen: StrokeSample,
     nozzle_at: (f64, f64),
     squeezed: bool,

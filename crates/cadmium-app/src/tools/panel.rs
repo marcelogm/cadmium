@@ -1,5 +1,4 @@
-use super::tray_tool::{TUBE_CONTROLS, TUBE_WORDING};
-use super::{Tool, TrayTool, UiTool};
+use super::{Tool, UiTool};
 
 pub(crate) const CLEAN_LABEL: &str = "Clean";
 
@@ -50,6 +49,21 @@ pub(super) const NO_CONTROLS: VisibleControls = VisibleControls {
     hint: false,
 };
 
+pub(super) const TUBE_LABEL: &str = "Tube";
+
+const TUBE_CONTROLS: VisibleControls = VisibleControls {
+    pigments: true,
+    size: true,
+    ..NO_CONTROLS
+};
+
+const TUBE_WORDING: ToolWording = ToolWording {
+    pigments: "Click to pick the tube",
+    size_title: "Nozzle",
+    size_subtitle: None,
+    ..UiTool::Paint(Tool::Brush).profile().wording
+};
+
 /// The tool the side panel describes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PanelTool {
@@ -69,7 +83,7 @@ impl PanelTool {
     pub(crate) fn label(self) -> &'static str {
         match self {
             PanelTool::Paint(tool) => UiTool::Paint(tool).label(),
-            PanelTool::Tube => TrayTool::Tube.profile().label,
+            PanelTool::Tube => TUBE_LABEL,
         }
     }
 

@@ -158,16 +158,7 @@ impl CadmiumCanvas {
         Some((trail.colour, trail.widget_marks(self.device_scale() as f32)))
     }
 
-    pub(super) fn note_device_scale(&self) {
-        if let Some(state) = self.imp().state.get()
-            && let Ok(mut state) = state.try_borrow_mut()
-        {
-            state.set_painting_device_scale(self.device_scale() as f32);
-        }
-    }
-
     pub(super) fn follow_scale_change(&self) {
-        self.note_device_scale();
         self.fit_if_due(self.width() > 0 && self.height() > 0);
         self.queue_present();
     }

@@ -54,7 +54,6 @@ impl WidgetImpl for CadmiumCanvas {
         let canvas = self.obj();
         self.scale_watch
             .start(&*canvas, super::CadmiumCanvas::follow_scale_change);
-        canvas.note_device_scale();
         canvas.queue_present();
     }
 
