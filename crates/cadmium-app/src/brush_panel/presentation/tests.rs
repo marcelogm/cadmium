@@ -77,6 +77,26 @@ fn the_rag_and_the_pencil_show_only_the_size() {
 }
 
 #[test]
+fn only_the_pencil_shows_its_hardness() {
+    for tool in UiTool::ALL {
+        let panel = PanelTool::of_painting(tool, Tool::Brush);
+        let pencil = tool == UiTool::Paint(Tool::Pencil);
+        assert_eq!(panel.controls().hardness, pencil, "{tool:?}");
+    }
+    assert!(!PanelTool::Tube.controls().hardness);
+}
+
+#[test]
+fn hardness_reads_as_pencil_grades_from_b_to_h() {
+    assert_eq!(hardness_grade(0.0), "8B");
+    assert_eq!(hardness_grade(0.5), "HB");
+    assert_eq!(hardness_grade(1.0), "8H");
+    assert_eq!(hardness_grade(0.3), "4B");
+    assert_eq!(hardness_grade(2.0), "8H");
+    assert_eq!(hardness_grade(f32::NAN), "HB");
+}
+
+#[test]
 fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
     let knife = PanelTool::Paint(Tool::Knife).wording();
     assert_eq!(knife.clean_button, "Clean Knife");

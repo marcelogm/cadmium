@@ -1,3 +1,4 @@
+use crate::settings::SettingsStore;
 use crate::state::test_support::{
     PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, brush_totals, painting_state, present_one_frame,
     row_samples, stroke, wet_volume,
@@ -41,6 +42,28 @@ fn wearing_a_brush_takes_its_size_head_and_hair() {
     assert_eq!(state.session.brush.head, mop.head);
     assert_eq!(state.session.brush.hair, mop.hair);
     assert_eq!(state.session.brush.geometry.max_diameter_px, mop.size_px);
+}
+
+#[test]
+fn choosing_the_hardness_sharpens_the_pencil_and_remembers_it() {
+    let mut state = painting_state();
+    state.set_pencil_hardness(0.8);
+    assert_eq!(state.session.brush.pencil_hardness, 0.8);
+    assert_eq!(state.settings.get().pencil_hardness, 0.8);
+    state.set_pencil_hardness(3.0);
+    assert_eq!(state.session.brush.pencil_hardness, 1.0);
+}
+
+#[test]
+fn the_remembered_hardness_is_taken_up_with_the_settings() {
+    let mut state = painting_state();
+    let mut store = SettingsStore::default();
+    store
+        .update(|settings| settings.pencil_hardness = 0.2)
+        .unwrap();
+    state.use_settings(store);
+    assert_eq!(state.session.brush.pencil_hardness, 0.2);
+    assert_eq!(state.settings.get().pencil_hardness, 0.2);
 }
 
 #[test]

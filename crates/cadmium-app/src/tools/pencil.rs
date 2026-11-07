@@ -14,6 +14,7 @@ pub(super) const PENCIL: UiToolProfile = UiToolProfile {
     on_painting: Press::Stroke(Tool::Pencil),
     controls: VisibleControls {
         size: true,
+        hardness: true,
         ..NO_CONTROLS
     },
     wording: BRUSH_WORDING,

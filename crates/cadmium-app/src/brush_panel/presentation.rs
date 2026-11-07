@@ -17,6 +17,9 @@ pub(super) const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_UNIT: &str = "µm";
 pub(super) const EYEDROPPER_HINT: &str = "Click the canvas to pick up the paint on it. \
 The right mouse button, or a pen button set to Pick Colour, picks a colour with any tool.";
+/// Pencil grades from the softest lead to the hardest, HB in the middle.
+const PENCIL_GRADES: [&str; 9] = ["8B", "6B", "4B", "2B", "HB", "2H", "4H", "6H", "8H"];
+const MIDDLE_GRADE: usize = PENCIL_GRADES.len() / 2;
 /// What a rack row calls a head or hair that matches no factory one.
 const CUSTOM_PART: &str = "Custom";
 
@@ -84,6 +87,15 @@ pub(super) fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String
         .map(|(name, share)| format!("{name} {:.0}%", f64::from(share) * PERCENT))
         .collect::<Vec<_>>()
         .join(" · ")
+}
+
+/// The pencil grade a hardness between 0 (softest) and 1 (hardest) reads as.
+pub(super) fn hardness_grade(hardness: f32) -> &'static str {
+    if hardness.is_nan() {
+        return PENCIL_GRADES[MIDDLE_GRADE];
+    }
+    let last = (PENCIL_GRADES.len() - 1) as f32;
+    PENCIL_GRADES[(hardness.clamp(0.0, 1.0) * last).round() as usize]
 }
 
 pub(super) fn plate_gap_spec() -> &'static ParamSpec {
