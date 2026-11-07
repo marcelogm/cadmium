@@ -14,11 +14,11 @@ fn toggle_names_match_the_header_tool_group() {
         names,
         [
             "move",
+            "pencil",
             "brush",
             "knife",
             "blender",
             "rag",
-            "pencil",
             "eyedropper"
         ]
     );

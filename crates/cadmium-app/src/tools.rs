@@ -55,11 +55,11 @@ impl Default for UiTool {
 impl UiTool {
     pub const ALL: [UiTool; 7] = [
         UiTool::Move,
+        UiTool::Paint(Tool::Pencil),
         UiTool::Paint(Tool::Brush),
         UiTool::Paint(Tool::Knife),
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
-        UiTool::Paint(Tool::Pencil),
         UiTool::Paint(Tool::Eyedropper),
     ];
 
