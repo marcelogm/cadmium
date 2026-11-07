@@ -4,19 +4,19 @@ use cadmium_engine::pigments::Mixture;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tool::Holder;
-use gtk::glib;
 
 use super::AppState;
 use super::dip::{fill_level, mean_mixture};
 use super::recipe::recipe_from_fractions;
-use crate::LOG_DOMAIN;
-use crate::settings::mixing_knife_diameter;
+use crate::settings::{DEFAULT_MIXING_KNIFE_DIAMETER_PX, SettingsStore, mixing_knife_diameter};
 use crate::tools::panel::PanelTool;
 
-/// The tray's mixing knife: a blade of its own size (kept in the settings), whose
-/// face keeps the paint it scrapes up from one pass to the next.
+/// The tray's mixing knife: a blade of its own size, whose face keeps the paint it
+/// scrapes up from one pass to the next.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct MixingKnife {
+    /// The blade's length; the settings keep it only once the window closes.
+    diameter_px: f32,
     /// The brush's own size while the mixing knife's stands in for it in a stroke.
     brush_diameter_px: Option<f32>,
     face: Mixture,
@@ -25,6 +25,7 @@ pub(super) struct MixingKnife {
 impl Default for MixingKnife {
     fn default() -> Self {
         MixingKnife {
+            diameter_px: DEFAULT_MIXING_KNIFE_DIAMETER_PX,
             brush_diameter_px: None,
             face: super::EMPTY_MIXTURE,
         }
@@ -38,7 +39,23 @@ pub(super) fn strokes_on(tool: Tool, surface: Surface) -> bool {
 
 impl AppState {
     pub fn mixing_knife_diameter_px(&self) -> f32 {
-        self.settings.get().mixing_knife_diameter_px
+        self.mixing_knife.diameter_px
+    }
+
+    /// Takes on `store`'s settings, the mixing knife's size with them.
+    pub fn use_settings(&mut self, store: SettingsStore) {
+        self.settings = store;
+        self.mixing_knife.diameter_px = self.settings.get().mixing_knife_diameter_px;
+    }
+
+    /// Saves the mixing knife's size, if it changed; the window calls it as it closes.
+    pub fn remember_mixing_knife_size(&mut self) -> std::io::Result<()> {
+        let diameter_px = self.mixing_knife.diameter_px;
+        if self.settings.get().mixing_knife_diameter_px == diameter_px {
+            return Ok(());
+        }
+        self.settings
+            .update(|settings| settings.mixing_knife_diameter_px = diameter_px)
     }
 
     /// The brush's own size, even while a mixing knife stroke wears the knife's.
@@ -68,13 +85,7 @@ impl AppState {
             return;
         }
         self.release();
-        let diameter_px = mixing_knife_diameter(diameter_px);
-        let saved = self
-            .settings
-            .update(|settings| settings.mixing_knife_diameter_px = diameter_px);
-        if let Err(error) = saved {
-            glib::g_warning!(LOG_DOMAIN, "couldn't save the mixing knife size: {error}");
-        }
+        self.mixing_knife.diameter_px = mixing_knife_diameter(diameter_px);
     }
 
     /// Strokes with the mixing knife's size, keeping the brush's to hand it back.
@@ -84,7 +95,7 @@ impl AppState {
         }
         let geometry = &mut self.session.brush.geometry;
         self.mixing_knife.brush_diameter_px = Some(geometry.max_diameter_px);
-        geometry.max_diameter_px = self.settings.get().mixing_knife_diameter_px;
+        geometry.max_diameter_px = self.mixing_knife.diameter_px;
         self.session.resize_tip();
     }
 

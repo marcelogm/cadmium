@@ -2,11 +2,13 @@ use cadmium_engine::canvas::StateTexture;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 
+use crate::settings::SettingsStore;
 use crate::state::AppState;
 use crate::state::test_support::{
     PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, brush_totals, finish_painting, painting_state,
     present_one_frame, present_one_tray_frame, row_samples, sample_at, squeeze_blob_on_tray,
 };
+use crate::test_dir::TempDir;
 use crate::tools::panel::PanelTool;
 use crate::tools::{TrayTool, UiTool};
 
@@ -185,11 +187,32 @@ fn mid_stroke_the_brush_still_has_its_own_size() {
 }
 
 #[test]
-fn the_mixing_knife_size_is_kept_in_the_settings() {
+fn the_mixing_knife_size_reaches_the_settings_file_only_when_remembered() {
+    let dir = TempDir::new();
+    let path = dir.path().join("settings.json");
+    let mut store = SettingsStore::load(path.clone());
+    store
+        .update(|settings| settings.mixing_knife_diameter_px = BRUSH_SIZE_PX)
+        .unwrap();
     let mut state = painting_state();
+    state.use_settings(SettingsStore::load(path.clone()));
+    assert_eq!(state.mixing_knife_diameter_px(), BRUSH_SIZE_PX);
+    let written = std::fs::read_to_string(&path).unwrap();
     state.set_tray_tool(TrayTool::MixingKnife);
     state.set_focused_size(KNIFE_SIZE_PX);
-    assert_eq!(state.settings.get().mixing_knife_diameter_px, KNIFE_SIZE_PX);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+    state.remember_mixing_knife_size().unwrap();
+    let saved = SettingsStore::load(path.clone()).get();
+    assert_eq!(saved.mixing_knife_diameter_px, KNIFE_SIZE_PX);
+    std::fs::remove_file(&path).unwrap();
+    state.remember_mixing_knife_size().unwrap();
+    assert!(!path.exists(), "an unchanged size is not written again");
+}
+
+#[test]
+fn the_mixing_knife_size_stays_a_size() {
+    let mut state = painting_state();
+    state.set_tray_tool(TrayTool::MixingKnife);
     state.set_focused_size(f32::INFINITY);
     assert_eq!(state.mixing_knife_diameter_px(), 80.0);
     state.set_focused_size(1.0e6);
