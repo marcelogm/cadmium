@@ -11,7 +11,7 @@ use cadmium_engine::{
 };
 use support::{frame, line, session, spec, stroke, without_wgpu_errors};
 
-const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 2 * 4);
+const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 3 * 4);
 
 fn tray_tiles() -> u32 {
     TRAY_WIDTH.div_ceil(TILE_SIZE) * TRAY_HEIGHT.div_ceil(TILE_SIZE)

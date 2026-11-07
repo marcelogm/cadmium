@@ -8,11 +8,12 @@ pub enum StateTexture {
     DryHeight,
     DryTopPig0,
     DryTopPig1,
+    Graphite,
     Display,
 }
 
 impl StateTexture {
-    pub const ALL: [StateTexture; 9] = [
+    pub const ALL: [StateTexture; 10] = [
         StateTexture::WetPig0,
         StateTexture::WetPig1,
         StateTexture::WetVol,
@@ -21,10 +22,11 @@ impl StateTexture {
         StateTexture::DryHeight,
         StateTexture::DryTopPig0,
         StateTexture::DryTopPig1,
+        StateTexture::Graphite,
         StateTexture::Display,
     ];
 
-    pub const PAINT_STATE: [StateTexture; 8] = [
+    pub const PAINT_STATE: [StateTexture; 9] = [
         StateTexture::WetPig0,
         StateTexture::WetPig1,
         StateTexture::WetVol,
@@ -33,11 +35,12 @@ impl StateTexture {
         StateTexture::DryHeight,
         StateTexture::DryTopPig0,
         StateTexture::DryTopPig1,
+        StateTexture::Graphite,
     ];
 
     pub fn format(self) -> wgpu::TextureFormat {
         match self {
-            StateTexture::WetVol | StateTexture::DryHeight => wgpu::TextureFormat::R32Float,
+            StateTexture::WetVol | StateTexture::DryHeight | StateTexture::Graphite => wgpu::TextureFormat::R32Float,
             _ => wgpu::TextureFormat::Rgba16Float,
         }
     }
@@ -65,6 +68,7 @@ impl StateTexture {
             StateTexture::DryHeight => "dry_height",
             StateTexture::DryTopPig0 => "dry_top_pig0",
             StateTexture::DryTopPig1 => "dry_top_pig1",
+            StateTexture::Graphite => "graphite",
             StateTexture::Display => "display",
         }
     }
