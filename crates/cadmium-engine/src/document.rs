@@ -17,7 +17,7 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 4;
+const FORMAT_VERSION: u32 = 5;
 const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
 const TRAYLESS_FORMAT: u32 = 2;
 /// The format that saved the tray, at its old size.

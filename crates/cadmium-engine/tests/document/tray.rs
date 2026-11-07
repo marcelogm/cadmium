@@ -10,7 +10,7 @@ use cadmium_engine::{
 
 use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
 use crate::{
-    INVALID_THICKNESS, TempDir, painted_session, painted_spec, squeeze_on_the_tray,
+    CURRENT_FORMAT, INVALID_THICKNESS, TempDir, painted_session, painted_spec, squeeze_on_the_tray,
     squeeze_on_the_tray_at,
 };
 
@@ -114,11 +114,11 @@ fn a_format_three_painting_saved_again_keeps_its_tray() {
 }
 
 #[test]
-fn a_painting_with_a_wet_tray_saves_in_format_four() {
+fn a_painting_with_a_wet_tray_saves_in_the_current_format() {
     let gpu = GpuContext::new().unwrap();
-    let dir = TempDir::new("format-4");
+    let dir = TempDir::new("current-format");
     let (_, path) = saved_painting_with_a_wet_tray(&gpu, &dir);
-    assert_eq!(saved_format(&path), 4);
+    assert_eq!(saved_format(&path), CURRENT_FORMAT);
 }
 
 #[test]
@@ -183,13 +183,13 @@ fn saved_format(path: &Path) -> serde_json::Value {
 }
 
 #[test]
-fn a_clean_tray_is_still_saved_as_format_four() {
+fn a_clean_tray_is_still_saved_in_the_current_format() {
     let gpu = GpuContext::new().unwrap();
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("clean-tray");
     let path = dir.file("clean.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
-    assert_eq!(saved_format(&path), 4);
+    assert_eq!(saved_format(&path), CURRENT_FORMAT);
     assert!(
         Entries::saved(&path)
             .0

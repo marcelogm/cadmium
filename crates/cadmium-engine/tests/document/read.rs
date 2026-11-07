@@ -5,8 +5,11 @@ use cadmium_engine::{
 };
 
 use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
-use crate::{DRY_RELIEF, FORMAT_1_DRY_HEIGHT, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir};
+use crate::{
+    CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir,
+};
 
+const FUTURE_FORMAT: u32 = CURRENT_FORMAT + 1;
 const MAX_MANIFEST_BYTES: usize = 1 << 20;
 
 #[test]
@@ -37,12 +40,12 @@ fn reading_a_missing_file_is_an_io_error() {
 #[test]
 fn future_format_version_is_unsupported() {
     let entries = Entries::blank().edit_manifest(|m| {
-        m["format"] = 5.into();
+        m["format"] = FUTURE_FORMAT.into();
         m["spec"] = serde_json::json!({ "something": "new" });
     });
     assert!(matches!(
         read_entries(entries),
-        Err(DocumentError::UnsupportedVersion(5))
+        Err(DocumentError::UnsupportedVersion(FUTURE_FORMAT))
     ));
 }
 

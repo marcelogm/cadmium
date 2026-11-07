@@ -10,7 +10,8 @@ use cadmium_engine::{
 
 use crate::entries::{Entries, read_entries};
 use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES, TempDir,
+    BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT,
+    FORMAT_1_STATE_ENTRIES, TempDir,
     painted_session, painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
 };
 use crate::support::session;
@@ -276,7 +277,7 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         .read_to_string(&mut manifest)
         .unwrap();
     let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
-    assert_eq!(manifest["format"], 4);
+    assert_eq!(manifest["format"], CURRENT_FORMAT);
     assert_eq!(manifest["bands"], 8);
     assert_eq!(manifest["units"], "um");
     drop(archive);
