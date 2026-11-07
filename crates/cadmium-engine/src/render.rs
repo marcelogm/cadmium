@@ -10,9 +10,10 @@ const SHADE_BODY: &str = concat!(
     include_str!("shaders/pigment_slots.wgsl"),
     include_str!("shaders/slot_lane.wgsl"),
     include_str!("shaders/kubelka_munk.wgsl"),
+    include_str!("shaders/graphite.wgsl"),
     include_str!("shaders/shade.wgsl")
 );
-const TILE_CHANGES_BINDING: u32 = 10;
+const TILE_CHANGES_BINDING: u32 = 11;
 const SHADE_WORKGROUP_SIZE: u32 = 8;
 const WORKGROUPS_PER_TILE_SIDE: u32 = TILE_SIZE / SHADE_WORKGROUP_SIZE;
 const BANDS_PER_VEC4: usize = 4;
@@ -23,13 +24,14 @@ const VIEW_HEIGHT: u32 = 1;
 const VIEW_WETNESS: u32 = 2;
 const VIEW_PIGMENT: u32 = 3;
 
-const SHADE_INPUTS: [StateTexture; 6] = [
+const SHADE_INPUTS: [StateTexture; 7] = [
     StateTexture::WetPig0,
     StateTexture::WetPig1,
     StateTexture::WetVol,
     StateTexture::DryRefl0,
     StateTexture::DryRefl1,
     StateTexture::DryHeight,
+    StateTexture::Graphite,
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

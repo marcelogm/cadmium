@@ -59,8 +59,9 @@ const VOLUME_VIEW_FULL_SCALE_UM: f32 = 200.0;
 @group(0) @binding(6) var dry_refl0: texture_storage_2d<rgba16float, read>;
 @group(0) @binding(7) var dry_refl1: texture_storage_2d<rgba16float, read>;
 @group(0) @binding(8) var dry_height: texture_storage_2d<r32float, read>;
-@group(0) @binding(9) var display: texture_storage_2d<rgba16float, write>;
-@group(0) @binding(10) var<storage, read> tile_changes: array<u32>;
+@group(0) @binding(9) var graphite: texture_storage_2d<r32float, read>;
+@group(0) @binding(10) var display: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(11) var<storage, read> tile_changes: array<u32>;
 
 fn unchanged(slot: u32, tile: vec2<u32>) -> bool {
     if (slot < params.first_possible_tile) {
@@ -176,7 +177,10 @@ fn main(
         return;
     }
 
-    let rgb = albedo(fractions_low, fractions_high, volume, textureLoad(dry_refl0, pixel), textureLoad(dry_refl1, pixel));
+    let density = textureLoad(graphite, pixel).x;
+    let below_low = under_graphite_low(textureLoad(dry_refl0, pixel), density);
+    let below_high = under_graphite_high(textureLoad(dry_refl1, pixel), density);
+    let rgb = albedo(fractions_low, fractions_high, volume, below_low, below_high);
 
     let slope_scale = params.impasto_scale / (2.0 * HEIGHT_UM_PER_PIXEL);
     let dhdx = (surface_height(pixel + vec2<i32>(1, 0), size) - surface_height(pixel - vec2<i32>(1, 0), size)) * slope_scale;

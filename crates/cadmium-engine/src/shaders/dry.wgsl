@@ -8,6 +8,7 @@
 @group(0) @binding(7) var dry_height: texture_storage_2d<r32float, read_write>;
 @group(0) @binding(8) var dry_top_pig0: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(9) var dry_top_pig1: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(10) var graphite: texture_storage_2d<r32float, read_write>;
 
 fn dry_band(fractions_low: vec4<f32>, fractions_high: vec4<f32>, volume: f32, below: f32, band: u32) -> f32 {
     let wet = km_layer(
@@ -42,8 +43,12 @@ fn main(
     if (volume > 0.0) {
         let fractions_low = textureLoad(wet_pig0, pixel);
         let fractions_high = textureLoad(wet_pig1, pixel);
-        textureStore(dry_refl0, pixel, dry_bands(fractions_low, fractions_high, volume, textureLoad(dry_refl0, pixel), 0u));
-        textureStore(dry_refl1, pixel, dry_bands(fractions_low, fractions_high, volume, textureLoad(dry_refl1, pixel), 4u));
+        let density = textureLoad(graphite, pixel).x;
+        let below_low = under_graphite_low(textureLoad(dry_refl0, pixel), density);
+        let below_high = under_graphite_high(textureLoad(dry_refl1, pixel), density);
+        textureStore(dry_refl0, pixel, dry_bands(fractions_low, fractions_high, volume, below_low, 0u));
+        textureStore(dry_refl1, pixel, dry_bands(fractions_low, fractions_high, volume, below_high, 4u));
+        textureStore(graphite, pixel, vec4<f32>(0.0));
         textureStore(dry_height, pixel, vec4<f32>(textureLoad(dry_height, pixel).x + volume, 0.0, 0.0, 0.0));
         if (volume > MIN_TOP_LAYER_UM) {
             textureStore(dry_top_pig0, pixel, fractions_low);
