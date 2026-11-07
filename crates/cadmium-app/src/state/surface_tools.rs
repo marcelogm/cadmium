@@ -1,6 +1,7 @@
 use cadmium_engine::engine::Tip;
 use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
+use cadmium_engine::tool::UNTILTED_MIXING_KNIFE_TILT_DEG;
 
 use super::AppState;
 use crate::tools::panel::PanelTool;
@@ -21,6 +22,16 @@ impl AppState {
         match surface {
             Surface::Painting => self.ui_tool.profile().on_painting,
             Surface::Tray => self.tray_tool.press(self.ui_tool),
+        }
+    }
+
+    /// The tilt a touch on `surface` takes from a device that reports none, such as a mouse:
+    /// the mixing knife is held part laid, so it lays paint as well as scraping it up.
+    pub(crate) fn untilted_tilt_deg(&self, surface: Surface) -> f32 {
+        if self.press_for(surface) == Press::Stroke(Tool::MixingKnife) {
+            UNTILTED_MIXING_KNIFE_TILT_DEG
+        } else {
+            0.0
         }
     }
 
