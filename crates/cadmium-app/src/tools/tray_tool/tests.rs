@@ -1,0 +1,112 @@
+use super::*;
+use crate::tools::{Press, Tool, UiTool};
+
+#[test]
+fn names_round_trip_and_match_the_tray_header() {
+    let names: Vec<_> = TrayTool::ALL.iter().map(|tool| tool.name()).collect();
+    assert_eq!(names, ["load", "tray-blender", "tray-rag", "tray-tube"]);
+    for tool in TrayTool::ALL {
+        assert_eq!(TrayTool::from_name(tool.name()), Some(tool));
+    }
+    assert_eq!(TrayTool::from_name("brush"), None);
+}
+
+#[test]
+fn the_tray_starts_on_load() {
+    assert_eq!(TrayTool::default(), TrayTool::Load);
+}
+
+#[test]
+fn load_loads_the_painting_tool_that_holds_paint() {
+    assert_eq!(
+        TrayTool::Load.press(UiTool::Paint(Tool::Brush)),
+        Press::LoadFromPile(Tool::Brush)
+    );
+    assert_eq!(
+        TrayTool::Load.press(UiTool::Paint(Tool::Knife)),
+        Press::LoadFromPile(Tool::Knife)
+    );
+    for tool in [
+        UiTool::Move,
+        UiTool::Tube,
+        UiTool::Paint(Tool::Blender),
+        UiTool::Paint(Tool::Rag),
+        UiTool::Paint(Tool::Eyedropper),
+    ] {
+        assert_eq!(TrayTool::Load.press(tool), Press::Pan, "{tool:?}");
+        assert!(!TrayTool::Load.is_enabled(tool), "{tool:?}");
+    }
+}
+
+#[test]
+fn the_other_tray_tools_ignore_the_painting_tool() {
+    for painting in UiTool::ALL {
+        assert_eq!(
+            TrayTool::Blender.press(painting),
+            Press::Stroke(Tool::Blender)
+        );
+        assert_eq!(TrayTool::Rag.press(painting), Press::Stroke(Tool::Rag));
+        assert_eq!(TrayTool::Tube.press(painting), Press::Squeeze);
+        for tool in [TrayTool::Blender, TrayTool::Rag, TrayTool::Tube] {
+            assert!(tool.is_enabled(painting));
+        }
+    }
+}
+
+#[test]
+fn load_is_named_after_what_it_loads() {
+    assert_eq!(
+        TrayTool::Load.label_for(UiTool::Paint(Tool::Brush)),
+        "Load Brush"
+    );
+    assert_eq!(
+        TrayTool::Load.label_for(UiTool::Paint(Tool::Knife)),
+        "Load Knife"
+    );
+    assert_eq!(TrayTool::Load.label_for(UiTool::Move), "Load");
+    assert_eq!(TrayTool::Rag.label_for(UiTool::Paint(Tool::Brush)), "Rag");
+}
+
+#[test]
+fn load_wears_the_icon_of_what_it_loads() {
+    assert_eq!(
+        TrayTool::Load.icon_for(UiTool::Paint(Tool::Knife)),
+        "cadmium-knife-symbolic"
+    );
+    assert_eq!(
+        TrayTool::Load.icon_for(UiTool::Paint(Tool::Brush)),
+        "cadmium-brush-symbolic"
+    );
+    assert_eq!(
+        TrayTool::Load.icon_for(UiTool::Move),
+        "cadmium-brush-symbolic"
+    );
+}
+
+#[test]
+fn tray_keys_are_shifted_digits_and_tooltips_name_them() {
+    let keys: Vec<_> = TrayTool::ALL.iter().map(|tool| tool.key()).collect();
+    assert_eq!(
+        keys,
+        [gdk::Key::_1, gdk::Key::_4, gdk::Key::_5, gdk::Key::_6]
+    );
+    for tool in TrayTool::ALL {
+        let digit = tool.key().name().unwrap();
+        assert!(
+            tool.profile().tooltip.contains(&format!("(Shift+{digit})")),
+            "{tool:?}"
+        );
+    }
+}
+
+#[test]
+fn every_tray_tool_shows_as_a_ui_tool_in_the_panel() {
+    let brush = UiTool::Paint(Tool::Brush);
+    assert_eq!(TrayTool::Load.panel_tool(brush), brush);
+    assert_eq!(
+        TrayTool::Blender.panel_tool(brush),
+        UiTool::Paint(Tool::Blender)
+    );
+    assert_eq!(TrayTool::Rag.panel_tool(brush), UiTool::Paint(Tool::Rag));
+    assert_eq!(TrayTool::Tube.panel_tool(brush), UiTool::Tube);
+}

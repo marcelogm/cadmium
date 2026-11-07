@@ -3,6 +3,9 @@ use gtk::gdk;
 pub use cadmium_engine::stroke::Tool;
 use cadmium_engine::surface::Surface;
 use panel::{ToolWording, VisibleControls};
+// Unused until the app state holds the tray's tool.
+#[expect(unused_imports)]
+pub use tray_tool::TrayTool;
 
 mod blender;
 mod brush;
@@ -12,6 +15,8 @@ pub(crate) mod knife;
 mod moving;
 pub(crate) mod panel;
 mod rag;
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) mod tray_tool;
 mod tube;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +26,7 @@ pub enum UiTool {
     Tube,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Press {
     Pan,
     PickColour,
