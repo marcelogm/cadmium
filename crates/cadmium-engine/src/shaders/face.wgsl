@@ -108,6 +108,22 @@ fn touched_cell(id: vec2<u32>) -> vec2<u32> {
     return vec2<u32>(u32(row) * FACE_DEPTH + id.x, u32(row <= last && id.x < FACE_DEPTH));
 }
 
+/// The first and last face rows the blade has pixels under (`lateral_cover`
+/// reaches half a pixel past its length): rows past them can neither lay nor
+/// scrape, so no paint may move onto them.
+fn covered_rows() -> vec2<i32> {
+    let length = semi_axes().y + BLADE_COVERAGE_HALF_PX;
+    let first = max(TIP_HALF + i32(floor(-length)), 0);
+    let last = min(TIP_HALF + i32(ceil(length)) - 1, i32(TIP_SIZE) - 1);
+    return vec2<i32>(first, last);
+}
+
+fn is_covered_row(cell: u32) -> bool {
+    let row = i32(cell / FACE_DEPTH);
+    let covered = covered_rows();
+    return row >= covered.x && row <= covered.y;
+}
+
 @compute @workgroup_size(FACE_THREADS)
 fn rest(@builtin(local_invocation_index) thread: u32) {
     var peak = NO_PEAK;
@@ -248,7 +264,7 @@ fn even_out(first: u32, second: u32) {
 fn smear_across(id: vec2<u32>, parity: u32) {
     let column = parity + 2u * id.x;
     let touched = touched_cell(vec2<u32>(column, id.y));
-    if (touched.y == 1u && column + 1u < face_columns()) {
+    if (touched.y == 1u && column + 1u < face_columns() && is_covered_row(touched.x)) {
         even_out(touched.x, touched.x + 1u);
     }
 }
@@ -258,7 +274,8 @@ fn smear_across(id: vec2<u32>, parity: u32) {
 fn smear_along(id: vec2<u32>, parity: u32) {
     let row = parity + 2u * id.y;
     let touched = touched_cell(vec2<u32>(id.x, row + 1u));
-    if (touched.y == 1u) {
+    let both_covered = is_covered_row(touched.x) && is_covered_row(touched.x - FACE_DEPTH);
+    if (touched.y == 1u && both_covered) {
         even_out(touched.x - FACE_DEPTH, touched.x);
     }
 }

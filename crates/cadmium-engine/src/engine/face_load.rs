@@ -67,4 +67,14 @@ impl WetOilEngine {
     pub fn face_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
         Ok(cell_totals(&read_buffer(gpu, &self.buffers.face_load)?))
     }
+
+    /// The volume on each row of the mixing knife's face, along the blade from
+    /// one end of the face to the other; the blade's middle is row `TIP_SIZE / 2`.
+    pub fn face_row_volumes(&self, gpu: &GpuContext) -> Result<Vec<f64>, GpuLost> {
+        let load = read_buffer(gpu, &self.buffers.face_load)?;
+        Ok(load
+            .chunks(FACE_DEPTH * TIP_CHANNELS)
+            .map(|row| cell_totals(row).volume)
+            .collect())
+    }
 }

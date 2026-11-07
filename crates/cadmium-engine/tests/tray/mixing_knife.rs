@@ -4,8 +4,8 @@ mod streaks;
 use std::ops::Range;
 
 use cadmium_engine::{
-    draw_up::DrawUpRequest, engine::PaintEngine, gpu::GpuContext, session::PaintSession,
-    stroke::Tool, surface::Surface, tool::Holder,
+    draw_up::DrawUpRequest, engine::PaintEngine, engine::TIP_SIZE, gpu::GpuContext,
+    session::PaintSession, stroke::Tool, surface::Surface, tool::Holder,
 };
 
 use scene::*;
@@ -221,4 +221,35 @@ fn cleaning_the_face_with_another_tool_in_hand_leaves_that_tool_alone() {
     assert_eq!(face_totals(&gpu, &s).volume, 0.0);
     assert_eq!(s.engine.brush_totals(&gpu).unwrap(), brush);
     assert_eq!(s.brush.tool, Tool::Brush);
+}
+
+/// The face rows a blade of `BLADE_DIAMETER_PX` has pixels under: those its
+/// length covers either side of the middle row.
+fn covered_rows() -> Range<usize> {
+    let half = TIP_SIZE as usize / 2;
+    let radius = f64::from(BLADE_DIAMETER_PX) / 2.0;
+    let first = (half as f64 + (-radius - 0.5).floor()) as usize;
+    let last = (half as f64 + (radius + 0.5).ceil()) as usize - 1;
+    first..last + 1
+}
+
+#[test]
+fn only_the_rows_the_blade_covers_hold_paint() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = mixing_session(&gpu);
+    s.engine.params_mut().set("face_smear", SMEARED);
+    two_cords(&gpu, &mut s);
+    for index in 0..4 {
+        knife_pass(&gpu, &mut s, mixing_pass(index));
+    }
+    let rows = s.engine.face_row_volumes(&gpu).unwrap();
+    let covered = covered_rows();
+    let stray: f64 = rows
+        .iter()
+        .enumerate()
+        .filter(|(row, _)| !covered.contains(row))
+        .map(|(_, volume)| volume)
+        .sum();
+    assert!(rows.iter().sum::<f64>() > 0.0);
+    assert_eq!(stray, 0.0, "paint on rows the blade never covers");
 }
