@@ -13,6 +13,10 @@ const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
 const MIXING_KNIFE_HALF_WIDTH_RATIO: f32 = 0.35;
 const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
 const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
+/// How far a blade turns per pixel its centre travels, as a share of the turn that would
+/// carry its ends that pixel too: its ends then move at most half again as far as its
+/// centre, so turning never opens gaps between its dabs.
+const BLADE_TURN_SHARE: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BrushOutline {
@@ -30,10 +34,17 @@ pub(super) struct Footprint {
 }
 
 impl Footprint {
-    pub(super) fn of(dab: &Dab, brush: &BrushSettings, ferrule_radius_px: f32) -> Footprint {
+    /// The dab's footprint; a blade lies at `blade_orientation` when given, else across the
+    /// dab's heading.
+    pub(super) fn of(
+        dab: &Dab,
+        brush: &BrushSettings,
+        ferrule_radius_px: f32,
+        blade_orientation: Option<f32>,
+    ) -> Footprint {
         let profile = brush.tool.profile();
         if profile.has_blade_footprint() {
-            return Footprint::of_blade(dab, brush);
+            return Footprint::of_blade(dab, brush, blade_orientation);
         }
         if profile.has_bristle_footprint() {
             return Footprint::of_bristles(dab, brush, ferrule_radius_px);
@@ -41,12 +52,12 @@ impl Footprint {
         Footprint::of_ellipse(dab, brush)
     }
 
-    fn of_blade(dab: &Dab, brush: &BrushSettings) -> Footprint {
-        let radius = (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS);
+    fn of_blade(dab: &Dab, brush: &BrushSettings, orientation: Option<f32>) -> Footprint {
+        let radius = blade_half_length(brush);
         Footprint {
             radius,
             elongation: blade_half_width(brush.tool, radius) / radius,
-            orientation: dab.direction,
+            orientation: orientation.unwrap_or(dab.direction),
             rectangular: true,
             lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
             bristle_reach_px: None,
@@ -127,6 +138,31 @@ fn blade_orientation(round: bool, altitude: f32, azimuth: f32) -> f32 {
     doubled[1].atan2(doubled[0]) / 2.0
 }
 
+/// Half the blade's length, along its edge.
+pub(super) fn blade_half_length(brush: &BrushSettings) -> f32 {
+    (brush.geometry.max_diameter_px / 2.0).clamp(MIN_DAB_RADIUS, MAX_TIP_RADIUS)
+}
+
+/// Where a blade at `previous` lies once its centre has travelled `step_px` heading
+/// towards `heading`: it turns towards lying across the heading, but only as far as the
+/// travel allows, so a hand jiggling in place or rounding a curve sweeps the blade evenly
+/// instead of swinging it about. A blade is the same either way round, so heading back
+/// does not turn it.
+pub(super) fn turned_blade(
+    previous: Option<f32>,
+    heading: f32,
+    step_px: f32,
+    half_length_px: f32,
+) -> f32 {
+    let Some(previous) = previous else {
+        return heading;
+    };
+    let half_turn = std::f32::consts::PI;
+    let wanted = (heading - previous + half_turn / 2.0).rem_euclid(half_turn) - half_turn / 2.0;
+    let most = BLADE_TURN_SHARE * step_px.max(0.0) / half_length_px.max(1.0);
+    previous + wanted.clamp(-most, most)
+}
+
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -170,7 +206,7 @@ impl WetOilEngine {
             speed: 0.0,
             time_ms: 0.0,
         };
-        let footprint = Footprint::of(&dab, brush, self.tip_radius);
+        let footprint = Footprint::of(&dab, brush, self.tip_radius, None);
         Some(BrushOutline {
             semi_axes: footprint.semi_axes(),
             orientation: footprint.orientation,
