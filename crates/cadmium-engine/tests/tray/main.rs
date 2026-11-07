@@ -3,6 +3,7 @@ mod draw_up;
 mod glass;
 mod strokes;
 mod surface;
+mod tray_tip;
 mod tube;
 
 use cadmium_engine::{

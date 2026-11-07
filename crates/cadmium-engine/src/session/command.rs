@@ -1,4 +1,4 @@
-use crate::engine::FULL_DIP;
+use crate::engine::{FULL_DIP, Tip};
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::pigments::Mixture;
 
@@ -36,6 +36,11 @@ impl PaintSession {
         change: BrushChange,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        let tip = match change {
+            BrushChange::CleanTrayTip => Tip::Tray,
+            _ => Tip::Painting,
+        };
+        self.engine.select_tip(tip);
         match change {
             BrushChange::ResizeTip { radius_px } => self.engine.resize_tip(radius_px),
             BrushChange::Reload { mixture } if mixture.is_empty() => {
@@ -51,7 +56,9 @@ impl PaintSession {
                 self.engine.encode_dip(gpu, &mixture, amount, encoder);
             }
             BrushChange::Clean { knife: true } => self.engine.encode_clean_knife(encoder),
-            BrushChange::Clean { knife: false } => self.engine.encode_clean_brush(encoder),
+            BrushChange::Clean { knife: false } | BrushChange::CleanTrayTip => {
+                self.engine.encode_clean_brush(encoder);
+            }
         }
     }
 
@@ -60,6 +67,7 @@ impl PaintSession {
         gpu: &GpuContext,
         load: KnifeLoad,
     ) -> Result<(), GpuLost> {
+        self.engine.select_tip(Tip::Painting);
         match load {
             KnifeLoad::Dip { mixture, amount } => self.engine.dip_knife(gpu, &mixture, amount),
             KnifeLoad::TopUp { mixture } => self.top_up_knife_now(gpu, &mixture),

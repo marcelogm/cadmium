@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::brush::BrushSettings;
+use crate::engine::Tip;
 use crate::pigments::Mixture;
 use crate::stroke::Dab;
 use crate::surface::Surface;
@@ -13,6 +14,7 @@ pub(super) enum Queued {
 
 pub(super) struct QueuedStroke {
     pub(super) surface: Surface,
+    pub(super) tip: Tip,
     pub(super) brush: BrushSettings,
     pub(super) dabs: VecDeque<Dab>,
     pub(super) begun: bool,
@@ -23,11 +25,24 @@ pub(super) struct QueuedStroke {
 /// was asked for: the brush settings may have moved on by the time it runs.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum BrushChange {
-    ResizeTip { radius_px: f32 },
-    Reload { mixture: Mixture },
-    RestoreReserve { mixture: Mixture },
-    Dip { mixture: Mixture, amount: f32 },
-    Clean { knife: bool },
+    ResizeTip {
+        radius_px: f32,
+    },
+    Reload {
+        mixture: Mixture,
+    },
+    RestoreReserve {
+        mixture: Mixture,
+    },
+    Dip {
+        mixture: Mixture,
+        amount: f32,
+    },
+    Clean {
+        knife: bool,
+    },
+    /// Cleans the tray's own tip, which only the tray's tools use.
+    CleanTrayTip,
 }
 
 /// A load of the knife, which reads the blade back and writes it from the CPU: it runs
@@ -90,9 +105,10 @@ impl WalkProgress {
 }
 
 impl QueuedStroke {
-    pub(super) fn new(surface: Surface, brush: BrushSettings) -> QueuedStroke {
+    pub(super) fn new(surface: Surface, tip: Tip, brush: BrushSettings) -> QueuedStroke {
         QueuedStroke {
             surface,
+            tip,
             brush,
             dabs: VecDeque::new(),
             begun: false,

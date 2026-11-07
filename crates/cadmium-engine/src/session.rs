@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
 use crate::draw_up::DrawUp;
-use crate::engine::{PaintEngine, PickRequest, WetOilEngine};
+use crate::engine::{PaintEngine, PickRequest, Tip, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
@@ -72,7 +72,9 @@ impl PaintSession {
             budget_bytes: history_budget(&spec),
             max_steps: HISTORY_MAX_STEPS,
         };
-        PaintSession::assemble(gpu, spec, tray, undo)
+        let mut session = PaintSession::assemble(gpu, spec, tray, undo)?;
+        session.engine.add_tray_tip(gpu);
+        Ok(session)
     }
 
     /// A session for previews: the same simulation, but no undo history and a
@@ -235,7 +237,17 @@ impl PaintSession {
         self.engine
             .encode_eyedropper(gpu, self.canvas_of(surface), request, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        self.engine.picked_mixture(gpu)
+        self.on_tip(Tip::Painting, |session| session.engine.picked_mixture(gpu))
+    }
+
+    /// Runs `work` with `tip` active, then gives the engine back the tip it had, so a tray
+    /// tool's bristles keep settling through a read of the brush.
+    pub(super) fn on_tip<R>(&mut self, tip: Tip, work: impl FnOnce(&mut Self) -> R) -> R {
+        let before = self.engine.active_tip();
+        self.engine.select_tip(tip);
+        let result = work(self);
+        self.engine.select_tip(before);
+        result
     }
 }
 

@@ -95,6 +95,8 @@ pub struct AppState {
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
     pub tip_mixture: Mixture,
+    /// What the tray blender's own tip holds, as last read.
+    pub tray_tip_mixture: Mixture,
     pub reload_each_stroke: bool,
     pub clean_each_stroke: bool,
     reserve_volume: f32,
@@ -135,6 +137,7 @@ impl AppState {
             file: None,
             pen: PenReadout::default(),
             tip_mixture: EMPTY_MIXTURE,
+            tray_tip_mixture: EMPTY_MIXTURE,
             reload_each_stroke: true,
             clean_each_stroke: false,
             reserve_volume: 0.0,

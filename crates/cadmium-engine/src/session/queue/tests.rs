@@ -14,7 +14,7 @@ fn dab_at(x: f32) -> Dab {
 }
 
 fn stroke_of(dab_count: usize, begun: bool, ended: bool) -> Queued {
-    let mut stroke = QueuedStroke::new(Surface::Painting, BrushSettings::default());
+    let mut stroke = QueuedStroke::new(Surface::Painting, Tip::Painting, BrushSettings::default());
     stroke.dabs = (0..dab_count).map(|i| dab_at(i as f32)).collect();
     stroke.begun = begun;
     stroke.ended = ended;

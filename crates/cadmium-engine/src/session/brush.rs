@@ -1,4 +1,4 @@
-use crate::engine::{BrushOutline, BrushReadout};
+use crate::engine::{BrushOutline, BrushReadout, Tip};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::Mixture;
 use crate::stroke::StrokeSample;
@@ -57,12 +57,23 @@ impl PaintSession {
 
     pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
         self.flush(gpu);
-        self.engine.tip_mean_mixture(gpu)
+        self.on_tip(Tip::Painting, |session| {
+            session.engine.tip_mean_mixture(gpu)
+        })
     }
 
     pub fn read_brush(&mut self, gpu: &GpuContext) -> Result<BrushReadout, GpuLost> {
+        self.read_tip(gpu, Tip::Painting)
+    }
+
+    /// What `tip` holds: the painting brush's, or the tray's own tools'.
+    pub fn read_tip(&mut self, gpu: &GpuContext, tip: Tip) -> Result<BrushReadout, GpuLost> {
         self.flush(gpu);
-        self.engine.read_brush(gpu)
+        self.on_tip(tip, |session| session.engine.read_brush(gpu))
+    }
+
+    pub fn clean_tray_tip(&mut self, gpu: &GpuContext) {
+        self.change_brush(gpu, BrushChange::CleanTrayTip);
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {

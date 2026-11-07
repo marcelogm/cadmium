@@ -100,7 +100,10 @@ fn held_paint(
     tool: PanelTool,
     colour_of: impl Fn(&Mixture) -> [u8; 3],
 ) -> ([u8; 3], f32, bool) {
-    if tool.holds_knife() {
+    if state.shows_tray_tip() {
+        let mixture = &state.tray_tip_mixture;
+        (colour_of(mixture), 0.0, mixture.is_empty())
+    } else if tool.holds_knife() {
         (
             colour_of(&state.knife_mixture),
             state.knife_level(),

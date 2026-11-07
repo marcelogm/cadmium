@@ -76,6 +76,7 @@ impl PaintSession {
         stroke.begun = true;
         self.history.begin_step(stroke.surface);
         self.walked_surface = stroke.surface;
+        self.engine.select_tip(stroke.tip);
         self.engine.begin_stroke();
         self.motion_anchor = None;
     }

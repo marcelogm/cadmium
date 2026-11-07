@@ -3,6 +3,7 @@ use cadmium_engine::surface::Surface;
 
 use super::Contact;
 use crate::state::AppState;
+use crate::state::surface_tools::tip_for;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum StrokePreparation {
@@ -51,7 +52,8 @@ impl AppState {
         self.provisional.colour = (surface == Surface::Painting && tool == Tool::Brush)
             .then(|| self.held_colour(tool))
             .flatten();
-        self.session.begin_stroke_on(surface, sample);
+        let tip = tip_for(surface, tool);
+        self.session.begin_stroke_with(surface, tip, sample);
         self.contact = Some(Contact::Stroke { surface });
         self.last_sample_time_ms = None;
         self.note_samples(std::slice::from_ref(&sample));
@@ -69,6 +71,8 @@ impl AppState {
 
     pub(super) fn finish_stroke(&mut self) {
         self.session.end_stroke();
+        // The stroke took its own copy of the brush; the hand goes back to the painting tool.
+        self.session.brush.tool = self.resting_tool;
         self.edits.record();
         self.measure_brush_once_painted();
     }
