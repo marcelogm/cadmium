@@ -143,7 +143,7 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         group: ParamGroup::Tools,
         min: 20.0,
         max: 2000.0,
-        default: 300.0,
+        default: 700.0,
     },
     ParamSpec {
         key: "tube_cord_um",
@@ -159,7 +159,7 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         group: ParamGroup::Tools,
         min: 50.0,
         max: 1500.0,
-        default: 500.0,
+        default: 1000.0,
     },
     ParamSpec {
         key: "draw_up_rate",
@@ -199,7 +199,7 @@ pub(super) const SPECS: [ParamSpec; PARAM_COUNT] = [
         group: ParamGroup::Tools,
         min: 0.0,
         max: 1.0,
-        default: 0.9,
+        default: 0.15,
     },
     ParamSpec {
         key: "impasto_scale",

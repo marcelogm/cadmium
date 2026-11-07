@@ -12,6 +12,7 @@ use super::scene::{
 use crate::FRAME_SECONDS;
 
 const BOUNDARY_X: f64 = 350.0;
+const UNEVEN_EDGE: f32 = 0.9;
 const BLOB_TOP_Y: f32 = 230.0;
 const BLOB_BOTTOM_Y: f32 = 390.0;
 const BLOB_CORD_RADIUS: f32 = 13.0;
@@ -159,10 +160,19 @@ fn mix_across_the_boundary(
     measures
 }
 
+/// A blade with a markedly uneven edge, so its streaks stand out to be measured.
+fn uneven_session(gpu: &GpuContext) -> PaintSession {
+    let mut s = mixing_session(gpu);
+    s.engine
+        .params_mut()
+        .set("face_edge_unevenness", UNEVEN_EDGE);
+    s
+}
+
 #[test]
 fn the_first_pass_leaves_streaks_and_every_pass_mixes_more() {
     let gpu = GpuContext::new().unwrap();
-    let mut s = mixing_session(&gpu);
+    let mut s = uneven_session(&gpu);
     let measures = mix_across_the_boundary(&gpu, &mut s, 10, "streaks");
     let initial = measures[0].variance;
     let relative: Vec<f64> = measures.iter().map(|m| m.variance / initial).collect();
@@ -180,7 +190,7 @@ fn the_first_pass_leaves_streaks_and_every_pass_mixes_more() {
 #[test]
 fn an_even_edge_leaves_fewer_streaks() {
     let gpu = GpuContext::new().unwrap();
-    let mut uneven = mixing_session(&gpu);
+    let mut uneven = uneven_session(&gpu);
     let streaky = mix_across_the_boundary(&gpu, &mut uneven, 1, "uneven")[1].streakiness;
     let mut even = mixing_session(&gpu);
     even.engine.params_mut().set("face_edge_unevenness", 0.0);

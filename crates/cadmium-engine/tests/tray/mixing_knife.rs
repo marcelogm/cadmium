@@ -17,7 +17,7 @@ const READOUT_TOLERANCE: f64 = 1e-4;
 /// every rewrite of a pixel rounds its pigment; the drift runs a little negative
 /// because `within_whole_volume` trims rounded fractions that overshoot the whole.
 const PIGMENT_TOLERANCE: f64 = 1e-3;
-const FIRST_PASS_KEEPS: f64 = 0.6;
+const FIRST_PASS_KEEPS: f64 = 0.5;
 const EIGHT_PASSES_LEAVE: f64 = 0.15;
 const MONOTONE_SLACK: f64 = 1.05;
 const SMEARED: f32 = 0.6;
