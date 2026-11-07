@@ -54,6 +54,8 @@ pub struct CadmiumWindow {
     pub(super) tray_divider: Cell<TrayDivider>,
     /// Whether placing the divider is already queued for the paned's new height.
     pub(super) divider_queued: Cell<bool>,
+    /// The touch sequence holding the divider's handle (`None` for a mouse or pen press).
+    pub(super) divider_grab_sequence: Cell<Option<usize>>,
     pub canvas: OnceCell<CadmiumCanvas>,
     pub tray: OnceCell<TrayView>,
     /// Whether the window has claimed the Space press now held down.

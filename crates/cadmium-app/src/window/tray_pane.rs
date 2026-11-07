@@ -199,15 +199,28 @@ impl CadmiumWindow {
     fn watch_divider_press(&self, event: &gdk::Event) {
         let imp = self.imp();
         let mut divider = imp.tray_divider.get();
+        let sequence = touch_sequence(event);
+        // Only the press that grabbed the handle lets go of it: another finger's end isn't it.
+        let grabbing = sequence == imp.divider_grab_sequence.get();
         let closes = match event.event_type() {
             gdk::EventType::ButtonPress | gdk::EventType::TouchBegin
                 if self.press_is_on_divider_handle(event) =>
             {
                 divider.grab();
+                imp.divider_grab_sequence.set(sequence);
                 false
             }
-            gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd => divider.released(),
-            gdk::EventType::TouchCancel => {
+            gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd if grabbing => {
+                imp.divider_grab_sequence.set(None);
+                divider.released()
+            }
+            gdk::EventType::TouchCancel if grabbing => {
+                imp.divider_grab_sequence.set(None);
+                divider.cancel();
+                false
+            }
+            gdk::EventType::GrabBroken => {
+                imp.divider_grab_sequence.set(None);
                 divider.cancel();
                 false
             }
@@ -330,6 +343,19 @@ impl CadmiumWindow {
             glib::g_warning!(LOG_DOMAIN, "couldn't save the tray layout: {error}");
         }
     }
+}
+
+/// The touch sequence `event` belongs to, by address; `None` for a pointer event, which has
+/// no sequence.
+fn touch_sequence(event: &gdk::Event) -> Option<usize> {
+    let touch = matches!(
+        event.event_type(),
+        gdk::EventType::TouchBegin
+            | gdk::EventType::TouchUpdate
+            | gdk::EventType::TouchEnd
+            | gdk::EventType::TouchCancel
+    );
+    touch.then(|| event.event_sequence().as_ptr() as usize)
 }
 
 /// The paned's handle, the separator between its children.
