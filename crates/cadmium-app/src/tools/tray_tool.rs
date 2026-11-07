@@ -88,7 +88,7 @@ impl TrayTool {
         match self {
             TrayTool::Load => match loaded_tool(painting) {
                 Some(tool) => Press::LoadFromPile(tool),
-                None => Press::Pan,
+                None => Press::Nothing,
             },
             TrayTool::Blender => Press::Stroke(Tool::Blender),
             TrayTool::Rag => Press::Stroke(Tool::Rag),

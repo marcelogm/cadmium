@@ -46,6 +46,12 @@ fn a_moving_tool_ignores_the_pen() {
 }
 
 #[test]
+fn a_tip_that_does_nothing_still_lets_the_eraser_wipe() {
+    assert_eq!(down_outcome(Press::Nothing, false), DownOutcome::Ignore);
+    assert_eq!(down_outcome(Press::Nothing, true), DownOutcome::Press);
+}
+
+#[test]
 fn the_eyedropper_picks_with_the_tip() {
     assert_eq!(
         down_outcome(Press::PickColour, false),

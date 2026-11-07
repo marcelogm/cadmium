@@ -132,10 +132,13 @@ enum DownOutcome {
 fn down_outcome(press: Press, eraser: bool) -> DownOutcome {
     match press {
         Press::Pan => DownOutcome::Ignore,
+        Press::Nothing if !eraser => DownOutcome::Ignore,
         Press::PickColour if !eraser => DownOutcome::PickColour,
-        Press::PickColour | Press::Stroke(_) | Press::LoadFromPile(_) | Press::Squeeze => {
-            DownOutcome::Press
-        }
+        Press::Nothing
+        | Press::PickColour
+        | Press::Stroke(_)
+        | Press::LoadFromPile(_)
+        | Press::Squeeze => DownOutcome::Press,
     }
 }
 

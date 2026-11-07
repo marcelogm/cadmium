@@ -25,6 +25,8 @@ pub enum UiTool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Press {
     Pan,
+    /// The tip does nothing here; the eraser end still wipes.
+    Nothing,
     PickColour,
     Stroke(Tool),
     LoadFromPile(Tool),

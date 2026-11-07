@@ -32,7 +32,7 @@ fn load_loads_the_painting_tool_that_holds_paint() {
         UiTool::Paint(Tool::Rag),
         UiTool::Paint(Tool::Eyedropper),
     ] {
-        assert_eq!(TrayTool::Load.press(tool), Press::Pan, "{tool:?}");
+        assert_eq!(TrayTool::Load.press(tool), Press::Nothing, "{tool:?}");
         assert!(!TrayTool::Load.is_enabled(tool), "{tool:?}");
     }
 }

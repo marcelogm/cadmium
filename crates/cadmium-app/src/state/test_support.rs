@@ -139,13 +139,14 @@ pub(super) fn present_one_tray_frame(state: &mut AppState) {
 }
 
 pub(super) fn squeeze_blob_on_tray(state: &mut AppState, slot: usize) {
-    let tray_tool = state.tray_tool();
+    let (tray_tool, focus) = (state.tray_tool, state.focus);
     state.set_tray_tool(TrayTool::Tube);
     state.set_tube_slot(slot);
     state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
     state.advance_hold(1.0);
     state.release();
-    state.set_tray_tool(tray_tool);
+    state.tray_tool = tray_tool;
+    state.focus = focus;
 }
 
 pub(super) fn settle_both_surfaces(state: &mut AppState) {

@@ -13,7 +13,7 @@ impl AppState {
             self.press_for(surface)
         };
         let began = match press {
-            Press::Pan | Press::PickColour => false,
+            Press::Pan | Press::Nothing | Press::PickColour => false,
             Press::Squeeze => {
                 self.begin_squeezing(surface, sample);
                 true
