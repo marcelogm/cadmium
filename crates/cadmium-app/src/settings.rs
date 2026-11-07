@@ -59,13 +59,6 @@ impl PenButtonAction {
     }
 }
 
-/// The share of the window height the tray takes by default.
-pub const DEFAULT_TRAY_SHARE: f32 = 0.35;
-/// The least share of the window height the tray may take.
-pub const MIN_TRAY_SHARE: f32 = 0.15;
-/// The most share of the window height the tray may take.
-pub const MAX_TRAY_SHARE: f32 = 0.85;
-
 /// The painter's preferences. They are read through [`Settings::from_json`], which gives each
 /// field its own fallback, so this does not derive `Deserialize`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -76,17 +69,8 @@ pub struct Settings {
     pub upper_pen_button: PenButtonAction,
     /// How the pen's pressure maps onto the brush's.
     pub pressure_curve: PressureCurve,
-    /// The share of the window height the tray takes, between `MIN_TRAY_SHARE` and
-    /// `MAX_TRAY_SHARE`.
-    #[serde(serialize_with = "round_share")]
-    pub tray_share: f32,
-    /// Whether the tray is showing under the canvas.
+    /// Whether the tray's sheet is open under the canvas.
     pub tray_shown: bool,
-}
-
-/// Writes `share` to three decimals, so an f32 like 0.35 doesn't show its widening noise.
-fn round_share<S: serde::Serializer>(share: &f32, serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.serialize_f64((f64::from(*share) * 1000.0).round() / 1000.0)
 }
 
 impl Default for Settings {
@@ -95,7 +79,6 @@ impl Default for Settings {
             lower_pen_button: PenButtonAction::PickColour,
             upper_pen_button: PenButtonAction::Pan,
             pressure_curve: PressureCurve::linear(),
-            tray_share: DEFAULT_TRAY_SHARE,
             tray_shown: true,
         }
     }
@@ -122,11 +105,6 @@ impl Settings {
                 .get("pressure_curve")
                 .and_then(PressureCurve::from_json)
                 .unwrap_or(defaults.pressure_curve),
-            tray_share: fields
-                .get("tray_share")
-                .and_then(serde_json::Value::as_f64)
-                .map(|share| (share as f32).clamp(MIN_TRAY_SHARE, MAX_TRAY_SHARE))
-                .unwrap_or(defaults.tray_share),
             tray_shown: fields
                 .get("tray_shown")
                 .and_then(serde_json::Value::as_bool)
@@ -138,19 +116,6 @@ impl Settings {
     pub fn to_json(self) -> String {
         serde_json::to_string_pretty(&self).expect("settings serialise")
     }
-}
-
-/// Where the paned divider sits, from the top, for a tray taking `share` of `height`.
-pub fn divider_position(share: f32, height: i32) -> i32 {
-    (height as f32 * (1.0 - share)).round() as i32
-}
-
-/// The tray's share of `height` with the divider at `position`.
-pub fn tray_share_at(position: i32, height: i32) -> f32 {
-    if height <= 0 {
-        return DEFAULT_TRAY_SHARE;
-    }
-    (1.0 - position as f32 / height as f32).clamp(MIN_TRAY_SHARE, MAX_TRAY_SHARE)
 }
 
 /// The settings and the file they are kept in; without a file they live in memory only.

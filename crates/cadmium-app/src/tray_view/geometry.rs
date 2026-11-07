@@ -3,6 +3,16 @@ use cadmium_engine::surface::{TRAY_HEIGHT, TRAY_WIDTH};
 
 use crate::view;
 
+/// The least height the tray takes, in widget px.
+pub(super) const TRAY_MIN_HEIGHT: i32 = 120;
+/// The height the tray asks for, which its sheet opens to.
+pub(super) const TRAY_NATURAL_HEIGHT: i32 = 320;
+
+/// The tray's (minimum, natural) height: the sheet opens it to its natural height.
+pub(super) fn tray_height_request() -> (i32, i32) {
+    (TRAY_MIN_HEIGHT, TRAY_NATURAL_HEIGHT)
+}
+
 /// The tray point under widget point (`widget_x`, `widget_y`) with the tray shown by `view`
 /// on a screen of `device_scale` device px per widget px.
 pub(super) fn tray_point(

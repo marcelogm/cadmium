@@ -7,7 +7,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
-use self::geometry::{is_on_tray, tray_point};
+use self::geometry::{is_on_tray, tray_height_request, tray_point};
 use self::ring::{ShownRing, append_load_ring};
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
@@ -21,8 +21,6 @@ use crate::view::auto_fit::AutoFit;
 const TRAY_CURSOR: &str = "crosshair";
 const TRAY_FRAME_CLASS: &str = "card";
 const TRAY_MIN_WIDTH: i32 = 180;
-/// The least height the tray asks for; it fills whatever its pane gives it.
-const TRAY_MIN_HEIGHT: i32 = 120;
 
 type TrayHandler = Box<dyn Fn(&TrayView)>;
 type PickHandler = Box<dyn Fn(&TrayView, bool)>;

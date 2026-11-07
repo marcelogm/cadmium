@@ -112,55 +112,27 @@ fn every_action_is_in_the_menu() {
 }
 
 #[test]
-fn the_tray_starts_shown_under_a_third_of_the_window() {
-    let defaults = Settings::default();
-    assert!(defaults.tray_shown);
-    assert_eq!(defaults.tray_share, DEFAULT_TRAY_SHARE);
+fn the_tray_starts_shown() {
+    assert!(Settings::default().tray_shown);
 }
 
 #[test]
-fn tray_layout_round_trips_through_json() {
+fn whether_the_tray_shows_round_trips_through_json() {
     let settings = Settings {
-        tray_share: 0.5,
         tray_shown: false,
         ..Settings::default()
     };
     assert_eq!(Settings::from_json(&settings.to_json()), settings);
-}
-
-#[test]
-fn a_tray_share_out_of_range_is_clamped_and_garbage_falls_back() {
-    assert_eq!(
-        Settings::from_json(r#"{"tray_share": 2.0}"#).tray_share,
-        MAX_TRAY_SHARE
-    );
-    assert_eq!(
-        Settings::from_json(r#"{"tray_share": -1.0}"#).tray_share,
-        MIN_TRAY_SHARE
-    );
-    assert_eq!(
-        Settings::from_json(r#"{"tray_share": "big"}"#).tray_share,
-        DEFAULT_TRAY_SHARE
-    );
     assert!(Settings::from_json(r#"{"tray_shown": 3}"#).tray_shown);
 }
 
 #[test]
-fn the_divider_position_and_the_share_convert_both_ways() {
-    assert_eq!(divider_position(0.25, 800), 600);
-    assert_eq!(tray_share_at(600, 800), 0.25);
-    assert_eq!(tray_share_at(799, 800), MIN_TRAY_SHARE);
-    assert_eq!(tray_share_at(0, 800), MAX_TRAY_SHARE);
-    assert_eq!(tray_share_at(10, 0), DEFAULT_TRAY_SHARE);
-}
-
-#[test]
-fn the_saved_tray_share_is_rounded() {
-    assert!(
-        Settings::default()
-            .to_json()
-            .contains("\"tray_share\": 0.35,")
-    );
+fn a_file_from_the_tray_divider_still_reads() {
+    let read =
+        Settings::from_json(r#"{"lower_pen_button":"zoom","tray_share":0.5,"tray_shown":false}"#);
+    assert_eq!(read.lower_pen_button, PenButtonAction::Zoom);
+    assert!(!read.tray_shown);
+    assert!(!read.to_json().contains("tray_share"));
 }
 
 #[test]

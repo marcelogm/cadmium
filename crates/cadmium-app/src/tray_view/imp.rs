@@ -48,7 +48,10 @@ impl WidgetImpl for TrayView {
     fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
         match orientation {
             gtk::Orientation::Horizontal => (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1),
-            _ => (TRAY_MIN_HEIGHT, TRAY_MIN_HEIGHT, -1, -1),
+            _ => {
+                let (minimum, natural) = tray_height_request();
+                (minimum, natural, -1, -1)
+            }
         }
     }
 
