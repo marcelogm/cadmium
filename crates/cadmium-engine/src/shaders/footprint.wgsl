@@ -2,6 +2,10 @@ const EDGE_SOFTNESS_PX: f32 = 1.5;
 const ALONG_HEADING_SOFTNESS_SHARE: f32 = 0.2;
 const BLADE_COVERAGE_HALF_PX: f32 = 0.5;
 
+fn is_blade_mode(mode: u32) -> bool {
+    return mode == TOOL_MODE_KNIFE || mode == TOOL_MODE_MIXING_KNIFE;
+}
+
 fn brush_space(pixel: vec2<i32>) -> vec2<f32> {
     let offset = vec2<f32>(pixel) + vec2<f32>(0.5) - dab.center;
     let axis = dab.orientation;
@@ -45,7 +49,7 @@ fn tuft_footprint(position: vec2<f32>) -> f32 {
 }
 
 fn footprint(position: vec2<f32>) -> f32 {
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+    if (is_blade_mode(dab.tool_mode)) {
         return blade_footprint(position);
     }
     return tuft_footprint(position);
@@ -62,7 +66,7 @@ fn blade_pressure_gradient(position: vec2<f32>) -> vec2<f32> {
 }
 
 fn inside_outline(offset: vec2<f32>) -> bool {
-    if (dab.tool_mode == TOOL_MODE_KNIFE) {
+    if (is_blade_mode(dab.tool_mode)) {
         return all(abs(offset) <= semi_axes());
     }
     return length(offset / semi_axes()) <= 1.0;

@@ -8,6 +8,7 @@ const MAX_DABS_PER_SEGMENT: usize = 8192;
 pub enum Tool {
     Brush,
     Knife,
+    MixingKnife,
     Blender,
     Rag,
     Eyedropper,
@@ -15,9 +16,10 @@ pub enum Tool {
 
 impl Tool {
     #[cfg(test)]
-    pub(crate) const ALL: [Tool; 5] = [
+    pub(crate) const ALL: [Tool; 6] = [
         Tool::Brush,
         Tool::Knife,
+        Tool::MixingKnife,
         Tool::Blender,
         Tool::Rag,
         Tool::Eyedropper,

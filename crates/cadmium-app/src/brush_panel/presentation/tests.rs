@@ -1,5 +1,6 @@
 use super::*;
 use crate::tools::knife::KNIFE_HANDLING;
+use crate::tools::mixing_knife::MIXING_KNIFE_HANDLING;
 use crate::tools::{Tool, UiTool};
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
 
@@ -42,6 +43,26 @@ fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() 
     assert!(knife.pigments && knife.loaded && knife.size && knife.load);
     assert!(knife.plate_gap && knife.stroke_loading && knife.clean && knife.hint);
     assert!(!knife.medium && !knife.shape);
+}
+
+#[test]
+fn mixing_knife_shows_what_its_face_carries_but_loads_no_pigment() {
+    let shown = PanelTool::Paint(Tool::MixingKnife).controls();
+    assert!(shown.loaded && shown.size && shown.clean && shown.hint);
+    assert!(!shown.pigments && !shown.load && !shown.medium);
+    assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
+}
+
+#[test]
+fn mixing_knife_panel_speaks_of_the_mixing_knife_and_how_to_hold_it() {
+    let wording = PanelTool::Paint(Tool::MixingKnife).wording();
+    assert_eq!(wording.loaded_title, "On the Mixing Knife");
+    assert_eq!(wording.clean_button, "Clean Mixing Knife");
+    assert_eq!(wording.size_subtitle, Some("Blade length"));
+    assert_eq!(
+        tool_hint(PanelTool::Paint(Tool::MixingKnife)),
+        MIXING_KNIFE_HANDLING
+    );
 }
 
 #[test]

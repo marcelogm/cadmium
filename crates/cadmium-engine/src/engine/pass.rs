@@ -173,6 +173,9 @@ impl DabPasses {
             DabStage::Refill => self.refill.encode(pass, &bind_groups.refill, dab),
             DabStage::Spread => self.spread.encode(pass, &bind_groups.spread, dab),
             DabStage::Blade => self.blade.encode(pass, &bind_groups.blade, dab),
+            // The face pass is not wired yet: until it is, the mixing knife only
+            // spreads what lies under its blade.
+            DabStage::Face => {}
             DabStage::Wipe => self.wipe.encode(pass, &bind_groups.wipe, dab),
         }
     }
