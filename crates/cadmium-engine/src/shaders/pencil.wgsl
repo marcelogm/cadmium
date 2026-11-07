@@ -1,13 +1,43 @@
-const TOOTH_LIGHT_UM: f32 = 2.0;
-const TOOTH_FIRM_UM: f32 = -8.0;
-const TOOTH_SOFTNESS_UM: f32 = 2.0;
+// Graphite is scraped off the lead by the tooth: every texel has a fixed grain (the canvas
+// relief plus a fine speckle), and pressure decides which grains are high enough to catch it.
+// A texel only darkens towards the coverage its grain allows, so going over a line builds
+// it up gently instead of filling the grain in solid.
 const TOOTH_REACH_PX: i32 = 3;
 const NEIGHBOUR_SHARE: f32 = 0.25;
+const RELIEF_SPAN_UM: f32 = 12.0;
+const RELIEF_SHARE: f32 = 0.4;
+const SPECKLE_SHARE: f32 = 0.6;
+const THRESHOLD_LIGHT: f32 = 0.72;
+const THRESHOLD_FIRM: f32 = 0.28;
+const THRESHOLD_SOFTNESS: f32 = 0.12;
+const COVERAGE_LIGHT: f32 = 0.45;
+const COVERAGE_FIRM: f32 = 0.95;
+const HASH_MULTIPLIER: u32 = 747796405u;
+const HASH_INCREMENT: u32 = 2891336453u;
+const HASH_MIX: u32 = 277803737u;
+const HASH_SHIFT_SELECT: u32 = 28u;
+const HASH_SHIFT_BASE: u32 = 4u;
+const HASH_OUTPUT_SHIFT: u32 = 22u;
+const HASH_SALT: u32 = 0x9e3779b9u;
+const NOISE_DISCARDED_BITS: u32 = 8u;
+const NOISE_RANGE: f32 = 16777216.0;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var graphite: texture_storage_2d<r32float, read_write>;
 @group(0) @binding(2) var dry_height: texture_storage_2d<r32float, read>;
 @group(0) @binding(3) var wet_vol: texture_storage_2d<r32float, read>;
+
+fn hash(value: u32) -> u32 {
+    let state = value * HASH_MULTIPLIER + HASH_INCREMENT;
+    let word = ((state >> ((state >> HASH_SHIFT_SELECT) + HASH_SHIFT_BASE)) ^ state) * HASH_MIX;
+    return (word >> HASH_OUTPUT_SHIFT) ^ word;
+}
+
+fn speckle(pixel: vec2<i32>) -> f32 {
+    let texel = vec2<u32>(pixel);
+    let word = hash(texel.x ^ hash(texel.y ^ HASH_SALT));
+    return f32(word >> NOISE_DISCARDED_BITS) / NOISE_RANGE;
+}
 
 fn surface_um(pixel: vec2<i32>) -> f32 {
     let size = vec2<i32>(textureDimensions(graphite));
@@ -23,13 +53,20 @@ fn relief_um(pixel: vec2<i32>) -> f32 {
     return surface_um(pixel) - NEIGHBOUR_SHARE * around;
 }
 
-fn tooth(pixel: vec2<i32>) -> f32 {
-    let threshold = mix(TOOTH_LIGHT_UM, TOOTH_FIRM_UM, dab.pressure);
-    return smoothstep(
-        threshold - TOOTH_SOFTNESS_UM,
-        threshold + TOOTH_SOFTNESS_UM,
-        relief_um(pixel)
+/// How proud this texel stands, 0 in the deepest valley to 1 on the highest peak.
+fn grain(pixel: vec2<i32>) -> f32 {
+    let relief = clamp(relief_um(pixel) / RELIEF_SPAN_UM + 0.5, 0.0, 1.0);
+    return RELIEF_SHARE * relief + SPECKLE_SHARE * speckle(pixel);
+}
+
+fn coverage(pixel: vec2<i32>) -> f32 {
+    let threshold = mix(THRESHOLD_LIGHT, THRESHOLD_FIRM, dab.pressure);
+    let caught = smoothstep(
+        threshold - THRESHOLD_SOFTNESS,
+        threshold + THRESHOLD_SOFTNESS,
+        grain(pixel)
     );
+    return caught * mix(COVERAGE_LIGHT, COVERAGE_FIRM, dab.pressure);
 }
 
 @compute @workgroup_size(8, 8)
@@ -42,7 +79,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (mask <= 0.0) {
         return;
     }
-    let deposit = clamp(dab.tool_strength * dab.pressure * mask * tooth(pixel), 0.0, 1.0);
+    let target_density = coverage(pixel) * mask;
     let density = textureLoad(graphite, pixel).x;
-    textureStore(graphite, pixel, vec4<f32>(density + deposit * (1.0 - density), 0.0, 0.0, 0.0));
+    if (target_density <= density) {
+        return;
+    }
+    let rate = clamp(dab.tool_strength, 0.0, 1.0);
+    textureStore(graphite, pixel, vec4<f32>(mix(density, target_density, rate), 0.0, 0.0, 0.0));
 }

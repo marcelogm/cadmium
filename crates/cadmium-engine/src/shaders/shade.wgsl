@@ -191,8 +191,10 @@ fn main(
     let diffuse = clamp(AMBIENT + (1.0 - AMBIENT) * lambert, 0.0, MAX_DIFFUSE);
 
     let wetness = smoothstep(0.0, FULLY_WET_UM, volume);
-    let roughness = mix(params.dry_roughness, 1.0 - WET_GLOSS_SMOOTHING * params.wet_gloss, wetness);
-    let specular = ggx_specular(normal, light, roughness);
+    let surface_roughness = mix(params.dry_roughness, 1.0 - WET_GLOSS_SMOOTHING * params.wet_gloss, wetness);
+    let sheen = graphite_sheen(density, wetness);
+    let roughness = mix(surface_roughness, GRAPHITE_ROUGHNESS, sheen);
+    let specular = ggx_specular(normal, light, roughness) * mix(1.0, GRAPHITE_SHEEN_GAIN, sheen);
 
     var shaded = rgb * diffuse + vec3<f32>(specular);
     if (params.glass != 0u) {
