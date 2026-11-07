@@ -1,5 +1,5 @@
 use cadmium_engine::{
-    canvas::{Primer, StateTexture, Weave, primer_reflectance},
+    canvas::{Primer, StateTexture, Weave, primer_reflectance, primer_srgb8},
     gpu::GpuContext,
     pigments::PigmentDb,
     surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec},
@@ -21,10 +21,17 @@ fn a_new_session_has_a_clean_tray_with_the_painting_pigments() {
 }
 
 #[test]
-fn the_tray_primer_is_a_flat_neutral_grey() {
+fn the_tray_primer_is_a_flat_neutral_mid_grey() {
     let db = PigmentDb::builtin();
     let bands = primer_reflectance(&db, Primer::Tray);
-    assert!(bands.iter().all(|band| (*band - 0.75).abs() < 1e-6));
+    assert!(bands.iter().all(|band| (*band - bands[0]).abs() < 1e-6));
+    let [red, green, blue] = primer_srgb8(&db, Primer::Tray);
+    assert!(
+        red.abs_diff(green) <= 1 && green.abs_diff(blue) <= 1,
+        "{red} {green} {blue}"
+    );
+    let lightness = crate::glass::lightness([red, green, blue]);
+    assert!((45.0..=60.0).contains(&lightness), "L* {lightness}");
 }
 
 #[test]

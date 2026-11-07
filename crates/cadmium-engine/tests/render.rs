@@ -147,6 +147,7 @@ fn presenting_the_display_view_directly_matches_presenting_the_canvas() {
     let request = PresentRequest {
         source: canvas.view(StateTexture::Display),
         view: IDENTITY_VIEW,
+        plate: false,
     };
     let via_view = present_to_rgba8(&gpu, &presenter, request, CANVAS_SIZE, CANVAS_SIZE);
     assert_eq!(via_canvas, via_view);
@@ -199,6 +200,7 @@ fn present_solid(gpu: &GpuContext, rgb: [u16; 3]) -> Vec<u8> {
     let request = PresentRequest {
         source: &source,
         view: IDENTITY_VIEW,
+        plate: false,
     };
     present_to_rgba8(gpu, &presenter, request, TARGET_SIZE.0, TARGET_SIZE.1)
 }

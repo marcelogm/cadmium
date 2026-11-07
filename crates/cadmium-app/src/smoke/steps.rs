@@ -78,6 +78,7 @@ pub(super) enum SmokeStep {
     Brush(BrushStep),
     ShowPage(String),
     ShowTray,
+    PaintTray,
     Screenshot(PathBuf),
     Quit,
 }
@@ -94,7 +95,8 @@ impl SmokeStep {
             SmokeStep::ChooseTool(_)
             | SmokeStep::OpenDialog(_)
             | SmokeStep::ShowPage(_)
-            | SmokeStep::ShowTray => true,
+            | SmokeStep::ShowTray
+            | SmokeStep::PaintTray => true,
             SmokeStep::Brush(step) => step.is_ready(window),
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
@@ -130,6 +132,7 @@ impl SmokeStep {
             SmokeStep::Brush(step) => step.run(window),
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
             SmokeStep::ShowTray => window.show_tray(),
+            SmokeStep::PaintTray => super::tray_paint::paint_tray(window),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
                     return false;
@@ -149,7 +152,7 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, tray, brush editor, sheet stroke,
+    /// open, export, brush export, brush delete, page, tray, tray paint, brush editor, sheet stroke,
     /// screenshot, quit.
     /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
     /// it at start-up.
@@ -166,8 +169,11 @@ impl SmokeConfig {
         steps.extend(self.export.clone().map(SmokeStep::Export));
         steps.extend(self.brushes.after_files());
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
-        if self.tray {
+        if self.tray || self.tray_paint {
             steps.push(SmokeStep::ShowTray);
+        }
+        if self.tray_paint {
+            steps.push(SmokeStep::PaintTray);
         }
         steps.extend(self.brushes.editor_steps());
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));

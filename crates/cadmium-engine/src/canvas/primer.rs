@@ -11,7 +11,9 @@ const PRIMER_WHITE_ID: &str = "titanium_white";
 const IMPRIMATURA_PIGMENT_ID: &str = "burnt_sienna";
 const IMPRIMATURA_FRACTION: f32 = 0.5;
 const IMPRIMATURA_THICKNESS_UM: f32 = 12.0;
-const TRAY_REFLECTANCE: f32 = 0.75;
+/// The tray's mid grey under its glass: flat, so it has no tone, and shown near L* 52, the
+/// middle value a painter judges light and dark against.
+pub(crate) const TRAY_REFLECTANCE: f32 = 0.40;
 /// The paper ground's brightest band: just under full reflectance, so layers composited
 /// over it stay well clear of the `1 − R·R` pole.
 const PAPER_TOP_REFLECTANCE: f32 = 0.99;
