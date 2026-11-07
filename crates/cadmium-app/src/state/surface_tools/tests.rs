@@ -101,7 +101,11 @@ fn a_pile_click_chooses_the_pigment_while_the_tray_loads() {
 
 #[test]
 fn the_eraser_wipes_the_tray_when_the_painting_tool_cannot_load() {
-    for tool in [UiTool::Move, UiTool::Paint(Tool::Eyedropper)] {
+    for tool in [
+        UiTool::Move,
+        UiTool::Paint(Tool::Pencil),
+        UiTool::Paint(Tool::Eyedropper),
+    ] {
         let mut state = painting_state();
         squeeze_blob_on_tray(&mut state, 0);
         let before = state.session.tray.wet_totals(&state.gpu).unwrap().volume;

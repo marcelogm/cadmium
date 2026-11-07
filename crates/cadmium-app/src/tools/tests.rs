@@ -12,7 +12,15 @@ fn toggle_names_match_the_header_tool_group() {
     let names: Vec<_> = UiTool::ALL.iter().map(|tool| tool.name()).collect();
     assert_eq!(
         names,
-        ["move", "brush", "knife", "blender", "rag", "eyedropper"]
+        [
+            "move",
+            "brush",
+            "knife",
+            "blender",
+            "rag",
+            "pencil",
+            "eyedropper"
+        ]
     );
 }
 
@@ -85,4 +93,12 @@ fn the_mixing_knife_is_no_header_tool_and_does_nothing_on_the_painting() {
     let profile = mixing_knife.profile();
     assert!(profile.keys.is_empty() && profile.keypad_keys.is_empty());
     assert_eq!(profile.on_painting, Press::Nothing);
+}
+
+#[test]
+fn the_pencil_strokes_on_the_painting_and_ignores_the_tray() {
+    let pencil = UiTool::Paint(Tool::Pencil);
+    assert_eq!(pencil.profile().on_painting, Press::Stroke(Tool::Pencil));
+    assert_eq!(TrayTool::Load.press(pencil), Press::Nothing);
+    assert!(!TrayTool::Load.is_enabled(pencil));
 }

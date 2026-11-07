@@ -37,6 +37,14 @@ fn rag_lists_both_of_its_keys() {
 }
 
 #[test]
+fn pencil_lists_both_of_its_keys() {
+    assert_eq!(
+        tool_accelerator(UiTool::Paint(crate::tools::Tool::Pencil)),
+        "7 p"
+    );
+}
+
+#[test]
 fn zoom_in_lists_both_of_its_accelerators() {
     assert_eq!(
         action_accelerator("win.zoom-in").as_deref(),

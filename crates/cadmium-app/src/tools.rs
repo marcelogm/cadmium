@@ -12,6 +12,7 @@ pub(crate) mod knife;
 pub(crate) mod mixing_knife;
 mod moving;
 pub(crate) mod panel;
+mod pencil;
 mod rag;
 pub(crate) mod tray_tool;
 
@@ -52,12 +53,13 @@ impl Default for UiTool {
 }
 
 impl UiTool {
-    pub const ALL: [UiTool; 6] = [
+    pub const ALL: [UiTool; 7] = [
         UiTool::Move,
         UiTool::Paint(Tool::Brush),
         UiTool::Paint(Tool::Knife),
         UiTool::Paint(Tool::Blender),
         UiTool::Paint(Tool::Rag),
+        UiTool::Paint(Tool::Pencil),
         UiTool::Paint(Tool::Eyedropper),
     ];
 
@@ -69,6 +71,7 @@ impl UiTool {
             UiTool::Paint(Tool::MixingKnife) => &mixing_knife::MIXING_KNIFE,
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
+            UiTool::Paint(Tool::Pencil) => &pencil::PENCIL,
             UiTool::Paint(Tool::Eyedropper) => &eyedropper::EYEDROPPER,
         }
     }

@@ -9,6 +9,7 @@
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-mixing-knife-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-blender-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-rag-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-pencil-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/cadmium-tube-symbolic.svg</file>
     <file alias="icons/scalable/apps/io.github.marcelogm.Cadmium.svg" preprocess="xml-stripblanks">app-icons/io.github.marcelogm.Cadmium.svg</file>
     <file alias="icons/symbolic/apps/io.github.marcelogm.Cadmium-symbolic.svg" preprocess="xml-stripblanks">app-icons/io.github.marcelogm.Cadmium-symbolic.svg</file>

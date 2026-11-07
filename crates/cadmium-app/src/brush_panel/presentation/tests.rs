@@ -66,12 +66,14 @@ fn mixing_knife_panel_speaks_of_the_mixing_knife_and_how_to_hold_it() {
 }
 
 #[test]
-fn rag_shows_only_the_size() {
-    let shown = PanelTool::Paint(Tool::Rag).controls();
-    assert!(shown.size);
-    assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
-    assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
-    assert!(!shown.clean && !shown.hint);
+fn the_rag_and_the_pencil_show_only_the_size() {
+    for tool in [Tool::Rag, Tool::Pencil] {
+        let shown = PanelTool::Paint(tool).controls();
+        assert!(shown.size, "{tool:?}");
+        assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
+        assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
+        assert!(!shown.clean && !shown.hint, "{tool:?}");
+    }
 }
 
 #[test]
