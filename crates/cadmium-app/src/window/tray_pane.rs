@@ -1,9 +1,9 @@
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use gtk::{gdk, glib};
+use gtk::{gdk, glib, graphene};
 
 use super::CadmiumWindow;
-use super::tray_divider::{TrayDivider, bar_drag_opens};
+use super::tray_divider::{TrayDivider, bar_drag_opens, clamp_open_position};
 use crate::LOG_DOMAIN;
 use crate::settings::Settings;
 use crate::tools::keys::{DigitPick, digit_pick};
@@ -153,9 +153,6 @@ impl CadmiumWindow {
             imp.tray_divider.set(divider);
             self.queue_divider_placing();
         }
-        if imp.tray_toggle.is_active() != shown {
-            imp.tray_toggle.set_active(shown);
-        }
     }
 
     /// Shows the tray as the settings left it, and keeps the divider at the tray's share
@@ -179,39 +176,65 @@ impl CadmiumWindow {
         self.open_tray_from_its_bar();
     }
 
-    /// Closes the tray when the painter lets go of the divider near the bottom. GtkPaned keeps
-    /// its own drag to itself, so the let-go is read from the pointer or touch ending, seen
-    /// on the way down to the divider.
+    /// Closes the tray when the painter drags the divider's handle near the bottom and lets
+    /// go. GtkPaned keeps its own drag to itself, so this watches, in the capture phase,
+    /// every press and release under the paned (the canvas's and the tray's too): a press
+    /// on the handle grabs it, and only that press's release can close the tray.
     fn close_tray_when_let_go_low(&self) {
-        let ends = gtk::EventControllerLegacy::new();
-        ends.set_propagation_phase(gtk::PropagationPhase::Capture);
-        ends.connect_event(glib::clone!(
+        let presses = gtk::EventControllerLegacy::new();
+        presses.set_propagation_phase(gtk::PropagationPhase::Capture);
+        presses.connect_event(glib::clone!(
             #[weak(rename_to = window)]
             self,
             #[upgrade_or]
             glib::Propagation::Proceed,
             move |_, event| {
-                let ended = matches!(
-                    event.event_type(),
-                    gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd
-                );
-                if ended {
-                    window.divider_let_go();
-                }
+                window.watch_divider_press(event);
                 glib::Propagation::Proceed
             }
         ));
-        self.imp().tray_paned.add_controller(ends);
+        self.imp().tray_paned.add_controller(presses);
     }
 
-    fn divider_let_go(&self) {
+    fn watch_divider_press(&self, event: &gdk::Event) {
         let imp = self.imp();
         let mut divider = imp.tray_divider.get();
-        let closes = divider.released();
+        let closes = match event.event_type() {
+            gdk::EventType::ButtonPress | gdk::EventType::TouchBegin
+                if self.press_is_on_divider_handle(event) =>
+            {
+                divider.grab();
+                false
+            }
+            gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd => divider.released(),
+            gdk::EventType::TouchCancel => {
+                divider.cancel();
+                false
+            }
+            _ => return,
+        };
         imp.tray_divider.set(divider);
         if closes {
             self.set_tray_open(false);
         }
+    }
+
+    fn press_is_on_divider_handle(&self, event: &gdk::Event) -> bool {
+        let paned = &*self.imp().tray_paned;
+        let (Some((x, y)), Some(native), Some(handle)) =
+            (event.position(), paned.native(), divider_handle(paned))
+        else {
+            return false;
+        };
+        let (dx, dy) = native.surface_transform();
+        let on_surface = graphene::Point::new((x - dx) as f32, (y - dy) as f32);
+        let point = native
+            .upcast_ref::<gtk::Widget>()
+            .compute_point(paned, &on_surface);
+        let bounds = handle.compute_bounds(paned);
+        point
+            .zip(bounds)
+            .is_some_and(|(point, bounds)| bounds.contains_point(&point))
     }
 
     /// A click on the closed tray's bar opens it, and so does a short drag up.
@@ -227,7 +250,7 @@ impl CadmiumWindow {
             #[weak(rename_to = window)]
             self,
             move |drag, _, offset_y| {
-                if bar_drag_opens(offset_y) {
+                if !window.imp().tray_pane.is_visible() && bar_drag_opens(offset_y) {
                     drag.set_state(gtk::EventSequenceState::Claimed);
                     window.set_tray_open(true);
                 }
@@ -265,8 +288,17 @@ impl CadmiumWindow {
             return;
         };
         imp.tray_divider.set(divider);
-        // Clamped here so GTK has nothing left to clamp, which would look like a drag.
-        let position = position.clamp(paned.min_position(), paned.max_position().max(0));
+        // Clamped here so GTK has nothing left to clamp, which would look like a drag; the
+        // paned lets the tray shrink (to drag it closed), so its minimum is kept here.
+        let handle_px = divider_handle(paned).map_or(0, |handle| handle.height());
+        let tray_min_px = imp.tray_pane.measure(gtk::Orientation::Vertical, -1).0;
+        let position = clamp_open_position(
+            position.min(paned.max_position().max(0)),
+            paned.min_position(),
+            paned.height(),
+            handle_px,
+            tray_min_px,
+        );
         paned.set_position(position);
         let mut divider = imp.tray_divider.get();
         divider.end_place();
@@ -298,4 +330,16 @@ impl CadmiumWindow {
             glib::g_warning!(LOG_DOMAIN, "couldn't save the tray layout: {error}");
         }
     }
+}
+
+/// The paned's handle, the separator between its children.
+fn divider_handle(paned: &gtk::Paned) -> Option<gtk::Widget> {
+    let mut child = paned.first_child();
+    while let Some(widget) = child {
+        if widget.css_name() == "separator" {
+            return Some(widget);
+        }
+        child = widget.next_sibling();
+    }
+    None
 }

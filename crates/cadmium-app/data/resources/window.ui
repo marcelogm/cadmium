@@ -49,13 +49,6 @@
                   </object>
                 </child>
                 <child type="end">
-                  <object class="GtkToggleButton" id="tray_toggle">
-                    <property name="icon-name">view-dual-symbolic</property>
-                    <property name="tooltip-text">Toggle tray (F8)</property>
-                    <property name="action-name">win.toggle-tray</property>
-                  </object>
-                </child>
-                <child type="end">
                   <object class="GtkButton">
                     <property name="icon-name">weather-clear-symbolic</property>
                     <property name="tooltip-text">Dry (Ctrl+D)</property>

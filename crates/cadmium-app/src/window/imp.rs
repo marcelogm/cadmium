@@ -42,8 +42,6 @@ pub struct CadmiumWindow {
     #[template_child]
     pub tray_tool_group: TemplateChild<adw::ToggleGroup>,
     #[template_child]
-    pub tray_toggle: TemplateChild<gtk::ToggleButton>,
-    #[template_child]
     pub tray_bar: TemplateChild<gtk::Button>,
     #[template_child]
     pub tray_slot: TemplateChild<gtk::Box>,
