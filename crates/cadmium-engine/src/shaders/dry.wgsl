@@ -43,9 +43,10 @@ fn main(
     if (volume > 0.0) {
         let fractions_low = textureLoad(wet_pig0, pixel);
         let fractions_high = textureLoad(wet_pig1, pixel);
+        // Once paint dries over graphite, the graphite is sealed in for good.
         let density = textureLoad(graphite, pixel).x;
-        let below_low = under_graphite_low(textureLoad(dry_refl0, pixel), density);
-        let below_high = under_graphite_high(textureLoad(dry_refl1, pixel), density);
+        let below_low = under_graphite(textureLoad(dry_refl0, pixel), GRAPHITE_BANDS_LOW, density);
+        let below_high = under_graphite(textureLoad(dry_refl1, pixel), GRAPHITE_BANDS_HIGH, density);
         textureStore(dry_refl0, pixel, dry_bands(fractions_low, fractions_high, volume, below_low, 0u));
         textureStore(dry_refl1, pixel, dry_bands(fractions_low, fractions_high, volume, below_high, 4u));
         textureStore(graphite, pixel, vec4<f32>(0.0));
