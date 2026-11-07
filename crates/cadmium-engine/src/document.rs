@@ -29,6 +29,8 @@ const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
 const MANIFEST_ENTRY: &str = "manifest.json";
 const THICKNESS_BYTES: usize = 4;
+const DENSITY_BYTES: usize = 4;
+const MAX_GRAPHITE_DENSITY: f32 = 1.0;
 
 #[derive(Debug)]
 pub enum DocumentError {

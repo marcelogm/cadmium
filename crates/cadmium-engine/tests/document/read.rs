@@ -1,10 +1,11 @@
 use cadmium_engine::{
-    canvas::MAX_CANVAS_SIZE,
+    canvas::{MAX_CANVAS_SIZE, StateTexture},
     document::{DocumentError, DocumentSnapshot},
+    gpu::GpuContext,
 };
 
 use crate::entries::{Entries, format_reason, read_entries, set_first_thickness};
-use crate::{DRY_RELIEF, FORMAT_1_DRY_HEIGHT, INVALID_THICKNESS, TempDir};
+use crate::{DRY_RELIEF, FORMAT_1_DRY_HEIGHT, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir};
 
 const MAX_MANIFEST_BYTES: usize = 1 << 20;
 
@@ -149,4 +150,29 @@ fn a_dry_relief_that_sinks_below_the_bare_canvas_is_a_format_error() {
 #[test]
 fn a_well_formed_format_2_document_reads() {
     assert!(read_entries(Entries::blank().in_format_2()).is_ok());
+}
+
+#[test]
+fn a_painting_from_before_the_pencil_opens_without_graphite() {
+    let gpu = GpuContext::new().unwrap();
+    let opened = read_entries(Entries::blank())
+        .unwrap()
+        .into_session(&gpu)
+        .unwrap();
+    let graphite = opened.canvas.read_f32(&gpu, StateTexture::Graphite).unwrap();
+    assert!(graphite.iter().all(|density| *density == 0.0));
+}
+
+#[test]
+fn a_graphite_density_outside_zero_to_one_is_a_format_error() {
+    for value in [2.0, -0.5, f32::NAN] {
+        let entries = Entries::blank()
+            .with_graphite()
+            .edit_state(GRAPHITE_ENTRY, set_first_thickness(value));
+        let reason = format_reason(read_entries(entries));
+        assert!(
+            reason.contains(&format!("{GRAPHITE_ENTRY} holds a graphite density outside")),
+            "{reason}"
+        );
+    }
 }

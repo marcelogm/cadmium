@@ -25,6 +25,7 @@ const BLANK_WIDTH: u32 = 64;
 const BLANK_HEIGHT: u32 = 32;
 const FORMAT_1_DRY_HEIGHT: &str = "state/dry_height.zst";
 const DRY_RELIEF: &str = "state/dry_relief.zst";
+const GRAPHITE_ENTRY: &str = "state/graphite.zst";
 const INVALID_THICKNESS: &str = "holds a negative or non-finite thickness";
 const FORMAT_1_STATE_ENTRIES: [(&str, StateTexture); 8] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),

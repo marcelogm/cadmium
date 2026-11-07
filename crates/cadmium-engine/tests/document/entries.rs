@@ -9,10 +9,13 @@ use cadmium_engine::{
 };
 
 use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES, TempDir,
+    BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES,
+    GRAPHITE_ENTRY, TempDir,
 };
 
 const TRAY_PREFIX: &str = "tray/";
+
+const GRAPHITE_BYTES: usize = 4;
 
 pub(super) struct Entries(pub(super) Vec<(String, Vec<u8>)>);
 
@@ -60,6 +63,16 @@ impl Entries {
         let mut manifest: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         edit(&mut manifest);
         *bytes = serde_json::to_vec(&manifest).unwrap();
+        self
+    }
+
+    /// Adds a graphite entry, all zero, which `edit_state` can then change.
+    pub(super) fn with_graphite(mut self) -> Entries {
+        let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT) as usize * GRAPHITE_BYTES];
+        self.0.push((
+            GRAPHITE_ENTRY.to_string(),
+            zstd::encode_all(raw.as_slice(), 3).unwrap(),
+        ));
         self
     }
 
