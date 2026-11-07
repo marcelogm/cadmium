@@ -16,6 +16,7 @@ mod placement;
 mod readout;
 mod reservoir;
 pub(crate) mod shader;
+mod tip;
 
 pub use bristles::{
     BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX, bristle_reach_px,
@@ -23,6 +24,7 @@ pub use bristles::{
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use readout::BrushReadout;
+pub use tip::Tip;
 
 pub(crate) use pass::pick::PickRequest;
 
@@ -167,6 +169,8 @@ pub struct WetOilEngine {
     dry_pass: DryPass,
     dip_pass: DipPass,
     face_sum_pass: FaceSumPass,
+    active: Tip,
+    parked: Option<Box<tip::ParkedTip>>,
 }
 
 impl WetOilEngine {
@@ -185,6 +189,8 @@ impl WetOilEngine {
             dry_pass: DryPass::new(gpu),
             dip_pass: DipPass::new(gpu),
             face_sum_pass: FaceSumPass::new(gpu),
+            active: Tip::Painting,
+            parked: None,
         }
     }
 

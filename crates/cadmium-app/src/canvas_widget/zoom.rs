@@ -45,9 +45,12 @@ impl CadmiumCanvas {
                 state.session.canvas.spec.height,
             )
         };
-        let viewport = (
-            f64::from(self.width()) * scale,
-            f64::from(self.height()) * scale,
+        let viewport = view::above_inset(
+            (
+                f64::from(self.width()) * scale,
+                f64::from(self.height()) * scale,
+            ),
+            f64::from(self.imp().fit_inset.get()) * scale,
         );
         self.set_view(view::fit_view(spec_size, viewport, FIT_MARGIN * scale));
         update_auto_fit(&self.imp().auto_fit, AutoFit::fitted);
@@ -94,6 +97,14 @@ impl CadmiumCanvas {
         let delta = if clockwise { ROTATE_STEP } else { -ROTATE_STEP };
         let (x, y) = widget_centre(self);
         self.rotate_around(x, y, delta);
+    }
+
+    /// Keeps fits clear of a bar `inset_px` tall over the canvas's foot (the tray's), and
+    /// refits if the view is still the fitted one.
+    pub fn set_fit_inset(&self, inset_px: i32) {
+        if self.imp().fit_inset.replace(inset_px) != inset_px {
+            self.fit_if_due(self.width() > 0 && self.height() > 0);
+        }
     }
 
     /// Whether the window holds Space down for the canvas.

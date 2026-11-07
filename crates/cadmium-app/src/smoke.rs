@@ -16,6 +16,7 @@ mod steps;
 #[cfg(test)]
 mod tests;
 mod tray;
+mod tray_paint;
 
 use brushes::SmokeBrushes;
 use steps::{FileWork, SmokeDialog, SmokeStep, quit};
@@ -33,6 +34,7 @@ pub struct SmokeConfig {
     tray: bool,
     tray_tool: Option<TrayTool>,
     tray_mix: bool,
+    tray_paint: bool,
     save: Option<PathBuf>,
     open: Option<PathBuf>,
     export: Option<PathBuf>,

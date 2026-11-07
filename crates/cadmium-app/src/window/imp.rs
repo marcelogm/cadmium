@@ -1,6 +1,5 @@
 use std::cell::{Cell, OnceCell, RefCell};
 
-use super::tray_divider::TrayDivider;
 use super::*;
 use crate::tools::TrayTool;
 use crate::tray_view::TrayView;
@@ -36,13 +35,9 @@ pub struct CadmiumWindow {
     #[template_child]
     pub sidebar_stack: TemplateChild<adw::ViewStack>,
     #[template_child]
-    pub tray_paned: TemplateChild<gtk::Paned>,
-    #[template_child]
-    pub tray_pane: TemplateChild<gtk::Box>,
+    pub tray_sheet: TemplateChild<adw::BottomSheet>,
     #[template_child]
     pub tray_tool_group: TemplateChild<adw::ToggleGroup>,
-    #[template_child]
-    pub tray_bar: TemplateChild<gtk::Button>,
     #[template_child]
     pub tray_slot: TemplateChild<gtk::Box>,
     #[template_child]
@@ -51,11 +46,6 @@ pub struct CadmiumWindow {
     pub lab_panel_slot: TemplateChild<gtk::Box>,
     pub tool: Cell<UiTool>,
     pub tray_tool: Cell<TrayTool>,
-    pub(super) tray_divider: Cell<TrayDivider>,
-    /// Whether placing the divider is already queued for the paned's new height.
-    pub(super) divider_queued: Cell<bool>,
-    /// The touch sequence holding the divider's handle (`None` for a mouse or pen press).
-    pub(super) divider_grab_sequence: Cell<Option<usize>>,
     pub canvas: OnceCell<CadmiumCanvas>,
     pub tray: OnceCell<TrayView>,
     /// Whether the window has claimed the Space press now held down.
@@ -112,7 +102,6 @@ impl ObjectImpl for CadmiumWindow {
 impl WidgetImpl for CadmiumWindow {}
 impl WindowImpl for CadmiumWindow {
     fn close_request(&self) -> glib::Propagation {
-        self.obj().remember_tray_share();
         self.obj().remember_mixing_knife_size();
         if self.obj().may_close() {
             self.parent_close_request()

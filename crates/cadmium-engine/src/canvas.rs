@@ -14,6 +14,7 @@ mod weave;
 
 pub(crate) use changes::{TILE_CHANGE_HEADER_WORDS, TileChanges};
 pub use pigment_slots::PigmentSlotsUniform;
+pub(crate) use primer::TRAY_REFLECTANCE;
 pub use primer::{primer_reflectance, primer_srgb8};
 pub use spec::{CanvasSpec, MAX_CANVAS_SIZE, Primer, Weave};
 pub use state_texture::StateTexture;

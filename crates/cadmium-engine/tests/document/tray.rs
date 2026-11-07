@@ -266,3 +266,23 @@ fn a_tray_entry_with_a_negative_thickness_is_a_format_error() {
         "{reason}"
     );
 }
+
+#[test]
+fn a_tray_saved_on_the_old_light_ground_opens_on_todays_mid_grey() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("old-ground");
+    let mut s = painted_session(&gpu);
+    let texels = (TRAY_WIDTH * TRAY_HEIGHT * 4) as usize;
+    let today = s.tray.read_f32(&gpu, StateTexture::DryRefl0).unwrap()[0];
+    for which in [StateTexture::DryRefl0, StateTexture::DryRefl1] {
+        s.tray.write_f32(&gpu, which, &vec![0.75; texels]);
+    }
+    let path = dir.file("old-ground.cadmium");
+    document::save(&gpu, &mut s, &path).unwrap();
+    let opened = document::open(&gpu, &path).unwrap();
+    for which in [StateTexture::DryRefl0, StateTexture::DryRefl1] {
+        let ground = opened.tray.read_f32(&gpu, which).unwrap();
+        assert!(ground.iter().all(|band| *band == today), "{which:?}");
+    }
+    assert!((today - 0.4).abs() < 1e-3, "{today}");
+}

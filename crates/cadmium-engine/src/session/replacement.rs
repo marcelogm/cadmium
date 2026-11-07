@@ -1,4 +1,5 @@
 use crate::canvas::{Canvas, CanvasError, CanvasSpec};
+use crate::engine::Tip;
 use crate::gpu::GpuContext;
 use crate::pigments::PigmentDb;
 use crate::render::ViewMode;
@@ -23,6 +24,9 @@ impl PaintSession {
         let tray_rebuilt = self.rebuild_tray(gpu);
         self.history.refit(gpu, history_budget(&self.canvas.spec));
         self.view_mode = ViewMode::Color;
+        self.engine.select_tip(Tip::Tray);
+        self.engine.clean_brush(gpu);
+        self.engine.select_tip(Tip::Painting);
         self.engine.clean_brush(gpu);
         self.engine.clean_knife(gpu);
         self.engine.clean_face(gpu);

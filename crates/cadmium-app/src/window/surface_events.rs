@@ -36,7 +36,7 @@ impl CadmiumWindow {
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
         self.announce_if_history_disabled();
-        self.restore_tray_layout();
+        self.restore_tray_sheet();
         self.sync_load_toggle();
     }
 

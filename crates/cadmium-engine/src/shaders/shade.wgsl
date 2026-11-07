@@ -8,6 +8,7 @@ struct ShadeParams {
     view_mode: u32,
     view_slot: u32,
     first_possible_tile: u32,
+    glass: u32,
 };
 
 const TILE_SIZE: u32 = 64u;
@@ -35,6 +36,16 @@ const WET_GLOSS_SMOOTHING: f32 = 0.85;
 const FULLY_WET_UM: f32 = 5.0;
 const MIN_COSINE: f32 = 1e-4;
 const PI: f32 = 3.141592654;
+
+// The tray's glass plate: a faint sheen rising toward the top-left and a broad, soft glow of
+// studio light, in linear display units, fixed on the plate. Paint thicker than
+// `GLASS_HIDDEN_UM` covers it; the paint keeps its own gloss.
+const GLASS_SHEEN_LOW: f32 = 0.004;
+const GLASS_SHEEN_HIGH: f32 = 0.016;
+const GLASS_GLOW: f32 = 0.012;
+const GLASS_GLOW_CENTRE: vec2<f32> = vec2<f32>(0.28, 0.22);
+const GLASS_GLOW_RADIUS: f32 = 0.35;
+const GLASS_HIDDEN_UM: f32 = 3.0;
 
 const HEIGHT_VIEW_FULL_SCALE_UM: f32 = 100.0;
 const VOLUME_VIEW_FULL_SCALE_UM: f32 = 200.0;
@@ -121,6 +132,16 @@ fn ggx_specular(normal: vec3<f32>, light: vec3<f32>, roughness: f32) -> f32 {
     return distribution * fresnel * shadowing / (4.0 * n_dot_l * n_dot_v) * n_dot_l;
 }
 
+fn glass_reflection(texel: vec2<u32>, size: vec2<u32>) -> f32 {
+    let uv = (vec2<f32>(texel) + vec2<f32>(0.5)) / vec2<f32>(size);
+    let toward_top_left = smoothstep(0.0, 1.0, 1.0 - 0.5 * (uv.x + uv.y));
+    let sheen = mix(GLASS_SHEEN_LOW, GLASS_SHEEN_HIGH, toward_top_left);
+    // Measured in plate heights, so the glow stays round on a wide plate.
+    let offset = (uv - GLASS_GLOW_CENTRE) * vec2<f32>(f32(size.x) / f32(size.y), 1.0);
+    let glow = GLASS_GLOW * exp(-dot(offset, offset) / (GLASS_GLOW_RADIUS * GLASS_GLOW_RADIUS));
+    return sheen + glow;
+}
+
 @compute @workgroup_size(8, 8)
 fn main(
     @builtin(workgroup_id) group: vec3<u32>,
@@ -169,5 +190,10 @@ fn main(
     let roughness = mix(params.dry_roughness, 1.0 - WET_GLOSS_SMOOTHING * params.wet_gloss, wetness);
     let specular = ggx_specular(normal, light, roughness);
 
-    textureStore(display, pixel, vec4<f32>(rgb * diffuse + vec3<f32>(specular), 1.0));
+    var shaded = rgb * diffuse + vec3<f32>(specular);
+    if (params.glass != 0u) {
+        let bare = 1.0 - smoothstep(0.0, GLASS_HIDDEN_UM, height);
+        shaded += vec3<f32>(glass_reflection(texel, size) * bare);
+    }
+    textureStore(display, pixel, vec4<f32>(shaded, 1.0));
 }
