@@ -6,7 +6,9 @@ use crate::state::AppState;
 use crate::tools::Press;
 
 impl AppState {
+    /// A touch on `surface`, which also brings that surface's tool to the side panel.
     pub fn press(&mut self, surface: Surface, sample: StrokeSample, eraser: bool) -> bool {
+        self.focus = surface;
         let press = if eraser {
             Press::Stroke(Tool::Rag)
         } else {
