@@ -21,6 +21,8 @@ pub use gesture::LoadRing;
 pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use pen::PenReadout;
+use provisional::Provisional;
+pub use provisional::{Mark, PROVISIONAL_OPACITY, ProvisionalTrail};
 pub use recipe::PigmentClick;
 
 mod clock;
@@ -34,6 +36,7 @@ mod lab;
 mod library;
 mod pacing;
 mod pen;
+mod provisional;
 mod recipe;
 mod studio_paint;
 mod tray;
@@ -85,6 +88,7 @@ pub struct AppState {
     resting_tool: Tool,
     samples_since_frame: u32,
     pacing: FramePacing,
+    provisional: Provisional,
     last_sample_time_ms: Option<u32>,
     clock: Box<dyn Clock>,
     wakers: Vec<Waker>,
@@ -125,6 +129,7 @@ impl AppState {
             resting_tool,
             samples_since_frame: 0,
             pacing: FramePacing::default(),
+            provisional: Provisional::default(),
             last_sample_time_ms: None,
             clock: Box::new(SystemClock::new()),
             wakers: Vec::new(),

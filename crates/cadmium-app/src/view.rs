@@ -50,7 +50,6 @@ fn unturn(rotation: f32, x: f64, y: f64) -> (f64, f64) {
 }
 
 /// The screen offset a canvas offset (`x`, `y`) appears at: `R(rotation)` applied to it.
-#[cfg(test)]
 fn turn(rotation: f32, x: f64, y: f64) -> (f64, f64) {
     let (s, c) = f64::from(rotation).sin_cos();
     (c * x - s * y, s * x + c * y)
@@ -73,8 +72,7 @@ pub fn viewport_to_canvas(view: ViewTransform, x_px: f64, y_px: f64) -> (f64, f6
 }
 
 /// The screen px where canvas point (`x`, `y`) appears; the inverse of `viewport_to_canvas`.
-#[cfg(test)]
-fn canvas_to_viewport(view: ViewTransform, x: f64, y: f64) -> (f64, f64) {
+pub fn canvas_to_viewport(view: ViewTransform, x: f64, y: f64) -> (f64, f64) {
     let zoom = f64::from(view.zoom);
     let (dx, dy) = turn(
         view.rotation,

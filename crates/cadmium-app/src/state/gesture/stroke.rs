@@ -48,6 +48,9 @@ impl AppState {
             StrokePreparation::TopUp => self.top_up(),
             StrokePreparation::CleanAndLoad => self.clean_and_load(),
         }
+        self.provisional.colour = (surface == Surface::Painting && tool == Tool::Brush)
+            .then(|| self.held_colour(tool))
+            .flatten();
         self.session.begin_stroke_on(surface, sample);
         self.contact = Some(Contact::Stroke { surface });
         self.last_sample_time_ms = None;

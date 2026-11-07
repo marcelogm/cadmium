@@ -1,6 +1,8 @@
 use cadmium_engine::surface::Surface;
 
-use super::AppState;
+use cadmium_engine::render::ViewMode;
+
+use super::{AppState, ProvisionalTrail};
 
 impl AppState {
     pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
@@ -11,6 +13,7 @@ impl AppState {
         self.session.encode_frame(&self.gpu, now_ms, encoder);
         self.pacing
             .end_frame(encoder, self.session.last_frame_dabs());
+        self.capture_provisional();
         self.after_frame();
     }
 
@@ -27,6 +30,21 @@ impl AppState {
 
     pub fn frame_submitted(&self) {
         self.pacing.frame_submitted();
+    }
+
+    /// The provisional paint over the texture this frame presents.
+    pub fn provisional_trail(&self) -> Option<&ProvisionalTrail> {
+        self.provisional.presented.as_ref()
+    }
+
+    fn capture_provisional(&mut self) {
+        let pending = self.session.queued_dabs_on(Surface::Painting);
+        let shown_in_colour = self.session.view_mode == ViewMode::Color;
+        self.provisional.presented = self
+            .provisional
+            .colour
+            .filter(|_| shown_in_colour && !pending.is_empty())
+            .map(|colour| ProvisionalTrail::of(colour, &pending, self.view));
     }
 
     fn prepare_frame(&mut self) {
