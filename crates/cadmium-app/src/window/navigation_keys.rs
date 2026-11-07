@@ -60,7 +60,7 @@ impl CadmiumWindow {
     /// auto-repeats until the key is released.
     fn space_pressed(&self, modifiers: gdk::ModifierType) -> glib::Propagation {
         let claimed = self.imp().space_claimed.get();
-        match space_press(claimed, self.space_navigates()) {
+        match space_press(claimed, self.window_keys_are_free()) {
             SpacePress::Pass => return glib::Propagation::Proceed,
             SpacePress::Hold => self.show_held_keys(true, modifiers),
             SpacePress::Release => self.show_held_keys(false, gdk::ModifierType::empty()),
@@ -89,8 +89,9 @@ impl CadmiumWindow {
         }
     }
 
-    /// Whether Space is free for navigation: no dialog is up and no text field has focus.
-    fn space_navigates(&self) -> bool {
+    /// Whether the window may take keys for itself (Space for navigation, Shift+digit for
+    /// the tray): no dialog is up and no text field has focus.
+    pub(super) fn window_keys_are_free(&self) -> bool {
         let typing = gtk::prelude::RootExt::focus(self)
             .is_some_and(|focus| focus.dynamic_cast_ref::<gtk::Editable>().is_some());
         self.visible_dialog().is_none() && !typing

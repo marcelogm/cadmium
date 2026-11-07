@@ -1,5 +1,6 @@
 use std::cell::{Cell, OnceCell, RefCell};
 
+use super::tray_divider::TrayDivider;
 use super::*;
 use crate::tools::TrayTool;
 use crate::writes::Closing;
@@ -49,6 +50,9 @@ pub struct CadmiumWindow {
     pub lab_panel_slot: TemplateChild<gtk::Box>,
     pub tool: Cell<UiTool>,
     pub tray_tool: Cell<TrayTool>,
+    pub(super) tray_divider: Cell<TrayDivider>,
+    /// Whether placing the divider is already queued for the paned's new height.
+    pub divider_queued: Cell<bool>,
     pub canvas: OnceCell<CadmiumCanvas>,
     /// Whether the window has claimed the Space press now held down.
     pub space_claimed: Cell<bool>,

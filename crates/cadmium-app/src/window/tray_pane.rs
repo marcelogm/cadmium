@@ -3,8 +3,9 @@ use adw::subclass::prelude::*;
 use gtk::{gdk, glib};
 
 use super::CadmiumWindow;
+use super::tray_divider::TrayDivider;
 use crate::LOG_DOMAIN;
-use crate::settings::{Settings, divider_position, tray_share_at};
+use crate::settings::Settings;
 use crate::tools::TrayTool;
 
 impl CadmiumWindow {
@@ -29,7 +30,10 @@ impl CadmiumWindow {
                 #[weak(rename_to = window)]
                 self,
                 move |group| {
-                    if let Some(name) = group.active_name() {
+                    let Some(name) = group.active_name() else {
+                        return;
+                    };
+                    if window.imp().tray_tool.get().name() != name {
                         window.select_tray_tool(&name);
                     }
                 }
@@ -60,20 +64,26 @@ impl CadmiumWindow {
             return;
         };
         toggle.set_label(Some(&load.label_for(painting)));
+        toggle.set_tooltip(load.tooltip_for(painting));
         toggle.set_icon_name(Some(load.icon_for(painting)));
         toggle.set_enabled(load.is_enabled(painting));
     }
 
-    /// Shift+digit picks the tray's tool. Shift+1 arrives as `!` (or whatever the layout
-    /// puts there), which no `<Shift>1` trigger matches, so the key is read back unshifted.
+    /// Shift+digit picks the tray's tool. Shift+1 arrives as `!` on most layouts, which no
+    /// `<Shift>1` trigger matches, so the key is also read back unshifted. It is taken in
+    /// the capture phase so the painting's digit shortcuts never see it, as they would on
+    /// AZERTY, where Shift+& gives the digit itself.
     pub(super) fn setup_tray_tool_keys(&self) {
         let keys = gtk::EventControllerKey::new();
+        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
         keys.connect_key_pressed(glib::clone!(
             #[weak(rename_to = window)]
             self,
             #[upgrade_or]
             glib::Propagation::Proceed,
-            move |keys, _, keycode, modifiers| window.tray_key_pressed(keys, keycode, modifiers)
+            move |keys, keyval, keycode, modifiers| {
+                window.tray_key_pressed(keys, keyval, keycode, modifiers)
+            }
         ));
         self.add_controller(keys);
     }
@@ -81,19 +91,24 @@ impl CadmiumWindow {
     fn tray_key_pressed(
         &self,
         keys: &gtk::EventControllerKey,
+        keyval: gdk::Key,
         keycode: u32,
         modifiers: gdk::ModifierType,
     ) -> glib::Propagation {
+        if !self.window_keys_are_free() {
+            return glib::Propagation::Proceed;
+        }
         let unshifted = WidgetExt::display(self)
             .translate_key(keycode, gdk::ModifierType::empty(), keys.group() as i32)
-            .map(|(key, ..)| key);
-        match unshifted.and_then(|key| TrayTool::for_shifted_key(key, modifiers)) {
-            Some(tool) => {
-                self.select_tray_tool(tool.name());
-                glib::Propagation::Stop
-            }
-            None => glib::Propagation::Proceed,
+            .map_or(keyval, |(key, ..)| key);
+        let Some(tool) = TrayTool::for_shifted_key(keyval, unshifted, modifiers) else {
+            return glib::Propagation::Proceed;
+        };
+        // A Load that can't load is not picked, but the press is still the tray's.
+        if tool.is_enabled(self.tool()) {
+            self.select_tray_tool(tool.name());
         }
+        glib::Propagation::Stop
     }
 
     pub(super) fn toggle_tray(&self) {
@@ -109,30 +124,78 @@ impl CadmiumWindow {
     fn show_tray_pane(&self, shown: bool) {
         let imp = self.imp();
         imp.tray_pane.set_visible(shown);
+        if shown {
+            self.queue_divider_placing();
+        }
         if imp.tray_toggle.is_active() != shown {
             imp.tray_toggle.set_active(shown);
         }
     }
 
-    /// Lays the divider out from the settings once the paned has a height.
+    /// Shows the tray as the settings left it, and keeps the divider at the tray's share
+    /// of the paned as the window resizes.
     pub(super) fn restore_tray_layout(&self) {
         let settings = self.state().borrow().settings.get();
+        let imp = self.imp();
+        imp.tray_divider.set(TrayDivider::new(settings.tray_share));
         self.show_tray_pane(settings.tray_shown);
-        self.imp()
-            .tray_paned
-            .connect_notify_local(Some("max-position"), move |paned, _| {
-                lay_out_divider(paned, settings.tray_share);
-            });
+        imp.tray_paned.connect_max_position_notify(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.queue_divider_placing()
+        ));
+        imp.tray_paned.connect_position_notify(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.follow_divider()
+        ));
     }
 
-    /// Saves where the divider is; the window calls it as it closes.
-    pub(super) fn remember_tray_share(&self) {
-        let imp = self.imp();
-        let height = imp.tray_paned.height();
-        if !imp.tray_pane.is_visible() || height <= 0 {
+    /// Places the divider once the paned's new height is laid out, outside its allocation.
+    fn queue_divider_placing(&self) {
+        if self.imp().divider_queued.replace(true) {
             return;
         }
-        let share = tray_share_at(imp.tray_paned.position(), height);
+        glib::idle_add_local_once(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            move || {
+                window.imp().divider_queued.set(false);
+                window.place_divider();
+            }
+        ));
+    }
+
+    fn place_divider(&self) {
+        let imp = self.imp();
+        let paned = &imp.tray_paned;
+        let mut divider = imp.tray_divider.get();
+        let Some(position) = divider.place(paned.height()) else {
+            return;
+        };
+        imp.tray_divider.set(divider);
+        // Clamped here so GTK has nothing left to clamp, which would look like a drag.
+        let position = position.clamp(paned.min_position(), paned.max_position().max(0));
+        paned.set_position(position);
+        let mut divider = imp.tray_divider.get();
+        divider.end_place();
+        imp.tray_divider.set(divider);
+    }
+
+    /// Takes a divider move at the laid-out height as the painter's, and keeps its share.
+    fn follow_divider(&self) {
+        let imp = self.imp();
+        if !imp.tray_pane.is_visible() {
+            return;
+        }
+        let mut divider = imp.tray_divider.get();
+        divider.follow_move(imp.tray_paned.position(), imp.tray_paned.height());
+        imp.tray_divider.set(divider);
+    }
+
+    /// Saves the tray's share; the window calls it as it closes.
+    pub(super) fn remember_tray_share(&self) {
+        let share = self.imp().tray_divider.get().share();
         self.remember_tray(|settings| settings.tray_share = share);
     }
 
@@ -143,14 +206,5 @@ impl CadmiumWindow {
         if let Err(error) = canvas.state().borrow_mut().settings.update(change) {
             glib::g_warning!(LOG_DOMAIN, "couldn't save the tray layout: {error}");
         }
-    }
-}
-
-/// Puts the divider where `share` leaves the tray, once the paned has a height and until
-/// it has a position of its own.
-fn lay_out_divider(paned: &gtk::Paned, share: f32) {
-    let height = paned.height();
-    if height > 0 && !paned.is_position_set() {
-        paned.set_position(divider_position(share, height));
     }
 }

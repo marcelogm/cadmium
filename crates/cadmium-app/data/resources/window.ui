@@ -74,58 +74,58 @@
                     <property name="shrink-end-child">False</property>
                     <property name="resize-end-child">False</property>
                     <property name="start-child">
-                          <object class="GtkOverlay" id="canvas_overlay">
-                            <property name="child">
-                              <object class="GtkBox" id="canvas_slot">
-                                <property name="hexpand">True</property>
-                                <property name="vexpand">True</property>
+                      <object class="GtkOverlay" id="canvas_overlay">
+                        <property name="child">
+                          <object class="GtkBox" id="canvas_slot">
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                        </property>
+                        <child type="overlay">
+                          <object class="GtkBox" id="zoom_osd">
+                            <property name="halign">start</property>
+                            <property name="valign">end</property>
+                            <property name="margin-start">12</property>
+                            <property name="margin-end">12</property>
+                            <property name="margin-top">12</property>
+                            <property name="margin-bottom">12</property>
+                            <style>
+                              <class name="osd"/>
+                              <class name="toolbar"/>
+                            </style>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-out-symbolic</property>
+                                <property name="tooltip-text">Zoom out (Ctrl+−)</property>
+                                <property name="action-name">win.zoom-out</property>
                               </object>
-                            </property>
-                            <child type="overlay">
-                              <object class="GtkBox" id="zoom_osd">
-                                <property name="halign">start</property>
-                                <property name="valign">end</property>
-                                <property name="margin-start">12</property>
-                                <property name="margin-end">12</property>
-                                <property name="margin-top">12</property>
-                                <property name="margin-bottom">12</property>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="zoom_label">
+                                <property name="label">100%</property>
+                                <property name="width-chars">5</property>
                                 <style>
-                                  <class name="osd"/>
-                                  <class name="toolbar"/>
+                                  <class name="numeric"/>
                                 </style>
-                                <child>
-                                  <object class="GtkButton">
-                                    <property name="icon-name">zoom-out-symbolic</property>
-                                    <property name="tooltip-text">Zoom out (Ctrl+−)</property>
-                                    <property name="action-name">win.zoom-out</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkLabel" id="zoom_label">
-                                    <property name="label">100%</property>
-                                    <property name="width-chars">5</property>
-                                    <style>
-                                      <class name="numeric"/>
-                                    </style>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkButton">
-                                    <property name="icon-name">zoom-in-symbolic</property>
-                                    <property name="tooltip-text">Zoom in (Ctrl++)</property>
-                                    <property name="action-name">win.zoom-in</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkButton">
-                                    <property name="icon-name">zoom-fit-best-symbolic</property>
-                                    <property name="tooltip-text">Fit to window (Ctrl+0)</property>
-                                    <property name="action-name">win.zoom-fit</property>
-                                  </object>
-                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-in-symbolic</property>
+                                <property name="tooltip-text">Zoom in (Ctrl++)</property>
+                                <property name="action-name">win.zoom-in</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="icon-name">zoom-fit-best-symbolic</property>
+                                <property name="tooltip-text">Fit to window (Ctrl+0)</property>
+                                <property name="action-name">win.zoom-fit</property>
                               </object>
                             </child>
                           </object>
+                        </child>
+                      </object>
                     </property>
                     <property name="end-child">
                       <object class="GtkBox" id="tray_pane">

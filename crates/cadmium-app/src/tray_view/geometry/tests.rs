@@ -46,12 +46,6 @@ fn the_widget_corners_are_the_tray_corners() {
 }
 
 #[test]
-fn the_tray_asks_only_for_a_small_minimum_height() {
-    assert_eq!(tray_min_height(), TRAY_MIN_HEIGHT);
-    assert!(tray_min_height() < 200);
-}
-
-#[test]
 fn a_widget_pixel_covers_one_over_the_screen_zoom_tray_pixels() {
     for (viewport, scale) in [((384, 400), 1.0), ((600, 300), 1.5), ((768, 900), 2.0)] {
         let zoom = f64::from(tray_screen_zoom(viewport, scale));

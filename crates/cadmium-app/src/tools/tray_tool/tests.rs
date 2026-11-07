@@ -133,22 +133,53 @@ fn the_tray_tube_keeps_the_tube_wording() {
 #[test]
 fn shift_and_a_digit_pick_the_tray_tool_on_that_digit() {
     let shift = gdk::ModifierType::SHIFT_MASK;
-    for (key, tool) in [
-        (gdk::Key::_1, TrayTool::Load),
-        (gdk::Key::_4, TrayTool::Blender),
-        (gdk::Key::_5, TrayTool::Rag),
-        (gdk::Key::_6, TrayTool::Tube),
+    for (digit, shifted, tool) in [
+        (gdk::Key::_1, gdk::Key::exclam, TrayTool::Load),
+        (gdk::Key::_4, gdk::Key::dollar, TrayTool::Blender),
+        (gdk::Key::_5, gdk::Key::percent, TrayTool::Rag),
+        (gdk::Key::_6, gdk::Key::dead_diaeresis, TrayTool::Tube),
     ] {
-        assert_eq!(TrayTool::for_shifted_key(key, shift), Some(tool), "{key:?}");
+        assert_eq!(
+            TrayTool::for_shifted_key(shifted, digit, shift),
+            Some(tool),
+            "{digit:?}"
+        );
         let with_lock = shift | gdk::ModifierType::LOCK_MASK;
         assert_eq!(
-            TrayTool::for_shifted_key(key, with_lock),
+            TrayTool::for_shifted_key(shifted, digit, with_lock),
             Some(tool),
-            "{key:?}"
+            "{digit:?}"
         );
     }
-    for key in [gdk::Key::_2, gdk::Key::_3, gdk::Key::_7, gdk::Key::a] {
-        assert_eq!(TrayTool::for_shifted_key(key, shift), None, "{key:?}");
+    for (shifted, unshifted) in [
+        (gdk::Key::at, gdk::Key::_2),
+        (gdk::Key::numbersign, gdk::Key::_3),
+        (gdk::Key::ampersand, gdk::Key::_7),
+        (gdk::Key::A, gdk::Key::a),
+    ] {
+        assert_eq!(
+            TrayTool::for_shifted_key(shifted, unshifted, shift),
+            None,
+            "{unshifted:?}"
+        );
+    }
+}
+
+#[test]
+fn shift_picks_the_tray_tool_where_the_digits_are_on_the_shift_level() {
+    // French AZERTY: the key that gives `&` unshifted gives `1` with Shift.
+    let shift = gdk::ModifierType::SHIFT_MASK;
+    for (digit, unshifted, tool) in [
+        (gdk::Key::_1, gdk::Key::ampersand, TrayTool::Load),
+        (gdk::Key::_4, gdk::Key::apostrophe, TrayTool::Blender),
+        (gdk::Key::_5, gdk::Key::parenleft, TrayTool::Rag),
+        (gdk::Key::_6, gdk::Key::minus, TrayTool::Tube),
+    ] {
+        assert_eq!(
+            TrayTool::for_shifted_key(digit, unshifted, shift),
+            Some(tool),
+            "{digit:?}"
+        );
     }
 }
 
@@ -162,9 +193,27 @@ fn a_digit_without_shift_or_with_other_modifiers_is_not_a_tray_key() {
         shift | gdk::ModifierType::SUPER_MASK,
     ] {
         assert_eq!(
-            TrayTool::for_shifted_key(gdk::Key::_1, modifiers),
+            TrayTool::for_shifted_key(gdk::Key::exclam, gdk::Key::_1, modifiers),
             None,
             "{modifiers:?}"
         );
+        assert_eq!(
+            TrayTool::for_shifted_key(gdk::Key::_1, gdk::Key::ampersand, modifiers),
+            None,
+            "{modifiers:?}"
+        );
+    }
+}
+
+#[test]
+fn a_disabled_load_says_what_to_pick_to_use_it() {
+    let brush = UiTool::Paint(Tool::Brush);
+    assert_eq!(TrayTool::Load.tooltip_for(brush), LOAD.tooltip);
+    let disabled = TrayTool::Load.tooltip_for(UiTool::Paint(Tool::Blender));
+    assert_ne!(disabled, LOAD.tooltip);
+    assert!(disabled.contains("Shift+1"), "{disabled}");
+    assert!(disabled.contains("brush or the knife"), "{disabled}");
+    for tool in [TrayTool::Blender, TrayTool::Rag, TrayTool::Tube] {
+        assert_eq!(tool.tooltip_for(UiTool::Move), tool.profile().tooltip);
     }
 }

@@ -15,6 +15,7 @@ mod imp;
 mod navigation_keys;
 mod surface_events;
 mod tool_toggles;
+mod tray_divider;
 mod tray_pane;
 
 pub type PanelRefresher = Rc<dyn Fn()>;
