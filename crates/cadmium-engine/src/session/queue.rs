@@ -4,6 +4,7 @@ use crate::brush::BrushSettings;
 use crate::pigments::Mixture;
 use crate::stroke::Dab;
 use crate::surface::Surface;
+use crate::tool::Holder;
 
 pub(super) enum Queued {
     Stroke(QueuedStroke),
@@ -27,7 +28,7 @@ pub(super) enum BrushChange {
     Reload { mixture: Mixture },
     RestoreReserve { mixture: Mixture },
     Dip { mixture: Mixture, amount: f32 },
-    Clean { knife: bool },
+    Clean { holder: Option<Holder> },
 }
 
 /// A load of the knife, which reads the blade back and writes it from the CPU: it runs

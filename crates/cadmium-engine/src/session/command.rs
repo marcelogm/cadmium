@@ -1,6 +1,7 @@
 use crate::engine::FULL_DIP;
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::pigments::Mixture;
+use crate::tool::Holder;
 
 use super::PaintSession;
 use super::queue::{BrushChange, KnifeLoad, Queued};
@@ -50,8 +51,11 @@ impl PaintSession {
             BrushChange::Dip { mixture, amount } => {
                 self.engine.encode_dip(gpu, &mixture, amount, encoder);
             }
-            BrushChange::Clean { knife: true } => self.engine.encode_clean_knife(encoder),
-            BrushChange::Clean { knife: false } => self.engine.encode_clean_brush(encoder),
+            BrushChange::Clean { holder } => match holder {
+                Some(Holder::Blade) => self.engine.encode_clean_knife(encoder),
+                Some(Holder::Face) => self.engine.encode_clean_face(encoder),
+                Some(Holder::Reservoir) | None => self.engine.encode_clean_brush(encoder),
+            },
         }
     }
 

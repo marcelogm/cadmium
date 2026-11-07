@@ -30,6 +30,12 @@ pub(super) const DAB_SNIPPETS: [&str; 3] = [
     include_str!("../shaders/nearest_half.wgsl"),
     include_str!("../shaders/footprint.wgsl"),
 ];
+pub(super) const BLADE_SNIPPETS: [&str; 4] = [
+    include_str!("../shaders/brush_tip.wgsl"),
+    include_str!("../shaders/nearest_half.wgsl"),
+    include_str!("../shaders/footprint.wgsl"),
+    include_str!("../shaders/blade_paint.wgsl"),
+];
 pub(super) const ADVECT_SNIPPETS: [&str; 4] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/nearest_half.wgsl"),

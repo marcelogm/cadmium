@@ -8,6 +8,7 @@ use crate::stroke::Dab;
 
 mod bristles;
 mod dab_record;
+mod face_load;
 mod footprint;
 mod knife_load;
 mod pass;
@@ -27,6 +28,7 @@ pub(crate) use pass::pick::PickRequest;
 
 use bristles::{BristleBuffers, BristleRig, BristleTuning, LayoutRequest, MAX_BRISTLES};
 use dab_record::{upload_dab_records, upload_records};
+use face_load::{FACE_DELTA_BYTES, FACE_LOAD_BYTES, FaceSettings};
 use pass::dip::DipPass;
 use pass::dry::DryPass;
 use pass::pick::PickPass;
@@ -123,6 +125,8 @@ struct Buffers {
     tip_sums: wgpu::Buffer,
     blade_load: wgpu::Buffer,
     blade_delta: wgpu::Buffer,
+    face_load: wgpu::Buffer,
+    face_delta: wgpu::Buffer,
     bristles: BristleBuffers,
 }
 
@@ -137,6 +141,8 @@ impl Buffers {
             tip_sums: storage_buffer(gpu, "brush_tip_sums", TIP_SUMS_BYTES),
             blade_load: storage_buffer(gpu, "knife_blade_load", BLADE_LOAD_BYTES),
             blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
+            face_load: storage_buffer(gpu, "mixing_knife_face_load", FACE_LOAD_BYTES),
+            face_delta: storage_buffer(gpu, "mixing_knife_face_delta", FACE_DELTA_BYTES),
             bristles: BristleBuffers::new(gpu),
         }
     }
@@ -265,6 +271,7 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &dab_records,
             buffers: &self.buffers,
+            face_settings: FaceSettings::of(&self.params),
         };
         let bind_groups = self.dab_passes.bind_groups(&resources);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -299,6 +306,7 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &records,
             buffers: &self.buffers,
+            face_settings: FaceSettings::of(&self.params),
         };
         self.dab_passes.encode_bristles_alone(&resources, encoder);
     }

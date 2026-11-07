@@ -1,5 +1,6 @@
 use super::Buffers;
 use super::dab_record::{DAB_RECORD_SIZE, DAB_RECORD_STRIDE};
+use super::face_load::FaceSettings;
 use super::placement::Placement;
 use crate::canvas::Canvas;
 use crate::compute::uniform_entry;
@@ -11,6 +12,7 @@ use bristle_contact::ContactPass;
 use bristle_step::BristleStepPass;
 use capillary::CapillaryPass;
 use exchange::ExchangePass;
+use face::FacePass;
 use refill::RefillPass;
 use spread::{HairContact, SpreadBindGroups, SpreadPass};
 use touched_tiles::TouchedTilesPass;
@@ -24,6 +26,7 @@ mod capillary;
 pub(super) mod dip;
 pub(super) mod dry;
 mod exchange;
+mod face;
 pub(super) mod pick;
 mod refill;
 mod spread;
@@ -35,6 +38,7 @@ pub(super) struct DabResources<'a> {
     pub(super) canvas: &'a Canvas,
     pub(super) dab_records: &'a wgpu::Buffer,
     pub(super) buffers: &'a Buffers,
+    pub(super) face_settings: FaceSettings,
 }
 
 #[derive(Clone, Copy)]
@@ -62,6 +66,7 @@ pub(super) struct DabPasses {
     refill: RefillPass,
     spread: SpreadPass,
     blade: BladePass,
+    face: FacePass,
     wipe: WipePass,
 }
 
@@ -74,6 +79,7 @@ pub(super) struct DabBindGroups {
     refill: wgpu::BindGroup,
     wipe: wgpu::BindGroup,
     blade: wgpu::BindGroup,
+    face: wgpu::BindGroup,
     spread: SpreadBindGroups,
 }
 
@@ -90,6 +96,7 @@ impl DabPasses {
             refill,
             spread: SpreadPass::new(gpu),
             blade: BladePass::new(gpu),
+            face: FacePass::new(gpu),
             wipe: WipePass::new(gpu),
         }
     }
@@ -109,6 +116,7 @@ impl DabPasses {
             refill: self.refill.bind_group(resources),
             wipe: self.wipe.bind_group(resources),
             blade: self.blade.bind_group(resources),
+            face: self.face.bind_group(resources),
             spread: self.spread.bind_groups(
                 resources,
                 HairContact {
@@ -173,9 +181,7 @@ impl DabPasses {
             DabStage::Refill => self.refill.encode(pass, &bind_groups.refill, dab),
             DabStage::Spread => self.spread.encode(pass, &bind_groups.spread, dab),
             DabStage::Blade => self.blade.encode(pass, &bind_groups.blade, dab),
-            // The face pass is not wired yet: until it is, the mixing knife only
-            // spreads what lies under its blade.
-            DabStage::Face => {}
+            DabStage::Face => self.face.encode(pass, &bind_groups.face, dab),
             DabStage::Wipe => self.wipe.encode(pass, &bind_groups.wipe, dab),
         }
     }

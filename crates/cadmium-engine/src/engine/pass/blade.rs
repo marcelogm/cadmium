@@ -3,7 +3,7 @@ use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_buffer, storage_entry, texture_binding, texture_entry,
 };
-use crate::engine::shader::{DAB_SNIPPETS, shader_source};
+use crate::engine::shader::{BLADE_SNIPPETS, shader_source};
 use crate::engine::{
     BLADE_CELL_GROUP_SIZE, BLADE_CELLS, BLADE_ENDS, BLADE_LOAD_BYTES, BLADE_SPILL_VALUES,
 };
@@ -51,7 +51,7 @@ impl BladePass {
         let compute = ComputeStage::new(
             gpu,
             "blade",
-            &shader_source(&DAB_SNIPPETS, include_str!("../../shaders/blade.wgsl")),
+            &shader_source(&BLADE_SNIPPETS, include_str!("../../shaders/blade.wgsl")),
             &[
                 dab_record_entry(),
                 texture_entry(1, ReadWrite, Rgba16Float),

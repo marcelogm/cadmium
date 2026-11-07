@@ -29,6 +29,10 @@ impl PaintSession {
 
     pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) -> Result<(), GpuLost> {
         let mixture = *mixture;
+        if self.brush.tool.profile().holds_on_face() {
+            // The mixing knife's face loads only by scraping paint up off the tray.
+            return Ok(());
+        }
         if self.holds_knife() {
             self.resize_tip();
             self.load_knife(gpu, KnifeLoad::Dip { mixture, amount })
@@ -66,8 +70,8 @@ impl PaintSession {
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        let knife = self.holds_knife();
-        self.change_brush(gpu, BrushChange::Clean { knife });
+        let holder = self.brush.tool.profile().holder;
+        self.change_brush(gpu, BrushChange::Clean { holder });
     }
 
     pub(super) fn holds_knife(&self) -> bool {
