@@ -38,8 +38,8 @@ impl AppState {
         self.session.brush.medium = medium;
     }
 
-    /// Sharpens the pencil to `hardness`, 0 the softest B to 1 the hardest H, and remembers it
-    /// for the next run.
+    /// Sharpens the pencil to `hardness`, 0 the softest B to 1 the hardest H. The settings keep
+    /// it in memory; the window saves them when it closes.
     pub fn set_pencil_hardness(&mut self, hardness: f32) {
         let hardness = if hardness.is_nan() {
             DEFAULT_PENCIL_HARDNESS
@@ -47,12 +47,16 @@ impl AppState {
             hardness.clamp(0.0, 1.0)
         };
         self.session.brush.pencil_hardness = hardness;
-        if let Err(error) = self
-            .settings
-            .update(|settings| settings.pencil_hardness = hardness)
-        {
-            glib::g_warning!(LOG_DOMAIN, "couldn't save the pencil hardness: {error}");
+    }
+
+    /// Saves the pencil's hardness, if it changed; the window calls it as it closes.
+    pub fn remember_pencil_hardness(&mut self) -> std::io::Result<()> {
+        let hardness = self.session.brush.pencil_hardness;
+        if self.settings.get().pencil_hardness == hardness {
+            return Ok(());
         }
+        self.settings
+            .update(|settings| settings.pencil_hardness = hardness)
     }
 
     /// Picks the painting's tool; one the tool header doesn't offer is ignored.

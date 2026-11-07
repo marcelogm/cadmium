@@ -56,6 +56,13 @@ impl CadmiumWindow {
         }
     }
 
+    /// Saves the pencil's hardness; the window calls it as it closes.
+    fn remember_pencil_hardness(&self) {
+        if let Err(error) = self.state().borrow_mut().remember_pencil_hardness() {
+            glib::g_warning!(LOG_DOMAIN, "couldn't save the pencil hardness: {error}");
+        }
+    }
+
     pub fn show_toast(&self, title: &str) {
         self.imp().toast_overlay.add_toast(adw::Toast::new(title));
     }

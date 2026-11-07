@@ -2,7 +2,9 @@ use adw::prelude::*;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
-use super::presentation::{EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, plate_gap_spec};
+use super::presentation::{
+    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, hardness_grade, plate_gap_spec,
+};
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::tools::panel::PanelTool;
@@ -20,7 +22,8 @@ const MEDIUM_SLIDER_MAX: f64 = 0.9;
 const PLATE_GAP_TITLE: &str = "Slab Thickness";
 const HARDNESS_TITLE: &str = "Hardness";
 const HARDNESS_SUBTITLE: &str = "Soft B leads are dark; hard H leads stay light and grainy";
-const HARDNESS_MARKS: [(f64, &str); 3] = [(0.0, "B"), (0.5, "HB"), (1.0, "H")];
+/// The softest, the middle (HB) and the hardest lead, marked with the grades the value shows.
+const HARDNESS_MARKS: [f32; 3] = [0.0, 0.5, 1.0];
 const RELOAD_EACH_STROKE: &str = "Reload Every Stroke";
 const CLEAN_EACH_STROKE: &str = "Clean Every Stroke";
 
@@ -154,10 +157,12 @@ fn hardness_row() -> SliderRow {
     let hardness = slider_row(HARDNESS_TITLE, 0.0, 1.0, UNIT_STEP, UNIT_PAGE);
     hardness.row.set_subtitle(HARDNESS_SUBTITLE);
     hardness.scale.set_tooltip_text(Some(HARDNESS_SUBTITLE));
-    for (value, label) in HARDNESS_MARKS {
-        hardness
-            .scale
-            .add_mark(value, gtk::PositionType::Bottom, Some(label));
+    for mark in HARDNESS_MARKS {
+        hardness.scale.add_mark(
+            f64::from(mark),
+            gtk::PositionType::Bottom,
+            Some(hardness_grade(mark)),
+        );
     }
     hardness
 }
