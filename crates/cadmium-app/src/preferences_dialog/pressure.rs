@@ -45,9 +45,11 @@ pub(super) fn pressure_group(
         #[weak]
         editor,
         move |_| {
-            curve.set(PressureCurve::linear());
-            editor.queue_draw();
-            save(PressureCurve::linear());
+            if curve.get() != PressureCurve::linear() {
+                curve.set(PressureCurve::linear());
+                editor.queue_draw();
+                save(PressureCurve::linear());
+            }
         }
     ));
     let (pad, clear_pad) = scribble::scribble_pad(curve);

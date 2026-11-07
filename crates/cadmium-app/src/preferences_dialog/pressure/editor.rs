@@ -39,6 +39,7 @@ pub(super) fn curve_editor(
         .content_height(EDITOR_SIZE)
         .css_classes(["card"])
         .build();
+    area.update_property(&[gtk::accessible::Property::Label("Pressure curve")]);
     let editing = Rc::new(Editing {
         before: Cell::new(curve.get()),
         curve,
@@ -53,8 +54,8 @@ pub(super) fn curve_editor(
             draw(context, &area.color(), plot, &editing.curve.get());
         }
     ));
-    attach_click(&area, &editing);
-    attach_drag(&area, &editing);
+    let click = attach_click(&area, &editing);
+    attach_drag(&area, &editing, &click);
     area
 }
 
@@ -64,29 +65,36 @@ fn plot_of(area: &gtk::DrawingArea) -> Plot {
 
 /// The first press takes hold of a point (adding one on empty space); the second of a
 /// double-click removes it.
-fn attach_click(area: &gtk::DrawingArea, editing: &Rc<Editing>) {
+fn attach_click(area: &gtk::DrawingArea, editing: &Rc<Editing>) -> gtk::GestureClick {
     let click = gtk::GestureClick::new();
     click.connect_pressed(glib::clone!(
         #[strong]
         editing,
         #[weak]
         area,
-        move |_, presses, x, y| {
+        move |click, presses, x, y| {
             let plot = plot_of(&area);
             match presses {
-                1 => hold(&editing, plot, (x, y)),
+                1 => {
+                    // Only a press that took a point claims the touch; one on nothing leaves
+                    // it to the page to scroll.
+                    if hold(&editing, plot, (x, y)) {
+                        click.set_state(gtk::EventSequenceState::Claimed);
+                    }
+                }
                 2 => remove_at(&editing, plot, (x, y)),
                 _ => {}
             }
             area.queue_draw();
         }
     ));
-    area.add_controller(click);
+    area.add_controller(click.clone());
+    click
 }
 
 /// Takes the point at the press, remembering where its handle is so a drag moves the handle
 /// by the pointer's offset rather than snapping it to the press.
-fn hold(editing: &Editing, plot: Plot, (x, y): (f64, f64)) {
+fn hold(editing: &Editing, plot: Plot, (x, y): (f64, f64)) -> bool {
     let curve = editing.curve.get();
     editing.before.set(curve);
     let radius = plot.unit_distance(HIT_RADIUS);
@@ -94,7 +102,9 @@ fn hold(editing: &Editing, plot: Plot, (x, y): (f64, f64)) {
         editing.curve.set(held);
         let handle = plot.to_widget(held.points()[index]);
         editing.held.set(Some((index, handle)));
+        return true;
     }
+    false
 }
 
 fn remove_at(editing: &Editing, plot: Plot, (x, y): (f64, f64)) {
@@ -111,8 +121,10 @@ fn remove_at(editing: &Editing, plot: Plot, (x, y): (f64, f64)) {
 }
 
 /// Moves the held point with the pointer; the release hands on the change.
-fn attach_drag(area: &gtk::DrawingArea, editing: &Rc<Editing>) {
+fn attach_drag(area: &gtk::DrawingArea, editing: &Rc<Editing>, click: &gtk::GestureClick) {
     let gesture = gtk::GestureDrag::new();
+    // Grouped, so claiming the click's sequence doesn't deny the drag.
+    gesture.group_with(click);
     gesture.connect_drag_update(glib::clone!(
         #[strong]
         editing,

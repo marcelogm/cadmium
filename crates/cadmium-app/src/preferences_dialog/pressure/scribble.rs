@@ -80,6 +80,7 @@ pub(super) fn scribble_pad(curve: Rc<Cell<PressureCurve>>) -> (gtk::DrawingArea,
         .content_height(PAD_SIZE)
         .css_classes(["card"])
         .build();
+    area.update_property(&[gtk::accessible::Property::Label("Pressure test pad")]);
     let scribble = Rc::new(RefCell::new(Scribble::default()));
     area.set_draw_func(glib::clone!(
         #[strong]
@@ -112,6 +113,8 @@ fn attach_stylus(
         scribble,
         move |stylus, x, y| {
             if is_primary(stylus) {
+                // Keeps a touch scribble from scrolling the page.
+                stylus.set_state(gtk::EventSequenceState::Claimed);
                 scribble.borrow_mut().begin((x, y));
             }
         }
