@@ -11,7 +11,7 @@ pub struct BrushSpec {
 }
 
 impl BrushSpec {
-    pub const SIZE_RANGE_PX: [f32; 2] = [4.0, 500.0];
+    pub const SIZE_RANGE_PX: [f32; 2] = [1.0, 500.0];
 
     /// Same brush with every value in range.
     pub fn clamped(&self) -> BrushSpec {

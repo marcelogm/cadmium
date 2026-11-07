@@ -1,8 +1,6 @@
+use super::BrushSpec;
 use super::{default_brush, factory_brushes};
 use crate::brush::{HairSpec, HeadSpec};
-
-const MIN_SIZE_PX: f32 = 4.0;
-const MAX_SIZE_PX: f32 = 500.0;
 
 #[test]
 fn the_default_brush_is_todays_round_synthetic_at_forty_pixels() {
@@ -29,7 +27,7 @@ fn every_factory_brush_is_in_range_and_fits_the_size_slider() {
         assert_eq!(brush.head.clamped(), brush.head, "{}", brush.name);
         assert_eq!(brush.hair.clamped(), brush.hair, "{}", brush.name);
         assert!(
-            (MIN_SIZE_PX..=MAX_SIZE_PX).contains(&brush.size_px),
+            (BrushSpec::SIZE_RANGE_PX[0]..=BrushSpec::SIZE_RANGE_PX[1]).contains(&brush.size_px),
             "{}",
             brush.name
         );

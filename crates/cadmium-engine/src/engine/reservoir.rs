@@ -7,6 +7,10 @@ use crate::compute::read_buffer;
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::pigments::Mixture;
 
+/// The fewest tip texels a brush's reserve is sized for: a 2 px brush's disc, so the finest
+/// brushes, whose tip is a single texel, still carry paint for a long line.
+const MIN_RESERVE_TEXELS: usize = 5;
+
 const DRAWN_LOADED_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM * DEFAULT_LOAD;
 
 #[repr(C)]
@@ -185,7 +189,8 @@ impl WetOilEngine {
     }
 
     pub(super) fn reserve_volume(&self, thickness_um: f32) -> f32 {
-        self.params.get("reserve_factor") * thickness_um * disc_texel_count(self.tip_radius) as f32
+        let texels = disc_texel_count(self.tip_radius).max(MIN_RESERVE_TEXELS);
+        self.params.get("reserve_factor") * thickness_um * texels as f32
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
