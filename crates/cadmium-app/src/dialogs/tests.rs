@@ -62,3 +62,15 @@ fn listed_navigation_keys_start_the_mode_they_name() {
         );
     }
 }
+
+#[test]
+fn tray_tool_accelerators_are_shifted_digits() {
+    let accelerators: Vec<_> = TrayTool::ALL
+        .into_iter()
+        .map(tray_tool_accelerator)
+        .collect();
+    assert_eq!(
+        accelerators,
+        ["<Shift>1", "<Shift>4", "<Shift>5", "<Shift>6"]
+    );
+}

@@ -76,6 +76,11 @@ impl TrayTool {
         TrayTool::ALL.into_iter().find(|tool| tool.name() == name)
     }
 
+    /// The tool's own name, without the painting tool Load would act on.
+    pub fn label(self) -> &'static str {
+        self.profile().label
+    }
+
     pub(crate) fn key(self) -> gdk::Key {
         self.profile().key
     }
