@@ -3,6 +3,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 use super::tray_divider::TrayDivider;
 use super::*;
 use crate::tools::TrayTool;
+use crate::tray_view::TrayView;
 use crate::writes::Closing;
 
 /// The open brush editor's dialog, and what stops the editor before the window closes it.
@@ -54,6 +55,7 @@ pub struct CadmiumWindow {
     /// Whether placing the divider is already queued for the paned's new height.
     pub(super) divider_queued: Cell<bool>,
     pub canvas: OnceCell<CadmiumCanvas>,
+    pub tray: OnceCell<TrayView>,
     /// Whether the window has claimed the Space press now held down.
     pub space_claimed: Cell<bool>,
     pub panel_refreshers: RefCell<Vec<PanelRefresher>>,

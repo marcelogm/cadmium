@@ -151,5 +151,7 @@ pub fn step(view: ViewTransform, change: ViewStep, scale: f64) -> ViewTransform 
     })
 }
 
+pub mod auto_fit;
+
 #[cfg(test)]
 mod tests;

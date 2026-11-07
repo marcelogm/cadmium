@@ -3,8 +3,7 @@ use std::rc::Weak;
 use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
-use cadmium_engine::present::{PresentRequest, ViewTransform};
-use cadmium_engine::surface::{TRAY_HEIGHT, TRAY_WIDTH};
+use cadmium_engine::present::PresentRequest;
 use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -24,17 +23,6 @@ const MILLISECONDS_PER_SECOND: f64 = 1000.0;
 mod by_dmabuf;
 mod by_readback;
 pub(crate) mod mode;
-
-pub fn tray_view(viewport_px: (u32, u32)) -> ViewTransform {
-    let zoom =
-        (viewport_px.0 as f32 / TRAY_WIDTH as f32).min(viewport_px.1 as f32 / TRAY_HEIGHT as f32);
-    ViewTransform {
-        origin_x: 0.0,
-        origin_y: 0.0,
-        zoom,
-        rotation: 0.0,
-    }
-}
 
 /// The brush editor's test sheet, which the editor owns: presented only while it is there.
 pub type SheetLink = Weak<RefCell<TestSheet>>;
@@ -68,10 +56,9 @@ impl PresentSource {
             }
             PresentSource::Tray => {
                 state.encode_tray_frame(encoder);
-                let view = tray_view((target.width(), target.height()));
                 state.session.presenter.encode_present(
                     gpu,
-                    PresentRequest::of_canvas(&state.session.tray, view),
+                    PresentRequest::of_canvas(&state.session.tray, state.tray_view),
                     target,
                     encoder,
                 );
@@ -244,6 +231,3 @@ impl FramePresenter {
         self.fallback_pending_notice = true;
     }
 }
-
-#[cfg(test)]
-mod tests;

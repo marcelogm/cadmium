@@ -156,6 +156,16 @@
                             </child>
                             <child>
                               <object class="GtkButton">
+                                <property name="icon-name">zoom-fit-best-symbolic</property>
+                                <property name="tooltip-text">Fit tray</property>
+                                <property name="action-name">win.fit-tray</property>
+                                <style>
+                                  <class name="flat"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
                                 <property name="icon-name">edit-clear-all-symbolic</property>
                                 <property name="tooltip-text">Clear tray</property>
                                 <property name="action-name">win.clear-tray</property>

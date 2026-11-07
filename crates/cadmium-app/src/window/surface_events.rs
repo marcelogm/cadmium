@@ -119,6 +119,9 @@ impl CadmiumWindow {
             move |_| window.after_contact()
         ));
         self.imp().tray_slot.append(&tray);
+        if self.imp().tray.set(tray.clone()).is_err() {
+            unreachable!("the tray is attached once");
+        }
         tray
     }
 

@@ -5,12 +5,12 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use super::CadmiumCanvas;
-use super::auto_fit::AutoFit;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
 use crate::input::nav_drag::{NavMode, held_mode};
 use crate::state::Mark;
 use crate::surface_scale::device_scale;
+use crate::view::auto_fit::AutoFit;
 use crate::view::{self, ViewStep};
 
 const FIT_MARGIN: f64 = 24.0;

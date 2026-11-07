@@ -3,6 +3,7 @@ use std::time::Instant;
 use cadmium_engine::canvas::PaintTotals;
 use cadmium_engine::draw_up::DrawUpRequest;
 use cadmium_engine::pigments::{MAX_SLOTS, mixture_srgb8};
+use cadmium_engine::present::ViewTransform;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tube::Nozzle;
@@ -31,10 +32,19 @@ fn held_on<T>(tool: Tool, on_knife: T, in_reserve: T) -> T {
 }
 
 impl AppState {
-    pub fn set_tray_zoom(&mut self, zoom: f32) {
-        if zoom.is_finite() && zoom > 0.0 {
-            self.tray_zoom = zoom;
+    /// Keeps how the tray widget shows the tray, on a screen of `device_scale` device px
+    /// per widget px; a view or a scale that isn't a scale is ignored.
+    pub fn set_tray_view(&mut self, view: ViewTransform, device_scale: f64) {
+        let zoom_is_a_scale = view.zoom.is_finite() && view.zoom > 0.0;
+        if zoom_is_a_scale && device_scale.is_finite() && device_scale > 0.0 {
+            self.tray_view = view;
+            self.tray_device_scale = device_scale;
         }
+    }
+
+    /// Widget px per tray px: what screen distances on the tray are measured in.
+    pub fn tray_screen_zoom(&self) -> f32 {
+        self.tray_view.zoom / self.tray_device_scale as f32
     }
 
     pub(super) fn follow_squeezing(
@@ -54,7 +64,7 @@ impl AppState {
         pen: StrokeSample,
         samples: &[StrokeSample],
     ) {
-        let threshold_px = LOAD_CANCEL_SCREEN_PX / f64::from(self.tray_zoom);
+        let threshold_px = LOAD_CANCEL_SCREEN_PX / f64::from(self.tray_screen_zoom());
         let cancelled_at = samples
             .iter()
             .position(|sample| load_cancelled(loading.origin, (sample.x, sample.y), threshold_px));
@@ -107,7 +117,7 @@ impl AppState {
                 slot: self.tube_slot,
                 pressure: pen.pressure,
                 seconds,
-                still_reach_px: STILL_TUBE_SCREEN_PX / self.tray_zoom,
+                still_reach_px: STILL_TUBE_SCREEN_PX / self.tray_screen_zoom(),
             },
         );
         self.contact = Some(Contact::Squeezing(Squeezing {

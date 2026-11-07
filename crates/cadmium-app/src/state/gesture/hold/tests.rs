@@ -4,6 +4,17 @@ use crate::state::test_support::{
     settle_both_surfaces, squeeze_blob_on_tray,
 };
 use crate::tools::{TrayTool, UiTool};
+use cadmium_engine::present::ViewTransform;
+
+/// A tray view at `zoom` device px per tray px.
+fn zoomed(zoom: f32) -> ViewTransform {
+    ViewTransform {
+        origin_x: 0.0,
+        origin_y: 0.0,
+        zoom,
+        rotation: 0.0,
+    }
+}
 
 #[test]
 fn load_is_cancelled_past_the_threshold() {
@@ -14,13 +25,23 @@ fn load_is_cancelled_past_the_threshold() {
 
 #[test]
 fn the_cancel_distance_is_measured_on_screen() {
-    for (drag, cancels) in [(10.0, false), (20.0, true)] {
+    for ((zoom, scale), (drag, cancels)) in [
+        ((0.25, 1.0), (10.0, false)),
+        ((0.25, 1.0), (20.0, true)),
+        // On a 2x screen the same zoom in widget px is twice the device zoom.
+        ((0.5, 2.0), (10.0, false)),
+        ((0.5, 2.0), (20.0, true)),
+    ] {
         let mut state = painting_state();
-        state.set_tray_zoom(0.25);
+        state.set_tray_view(zoomed(zoom), scale);
         state.set_ui_tool(UiTool::Paint(Tool::Brush));
         state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
         state.motion(&[sample_at(300.0 + drag, 300.0, 0.9)]);
-        assert_eq!(!state.holds_on(Surface::Tray), cancels, "{drag}");
+        assert_eq!(
+            !state.holds_on(Surface::Tray),
+            cancels,
+            "{zoom} {scale} {drag}"
+        );
         state.release();
     }
 }
@@ -29,7 +50,10 @@ fn the_cancel_distance_is_measured_on_screen() {
 fn a_tray_zoom_that_is_not_a_scale_is_ignored() {
     let mut state = painting_state();
     for zoom in [0.0, -1.0, f32::NAN, f32::INFINITY] {
-        state.set_tray_zoom(zoom);
+        state.set_tray_view(zoomed(zoom), 1.0);
+    }
+    for scale in [0.0, -1.0, f64::NAN] {
+        state.set_tray_view(zoomed(0.25), scale);
     }
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
@@ -250,9 +274,9 @@ fn tray_height_at(state: &AppState, x: usize, y: usize) -> f32 {
 fn a_tube_on_a_zoomed_out_tray_keeps_growing_through_a_trembling_hand() {
     let mut state = painting_state();
     state.set_brush_size(10.0);
-    state.set_tray_zoom(0.25);
+    state.set_tray_view(zoomed(0.25), 1.0);
     state.set_tray_tool(TrayTool::Tube);
-    let one_screen_px = 1.0 / f64::from(state.tray_zoom);
+    let one_screen_px = 1.0 / f64::from(state.tray_screen_zoom());
     let shaken = |frame: usize| {
         let shake = if frame.is_multiple_of(2) {
             one_screen_px

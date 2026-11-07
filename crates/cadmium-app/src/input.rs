@@ -9,9 +9,9 @@ use gtk::{gdk, glib};
 use self::nav_drag::{NavButton, NavDrag};
 use self::navigation::{nav_gesture, pinch_gesture, scroll_controller};
 use self::stylus::{eyedropper_click, hover_controller, stylus_gesture};
-use crate::canvas_widget::CadmiumCanvas;
 use crate::state::SharedState;
 use crate::tools::Press;
+use crate::view::ViewStep;
 
 pub(crate) mod nav_drag;
 mod navigation;
@@ -66,6 +66,23 @@ pub trait PaintSurfaceWidget:
     }
 }
 
+/// A paint surface the painter navigates: scrolls pan or zoom, pinches zoom, and drags pan,
+/// zoom or turn its view, the same on the canvas and the tray.
+pub trait NavigableSurface: PaintSurfaceWidget {
+    /// Whether the window holds Space down for this surface.
+    fn space_held(&self) -> bool;
+    /// The widget's centre, in widget px.
+    fn widget_centre(&self) -> (f64, f64);
+    /// Where the pointer is over the widget, to zoom about.
+    fn pointer(&self) -> Option<(f64, f64)>;
+    /// Applies one step of a navigation gesture to the view.
+    fn apply_view_step(&self, step: ViewStep);
+
+    fn pan_by(&self, dx: f64, dy: f64) {
+        self.apply_view_step(ViewStep::Pan { dx, dy });
+    }
+}
+
 #[derive(Default)]
 struct Contact {
     drags: NavDrags,
@@ -84,18 +101,15 @@ fn attach_stylus_sharing<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact
     widget.add_controller(hover_controller(widget, contact));
 }
 
-pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) {
-    attach_stylus_sharing(widget, &Rc::new(Contact::default()));
-}
-
-pub fn attach(canvas: &CadmiumCanvas) {
+/// Lets the pen paint on `surface` and the painter navigate its view.
+pub fn attach<W: NavigableSurface>(surface: &W) {
     let contact = Rc::new(Contact::default());
-    attach_stylus_sharing(canvas, &contact);
+    attach_stylus_sharing(surface, &contact);
     for button in NavButton::ALL {
-        canvas.add_controller(nav_gesture(canvas, &contact, button));
+        surface.add_controller(nav_gesture(surface, &contact, button));
     }
-    canvas.add_controller(scroll_controller(canvas));
-    canvas.add_controller(pinch_gesture(canvas));
+    surface.add_controller(scroll_controller(surface));
+    surface.add_controller(pinch_gesture(surface));
 }
 
 /// Whether an event from `event`'s device belongs to the stroke `stroking` paints; with

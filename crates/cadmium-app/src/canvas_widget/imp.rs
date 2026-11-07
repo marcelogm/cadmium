@@ -1,7 +1,7 @@
-use super::auto_fit::AutoFit;
 use super::*;
 use crate::input::nav_drag::NavMode;
 use crate::provisional_overlay::append_provisional;
+use crate::view::auto_fit::AutoFit;
 
 #[derive(Default)]
 pub struct CadmiumCanvas {

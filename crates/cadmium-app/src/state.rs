@@ -95,7 +95,10 @@ pub struct AppState {
     knife_volume: f32,
     contact: Option<Contact>,
     hold_clock: Option<Instant>,
-    tray_zoom: f32,
+    /// How the tray widget shows the tray, in device px.
+    pub tray_view: ViewTransform,
+    /// Device px per widget px on the tray's screen.
+    tray_device_scale: f64,
     resting_tool: Tool,
     samples_since_frame: u32,
     pacing: FramePacing,
@@ -132,7 +135,8 @@ impl AppState {
             knife_volume: 0.0,
             contact: None,
             hold_clock: None,
-            tray_zoom: 1.0,
+            tray_view: UNMOVED_VIEW,
+            tray_device_scale: 1.0,
             resting_tool,
             samples_since_frame: 0,
             pacing: FramePacing::default(),

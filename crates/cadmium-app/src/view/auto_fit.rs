@@ -1,5 +1,5 @@
-//! When the canvas fits itself to the widget: on a new size or scale, unless the painter
-//! has moved the view, and not in the middle of a stroke.
+//! When a surface (the canvas or the tray) fits itself to its widget: on a new size or
+//! scale, unless the painter has moved the view, and not in the middle of a stroke.
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AutoFit {

@@ -21,6 +21,7 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("redo", CadmiumWindow::redo),
     ("dry", CadmiumWindow::dry),
     ("clear-tray", CadmiumWindow::clear_tray),
+    ("fit-tray", CadmiumWindow::fit_tray),
     ("zoom-in", CadmiumWindow::zoom_in),
     ("zoom-out", CadmiumWindow::zoom_out),
     ("zoom-fit", CadmiumWindow::zoom_fit),
@@ -94,6 +95,12 @@ impl CadmiumWindow {
     fn clear_tray(&self) {
         self.state().borrow_mut().clear_tray();
         self.after_contact();
+    }
+
+    fn fit_tray(&self) {
+        if let Some(tray) = self.imp().tray.get() {
+            tray.fit_view();
+        }
     }
 
     fn new_brush(&self) {

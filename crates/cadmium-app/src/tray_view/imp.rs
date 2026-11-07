@@ -1,4 +1,5 @@
 use super::*;
+use crate::input::nav_drag::NavMode;
 
 #[derive(Default)]
 pub struct TrayView {
@@ -9,6 +10,11 @@ pub struct TrayView {
     pub tick: RefCell<Option<gtk::TickCallbackId>>,
     pub scale_watch: SurfaceScaleWatch,
     pub hover: Cell<Option<(f64, f64)>>,
+    /// Where the pointer is, on the tray or not; `hover` is only kept on the tray.
+    pub pointer: Cell<Option<(f64, f64)>>,
+    pub auto_fit: Cell<AutoFit>,
+    pub(crate) space_held: Cell<bool>,
+    pub(crate) held_mode: Cell<Option<NavMode>>,
     pub(super) shown_ring: Cell<Option<ShownRing>>,
     pub released_handlers: RefCell<Vec<TrayHandler>>,
     pub colour_picked_handlers: RefCell<Vec<PickHandler>>,
@@ -94,21 +100,11 @@ impl WidgetImpl for TrayView {
 }
 
 fn append_tray_image(snapshot: &gtk::Snapshot, texture: &gdk::Texture, scale: f64) {
-    let size = (texture.width() as u32, texture.height() as u32);
-    let to_widget = tray_screen_zoom(size, scale);
     let bounds = graphene::Rect::new(
         0.0,
         0.0,
-        size.0 as f32 / scale as f32,
-        size.1 as f32 / scale as f32,
+        texture.width() as f32 / scale as f32,
+        texture.height() as f32 / scale as f32,
     );
-    let image = graphene::Rect::new(
-        0.0,
-        0.0,
-        TRAY_WIDTH as f32 * to_widget,
-        TRAY_HEIGHT as f32 * to_widget,
-    );
-    snapshot.push_clip(&image);
     snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Linear, &bounds);
-    snapshot.pop();
 }

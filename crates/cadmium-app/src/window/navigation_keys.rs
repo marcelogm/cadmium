@@ -77,15 +77,19 @@ impl CadmiumWindow {
             .is_some_and(|canvas| canvas.space_held())
     }
 
-    /// Tells the canvas which navigation keys are held; while a dialog is up, none are.
+    /// Tells the canvas and the tray which navigation keys are held; while a dialog is up,
+    /// none are.
     fn show_held_keys(&self, space_held: bool, modifiers: gdk::ModifierType) {
-        let Some(canvas) = self.imp().canvas.get() else {
-            return;
-        };
-        if self.visible_dialog().is_some() {
-            canvas.set_held_keys(false, gdk::ModifierType::empty());
+        let (space_held, modifiers) = if self.visible_dialog().is_some() {
+            (false, gdk::ModifierType::empty())
         } else {
+            (space_held, modifiers)
+        };
+        if let Some(canvas) = self.imp().canvas.get() {
             canvas.set_held_keys(space_held, modifiers);
+        }
+        if let Some(tray) = self.imp().tray.get() {
+            tray.set_held_keys(space_held, modifiers);
         }
     }
 
