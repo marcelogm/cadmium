@@ -76,7 +76,7 @@ impl FirstRest {
         }
         if let Some(first_resting) = placements
             .iter_mut()
-            .find(|placement| !placement.profile.wipes())
+            .find(|placement| placement.profile.rests_on_surface())
         {
             first_resting.record.first_rest = 1;
             self.pending = false;

@@ -31,9 +31,8 @@ const OPAQUE_PASSES: usize = 6;
 const HIDDEN_SHARE_OF_BARE_CONTRAST: f32 = 0.05;
 const SHOWS_THROUGH_RATIO: f32 = 0.9;
 const PENCIL_TILT_DEG: f32 = 0.0;
-const FIRM_PRESSURE: f32 = 0.8;
+const FIRM_PRESSURE: f32 = 0.9;
 const LIGHT_PRESSURE: f32 = 0.2;
-const HARD_PRESSURE: f32 = 0.9;
 const DARKER_RATIO: f32 = 1.5;
 const TOOTH_RATIO: f32 = 1.5;
 const TOOTH_BAND_HALF_HEIGHT: usize = 1;
@@ -229,16 +228,18 @@ fn mean(values: &[f32]) -> f32 {
 fn the_pencil_draws_graphite_and_no_paint() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
+    let relief = s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap();
     pencil_line(&gpu, &mut s, FIRM_PRESSURE);
     assert!(graphite(&gpu, &s)[centre()] > 0.0);
     assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert_eq!(s.canvas.read_f32(&gpu, StateTexture::DryHeight).unwrap(), relief);
 }
 
 #[test]
 fn pressing_harder_draws_darker() {
     let gpu = GpuContext::new().unwrap();
     let light = total_graphite(&gpu, LIGHT_PRESSURE);
-    let firm = total_graphite(&gpu, HARD_PRESSURE);
+    let firm = total_graphite(&gpu, FIRM_PRESSURE);
     assert!(firm > light * DARKER_RATIO, "{firm} vs {light}");
 }
 

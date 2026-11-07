@@ -6,8 +6,8 @@ const NEIGHBOUR_SHARE: f32 = 0.25;
 
 @group(0) @binding(0) var<uniform> dab: Dab;
 @group(0) @binding(1) var graphite: texture_storage_2d<r32float, read_write>;
-@group(0) @binding(2) var dry_height: texture_storage_2d<r32float, read_write>;
-@group(0) @binding(3) var wet_vol: texture_storage_2d<r32float, read_write>;
+@group(0) @binding(2) var dry_height: texture_storage_2d<r32float, read>;
+@group(0) @binding(3) var wet_vol: texture_storage_2d<r32float, read>;
 
 fn surface_um(pixel: vec2<i32>) -> f32 {
     let size = vec2<i32>(textureDimensions(graphite));

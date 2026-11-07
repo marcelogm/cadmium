@@ -98,8 +98,11 @@ impl ToolProfile {
         self.dab_stages.contains(&DabStage::Bristles)
     }
 
-    pub(crate) fn wipes(&self) -> bool {
-        self.dab_stages.contains(&DabStage::Wipe)
+    /// Whether its dabs settle on the surface: only the exchange and blade stages read the rest.
+    pub(crate) fn rests_on_surface(&self) -> bool {
+        self.dab_stages
+            .iter()
+            .any(|stage| matches!(stage, DabStage::Exchange | DabStage::Blade))
     }
 }
 

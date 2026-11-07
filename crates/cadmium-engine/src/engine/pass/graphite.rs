@@ -4,10 +4,10 @@ use crate::compute::{ComputeStage, texture_binding, texture_entry};
 use crate::engine::shader::{DAB_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
-const SURFACE_TEXTURES: [(u32, StateTexture); 3] = [
-    (1, StateTexture::Graphite),
-    (2, StateTexture::DryHeight),
-    (3, StateTexture::WetVol),
+const SURFACE_TEXTURES: [(u32, StateTexture, wgpu::StorageTextureAccess); 3] = [
+    (1, StateTexture::Graphite, wgpu::StorageTextureAccess::ReadWrite),
+    (2, StateTexture::DryHeight, wgpu::StorageTextureAccess::ReadOnly),
+    (3, StateTexture::WetVol, wgpu::StorageTextureAccess::ReadOnly),
 ];
 
 pub(super) struct GraphitePass {
@@ -18,12 +18,8 @@ pub(super) struct GraphitePass {
 impl GraphitePass {
     pub(super) fn new(gpu: &GpuContext) -> GraphitePass {
         let mut entries = vec![dab_record_entry()];
-        entries.extend(SURFACE_TEXTURES.map(|(binding, _)| {
-            texture_entry(
-                binding,
-                wgpu::StorageTextureAccess::ReadWrite,
-                wgpu::TextureFormat::R32Float,
-            )
+        entries.extend(SURFACE_TEXTURES.map(|(binding, _, access)| {
+            texture_entry(binding, access, wgpu::TextureFormat::R32Float)
         }));
         let compute = ComputeStage::new(
             gpu,
@@ -41,7 +37,7 @@ impl GraphitePass {
         let mut entries = vec![dab_record_binding(resources.dab_records)];
         entries.extend(
             SURFACE_TEXTURES
-                .map(|(binding, which)| texture_binding(binding, resources.canvas, which)),
+                .map(|(binding, which, _)| texture_binding(binding, resources.canvas, which)),
         );
         self.compute.bind_group(resources.gpu, &entries)
     }

@@ -92,3 +92,11 @@ fn only_the_pencil_draws_graphite() {
         );
     }
 }
+
+#[test]
+fn the_rag_and_the_pencil_never_rest_on_the_surface() {
+    for tool in Tool::ALL {
+        let rests = !matches!(tool, Tool::Rag | Tool::Pencil | Tool::Eyedropper);
+        assert_eq!(tool.profile().rests_on_surface(), rests, "{tool:?}");
+    }
+}
