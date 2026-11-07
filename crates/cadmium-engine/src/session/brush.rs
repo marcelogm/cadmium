@@ -4,6 +4,7 @@ use crate::pigments::Mixture;
 use crate::stroke::StrokeSample;
 
 use super::PaintSession;
+use super::queue::{BrushChange, KnifeLoad, Queued};
 
 impl PaintSession {
     pub fn brush_outline(&self, pen: &StrokeSample) -> Option<BrushOutline> {
@@ -11,38 +12,47 @@ impl PaintSession {
     }
 
     pub fn resize_tip(&mut self) {
-        self.engine
-            .resize_tip(self.brush.geometry.max_diameter_px / 2.0);
-    }
-
-    pub fn reload_brush(&mut self, gpu: &GpuContext) {
-        self.flush(gpu);
-        self.resize_tip();
-        let mixture = self.recipe_mixture();
-        if mixture.is_empty() {
-            self.engine.clean_brush(gpu);
+        let radius_px = self.brush.geometry.max_diameter_px / 2.0;
+        if self.has_backlog() {
+            self.queued
+                .push_back(Queued::Brush(BrushChange::ResizeTip { radius_px }));
         } else {
-            self.engine.load_reservoir(gpu, &mixture);
+            self.engine.resize_tip(radius_px);
         }
     }
 
+    pub fn reload_brush(&mut self, gpu: &GpuContext) {
+        self.resize_tip();
+        let mixture = self.recipe_mixture();
+        self.change_brush(gpu, BrushChange::Reload { mixture });
+    }
+
     pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) -> Result<(), GpuLost> {
-        self.flush(gpu);
+        let mixture = *mixture;
         if self.holds_knife() {
             self.resize_tip();
-            self.engine.dip_knife(gpu, mixture, amount)
+            self.load_knife(gpu, KnifeLoad::Dip { mixture, amount })
         } else {
-            self.engine.dip(gpu, mixture, amount);
+            self.change_brush(gpu, BrushChange::Dip { mixture, amount });
             Ok(())
         }
     }
 
     pub fn restore_reserve(&mut self, gpu: &GpuContext) {
-        self.flush(gpu);
         let mixture = self.recipe_mixture();
         if !mixture.is_empty() {
-            self.engine.restore_reserve(gpu, &mixture);
+            self.change_brush(gpu, BrushChange::RestoreReserve { mixture });
         }
+    }
+
+    /// Dips the knife in the palette's mixture for just what it lacks of a full dip.
+    pub fn top_up_knife(&mut self, gpu: &GpuContext) -> Result<(), GpuLost> {
+        let mixture = self.recipe_mixture();
+        if mixture.is_empty() {
+            return Ok(());
+        }
+        self.resize_tip();
+        self.load_knife(gpu, KnifeLoad::TopUp { mixture })
     }
 
     pub fn tip_mean_mixture(&mut self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {
@@ -56,12 +66,8 @@ impl PaintSession {
     }
 
     pub fn clean_brush(&mut self, gpu: &GpuContext) {
-        self.flush(gpu);
-        if self.holds_knife() {
-            self.engine.clean_knife(gpu);
-        } else {
-            self.engine.clean_brush(gpu);
-        }
+        let knife = self.holds_knife();
+        self.change_brush(gpu, BrushChange::Clean { knife });
     }
 
     pub(super) fn holds_knife(&self) -> bool {

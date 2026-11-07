@@ -36,7 +36,7 @@ fn drag_watching_the_tip(gpu: &GpuContext, s: &mut PaintSession, samples: &[Stro
     let mut lowest_um = f32::INFINITY;
     for (index, sample) in samples.iter().enumerate() {
         if index == 0 {
-            s.begin_stroke(gpu, *sample);
+            s.begin_stroke(*sample);
         } else {
             s.add_samples(&[*sample]);
         }

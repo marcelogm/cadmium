@@ -112,7 +112,7 @@ impl StrokeSchedule {
 pub(crate) fn replay(session: &mut PaintSession, gpu: &GpuContext, events: &[StudioEvent]) {
     for event in events {
         match *event {
-            StudioEvent::Begin(sample) => session.begin_stroke(gpu, sample),
+            StudioEvent::Begin(sample) => session.begin_stroke(sample),
             StudioEvent::Add(sample) => session.add_samples(&[sample]),
             StudioEvent::Frame(clock_ms) => {
                 let mut encoder = gpu.device.create_command_encoder(&Default::default());

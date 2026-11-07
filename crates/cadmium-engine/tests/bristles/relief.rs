@@ -69,7 +69,7 @@ fn pressed_snapshot(
     x: f64,
     pressure: f32,
 ) -> BristleSnapshot {
-    painting.begin_stroke(gpu, upright(x, pressure, 0));
+    painting.begin_stroke(upright(x, pressure, 0));
     for index in 1..PRESS_SAMPLES {
         let moved = x + PRESS_STEP_PX * f64::from(index);
         painting.add_samples(&[upright(moved, pressure, index)]);

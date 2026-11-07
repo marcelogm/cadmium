@@ -7,7 +7,7 @@ use super::{
 use crate::brush::FULL_RESERVOIR_VOLUME_UM;
 use crate::canvas::PaintTotals;
 use crate::compute::read_buffer;
-use crate::gpu::{GpuContext, GpuLost, new_encoder};
+use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::Mixture;
 
 impl WetOilEngine {
@@ -73,10 +73,14 @@ impl WetOilEngine {
     }
 
     pub fn clean_knife(&mut self, gpu: &GpuContext) {
-        let mut encoder = new_encoder(gpu, "clean_knife");
+        self.submit(gpu, "clean_knife", |engine, encoder| {
+            engine.encode_clean_knife(encoder);
+        });
+    }
+
+    pub fn encode_clean_knife(&self, encoder: &mut wgpu::CommandEncoder) {
         encoder.clear_buffer(&self.buffers.blade_load, 0, None);
         encoder.clear_buffer(&self.buffers.blade_delta, 0, None);
-        gpu.queue.submit([encoder.finish()]);
     }
 
     pub fn knife_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {

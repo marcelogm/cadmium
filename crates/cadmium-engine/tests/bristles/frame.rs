@@ -50,7 +50,7 @@ fn roots_before_and_after_turning(
 ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
     let mut s = session(gpu);
     s.brush.head = head;
-    s.begin_stroke(gpu, leaning_sample(0, &from));
+    s.begin_stroke(leaning_sample(0, &from));
     let first_pose = (1..SAMPLES_PER_POSE).map(|index| leaning_sample(index, &from));
     s.add_samples(&first_pose.collect::<Vec<_>>());
     frame(gpu, &mut s);

@@ -71,7 +71,7 @@ fn paint_long_stroke(gpu: &GpuContext, session: &mut PaintSession) {
             time_ms: index * 8,
         };
         if index == 0 {
-            session.begin_stroke(gpu, sample);
+            session.begin_stroke(sample);
         } else {
             session.add_samples(&[sample]);
         }

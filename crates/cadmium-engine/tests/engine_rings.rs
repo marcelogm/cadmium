@@ -91,7 +91,7 @@ fn arc_samples(arc: &Arc) -> Vec<StrokeSample> {
 fn paint_arc(gpu: &GpuContext, s: &mut PaintSession, arc: &Arc) {
     for (i, sample) in arc_samples(arc).into_iter().enumerate() {
         if i == 0 {
-            s.begin_stroke(gpu, sample)
+            s.begin_stroke(sample)
         } else {
             s.add_samples(&[sample])
         }

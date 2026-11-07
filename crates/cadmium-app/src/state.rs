@@ -19,6 +19,7 @@ use clock::{Clock, SystemClock};
 use gesture::Contact;
 pub use gesture::LoadRing;
 pub use history::DryOutcome;
+use pacing::FramePacing;
 pub use pen::PenReadout;
 pub use recipe::PigmentClick;
 
@@ -31,6 +32,7 @@ mod hand;
 mod history;
 mod lab;
 mod library;
+mod pacing;
 mod pen;
 mod recipe;
 mod studio_paint;
@@ -42,6 +44,13 @@ const EMPTY_MIXTURE: Mixture = Mixture {
 };
 
 pub type SharedState = Rc<RefCell<AppState>>;
+
+fn starting_session(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
+    let mut session = PaintSession::new(gpu, spec)?;
+    session.brush.recipe = starting_recipe(&session.canvas.spec.pigment_slots);
+    session.brush.load = STARTING_LOAD;
+    Ok(session)
+}
 /// Wakes one view; returns false once the view is gone, which drops the waker.
 ///
 /// A waker runs under the caller's `borrow_mut` of the state, so it must not
@@ -75,6 +84,7 @@ pub struct AppState {
     painting_device_scale: f32,
     resting_tool: Tool,
     samples_since_frame: u32,
+    pacing: FramePacing,
     last_sample_time_ms: Option<u32>,
     clock: Box<dyn Clock>,
     wakers: Vec<Waker>,
@@ -82,9 +92,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(gpu: Rc<GpuContext>, spec: CanvasSpec) -> Result<AppState, CanvasError> {
-        let mut session = PaintSession::new(&gpu, spec)?;
-        session.brush.recipe = starting_recipe(&session.canvas.spec.pigment_slots);
-        session.brush.load = STARTING_LOAD;
+        let session = starting_session(&gpu, spec)?;
         let resting_tool = session.brush.tool;
         let mut state = AppState {
             gpu,
@@ -116,6 +124,7 @@ impl AppState {
             painting_device_scale: 1.0,
             resting_tool,
             samples_since_frame: 0,
+            pacing: FramePacing::default(),
             last_sample_time_ms: None,
             clock: Box::new(SystemClock::new()),
             wakers: Vec::new(),

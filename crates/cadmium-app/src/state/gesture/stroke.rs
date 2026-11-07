@@ -41,13 +41,14 @@ impl AppState {
         preparation: StrokePreparation,
     ) {
         self.release();
+        self.pacing.brush_measure_waits = false;
         self.session.brush.tool = tool;
         match preparation {
             StrokePreparation::None => {}
             StrokePreparation::TopUp => self.top_up(),
             StrokePreparation::CleanAndLoad => self.clean_and_load(),
         }
-        self.session.begin_stroke_on(&self.gpu, surface, sample);
+        self.session.begin_stroke_on(surface, sample);
         self.contact = Some(Contact::Stroke { surface });
         self.last_sample_time_ms = None;
         self.note_samples(std::slice::from_ref(&sample));
@@ -66,7 +67,11 @@ impl AppState {
     pub(super) fn finish_stroke(&mut self) {
         self.session.end_stroke();
         self.edits.record();
-        self.measure_brush();
+        if self.session.has_queued_dabs() {
+            self.pacing.brush_measure_waits = true;
+        } else {
+            self.measure_brush();
+        }
     }
 }
 

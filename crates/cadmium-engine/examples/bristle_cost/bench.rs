@@ -1,6 +1,7 @@
 use std::f64::consts::TAU;
 use std::time::Instant;
 
+use cadmium_engine::frame_budget::DabBudget;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::{PresentRequest, ViewTransform};
 use cadmium_engine::session::PaintSession;
@@ -15,6 +16,7 @@ const CURVE_SPAN_PX: f64 = 1500.0;
 const CURVE_AMPLITUDE_PX: f64 = 320.0;
 const CURVE_WALK_STEPS: usize = 20_000;
 const PEN_SPEED_PX_PER_SECOND: f64 = 800.0;
+const PEN_SPEED_VARIABLE: &str = "CADMIUM_PEN_SPEED";
 const SAMPLES_PER_SECOND: f64 = 120.0;
 const FRAMES_PER_SECOND: f64 = 60.0;
 pub(crate) const STROKE_PRESSURE: f32 = 0.8;
@@ -33,6 +35,8 @@ pub(crate) struct Bench<'gpu> {
     pub(crate) timestamps: Option<&'gpu Timestamps>,
     pub(crate) present_target: Option<wgpu::Texture>,
     pub(crate) frame_index: u32,
+    pub(crate) pacing: Option<DabBudget>,
+    pub(crate) frames_after_lift: usize,
 }
 
 impl Bench<'_> {
@@ -46,6 +50,9 @@ impl Bench<'_> {
         if let Some(timestamps) = self.timestamps {
             write_timestamp(&mut encoder, timestamps, Some(0), None);
         }
+        if let Some(pacing) = &self.pacing {
+            self.session.limit_dabs_per_frame(Some(pacing.allowance()));
+        }
         self.session
             .encode_frame(self.gpu, self.frame_clock_ms(), &mut encoder);
         if let Some(target) = &self.present_target {
@@ -53,10 +60,11 @@ impl Bench<'_> {
         }
         let gpu_ms = finish_frame(self.gpu, self.timestamps, encoder);
         self.frame_index += 1;
-        FrameCost {
-            gpu_ms,
-            wall_ms: started.elapsed().as_secs_f64() * 1000.0,
+        let wall_ms = started.elapsed().as_secs_f64() * 1000.0;
+        if let Some(pacing) = self.pacing.as_mut() {
+            pacing.observe(self.session.last_frame_dabs(), gpu_ms.unwrap_or(wall_ms));
         }
+        FrameCost { gpu_ms, wall_ms }
     }
 
     pub(crate) fn stroke(&mut self, samples: &[StrokeSample]) -> Vec<FrameCost> {
@@ -64,7 +72,7 @@ impl Bench<'_> {
             return Vec::new();
         };
         let samples_per_frame = (SAMPLES_PER_SECOND / FRAMES_PER_SECOND) as usize;
-        self.session.begin_stroke(self.gpu, first);
+        self.session.begin_stroke(first);
         let mut costs = vec![self.frame()];
         for chunk in rest.chunks(samples_per_frame) {
             self.session.add_samples(chunk);
@@ -72,6 +80,11 @@ impl Bench<'_> {
         }
         self.session.end_stroke();
         costs.push(self.frame());
+        self.frames_after_lift = 0;
+        while self.session.has_queued_dabs() {
+            costs.push(self.frame());
+            self.frames_after_lift += 1;
+        }
         costs
     }
 
@@ -185,8 +198,15 @@ pub(crate) fn long_stroke(pressure: f32) -> Vec<StrokeSample> {
     samples
 }
 
+fn pen_speed_px_per_second() -> f64 {
+    std::env::var(PEN_SPEED_VARIABLE)
+        .ok()
+        .and_then(|speed| speed.parse().ok())
+        .unwrap_or(PEN_SPEED_PX_PER_SECOND)
+}
+
 pub(crate) fn s_curve(pressure: f32) -> Vec<StrokeSample> {
-    let spacing_px = PEN_SPEED_PX_PER_SECOND / SAMPLES_PER_SECOND;
+    let spacing_px = pen_speed_px_per_second() / SAMPLES_PER_SECOND;
     let mut samples = Vec::new();
     let mut walked_px = 0.0;
     let mut previous = s_curve_point(0.0);

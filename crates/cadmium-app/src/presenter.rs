@@ -183,14 +183,18 @@ impl FramePresenter {
                 self.present_by_dmabuf_or_fall_back(state, native, policy, (width_px, height_px))
             }
         };
+        if texture.is_some() && !matches!(self.source, PresentSource::TestSheet(_)) {
+            state.frame_submitted();
+        }
         if self.debug_timing && texture.is_some() {
             glib::g_message!(
                 LOG_DOMAIN,
-                "{:?} frame {width_px}×{height_px} by {} in {:.2} ms, {} pen samples",
+                "{:?} frame {width_px}×{height_px} by {} in {:.2} ms, {} pen samples, {} dabs",
                 self.source,
                 self.mode.unwrap_or(mode).name(),
                 started.elapsed().as_secs_f64() * MILLISECONDS_PER_SECOND,
-                state.pen.samples_last_frame
+                state.pen.samples_last_frame,
+                state.session.last_frame_dabs()
             );
         }
         texture

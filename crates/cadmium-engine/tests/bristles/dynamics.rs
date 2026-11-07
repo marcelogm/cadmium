@@ -126,7 +126,7 @@ fn zig_zag(index: u32) -> StrokeSample {
 }
 
 fn zig_zag_snapshots(gpu: &GpuContext, s: &mut PaintSession) -> Vec<BristleSnapshot> {
-    s.begin_stroke(gpu, zig_zag(0));
+    s.begin_stroke(zig_zag(0));
     let mut snapshots = Vec::new();
     for index in 1..ZIG_ZAG_SAMPLES {
         s.add_samples(&[zig_zag(index)]);

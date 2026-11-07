@@ -70,13 +70,13 @@ struct Stroke {
 }
 
 impl Stroke {
-    fn begin(gpu: &GpuContext, s: &mut PaintSession, pressure: f32) -> Stroke {
+    fn begin(s: &mut PaintSession, pressure: f32) -> Stroke {
         let stroke = Stroke {
             at: [START_X, CENTRE_Y],
             time_ms: 0,
             pressure,
         };
-        s.begin_stroke(gpu, stroke.sample());
+        s.begin_stroke(stroke.sample());
         stroke
     }
 
@@ -128,7 +128,7 @@ fn loose_session(gpu: &GpuContext, plasticity: f32) -> PaintSession {
 
 fn settled_rest_offsets(gpu: &GpuContext, plasticity: f32) -> Vec<[f32; 2]> {
     let mut s = loose_session(gpu, plasticity);
-    s.begin_stroke(gpu, pressed(START_X, CENTRE_Y, 0.0, 0));
+    s.begin_stroke(pressed(START_X, CENTRE_Y, 0.0, 0));
     s.end_stroke();
     frame(gpu, &mut s);
     tip_offsets(&settle(gpu, &mut s, 0))
@@ -164,7 +164,7 @@ struct HardStroke {
 
 fn hard_stroke_then_lift(gpu: &GpuContext, plasticity: f32) -> HardStroke {
     let mut s = loose_session(gpu, plasticity);
-    let mut stroke = Stroke::begin(gpu, &mut s, HARD_PRESSURE);
+    let mut stroke = Stroke::begin(&mut s, HARD_PRESSURE);
     let during = stroke.run(gpu, &mut s, STROKE_SAMPLES);
     s.end_stroke();
     frame(gpu, &mut s);
@@ -183,7 +183,7 @@ fn along(offset: [f32; 2], heading: Heading) -> f32 {
 fn bristle_tips_trail_behind_the_handle_while_it_moves() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let mut stroke = Stroke::begin(&gpu, &mut s, PRESSURE);
+    let mut stroke = Stroke::begin(&mut s, PRESSURE);
     let snapshot = stroke.run(&gpu, &mut s, STROKE_SAMPLES);
     let handle_x = handle(&snapshot)[0];
     let tips_x = tip_centroid(&snapshot)[0];
@@ -198,7 +198,7 @@ fn bristle_tips_trail_behind_the_handle_while_it_moves() {
 fn on_a_turn_the_tips_lag_the_new_direction() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    let mut stroke = Stroke::begin(&gpu, &mut s, PRESSURE);
+    let mut stroke = Stroke::begin(&mut s, PRESSURE);
     stroke.run(&gpu, &mut s, STROKE_SAMPLES);
     let meaningful_px = MEANINGFUL_LAG_SHARE * nominal_length_px(&s);
     for dab in 0..TURN_SAMPLES {
@@ -242,7 +242,7 @@ fn no_plasticity_lets_the_brush_spring_back_straight() {
 fn trail_px(gpu: &GpuContext, drag_anisotropy: f32) -> f32 {
     let mut s = session(gpu);
     s.brush.hair.drag_anisotropy = drag_anisotropy;
-    let mut stroke = Stroke::begin(gpu, &mut s, PRESSURE);
+    let mut stroke = Stroke::begin(&mut s, PRESSURE);
     let snapshot = stroke.run(gpu, &mut s, STROKE_SAMPLES);
     handle(&snapshot)[0] - tip_centroid(&snapshot)[0]
 }
@@ -269,7 +269,7 @@ fn rest_bend_bits(snapshot: &BristleSnapshot) -> Vec<[u32; 2]> {
 fn bends_after_timeless_presses(gpu: &GpuContext, presses: u32) -> Vec<[u32; 2]> {
     let plasticity = HairSpec::default().bend_memory;
     let mut s = loose_session(gpu, plasticity);
-    let mut stroke = Stroke::begin(gpu, &mut s, HARD_PRESSURE);
+    let mut stroke = Stroke::begin(&mut s, HARD_PRESSURE);
     stroke.run(gpu, &mut s, STROKE_SAMPLES);
     let mut last = None;
     for _ in 0..presses {
@@ -300,7 +300,7 @@ fn holding_a_pressed_brush_still_does_not_bend_it_further() {
 fn radial_set_lean(gpu: &GpuContext, pressure: f32) -> f32 {
     let mut s = session(gpu);
     s.brush.hair.clumping = 0.0;
-    let mut stroke = Stroke::begin(gpu, &mut s, pressure);
+    let mut stroke = Stroke::begin(&mut s, pressure);
     stroke.run(gpu, &mut s, STROKE_SAMPLES);
     s.end_stroke();
     frame(gpu, &mut s);

@@ -1,7 +1,7 @@
 use super::*;
 use crate::state::test_support::{
     PAINT_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals, holding_the_knife,
-    knife_totals, painting_state, reserve_volume, row_samples, stroke,
+    knife_totals, paint_stroke, painting_state, reserve_volume, row_samples,
 };
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
@@ -11,7 +11,7 @@ const BARE_CANVAS_POINT: (f32, f32) = (20.0, 20.0);
 #[test]
 fn choosing_another_pigment_cleans_the_brush_before_loading_it() {
     let mut state = painting_state();
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
     let totals = brush_totals(&state);
     assert_eq!(totals.pigment[ULTRAMARINE_SLOT], 0.0);
@@ -38,7 +38,7 @@ fn ctrl_click_mixes_a_little_of_the_pigment_into_what_the_brush_holds() {
 #[test]
 fn clicking_the_loaded_pigment_again_dips_more_paint_on_top() {
     let mut state = painting_state();
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let worn = brush_totals(&state);
     state.choose_pigment(ULTRAMARINE_SLOT, PigmentClick::Choose);
     let dipped = brush_totals(&state);
@@ -49,7 +49,7 @@ fn clicking_the_loaded_pigment_again_dips_more_paint_on_top() {
 #[test]
 fn eyedropper_on_bare_canvas_changes_nothing() {
     let mut state = painting_state();
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let before = brush_totals(&state);
     let recipe = state.session.brush.recipe.clone();
     let (x, y) = BARE_CANVAS_POINT;
@@ -62,7 +62,7 @@ fn eyedropper_on_bare_canvas_changes_nothing() {
 fn eyedropper_mixes_the_picked_paint_on_the_palette_and_loads_it() {
     let mut state = painting_state();
     let samples = row_samples(PAINT_ROW_Y);
-    stroke(&mut state, Tool::Brush, &samples);
+    paint_stroke(&mut state, Tool::Brush, &samples);
     state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
     let middle = samples[samples.len() / 2];
     assert!(state.pick_colour_on(Surface::Painting, middle.x as f32, middle.y as f32));
@@ -80,7 +80,7 @@ fn picking_the_colour_already_on_the_brush_refreshes_it() {
     let full = reserve_volume(&state);
     let samples = row_samples(PAINT_ROW_Y);
     state.reload_each_stroke = false;
-    stroke(&mut state, Tool::Brush, &samples);
+    paint_stroke(&mut state, Tool::Brush, &samples);
     assert!(reserve_volume(&state) < full);
     let middle = samples[samples.len() / 2];
     assert!(state.pick_colour_on(Surface::Painting, middle.x as f32, middle.y as f32));
@@ -95,22 +95,11 @@ fn brush_readout_follows_loading_painting_and_cleaning() {
     assert!(!state.tip_mixture.is_empty());
     let loaded = state.reserve_level();
     assert!(loaded > 0.0);
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     assert!(state.reserve_level() < loaded);
     state.clean_brush();
     assert!(state.brush_is_clean());
     assert_eq!(state.reserve_level(), 0.0);
-}
-
-#[test]
-fn knife_tops_up_only_the_share_it_is_missing() {
-    assert_eq!(knife_top_up(0.0, 400.0), Some(1.0));
-    assert_eq!(knife_top_up(300.0, 400.0), Some(0.25));
-    assert_eq!(knife_top_up(400.0, 400.0), None);
-    assert_eq!(knife_top_up(500.0, 400.0), None);
-    assert_eq!(knife_top_up(-5.0, 400.0), Some(1.0));
-    assert_eq!(knife_top_up(0.0, 0.0), None);
-    assert_eq!(knife_top_up(f32::NAN, 400.0), None);
 }
 
 #[test]

@@ -30,7 +30,7 @@ fn reference_paint(gpu: &GpuContext, session: &mut PaintSession) {
         .enumerate()
     {
         if index == 0 {
-            session.begin_stroke(gpu, sample);
+            session.begin_stroke(sample);
         } else {
             session.add_samples(&[sample]);
         }

@@ -158,7 +158,7 @@ fn paint_straight_with(
             ..nib
         };
         if i == 0 {
-            s.begin_stroke(gpu, sample)
+            s.begin_stroke(sample)
         } else {
             s.add_samples(&[sample])
         }

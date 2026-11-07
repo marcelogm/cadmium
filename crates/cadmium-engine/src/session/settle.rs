@@ -40,7 +40,7 @@ impl PaintSession {
     }
 
     fn bristles_settling_on(&self, surface: Surface, frame_clock_ms: f64) -> bool {
-        self.stroke_surface == surface
+        self.walked_surface == surface
             && self
                 .stroke_time_at(frame_clock_ms)
                 .is_some_and(|stroke_time_ms| self.engine.bristles_settling(stroke_time_ms))
@@ -58,14 +58,14 @@ impl PaintSession {
         frame_clock_ms: f64,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let dabs_queued = !self.queued.is_empty();
-        self.encode_queued_dabs(gpu, encoder);
+        let work_queued = self.has_queued_dabs();
+        self.last_frame_dabs = self.walk_frame(gpu, encoder);
         let Some(anchor) = self.motion_anchor.as_mut() else {
             return;
         };
         anchor.bind_to(frame_clock_ms);
         let stroke_time_ms = anchor.stroke_time_at(frame_clock_ms);
-        if dabs_queued || self.stroke_surface != surface {
+        if work_queued || self.walked_surface != surface {
             return;
         }
         if self.engine.bristles_settling(stroke_time_ms) {

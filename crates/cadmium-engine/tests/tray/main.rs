@@ -48,7 +48,7 @@ fn sample(x: f64, y: f64, time_ms: u32) -> StrokeSample {
 }
 
 fn stroke_on(gpu: &GpuContext, s: &mut PaintSession, surface: Surface, y: f64) {
-    s.begin_stroke_on(gpu, surface, sample(40.0, y, 0));
+    s.begin_stroke_on(surface, sample(40.0, y, 0));
     for i in 1..=40 {
         s.add_samples(&[sample(40.0 + 10.0 * f64::from(i), y, 8 * i)]);
         if i % 4 == 0 {

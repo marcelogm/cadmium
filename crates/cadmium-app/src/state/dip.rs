@@ -9,22 +9,12 @@ use super::recipe::{
 };
 use super::{AppState, EMPTY_MIXTURE};
 
-const KNIFE_TOP_UP_TOLERANCE: f32 = 1e-3;
-
 fn fill_level(volume: f32, capacity: f32) -> f32 {
     if capacity > 0.0 && volume.is_finite() {
         (volume / capacity).clamp(0.0, 1.0)
     } else {
         0.0
     }
-}
-
-fn knife_top_up(volume: f32, target: f32) -> Option<f32> {
-    if !target.is_finite() || target <= 0.0 || !volume.is_finite() {
-        return None;
-    }
-    let missing = target - volume.max(0.0);
-    (missing > target * KNIFE_TOP_UP_TOLERANCE).then(|| (missing / target).min(FULL_DIP))
 }
 
 pub(super) fn mean_mixture(totals: &PaintTotals) -> Mixture {
@@ -88,19 +78,8 @@ impl AppState {
             self.session.restore_reserve(&self.gpu);
             return;
         }
-        let mixture = self.palette_mixture();
-        if mixture.is_empty() {
-            return;
-        }
-        self.session.flush(&self.gpu);
-        self.session.resize_tip();
-        let Ok(totals) = self.session.engine.knife_totals(&self.gpu) else {
+        if self.session.top_up_knife(&self.gpu).is_err() {
             self.wake();
-            return;
-        };
-        let target = self.session.engine.knife_full_dip_volume(mixture.volume_um);
-        if let Some(amount) = knife_top_up(totals.volume as f32, target) {
-            self.dip(&mixture, amount);
         }
     }
 

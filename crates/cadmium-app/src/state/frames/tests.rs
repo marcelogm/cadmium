@@ -1,7 +1,8 @@
 use crate::state::AppState;
 use crate::state::test_support::{
-    PAINT_ROW_Y, RAG_ROW_Y, ScriptedClock, painting_state, present_one_frame,
-    present_one_tray_frame, row_samples, sample_at, scripted_painting_state, stroke, wet_volume,
+    PAINT_ROW_Y, RAG_ROW_Y, ScriptedClock, finish_painting, paint_stroke, painting_state,
+    present_one_frame, present_one_tray_frame, row_samples, sample_at, scripted_painting_state,
+    stroke, wet_volume,
 };
 use crate::tools::UiTool;
 use cadmium_engine::engine::BRISTLE_SETTLE_MS;
@@ -11,6 +12,7 @@ use cadmium_engine::surface::Surface;
 const FRAME_INTERVAL_MS: f64 = 16.0;
 const CLOCK_START_MS: f64 = 73_000.0;
 const SETTLE_FRAME_LIMIT: u32 = 200;
+const PACED_FRAMES: usize = 6;
 
 fn frames_until_settled(state: &mut AppState, clock: &ScriptedClock) -> u32 {
     let mut frames = 0;
@@ -60,7 +62,7 @@ fn tray_frames_report_the_pen_samples_they_drew() {
 fn frames_keep_coming_while_the_bristles_settle_after_a_stroke() {
     let clock = ScriptedClock::starting_at(CLOCK_START_MS);
     let mut state = scripted_painting_state(&clock);
-    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     present_one_frame(&mut state);
     assert!(!state.session.has_pending_work());
     let settle_frames = f64::from(BRISTLE_SETTLE_MS) / FRAME_INTERVAL_MS;
@@ -81,6 +83,27 @@ fn a_rag_stroke_after_the_brush_asks_for_no_settling_frames() {
     let mut state = scripted_painting_state(&clock);
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     stroke(&mut state, Tool::Rag, &row_samples(RAG_ROW_Y));
-    present_one_frame(&mut state);
+    finish_painting(&mut state, present_one_frame);
     assert!(!state.session.bristles_settling(state.now_ms()));
+}
+
+#[test]
+fn pacing_learns_what_a_dab_costs_from_the_gpu_time_of_the_frames_that_painted_them() {
+    let mut state = painting_state();
+    let untaught_ms = state.pacing.cost_per_dab_ms();
+    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    for _ in 0..PACED_FRAMES {
+        present_one_frame(&mut state);
+        state.frame_submitted();
+    }
+    let gpu = state.gpu.clone();
+    let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+    let allowance = state.pacing.allowance(&gpu);
+    if cadmium_engine::gpu_timer::GpuFrameTimer::new(&gpu).is_none() {
+        return;
+    }
+    let learnt_ms = state.pacing.cost_per_dab_ms();
+    assert_ne!(learnt_ms, untaught_ms);
+    assert!(learnt_ms < FRAME_INTERVAL_MS, "{learnt_ms} ms a dab");
+    assert!(allowance > 1);
 }

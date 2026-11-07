@@ -285,13 +285,14 @@ fn a_queued_stroke_tail_is_painted_with_the_tool_it_was_drawn_with() {
     let mut s = session(&gpu);
     let tail = line(64.0, 40.0, 470.0, 0.8, 20.0);
     without_wgpu_errors(&gpu, || {
-        s.begin_stroke(&gpu, tail[0]);
+        s.begin_stroke(tail[0]);
         s.add_samples(&tail[1..]);
         s.end_stroke();
     });
     s.brush.tool = Tool::Rag;
     let elsewhere = line(200.0, 40.0, 470.0, 0.8, 20.0);
-    without_wgpu_errors(&gpu, || s.begin_stroke(&gpu, elsewhere[0]));
+    without_wgpu_errors(&gpu, || s.begin_stroke(elsewhere[0]));
+    frame(&gpu, &mut s);
     let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     assert!(volume[64 * CANVAS_WIDTH + 256] > 0.0);
 }
