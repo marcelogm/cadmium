@@ -11,8 +11,8 @@ use crate::tools::panel::{CLEAN_LABEL, ToolWording, VisibleControls};
 
 const PERCENT: f64 = 100.0;
 const MIN_LISTED_SHARE: f32 = 0.01;
-pub(super) const MIN_SIZE_PX: f64 = 4.0;
-pub(super) const MAX_SIZE_PX: f64 = 500.0;
+pub(super) const MIN_SIZE_PX: f64 = BrushSpec::SIZE_RANGE_PX[0] as f64;
+pub(super) const MAX_SIZE_PX: f64 = BrushSpec::SIZE_RANGE_PX[1] as f64;
 pub(super) const SIZE_STEP: f64 = 0.01;
 pub(super) const PLATE_GAP_KEY: &str = "knife_gap_um";
 const PLATE_GAP_UNIT: &str = "µm";

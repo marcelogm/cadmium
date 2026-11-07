@@ -12,6 +12,10 @@ use crate::patches::{flood, patch_areas_px2};
 use crate::support::{drag, line, session, spec, without_wgpu_errors, write_png};
 
 const TINY_DIAMETER_PX: f32 = 2.0;
+const ONE_PIXEL_DIAMETER_PX: f32 = 1.0;
+const MAX_ONE_PIXEL_INK_WIDTH_PX: f64 = 1.5;
+/// On a pixel row's centre, so a one pixel line can lie in one row rather than half in two.
+const PIXEL_CENTRE_ROW_PX: f64 = 128.5;
 const LARGEST_DIAMETER_PX: f32 = 500.0;
 const LARGE_CANVAS_PX: usize = 2048;
 const TINY_ROW_PX: f64 = 128.0;
@@ -96,6 +100,26 @@ fn tiny_mark(volume: &[f32], width: usize) -> Mark {
     }
 }
 
+/// How wide the paint lies across the tiny line, on average: each column's paint over its
+/// deepest pixel.
+fn mean_ink_width_px(volume: &[f32], width: usize) -> f64 {
+    let first = TINY_FROM_PX as usize + TINY_SETTLE_PX;
+    let last = TINY_TO_PX as usize - TINY_SETTLE_PX;
+    let widths: Vec<f64> = (first..=last)
+        .map(|x| {
+            let column: Vec<f64> = volume
+                .iter()
+                .skip(x)
+                .step_by(width)
+                .map(|&um| f64::from(um))
+                .collect();
+            let deepest = column.iter().copied().fold(0.0, f64::max);
+            column.iter().sum::<f64>() / deepest.max(f64::MIN_POSITIVE)
+        })
+        .collect();
+    widths.iter().sum::<f64>() / widths.len() as f64
+}
+
 fn density_extremes() -> [f32; 2] {
     HeadSpec::DENSITY_RANGE_PER_PX
 }
@@ -127,6 +151,32 @@ fn a_light_touch_with_a_fine_shaped_brush_draws_an_unbroken_line() {
             brush.name
         );
     }
+}
+
+#[test]
+fn a_one_pixel_brush_draws_an_unbroken_line_to_the_end() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.brush.geometry.max_diameter_px = ONE_PIXEL_DIAMETER_PX;
+    s.reload_brush(&gpu);
+    let samples = line(
+        PIXEL_CENTRE_ROW_PX,
+        TINY_FROM_PX,
+        TINY_TO_PX,
+        TINY_PRESSURE,
+        TINY_TILT_DEG,
+    );
+    drag(&gpu, &mut s, &samples);
+    let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
+    let width = s.canvas.spec.width as usize;
+    let mark = tiny_mark(&volume, width);
+    assert_eq!(mark.marked_column_share, 1.0, "the line breaks or runs dry");
+    let ink_width_px = mean_ink_width_px(&volume, width);
+    eprintln!("a one pixel brush inks {ink_width_px:.2} px wide");
+    assert!(
+        ink_width_px <= MAX_ONE_PIXEL_INK_WIDTH_PX,
+        "a one pixel brush inks {ink_width_px:.2} px wide"
+    );
 }
 
 #[test]

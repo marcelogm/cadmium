@@ -158,7 +158,7 @@ fn size_slider_is_left_alone_while_its_value_rounds_to_the_brush_size() {
 #[test]
 fn size_slider_is_logarithmic_and_clamped() {
     assert_eq!(slider_to_size(size_to_slider(40.0)), 40.0);
-    assert_eq!(slider_to_size(size_to_slider(1.0)), MIN_SIZE_PX as f32);
+    assert_eq!(slider_to_size(size_to_slider(0.25)), MIN_SIZE_PX as f32);
     assert_eq!(slider_to_size(size_to_slider(9000.0)), MAX_SIZE_PX as f32);
     let middle = slider_to_size((size_to_slider(4.0) + size_to_slider(500.0)) / 2.0);
     assert!(middle > 40.0 && middle < 50.0, "{middle}");
