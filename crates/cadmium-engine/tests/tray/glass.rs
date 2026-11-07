@@ -13,8 +13,8 @@ use cadmium_engine::{
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 128;
 
-/// The CIE L* of an sRGB8 colour.
-pub fn lightness(srgb: [u8; 3]) -> f32 {
+/// The relative luminance of an sRGB8 colour.
+fn luminance(srgb: [u8; 3]) -> f32 {
     let linear = srgb.map(|channel| {
         let v = f32::from(channel) / 255.0;
         if v <= 0.04045 {
@@ -23,7 +23,12 @@ pub fn lightness(srgb: [u8; 3]) -> f32 {
             ((v + 0.055) / 1.055).powf(2.4)
         }
     });
-    let luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+}
+
+/// The CIE L* of an sRGB8 colour.
+pub fn lightness(srgb: [u8; 3]) -> f32 {
+    let luminance = luminance(srgb);
     if luminance > 0.008856 {
         116.0 * luminance.cbrt() - 16.0
     } else {
@@ -72,15 +77,20 @@ fn texel(pixels: &[u8], x: u32, y: u32) -> [u8; 3] {
     [pixels[i], pixels[i + 1], pixels[i + 2]]
 }
 
-/// Mean L* over a 9×9 patch, so the present's dither doesn't decide a comparison.
-fn patch_lightness(pixels: &[u8], x: u32, y: u32) -> f32 {
+/// The mean of `measure` over a 9×9 patch, so the present's dither doesn't decide a
+/// comparison.
+fn patch_mean(pixels: &[u8], x: u32, y: u32, measure: fn([u8; 3]) -> f32) -> f32 {
     let mut sum = 0.0;
     for dy in 0..9 {
         for dx in 0..9 {
-            sum += lightness(texel(pixels, x + dx - 4, y + dy - 4));
+            sum += measure(texel(pixels, x + dx - 4, y + dy - 4));
         }
     }
     sum / 81.0
+}
+
+fn patch_lightness(pixels: &[u8], x: u32, y: u32) -> f32 {
+    patch_mean(pixels, x, y, lightness)
 }
 
 const UNMOVED: ViewTransform = ViewTransform {
@@ -114,16 +124,16 @@ fn an_empty_painting_shows_one_flat_colour_with_no_reflection() {
 }
 
 #[test]
-fn the_empty_tray_catches_a_soft_reflection_toward_its_top_left() {
+fn the_empty_tray_catches_a_clear_but_soft_reflection_toward_its_top_left() {
     let gpu = GpuContext::new().unwrap();
     let pixels = shown(&gpu, &mut blank(&gpu, Primer::Tray), UNMOVED);
-    let lit = patch_lightness(&pixels, 40, 24);
-    let far = patch_lightness(&pixels, WIDTH - 40, HEIGHT - 24);
-    assert!(lit > far + 0.5, "lit {lit} far {far}");
-    assert!(
-        lit < far * 1.08,
-        "the reflection stays subtle: lit {lit} far {far}"
-    );
+    let lit = patch_mean(&pixels, 40, 24, luminance);
+    let far = patch_mean(&pixels, WIDTH - 40, HEIGHT - 24, luminance);
+    let rise = lit / far - 1.0;
+    assert!((0.06..=0.12).contains(&rise), "lit {lit} far {far}: {rise}");
+    // Smooth: it falls off steadily from the lit corner across the plate.
+    let middle = patch_mean(&pixels, WIDTH / 2, HEIGHT / 2, luminance);
+    assert!(lit > middle && middle > far, "{lit} {middle} {far}");
 }
 
 #[test]

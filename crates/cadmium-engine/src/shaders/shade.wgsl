@@ -40,9 +40,9 @@ const PI: f32 = 3.141592654;
 // The tray's glass plate: a faint sheen rising toward the top-left and a broad, soft glow of
 // studio light, in linear display units, fixed on the plate. Paint thicker than
 // `GLASS_HIDDEN_UM` covers it; the paint keeps its own gloss.
-const GLASS_SHEEN_LOW: f32 = 0.002;
-const GLASS_SHEEN_HIGH: f32 = 0.008;
-const GLASS_GLOW: f32 = 0.006;
+const GLASS_SHEEN_LOW: f32 = 0.004;
+const GLASS_SHEEN_HIGH: f32 = 0.016;
+const GLASS_GLOW: f32 = 0.012;
 const GLASS_GLOW_CENTRE: vec2<f32> = vec2<f32>(0.28, 0.22);
 const GLASS_GLOW_RADIUS: f32 = 0.35;
 const GLASS_HIDDEN_UM: f32 = 3.0;
