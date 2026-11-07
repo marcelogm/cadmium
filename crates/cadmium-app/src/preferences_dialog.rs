@@ -5,6 +5,8 @@ use crate::LOG_DOMAIN;
 use crate::settings::{PenButtonAction, Settings};
 use crate::state::SharedState;
 
+mod pressure;
+
 const SAVE_FAILED: &str =
     "Couldn't save the preferences; they'll be back to how they were next time";
 
