@@ -46,23 +46,9 @@ fn the_widget_corners_are_the_tray_corners() {
 }
 
 #[test]
-fn the_tray_is_half_as_tall_as_it_is_wide() {
-    assert_eq!(tray_height_for_width(384), 192);
-    assert_eq!(tray_height_for_width(TRAY_WIDTH as i32), TRAY_HEIGHT as i32);
-}
-
-#[test]
-fn the_tray_image_fills_the_width_its_height_was_measured_for() {
-    for width in [180, 316, 317, 331, 356] {
-        let viewport = (width as u32, tray_height_for_width(width) as u32);
-        let zoom = tray_view(viewport).zoom;
-        assert_eq!(zoom, width as f32 / TRAY_WIDTH as f32, "{width}");
-        assert!(TRAY_HEIGHT as f32 * zoom <= viewport.1 as f32, "{width}");
-        assert!(
-            viewport.1 as f32 - TRAY_HEIGHT as f32 * zoom < 1.0,
-            "{width}"
-        );
-    }
+fn the_tray_asks_only_for_a_small_minimum_height() {
+    assert_eq!(tray_min_height(), TRAY_MIN_HEIGHT);
+    assert!(tray_min_height() < 200);
 }
 
 #[test]

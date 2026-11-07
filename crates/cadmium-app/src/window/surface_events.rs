@@ -19,6 +19,7 @@ const HISTORY_DISABLED_TOAST: &str = "Undo unavailable: not enough video memory"
 
 impl CadmiumWindow {
     pub(super) fn attach_state(&self, state: SharedState) {
+        state.borrow_mut().set_tray_tool(self.imp().tray_tool.get());
         state.borrow_mut().set_ui_tool(self.tool());
         let canvas = CadmiumCanvas::new(state);
         self.follow_canvas(&canvas);
@@ -35,6 +36,8 @@ impl CadmiumWindow {
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
         self.announce_if_history_disabled();
+        self.restore_tray_layout();
+        self.sync_load_toggle();
     }
 
     fn follow_canvas(&self, canvas: &CadmiumCanvas) {

@@ -33,6 +33,7 @@ impl CadmiumWindow {
         };
         action.set_state(&name.to_variant());
         self.imp().tool.set(tool);
+        self.sync_load_toggle();
         if let Some(canvas) = self.imp().canvas.get() {
             canvas.state().borrow_mut().set_ui_tool(tool);
             self.refresh_panels();

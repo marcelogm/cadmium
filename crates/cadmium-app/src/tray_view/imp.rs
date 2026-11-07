@@ -31,6 +31,7 @@ impl ObjectImpl for TrayView {
             .replace(FramePresenter::showing(PresentSource::Tray));
         let tray = self.obj();
         tray.set_hexpand(true);
+        tray.set_vexpand(true);
         tray.add_css_class(TRAY_FRAME_CLASS);
         tray.set_overflow(gtk::Overflow::Hidden);
         tray.set_cursor_from_name(Some(TRAY_CURSOR));
@@ -39,25 +40,11 @@ impl ObjectImpl for TrayView {
 }
 
 impl WidgetImpl for TrayView {
-    fn request_mode(&self) -> gtk::SizeRequestMode {
-        gtk::SizeRequestMode::HeightForWidth
-    }
-
-    fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {
-        if orientation == gtk::Orientation::Horizontal {
-            return (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1);
+    fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
+        match orientation {
+            gtk::Orientation::Horizontal => (TRAY_MIN_WIDTH, TRAY_MIN_WIDTH, -1, -1),
+            _ => (tray_min_height(), tray_min_height(), -1, -1),
         }
-        let width = if for_size < 0 {
-            TRAY_MIN_WIDTH
-        } else {
-            for_size
-        };
-        (
-            tray_height_for_width(TRAY_MIN_WIDTH.min(width)),
-            tray_height_for_width(width),
-            -1,
-            -1,
-        )
     }
 
     fn realize(&self) {

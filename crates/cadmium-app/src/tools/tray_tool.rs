@@ -18,10 +18,7 @@ pub(crate) struct TrayToolProfile {
     name: &'static str,
     label: &'static str,
     icon: &'static str,
-    // Read once the tray's header shows its tools.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) tooltip: &'static str,
-    #[cfg_attr(not(test), expect(dead_code))]
     key: gdk::Key,
 }
 
@@ -54,6 +51,13 @@ const TUBE: TrayToolProfile = TrayToolProfile {
     key: gdk::Key::_6,
 };
 
+const SHORTCUT_MODIFIERS: gdk::ModifierType = gdk::ModifierType::SHIFT_MASK
+    .union(gdk::ModifierType::CONTROL_MASK)
+    .union(gdk::ModifierType::ALT_MASK)
+    .union(gdk::ModifierType::SUPER_MASK)
+    .union(gdk::ModifierType::HYPER_MASK)
+    .union(gdk::ModifierType::META_MASK);
+
 impl TrayTool {
     pub const ALL: [TrayTool; 4] = [
         TrayTool::Load,
@@ -79,9 +83,23 @@ impl TrayTool {
         TrayTool::ALL.into_iter().find(|tool| tool.name() == name)
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn key(self) -> gdk::Key {
         self.profile().key
+    }
+
+    /// The tool a press picks when Shift and nothing else is held; `unshifted` is the
+    /// pressed key with Shift let go, since Shift+1 arrives as `!` (or whatever the
+    /// layout puts there).
+    pub(crate) fn for_shifted_key(
+        unshifted: gdk::Key,
+        modifiers: gdk::ModifierType,
+    ) -> Option<TrayTool> {
+        if modifiers & SHORTCUT_MODIFIERS != gdk::ModifierType::SHIFT_MASK {
+            return None;
+        }
+        TrayTool::ALL
+            .into_iter()
+            .find(|tool| tool.key() == unshifted)
     }
 
     /// What a touch on the tray does while `painting` is the painting's tool.

@@ -58,9 +58,11 @@ impl PenButtonAction {
     }
 }
 
-/// The share of the window height the tray takes by default, and the least and most it may take.
+/// The share of the window height the tray takes by default.
 pub const DEFAULT_TRAY_SHARE: f32 = 0.35;
+/// The least share of the window height the tray may take.
 pub const MIN_TRAY_SHARE: f32 = 0.15;
+/// The most share of the window height the tray may take.
 pub const MAX_TRAY_SHARE: f32 = 0.85;
 
 /// The painter's preferences. They are read through [`Settings::from_json`], which gives each
@@ -125,13 +127,11 @@ impl Settings {
 }
 
 /// Where the paned divider sits, from the top, for a tray taking `share` of `height`.
-#[cfg_attr(not(test), expect(dead_code))] // Used once the tray pane lays itself out from the settings.
 pub fn divider_position(share: f32, height: i32) -> i32 {
     (height as f32 * (1.0 - share)).round() as i32
 }
 
 /// The tray's share of `height` with the divider at `position`.
-#[cfg_attr(not(test), expect(dead_code))] // Used once the tray pane lays itself out from the settings.
 pub fn tray_share_at(position: i32, height: i32) -> f32 {
     if height <= 0 {
         return DEFAULT_TRAY_SHARE;

@@ -14,6 +14,7 @@ type Activate = fn(&CadmiumWindow);
 
 const ACTIONS: &[(&str, Activate)] = &[
     ("toggle-sidebar", CadmiumWindow::toggle_sidebar),
+    ("toggle-tray", CadmiumWindow::toggle_tray),
     ("new", CadmiumWindow::open_new_painting_dialog),
     ("clean-brush", CadmiumWindow::clean_brush),
     ("undo", CadmiumWindow::undo),

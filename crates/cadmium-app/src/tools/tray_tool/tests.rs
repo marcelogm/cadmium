@@ -129,3 +129,42 @@ fn the_tray_tube_keeps_the_tube_wording() {
     assert_eq!(PanelTool::Tube.wording().size_title, "Nozzle");
     assert!(PanelTool::Tube.controls().pigments);
 }
+
+#[test]
+fn shift_and_a_digit_pick_the_tray_tool_on_that_digit() {
+    let shift = gdk::ModifierType::SHIFT_MASK;
+    for (key, tool) in [
+        (gdk::Key::_1, TrayTool::Load),
+        (gdk::Key::_4, TrayTool::Blender),
+        (gdk::Key::_5, TrayTool::Rag),
+        (gdk::Key::_6, TrayTool::Tube),
+    ] {
+        assert_eq!(TrayTool::for_shifted_key(key, shift), Some(tool), "{key:?}");
+        let with_lock = shift | gdk::ModifierType::LOCK_MASK;
+        assert_eq!(
+            TrayTool::for_shifted_key(key, with_lock),
+            Some(tool),
+            "{key:?}"
+        );
+    }
+    for key in [gdk::Key::_2, gdk::Key::_3, gdk::Key::_7, gdk::Key::a] {
+        assert_eq!(TrayTool::for_shifted_key(key, shift), None, "{key:?}");
+    }
+}
+
+#[test]
+fn a_digit_without_shift_or_with_other_modifiers_is_not_a_tray_key() {
+    let shift = gdk::ModifierType::SHIFT_MASK;
+    for modifiers in [
+        gdk::ModifierType::empty(),
+        shift | gdk::ModifierType::CONTROL_MASK,
+        shift | gdk::ModifierType::ALT_MASK,
+        shift | gdk::ModifierType::SUPER_MASK,
+    ] {
+        assert_eq!(
+            TrayTool::for_shifted_key(gdk::Key::_1, modifiers),
+            None,
+            "{modifiers:?}"
+        );
+    }
+}
