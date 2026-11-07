@@ -16,6 +16,7 @@ use gtk::{gdk, glib, graphene, gsk};
 use crate::handlers::run_handlers;
 use crate::input::event_belongs_to_stroke;
 use crate::presenter::{FramePresenter, PresentSource, SheetLink};
+use crate::pressure_curve::PressureCurve;
 use crate::state::SharedState;
 use crate::surface_scale::{device_scale, viewport_px};
 use crate::view::{cover_view, viewport_to_canvas};
@@ -116,6 +117,16 @@ impl TestSheetView {
     fn canvas_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64) {
         let scale = device_scale(self);
         viewport_to_canvas(self.cover(), widget_x * scale, widget_y * scale)
+    }
+
+    /// The painter's pressure curve; linear before the view is linked.
+    fn pressure_curve(&self) -> PressureCurve {
+        self.imp()
+            .link
+            .get()
+            .map_or_else(PressureCurve::linear, |link| {
+                link.state.borrow().settings.get().pressure_curve
+            })
     }
 
     /// Starts a stroke at `sample`, painted by `device`; the sheet dips the brush afresh first.
