@@ -1,20 +1,31 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::canvas::{Canvas, TileCoord};
+use crate::engine::WetOilEngine;
 use crate::gpu::{GpuContext, new_encoder};
 
 mod atlas;
+mod held;
 mod slots;
 mod tiles;
 
 pub use atlas::bytes_per_tile_all_textures;
 
 use atlas::{Atlas, slots_for_budget};
+use held::HeldRecord;
 use tiles::{forget_wet, mark_restored, mark_wet, tile_extent};
 
 pub const ATLAS_TILES_PER_SIDE: u32 = 48;
 pub const ATLAS_SLOTS: u32 = ATLAS_TILES_PER_SIDE * ATLAS_TILES_PER_SIDE;
 pub const MIN_SLOTS_AFTER_OUT_OF_MEMORY: u32 = 64;
+pub const HELD_PAINT_HISTORY_BUDGET_BYTES: u64 = 256 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug)]
+pub struct HistoryLimits {
+    pub tile_budget_bytes: u64,
+    pub max_steps: usize,
+    pub held_paint_budget_bytes: u64,
+}
 
 type Slot = u32;
 
@@ -29,6 +40,8 @@ struct Step {
     saved: HashSet<TileCoord>,
     complete: bool,
     removes_wet_paint: bool,
+    held: Option<HeldRecord>,
+    held_asked: bool,
 }
 
 impl Step {
@@ -38,6 +51,8 @@ impl Step {
             saved: HashSet::new(),
             complete: true,
             removes_wet_paint,
+            held: None,
+            held_asked: false,
         }
     }
 
@@ -65,6 +80,7 @@ pub struct History {
     wanted_slots: u32,
     slot_capacity: u32,
     max_steps: usize,
+    held_paint_budget_bytes: u64,
     atlas: Option<Atlas>,
     free_slots: Vec<Slot>,
     undo_steps: VecDeque<Step>,
@@ -73,18 +89,19 @@ pub struct History {
 }
 
 impl History {
-    pub fn new(gpu: &GpuContext, budget_bytes: u64, max_steps: usize) -> Self {
+    pub fn new(gpu: &GpuContext, limits: HistoryLimits) -> Self {
         let mut history = History {
             wanted_slots: 0,
             slot_capacity: 0,
-            max_steps,
+            max_steps: limits.max_steps,
+            held_paint_budget_bytes: limits.held_paint_budget_bytes,
             atlas: None,
             free_slots: Vec::new(),
             undo_steps: VecDeque::new(),
             redo_steps: Vec::new(),
             current: None,
         };
-        history.allocate_atlas(gpu, slots_for_budget(budget_bytes));
+        history.allocate_atlas(gpu, slots_for_budget(limits.tile_budget_bytes));
         history
     }
 
@@ -201,7 +218,14 @@ impl History {
         true
     }
 
-    pub fn undo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
+    /// Puts the canvas back as the latest step found it, and the tool's paint too when the
+    /// tool was not loaded, cleaned or resized since.
+    pub fn undo(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        engine: &mut WetOilEngine,
+    ) -> bool {
         self.commit_step();
         let Some(mut step) = self.undo_steps.pop_back() else {
             return false;
@@ -215,6 +239,9 @@ impl History {
         for saved in &step.tiles {
             self.undo_tile(canvas, saved, &mut encoder);
         }
+        if let Some(held) = step.held.as_mut() {
+            held.encode_undo(gpu, engine, &mut encoder);
+        }
         gpu.queue.submit([encoder.finish()]);
         if redoable {
             self.redo_steps.push(step);
@@ -224,13 +251,21 @@ impl History {
         true
     }
 
-    pub fn redo(&mut self, gpu: &GpuContext, canvas: &mut Canvas) -> bool {
+    pub fn redo(
+        &mut self,
+        gpu: &GpuContext,
+        canvas: &mut Canvas,
+        engine: &mut WetOilEngine,
+    ) -> bool {
         let Some(step) = self.redo_steps.pop() else {
             return false;
         };
         let mut encoder = new_encoder(gpu, "redo");
         for saved in &step.tiles {
             self.redo_tile(canvas, saved, step.removes_wet_paint, &mut encoder);
+        }
+        if let Some(held) = &step.held {
+            held.encode_redo(engine, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
         if step.removes_wet_paint {

@@ -29,6 +29,7 @@ impl History {
 
     pub(super) fn abandon(&mut self, step: &mut Step) {
         step.complete = false;
+        step.held = None;
         self.free_slots.extend(
             std::mem::take(&mut step.tiles)
                 .iter()

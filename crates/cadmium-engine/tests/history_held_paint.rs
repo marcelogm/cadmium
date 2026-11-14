@@ -1,15 +1,26 @@
 pub mod support;
 
 use cadmium_engine::{
+    canvas::PaintTotals,
+    engine::FULL_DIP,
     gpu::GpuContext,
+    history::{History, HistoryLimits},
     pigments::{MAX_SLOTS, Mixture},
     session::PaintSession,
+    stroke::Tool,
 };
-use support::{session, stroke, without_wgpu_errors};
+use support::{drag, frame, line, session, stroke, without_wgpu_errors};
 
 const BLUE: usize = 0;
+const YELLOW: usize = 1;
+const SLOT_COUNT: usize = 3;
 const DIP_THICKNESS_UM: f32 = 40.0;
 const HALF_DIP: f32 = 0.5;
+const LAID_KNIFE_TILT_DEG: f32 = 60.0;
+const DABS_PER_FRAME: usize = 3;
+const FRAMES_TO_DRAIN: usize = 10_000;
+const UPPER_ROW: f64 = 64.0;
+const LOWER_ROW: f64 = 192.0;
 
 fn blue_of(volume_um: f32) -> Mixture {
     let mut fractions = [0.0; MAX_SLOTS];
@@ -25,13 +36,29 @@ fn load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
     without_wgpu_errors(gpu, || s.reload_brush(gpu));
 }
 
-fn held(gpu: &GpuContext, s: &PaintSession) -> (Vec<f32>, f64, f64) {
-    let totals = s.engine.brush_totals(gpu).unwrap();
+fn held(gpu: &GpuContext, s: &PaintSession) -> (Vec<f32>, PaintTotals, PaintTotals) {
     (
         s.engine.tip_volumes_um(gpu).unwrap(),
-        totals.volume,
-        s.engine.knife_totals(gpu).unwrap().volume,
+        s.engine.brush_totals(gpu).unwrap(),
+        s.engine.knife_totals(gpu).unwrap(),
     )
+}
+
+fn queue_stroke(s: &mut PaintSession, row: f64) {
+    let samples = line(row, 40.0, 470.0, 0.8, 20.0);
+    s.begin_stroke(samples[0]);
+    s.add_samples(&samples[1..]);
+    s.end_stroke();
+}
+
+fn drain(gpu: &GpuContext, s: &mut PaintSession) {
+    for _ in 0..FRAMES_TO_DRAIN {
+        if !s.has_queued_dabs() {
+            return;
+        }
+        frame(gpu, s);
+    }
+    panic!("the queued dabs never got painted");
 }
 
 #[test]
@@ -104,4 +131,150 @@ fn every_dip_and_knife_cleaning_starts_a_new_load_epoch_and_an_empty_dip_or_a_re
         s.engine.restore_held_paint(&gpu, &captured);
     });
     assert_eq!(s.engine.load_epoch(), settled);
+}
+
+#[test]
+fn undoing_a_stroke_gives_the_brush_back_the_paint_it_laid() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    let before = held(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(held(&gpu, &s) == before);
+}
+
+#[test]
+fn undoing_a_stroke_through_wet_paint_takes_its_dirt_off_the_brush() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, YELLOW);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
+    assert!(s.engine.brush_totals(&gpu).unwrap().pigment[YELLOW] > 0.0);
+    s.undo(&gpu);
+    assert_eq!(s.engine.brush_totals(&gpu).unwrap().pigment[YELLOW], 0.0);
+}
+
+#[test]
+fn redoing_a_stroke_leaves_the_brush_as_the_stroke_left_it() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let after = held(&gpu, &s);
+    s.undo(&gpu);
+    assert!(without_wgpu_errors(&gpu, || s.redo(&gpu)));
+    assert!(held(&gpu, &s) == after);
+}
+
+#[test]
+fn a_brush_loaded_after_a_stroke_keeps_that_load_when_the_stroke_is_undone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    load(&gpu, &mut s, YELLOW);
+    let loaded = held(&gpu, &s);
+    assert!(s.undo(&gpu));
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert!(held(&gpu, &s) == loaded);
+    assert!(s.redo(&gpu));
+    assert!(held(&gpu, &s) == loaded);
+}
+
+#[test]
+fn a_load_queued_behind_a_stroke_survives_undoing_that_stroke() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    s.limit_dabs_per_frame(Some(DABS_PER_FRAME));
+    queue_stroke(&mut s, UPPER_ROW);
+    load(&gpu, &mut s, YELLOW);
+    assert!(s.has_queued_dabs());
+    drain(&gpu, &mut s);
+    let loaded = held(&gpu, &s);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert!(held(&gpu, &s) == loaded);
+}
+
+#[test]
+fn a_stroke_queued_behind_a_load_gives_that_load_back_when_undone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut fresh = session(&gpu);
+    load(&gpu, &mut fresh, YELLOW);
+    let full_yellow = held(&gpu, &fresh);
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    s.limit_dabs_per_frame(Some(DABS_PER_FRAME));
+    queue_stroke(&mut s, UPPER_ROW);
+    load(&gpu, &mut s, YELLOW);
+    queue_stroke(&mut s, LOWER_ROW);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(held(&gpu, &s) == full_yellow);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    assert!(held(&gpu, &s) == full_yellow);
+}
+
+#[test]
+fn undoing_a_knife_stroke_gives_the_knife_back_its_load() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.brush.tool = Tool::Knife;
+    s.brush.recipe = vec![(BLUE, 1.0)];
+    let mixture = s.brush.reservoir_mixture(SLOT_COUNT);
+    s.dip(&gpu, &mixture, FULL_DIP).unwrap();
+    let before = held(&gpu, &s);
+    drag(
+        &gpu,
+        &mut s,
+        &line(128.0, 40.0, 470.0, 0.8, LAID_KNIFE_TILT_DEG),
+    );
+    assert!(held(&gpu, &s) != before);
+    s.undo(&gpu);
+    assert!(held(&gpu, &s) == before);
+}
+
+#[test]
+fn a_pencil_or_rag_stroke_holds_no_tool_paint_and_leaves_the_brush_alone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.history.clear();
+    let before = held(&gpu, &s);
+    for tool in [Tool::Pencil, Tool::Rag] {
+        s.brush.tool = tool;
+        stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+        assert_eq!(s.history.held_paint_bytes(), 0, "{tool:?}");
+        assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)), "{tool:?}");
+        assert!(held(&gpu, &s) == before, "{tool:?}");
+    }
+}
+
+#[test]
+fn held_paint_past_its_budget_pushes_the_oldest_steps_out() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    let one_capture = s.engine.capture_held_paint(&gpu).unwrap().bytes();
+    s.history = History::new(
+        &gpu,
+        HistoryLimits {
+            tile_budget_bytes: 64 * 1024 * 1024,
+            max_steps: 100,
+            held_paint_budget_bytes: one_capture * 2,
+        },
+    );
+    for row in 0..4 {
+        stroke(&gpu, &mut s, 60.0 + 40.0 * f64::from(row), 40.0, 470.0);
+    }
+    let mut undone = 0;
+    while s.undo(&gpu) {
+        undone += 1;
+    }
+    assert_eq!(undone, 2);
 }

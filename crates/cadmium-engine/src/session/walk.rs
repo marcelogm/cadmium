@@ -118,6 +118,10 @@ impl PaintSession {
         let touched = tiles_touched_by(&self.engine, &self.canvas, stroke_dabs);
         self.history
             .encode_save_tiles(gpu, &self.canvas, &touched, encoder);
+        if stroke.brush.tool.profile().changes_held_paint() && self.history.awaits_held_paint() {
+            let before = self.engine.encode_capture_held_paint(gpu, encoder);
+            self.history.hold_before(before, self.engine.load_epoch());
+        }
         let batch = DabBatch {
             brush: &stroke.brush,
             dabs: &batch,

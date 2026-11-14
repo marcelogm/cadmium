@@ -95,3 +95,12 @@ fn only_the_pencil_leaves_the_paint_untouched() {
         assert_eq!(!profile.touches_paint(), untouched, "{tool:?}");
     }
 }
+
+#[test]
+fn only_the_brush_the_knife_and_the_blender_change_the_paint_a_tool_holds() {
+    let changing: Vec<Tool> = Tool::ALL
+        .into_iter()
+        .filter(|tool| tool.profile().changes_held_paint())
+        .collect();
+    assert_eq!(changing, [Tool::Brush, Tool::Knife, Tool::Blender]);
+}

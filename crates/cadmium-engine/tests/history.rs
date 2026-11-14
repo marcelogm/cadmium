@@ -1,12 +1,24 @@
 pub mod support;
 
 use cadmium_engine::{
-    canvas::*, engine::PaintEngine, gpu::GpuContext, history::History, pigments::PigmentDb,
+    canvas::*,
+    engine::{PaintEngine, WetOilEngine},
+    gpu::GpuContext,
+    history::{History, HistoryLimits},
+    pigments::PigmentDb,
     session::PaintSession,
 };
 use support::{frame, line, session, spec, stroke, without_wgpu_errors};
 
 const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 3 * 4);
+
+fn limits(tile_budget_bytes: u64, max_steps: usize) -> HistoryLimits {
+    HistoryLimits {
+        tile_budget_bytes,
+        max_steps,
+        held_paint_budget_bytes: 0,
+    }
+}
 
 fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
     StateTexture::PAINT_STATE
@@ -111,25 +123,27 @@ fn undo_marks_restored_tiles_for_shading() {
 fn history_keeps_at_most_max_steps() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 64 * TILE_BYTES_ALL_TEXTURES, 2);
+    let mut history = History::new(&gpu, limits(64 * TILE_BYTES_ALL_TEXTURES, 2));
+    let mut engine = WetOilEngine::new(&gpu);
     for _ in 0..3 {
         save_step(&gpu, &mut history, &canvas, &tiles(1));
     }
-    assert!(history.undo(&gpu, &mut canvas));
-    assert!(history.undo(&gpu, &mut canvas));
-    assert!(!history.undo(&gpu, &mut canvas));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
+    assert!(!history.undo(&gpu, &mut canvas, &mut engine));
 }
 
 #[test]
 fn running_out_of_slots_evicts_the_oldest_steps() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(4 * TILE_BYTES_ALL_TEXTURES, 100));
+    let mut engine = WetOilEngine::new(&gpu);
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(1));
-    assert!(history.undo(&gpu, &mut canvas));
-    assert!(history.undo(&gpu, &mut canvas));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
     assert!(!history.can_undo());
 }
 
@@ -137,7 +151,7 @@ fn running_out_of_slots_evicts_the_oldest_steps() {
 fn a_step_larger_than_the_budget_is_dropped() {
     let gpu = GpuContext::new().unwrap();
     let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 2 * TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(2 * TILE_BYTES_ALL_TEXTURES, 100));
     save_step(&gpu, &mut history, &canvas, &tiles(3));
     assert!(!history.can_undo());
 }
@@ -146,7 +160,8 @@ fn a_step_larger_than_the_budget_is_dropped() {
 fn saving_the_same_tile_twice_in_a_step_keeps_the_first_copy() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(TILE_BYTES_ALL_TEXTURES, 100));
+    let mut engine = WetOilEngine::new(&gpu);
     without_wgpu_errors(&gpu, || {
         history.begin_step();
         let mut e = gpu.device.create_command_encoder(&Default::default());
@@ -156,7 +171,7 @@ fn saving_the_same_tile_twice_in_a_step_keeps_the_first_copy() {
         history.commit_step();
     });
     assert!(history.can_undo());
-    assert!(history.undo(&gpu, &mut canvas));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
 }
 
 #[test]
@@ -175,7 +190,7 @@ fn lifting_the_pen_after_every_dab_was_painted_makes_the_stroke_undoable() {
 fn history_capacity_follows_the_budget() {
     let gpu = GpuContext::new().unwrap();
     let history = without_wgpu_errors(&gpu, || {
-        History::new(&gpu, 3 * TILE_BYTES_ALL_TEXTURES, 100)
+        History::new(&gpu, limits(3 * TILE_BYTES_ALL_TEXTURES, 100))
     });
     assert_eq!(history.slot_capacity(), 3);
     assert!(history.is_enabled());
@@ -185,7 +200,7 @@ fn history_capacity_follows_the_budget() {
 fn a_budget_below_one_tile_disables_history() {
     let gpu = GpuContext::new().unwrap();
     let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES - 1, 100);
+    let mut history = History::new(&gpu, limits(TILE_BYTES_ALL_TEXTURES - 1, 100));
     assert_eq!(history.slot_capacity(), 0);
     assert!(!history.is_enabled());
     save_step(&gpu, &mut history, &canvas, &tiles(1));
@@ -196,7 +211,7 @@ fn a_budget_below_one_tile_disables_history() {
 fn a_step_too_large_for_the_history_clears_earlier_steps() {
     let gpu = GpuContext::new().unwrap();
     let canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(4 * TILE_BYTES_ALL_TEXTURES, 100));
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(5));
     assert!(!history.can_undo());
@@ -207,11 +222,12 @@ fn a_step_too_large_for_the_history_clears_earlier_steps() {
 fn after_an_unrecorded_step_the_full_capacity_is_free_again() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(4 * TILE_BYTES_ALL_TEXTURES, 100));
+    let mut engine = WetOilEngine::new(&gpu);
     save_step(&gpu, &mut history, &canvas, &tiles(2));
     save_step(&gpu, &mut history, &canvas, &tiles(5));
     save_step(&gpu, &mut history, &canvas, &tiles(4));
-    assert!(history.undo(&gpu, &mut canvas));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
     assert!(!history.can_undo());
 }
 
@@ -219,10 +235,11 @@ fn after_an_unrecorded_step_the_full_capacity_is_free_again() {
 fn clearing_the_history_forgets_undo_and_redo() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(4 * TILE_BYTES_ALL_TEXTURES, 100));
+    let mut engine = WetOilEngine::new(&gpu);
     save_step(&gpu, &mut history, &canvas, &tiles(1));
     save_step(&gpu, &mut history, &canvas, &tiles(1));
-    assert!(history.undo(&gpu, &mut canvas));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
     history.clear();
     assert!(!history.can_undo());
     assert!(!history.can_redo());
@@ -234,7 +251,7 @@ fn clearing_the_history_forgets_undo_and_redo() {
 fn a_dry_too_large_for_the_history_clears_earlier_steps_and_is_not_undoable() {
     let gpu = GpuContext::new().unwrap();
     let mut s = without_wgpu_errors(&gpu, || PaintSession::new(&gpu, spec(1024, 640)).unwrap());
-    s.history = History::new(&gpu, 64 * TILE_BYTES_ALL_TEXTURES, 100);
+    s.history = History::new(&gpu, limits(64 * TILE_BYTES_ALL_TEXTURES, 100));
     stroke(&gpu, &mut s, 20.0, 10.0, 30.0);
     assert!(s.history.can_undo());
     s.canvas.wet_tiles.mark_all();
@@ -247,9 +264,10 @@ fn a_dry_too_large_for_the_history_clears_earlier_steps_and_is_not_undoable() {
 fn an_action_that_saves_no_tiles_keeps_redo() {
     let gpu = GpuContext::new().unwrap();
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
-    let mut history = History::new(&gpu, 4 * TILE_BYTES_ALL_TEXTURES, 100);
+    let mut history = History::new(&gpu, limits(4 * TILE_BYTES_ALL_TEXTURES, 100));
+    let mut engine = WetOilEngine::new(&gpu);
     save_step(&gpu, &mut history, &canvas, &tiles(1));
-    assert!(history.undo(&gpu, &mut canvas));
+    assert!(history.undo(&gpu, &mut canvas, &mut engine));
     save_step(&gpu, &mut history, &canvas, &[]);
     save_step(&gpu, &mut history, &canvas, &[TileCoord { x: 100, y: 100 }]);
     assert!(history.can_redo());
