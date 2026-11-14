@@ -7,7 +7,7 @@ use crate::gpu::{GpuContext, new_encoder};
 use crate::stroke::Dab;
 
 use super::queue::{Queued, WalkProgress, WalkStep, next_step};
-use super::{MotionAnchor, PaintSession, surface_canvas};
+use super::{MotionAnchor, PaintSession};
 
 const SAVE_MARGIN_PX: f32 = 4.0;
 
@@ -74,8 +74,7 @@ impl PaintSession {
             return;
         };
         stroke.begun = true;
-        self.history.begin_step(stroke.surface);
-        self.walked_surface = stroke.surface;
+        self.history.begin_step();
         self.engine.begin_stroke();
         self.motion_anchor = None;
     }
@@ -112,15 +111,15 @@ impl PaintSession {
             return;
         };
         self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.time_ms));
-        let canvas = surface_canvas(stroke.surface, &mut self.canvas, &mut self.tray);
-        let touched = tiles_touched_by(&self.engine, canvas, &stroke.brush, &batch);
+        let touched = tiles_touched_by(&self.engine, &self.canvas, &stroke.brush, &batch);
         self.history
-            .encode_save_tiles(gpu, canvas, &touched, encoder);
+            .encode_save_tiles(gpu, &self.canvas, &touched, encoder);
         let batch = DabBatch {
             brush: &stroke.brush,
             dabs: &batch,
         };
-        self.engine.encode_dabs(gpu, canvas, batch, encoder);
+        self.engine
+            .encode_dabs(gpu, &mut self.canvas, batch, encoder);
     }
 }
 

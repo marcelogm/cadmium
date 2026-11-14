@@ -10,7 +10,7 @@ use crate::spectral::BANDS;
 use super::relief::dry_relief;
 use super::{
     DocumentError, DocumentSnapshot, MANIFEST_ENTRY, Manifest, PAINTING_PREFIX, StateBytes,
-    THICKNESS_UNITS, TRAY_PREFIX, state_entry,
+    THICKNESS_UNITS, state_entry,
 };
 
 const ZSTD_LEVEL: i32 = 3;
@@ -47,9 +47,6 @@ impl DocumentSnapshot {
             &self.spec,
             &self.states,
         )?;
-        if let Some(tray) = &self.tray {
-            write_states(&mut archive, format, TRAY_PREFIX, &tray.spec, &tray.states)?;
-        }
         archive.finish()?;
         Ok(())
     }

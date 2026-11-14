@@ -2,7 +2,6 @@ use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
 use cadmium_engine::canvas::PaintTotals;
 use cadmium_engine::engine::{BrushReadout, FULL_DIP};
 use cadmium_engine::pigments::Mixture;
-use cadmium_engine::surface::Surface;
 
 use super::recipe::{
     PARTIAL_DIP, PigmentClick, PigmentDip, plan_pigment_dip, recipe_from_fractions,
@@ -119,10 +118,7 @@ impl AppState {
 
     pub fn pick_colour(&mut self, x: f32, y: f32) -> bool {
         self.put_down_stroke_tool();
-        let Ok(Some(picked)) = self
-            .session
-            .pick_colour_on(&self.gpu, Surface::Painting, x, y)
-        else {
+        let Ok(Some(picked)) = self.session.pick_colour(&self.gpu, x, y) else {
             self.wake();
             return false;
         };

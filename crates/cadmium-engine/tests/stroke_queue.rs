@@ -1,8 +1,6 @@
 pub mod support;
 
-use cadmium_engine::{
-    canvas::StateTexture, gpu::GpuContext, session::PaintSession, stroke::Tool, surface::Surface,
-};
+use cadmium_engine::{canvas::StateTexture, gpu::GpuContext, session::PaintSession, stroke::Tool};
 use support::{frame, line, session, without_wgpu_errors};
 
 const FRAMES_TO_DRAIN: usize = 10_000;
@@ -22,7 +20,7 @@ const HARDEST_LEAD: f32 = 1.0;
 
 #[derive(Clone, Copy, Debug)]
 enum Act {
-    Stroke { surface: Surface, row: f64 },
+    Stroke { row: f64 },
     Frame,
     Hold(Tool),
     RestoreReserve,
@@ -36,17 +34,7 @@ enum Act {
 use Act::{CleanBrush, Dip, Frame, Hold, Resize, RestoreReserve, Sharpen, TopUpKnife};
 
 fn painting(row: f64) -> Act {
-    Act::Stroke {
-        surface: Surface::Painting,
-        row,
-    }
-}
-
-fn tray(row: f64) -> Act {
-    Act::Stroke {
-        surface: Surface::Tray,
-        row,
-    }
+    Act::Stroke { row }
 }
 
 struct Played {
@@ -55,13 +43,9 @@ struct Played {
 }
 
 fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
-    [&s.canvas, &s.tray]
-        .into_iter()
-        .flat_map(|canvas| {
-            StateTexture::PAINT_STATE
-                .iter()
-                .map(|t| canvas.read_bytes(gpu, *t).unwrap())
-        })
+    StateTexture::PAINT_STATE
+        .iter()
+        .map(|t| s.canvas.read_bytes(gpu, *t).unwrap())
         .collect()
 }
 
@@ -82,9 +66,9 @@ fn stroke_tilt_deg(s: &PaintSession) -> f32 {
     }
 }
 
-fn queue_stroke(s: &mut PaintSession, surface: Surface, row: f64) {
+fn queue_stroke(s: &mut PaintSession, row: f64) {
     let samples = line(row, 40.0, 470.0, STROKE_PRESSURE, stroke_tilt_deg(s));
-    s.begin_stroke_on(surface, samples[0]);
+    s.begin_stroke(samples[0]);
     s.add_samples(&samples[1..]);
     s.end_stroke();
 }
@@ -92,7 +76,7 @@ fn queue_stroke(s: &mut PaintSession, surface: Surface, row: f64) {
 fn perform(gpu: &GpuContext, s: &mut PaintSession, act: Act) {
     let mixture = s.brush.reservoir_mixture(SLOT_COUNT);
     match act {
-        Act::Stroke { surface, row } => queue_stroke(s, surface, row),
+        Act::Stroke { row } => queue_stroke(s, row),
         Frame => frame(gpu, s),
         Hold(tool) => s.brush.tool = tool,
         RestoreReserve => s.restore_reserve(gpu),
@@ -144,13 +128,13 @@ fn a_stroke_begun_behind_a_backlog_leaves_the_backlog_queued() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     s.limit_dabs_per_frame(Some(DABS_PER_FRAME));
-    queue_stroke(&mut s, Surface::Painting, UPPER_ROW);
+    queue_stroke(&mut s, UPPER_ROW);
     frame(&gpu, &mut s);
-    let backlog = s.queued_dabs_on(Surface::Painting).len();
+    let backlog = s.queued_dabs().len();
     s.restore_reserve(&gpu);
     let next = line(LOWER_ROW, 40.0, 470.0, STROKE_PRESSURE, BRUSH_TILT_DEG);
     s.begin_stroke(next[0]);
-    assert!(s.queued_dabs_on(Surface::Painting).len() >= backlog);
+    assert!(s.queued_dabs().len() >= backlog);
 }
 
 #[test]
@@ -243,17 +227,6 @@ fn a_knife_cleaned_behind_a_backlog_stays_a_knife_cleaning_when_the_brush_comes_
         Frame,
         CleanBrush,
         Hold(Tool::Brush),
-        painting(LOWER_ROW),
-        Frame,
-    ]);
-}
-
-#[test]
-fn a_tray_stroke_queued_before_a_painting_stroke_lands_on_the_tray() {
-    assert_a_backlog_paints_the_same_as_painting_at_once(&[
-        tray(UPPER_ROW),
-        Frame,
-        RestoreReserve,
         painting(LOWER_ROW),
         Frame,
     ]);

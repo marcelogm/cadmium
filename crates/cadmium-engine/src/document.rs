@@ -2,17 +2,13 @@ use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 
-use crate::canvas::{
-    Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TRAY_REFLECTANCE, TexelBlock,
-};
+use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TexelBlock};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
 use crate::session::PaintSession;
-use crate::surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, tray_spec};
 
 mod export;
 mod read;
 mod relief;
-mod tray_ground;
 mod write;
 
 pub use export::ExportedImage;
@@ -20,11 +16,7 @@ pub use export::ExportedImage;
 const FORMAT_VERSION: u32 = 5;
 const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
 const TRAYLESS_FORMAT: u32 = 2;
-/// The format that saved the tray, at its old size.
-const TRAY_FORMAT: u32 = 3;
-const LEGACY_TRAY: [u32; 2] = [LEGACY_TRAY_WIDTH, LEGACY_TRAY_HEIGHT];
 const PAINTING_PREFIX: &str = "";
-const TRAY_PREFIX: &str = "tray/";
 const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
 const MANIFEST_ENTRY: &str = "manifest.json";
@@ -128,15 +120,9 @@ impl StateBytes {
     }
 }
 
-struct TraySnapshot {
-    spec: CanvasSpec,
-    states: Vec<StateBytes>,
-}
-
 pub struct DocumentSnapshot {
     spec: CanvasSpec,
     states: Vec<StateBytes>,
-    tray: Option<TraySnapshot>,
 }
 
 impl DocumentSnapshot {
@@ -146,17 +132,9 @@ impl DocumentSnapshot {
     ) -> Result<DocumentSnapshot, GpuLost> {
         session.flush(gpu);
         let states = capture_canvas(gpu, &session.canvas)?;
-        let tray = (session.tray.spec == tray_spec(&session.canvas.spec.pigment_slots))
-            .then(|| capture_canvas(gpu, &session.tray))
-            .transpose()?
-            .map(|states| TraySnapshot {
-                spec: session.tray.spec.clone(),
-                states,
-            });
         Ok(DocumentSnapshot {
             spec: session.canvas.spec.clone(),
             states,
-            tray,
         })
     }
 
@@ -182,16 +160,9 @@ impl DocumentSnapshot {
             size: [self.spec.width, self.spec.height],
         };
         upload_states_into(gpu, &mut session.canvas, self.states, painting);
-        if let Some(tray) = self.tray {
-            let middle = middle_block(&session.tray.spec, &tray.spec);
-            let mut states = tray.states;
-            on_todays_tray_ground(&mut states);
-            upload_states_into(gpu, &mut session.tray, states, middle);
-        }
     }
 
     fn holds_graphite(&self) -> bool {
-        // Only the painting: the pencil never marks the tray.
         self.states
             .iter()
             .filter(|state| state.which == StateTexture::Graphite)
@@ -201,13 +172,9 @@ impl DocumentSnapshot {
     fn file_format(&self) -> u32 {
         // Older builds would open a sketch and drop it, so only the current format carries one.
         if self.holds_graphite() {
-            return FORMAT_VERSION;
-        }
-        match &self.tray {
-            // Read from format 3 and written without being opened: keeps its old tray and format.
-            Some(tray) if [tray.spec.width, tray.spec.height] == LEGACY_TRAY => TRAY_FORMAT,
-            Some(_) => FORMAT_VERSION,
-            None => TRAYLESS_FORMAT,
+            FORMAT_VERSION
+        } else {
+            TRAYLESS_FORMAT
         }
     }
 }
@@ -237,38 +204,6 @@ fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, 
             bytes: padded.to_vec(),
         }
     })
-}
-
-/// Moves a saved tray's bare ground to today's (see `tray_ground`).
-fn on_todays_tray_ground(states: &mut [StateBytes]) {
-    let mut low = None;
-    let mut high = None;
-    for state in states.iter_mut() {
-        match state.which {
-            StateTexture::DryRefl0 => low = Some(&mut state.bytes),
-            StateTexture::DryRefl1 => high = Some(&mut state.bytes),
-            _ => {}
-        }
-    }
-    if let (Some(low), Some(high)) = (low, high) {
-        tray_ground::rebase_tray_ground(low, high, TRAY_REFLECTANCE);
-    }
-}
-
-/// The block a `saved` tray takes in the middle of a `full` one.
-fn middle_block(full: &CanvasSpec, saved: &CanvasSpec) -> TexelBlock {
-    let margin = |full: u32, saved: u32| {
-        full.checked_sub(saved)
-            .expect("the saved tray fits the tray")
-            / 2
-    };
-    TexelBlock {
-        origin: [
-            margin(full.width, saved.width),
-            margin(full.height, saved.height),
-        ],
-        size: [saved.width, saved.height],
-    }
 }
 
 /// Writes `states` into `block` of `canvas`; the rest of the canvas keeps what it had.

@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use crate::brush::BrushSettings;
 use crate::pigments::Mixture;
 use crate::stroke::Dab;
-use crate::surface::Surface;
 use crate::tool::Holder;
 
 pub(super) enum Queued {
@@ -13,7 +12,6 @@ pub(super) enum Queued {
 }
 
 pub(super) struct QueuedStroke {
-    pub(super) surface: Surface,
     pub(super) brush: BrushSettings,
     pub(super) dabs: VecDeque<Dab>,
     pub(super) begun: bool,
@@ -91,9 +89,8 @@ impl WalkProgress {
 }
 
 impl QueuedStroke {
-    pub(super) fn new(surface: Surface, brush: BrushSettings) -> QueuedStroke {
+    pub(super) fn new(brush: BrushSettings) -> QueuedStroke {
         QueuedStroke {
-            surface,
             brush,
             dabs: VecDeque::new(),
             begun: false,
@@ -111,9 +108,9 @@ impl QueuedStroke {
 }
 
 impl Queued {
-    pub(super) fn awaits_frames_on(&self, surface: Surface) -> bool {
+    pub(super) fn awaits_frames(&self) -> bool {
         match self {
-            Queued::Stroke(stroke) => stroke.surface == surface && stroke.awaits_frames(),
+            Queued::Stroke(stroke) => stroke.awaits_frames(),
             Queued::Brush(_) | Queued::Knife(_) => true,
         }
     }

@@ -2,7 +2,6 @@ use std::collections::{HashSet, VecDeque};
 
 use crate::canvas::{Canvas, TileCoord};
 use crate::gpu::{GpuContext, new_encoder};
-use crate::surface::Surface;
 
 mod atlas;
 mod slots;
@@ -30,17 +29,15 @@ struct Step {
     saved: HashSet<TileCoord>,
     complete: bool,
     removes_wet_paint: bool,
-    surface: Surface,
 }
 
 impl Step {
-    fn new(removes_wet_paint: bool, surface: Surface) -> Step {
+    fn new(removes_wet_paint: bool) -> Step {
         Step {
             tiles: Vec::new(),
             saved: HashSet::new(),
             complete: true,
             removes_wet_paint,
-            surface,
         }
     }
 
@@ -121,12 +118,12 @@ impl History {
         self.slot_capacity > 0
     }
 
-    pub fn begin_step(&mut self, surface: Surface) {
-        self.open_step(false, surface);
+    pub fn begin_step(&mut self) {
+        self.open_step(false);
     }
 
-    pub fn begin_removal_step(&mut self, surface: Surface, wet_tile_count: usize) {
-        self.open_step(true, surface);
+    pub fn begin_removal_step(&mut self, wet_tile_count: usize) {
+        self.open_step(true);
         if wet_tile_count > self.slot_capacity as usize
             && let Some(mut step) = self.current.take()
         {
@@ -135,9 +132,9 @@ impl History {
         }
     }
 
-    fn open_step(&mut self, removes_wet_paint: bool, surface: Surface) {
+    fn open_step(&mut self, removes_wet_paint: bool) {
         self.commit_step();
-        self.current = Some(Step::new(removes_wet_paint, surface));
+        self.current = Some(Step::new(removes_wet_paint));
     }
 
     pub fn encode_save_tiles(
@@ -273,18 +270,6 @@ impl History {
         if !removes_wet_paint {
             mark_wet(canvas, saved.tile);
         }
-    }
-
-    pub fn undo_surface(&self) -> Option<Surface> {
-        self.current
-            .as_ref()
-            .filter(|step| step.complete && !step.tiles.is_empty())
-            .or(self.undo_steps.back())
-            .map(|step| step.surface)
-    }
-
-    pub fn redo_surface(&self) -> Option<Surface> {
-        self.redo_steps.last().map(|step| step.surface)
     }
 
     pub fn can_undo(&self) -> bool {

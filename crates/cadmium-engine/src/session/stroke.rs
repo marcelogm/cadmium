@@ -2,23 +2,18 @@ use std::collections::VecDeque;
 
 use crate::gpu::GpuContext;
 use crate::stroke::{Dab, StrokeBuilder, StrokeSample};
-use crate::surface::Surface;
 
 use super::PaintSession;
 use super::queue::{Queued, QueuedStroke};
 
 impl PaintSession {
-    pub fn begin_stroke(&mut self, sample: StrokeSample) {
-        self.begin_stroke_on(Surface::Painting, sample);
-    }
-
     /// Queues a stroke behind whatever is still waiting to paint; the engine crosses into
     /// it only once the strokes and brush changes ahead of it are encoded.
-    pub fn begin_stroke_on(&mut self, surface: Surface, sample: StrokeSample) {
+    pub fn begin_stroke(&mut self, sample: StrokeSample) {
         self.end_stroke();
         let brush = self.brush.clone();
         let mut builder = StrokeBuilder::new(brush.stroke_geometry());
-        let mut stroke = QueuedStroke::new(surface, brush);
+        let mut stroke = QueuedStroke::new(brush);
         stroke.dabs.extend(builder.push(sample));
         let first_in_line = self.queued.is_empty();
         self.queued.push_back(Queued::Stroke(stroke));
@@ -65,12 +60,12 @@ impl PaintSession {
         self.last_frame_dabs
     }
 
-    /// The dabs still to paint on `surface`, stroke after stroke, in painting order.
-    pub fn queued_dabs_on(&self, surface: Surface) -> Vec<Dab> {
+    /// The dabs still to paint, stroke after stroke, in painting order.
+    pub fn queued_dabs(&self) -> Vec<Dab> {
         self.queued
             .iter()
             .filter_map(|entry| match entry {
-                Queued::Stroke(stroke) if stroke.surface == surface => Some(&stroke.dabs),
+                Queued::Stroke(stroke) => Some(&stroke.dabs),
                 _ => None,
             })
             .flatten()
@@ -84,19 +79,9 @@ impl PaintSession {
     }
 
     pub fn has_pending_work(&self) -> bool {
-        self.has_pending_work_on(Surface::Painting)
-    }
-
-    pub fn tray_has_pending_work(&self) -> bool {
-        self.has_pending_work_on(Surface::Tray)
-    }
-
-    fn has_pending_work_on(&self, surface: Surface) -> bool {
-        self.queued
-            .iter()
-            .any(|entry| entry.awaits_frames_on(surface))
-            || !self.canvas_of(surface).dirty.is_empty()
-            || !self.canvas_of(surface).possibly_dirty.is_empty()
+        self.queued.iter().any(Queued::awaits_frames)
+            || !self.canvas.dirty.is_empty()
+            || !self.canvas.possibly_dirty.is_empty()
     }
 
     pub(super) fn settle_pending_step(&mut self, gpu: &GpuContext) {

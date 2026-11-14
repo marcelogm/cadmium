@@ -1,6 +1,5 @@
 use cadmium_engine::pigments::mixture_srgb8;
 use cadmium_engine::stroke::{StrokeSample, Tool};
-use cadmium_engine::surface::Surface;
 
 use crate::state::AppState;
 
@@ -49,7 +48,7 @@ impl AppState {
         self.provisional.colour = (tool == Tool::Brush)
             .then(|| self.held_colour(tool))
             .flatten();
-        self.session.begin_stroke_on(Surface::Painting, sample);
+        self.session.begin_stroke(sample);
         self.stroking = true;
         self.last_sample_time_ms = None;
         self.note_samples(std::slice::from_ref(&sample));

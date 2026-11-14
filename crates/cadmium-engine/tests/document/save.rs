@@ -250,6 +250,7 @@ fn drying_an_opened_document_clears_its_wet_layer() {
 fn saved_entries_are_stored_uncompressed_in_the_zip() {
     let gpu = GpuContext::new().unwrap();
     let mut s = painted_session(&gpu);
+    sketch_on_the_painting(&gpu, &s);
     let dir = TempDir::new("stored");
     let path = dir.file("stored.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();

@@ -1,5 +1,3 @@
-use cadmium_engine::surface::Surface;
-
 use cadmium_engine::render::ViewMode;
 
 use super::{AppState, ProvisionalTrail};
@@ -26,7 +24,7 @@ impl AppState {
     }
 
     fn capture_provisional(&mut self) {
-        let pending = self.session.queued_dabs_on(Surface::Painting);
+        let pending = self.session.queued_dabs();
         let shown_in_colour = self.session.view_mode == ViewMode::Color;
         let colour = self
             .provisional

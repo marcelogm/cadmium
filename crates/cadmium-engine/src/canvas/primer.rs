@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 use crate::compute::{AutoLayoutStage, buffer_binding, texture_binding};
 use crate::gpu::{GpuContext, new_encoder};
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
-use crate::spectral::{BANDS, BandValues, km_infinite, reflectance_srgb8};
+use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
 
 use super::{BANDS_PER_VEC4, Canvas, Primer, StateTexture, weave_heights};
 
@@ -11,9 +11,6 @@ const PRIMER_WHITE_ID: &str = "titanium_white";
 const IMPRIMATURA_PIGMENT_ID: &str = "burnt_sienna";
 const IMPRIMATURA_FRACTION: f32 = 0.5;
 const IMPRIMATURA_THICKNESS_UM: f32 = 12.0;
-/// The tray's mid grey under its glass: flat, so it has no tone, and shown near L* 52, the
-/// middle value a painter judges light and dark against.
-pub(crate) const TRAY_REFLECTANCE: f32 = 0.40;
 /// The paper ground's brightest band: just under full reflectance, so layers composited
 /// over it stay well clear of the `1 − R·R` pole.
 const PAPER_TOP_REFLECTANCE: f32 = 0.99;
@@ -46,7 +43,6 @@ pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
                 &gesso,
             )
         }
-        Primer::Tray => [TRAY_REFLECTANCE; BANDS],
         Primer::Paper => {
             let top = gesso.iter().copied().fold(0.0, f32::max);
             gesso.map(|band| band / top * PAPER_TOP_REFLECTANCE)
