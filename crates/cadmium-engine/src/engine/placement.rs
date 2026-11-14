@@ -161,22 +161,20 @@ impl WetOilEngine {
         }
     }
 
-    /// The rectangle holding every texel `encode_dabs` may write for this dab when it
-    /// sweeps from nowhere, however far a blade has turned on its way there.
+    /// The rectangle holding every texel `encode_dabs` may write for this dab swept from
+    /// the stroke's dab before it, however far a blade has turned on its way there.
     pub fn dab_bounds(
         &self,
         canvas: &Canvas,
         brush: &BrushSettings,
         dab: &Dab,
+        swept_from: Option<&Dab>,
     ) -> Option<[f32; 4]> {
         if !paints(brush.tool.profile(), dab) {
             return None;
         }
         let footprint = Footprint::of(dab, brush, self.tip_radius, None);
-        let reach = footprint.canvas_half_extents_at_any_turn();
-        let (first, last) = swept_span(dab, [0.0; 2], reach);
-        let (origin, size) = clamped_region(first, last, DAB_APRON_PX, pixel_limits(canvas))?;
-        Some(region_rect(origin, size))
+        swept_bounds(dab, swept_from, &footprint, pixel_limits(canvas))
     }
 
     fn place(
@@ -191,7 +189,7 @@ impl WetOilEngine {
             return None;
         }
         let footprint = Footprint::of(dab, brush, self.tip_radius, step.blade_orientation);
-        let regions = DabRegions::around(dab, step.sweep, footprint, canvas)?;
+        let regions = DabRegions::around(dab, step.sweep, footprint, pixel_limits(canvas))?;
         Some(Placement {
             record: self.record(brush, dab, step, &regions),
             canvas_rect: regions.canvas_rect(),
@@ -283,10 +281,9 @@ impl DabRegions {
         dab: &Dab,
         sweep: [f32; 2],
         footprint: Footprint,
-        canvas: &Canvas,
+        limits: [i32; 2],
     ) -> Option<DabRegions> {
         let (first, last) = swept_span(dab, sweep, footprint.canvas_half_extents());
-        let limits = pixel_limits(canvas);
         let (canvas_origin, canvas_size) = clamped_region(first, last, DAB_APRON_PX, limits)?;
         let (spread_origin, spread_size) = clamped_region(first, last, SPREAD_APRON_PX, limits)?;
         let (tip_origin, tip_size) = tip_window(footprint.semi_axes());
@@ -315,6 +312,21 @@ fn swept_span(dab: &Dab, sweep: [f32; 2], half_extents: [f32; 2]) -> ([i32; 2], 
     let last = [0, 1]
         .map(|axis| (at[axis].max(at[axis] + sweep[axis]) + half_extents[axis]).floor() as i32);
     (first, last)
+}
+
+/// The canvas rectangle holding `DabRegions::around` for the dab swept from `swept_from`,
+/// whatever the turn of the blade `footprint` is.
+fn swept_bounds(
+    dab: &Dab,
+    swept_from: Option<&Dab>,
+    footprint: &Footprint,
+    limits: [i32; 2],
+) -> Option<[f32; 4]> {
+    let sweep = swept_from.map_or([0.0; 2], |from| [from.x - dab.x, from.y - dab.y]);
+    let reach = footprint.canvas_half_extents_at_any_turn();
+    let (first, last) = swept_span(dab, sweep, reach);
+    let (origin, size) = clamped_region(first, last, DAB_APRON_PX, limits)?;
+    Some(region_rect(origin, size))
 }
 
 fn pixel_limits(canvas: &Canvas) -> [i32; 2] {

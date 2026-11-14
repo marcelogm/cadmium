@@ -143,39 +143,8 @@ fn tiles_touched_by(engine: &WetOilEngine, canvas: &Canvas, stroke: StrokeDabs) 
         .dabs
         .iter()
         .zip(dabs_before)
-        .filter_map(|(dab, before)| {
-            let here = engine.dab_bounds(canvas, stroke.brush, dab);
-            let swept_from = before.and_then(|before| {
-                engine.dab_bounds(canvas, stroke.brush, &moved_to(dab, &before))
-            });
-            covering(here, swept_from)
-        })
+        .filter_map(|(dab, before)| engine.dab_bounds(canvas, stroke.brush, dab, before.as_ref()))
         .flat_map(|bounds| tiles_in_rect(width, height, bounds))
         .collect();
     touched.into_iter().collect()
 }
-
-/// The dab's own footprint back where the dab before it lay: `encode_dabs` writes all it
-/// sweeps between the two.
-fn moved_to(dab: &Dab, before: &Dab) -> Dab {
-    Dab {
-        x: before.x,
-        y: before.y,
-        ..*dab
-    }
-}
-
-fn covering(a: Option<[f32; 4]>, b: Option<[f32; 4]>) -> Option<[f32; 4]> {
-    let (Some(a), Some(b)) = (a, b) else {
-        return a.or(b);
-    };
-    Some([
-        a[0].min(b[0]),
-        a[1].min(b[1]),
-        a[2].max(b[2]),
-        a[3].max(b[3]),
-    ])
-}
-
-#[cfg(test)]
-mod tests;
