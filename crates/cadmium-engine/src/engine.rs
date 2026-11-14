@@ -13,6 +13,7 @@ use wgpu::util::DeviceExt;
 mod bristles;
 mod dab_record;
 mod footprint;
+mod held_paint;
 mod knife_load;
 mod pass;
 mod placement;
@@ -25,6 +26,7 @@ pub use bristles::{
 };
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
+pub use held_paint::HeldPaint;
 pub use readout::BrushReadout;
 
 pub(crate) use pass::pick::PickRequest;
@@ -180,6 +182,7 @@ pub struct WetOilEngine {
     params: SimParams,
     tip_radius: f32,
     loaded_thickness_um: f32,
+    load_epoch: u64,
     buffers: Buffers,
     first_rest: FirstRest,
     previous_dab: Option<PreviousDab>,
@@ -196,6 +199,7 @@ impl WetOilEngine {
             params: SimParams::default(),
             tip_radius: DEFAULT_MAX_DIAMETER_PX / 2.0,
             loaded_thickness_um: 0.0,
+            load_epoch: 0,
             buffers: Buffers::new(gpu),
             first_rest: FirstRest::new(),
             previous_dab: None,
@@ -208,8 +212,13 @@ impl WetOilEngine {
     }
 
     pub fn resize_tip(&mut self, radius_px: f32) {
-        if radius_px.is_finite() {
-            self.tip_radius = ferrule_radius_for(2.0 * radius_px);
+        if !radius_px.is_finite() {
+            return;
+        }
+        let radius = ferrule_radius_for(2.0 * radius_px);
+        if radius != self.tip_radius {
+            self.tip_radius = radius;
+            self.start_load_epoch();
         }
     }
 

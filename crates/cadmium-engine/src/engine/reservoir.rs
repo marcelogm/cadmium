@@ -74,6 +74,7 @@ impl WetOilEngine {
         };
         self.encode_fill(gpu, &record, true, encoder);
         self.loaded_thickness_um = thickness;
+        self.start_load_epoch();
     }
 
     pub fn restore_reserve(&mut self, gpu: &GpuContext, mixture: &Mixture) {
@@ -103,6 +104,7 @@ impl WetOilEngine {
         };
         self.encode_fill(gpu, &record, false, encoder);
         self.loaded_thickness_um = thickness;
+        self.start_load_epoch();
     }
 
     pub(super) fn submit(
@@ -152,6 +154,7 @@ impl WetOilEngine {
         encoder.clear_buffer(&self.buffers.wanted, 0, None);
         encoder.clear_buffer(&self.buffers.capillary_pools, 0, None);
         self.bristles.reset();
+        self.start_load_epoch();
     }
 
     pub fn reservoir_mixture(&self, gpu: &GpuContext) -> Result<Mixture, GpuLost> {

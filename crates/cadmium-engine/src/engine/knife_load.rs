@@ -49,6 +49,7 @@ impl WetOilEngine {
         }
         gpu.queue
             .write_buffer(&self.buffers.blade_load, 0, bytemuck::cast_slice(&load));
+        self.start_load_epoch();
         Ok(())
     }
 
@@ -62,9 +63,10 @@ impl WetOilEngine {
         });
     }
 
-    pub fn encode_clean_knife(&self, encoder: &mut wgpu::CommandEncoder) {
+    pub fn encode_clean_knife(&mut self, encoder: &mut wgpu::CommandEncoder) {
         encoder.clear_buffer(&self.buffers.blade_load, 0, None);
         encoder.clear_buffer(&self.buffers.blade_delta, 0, None);
+        self.start_load_epoch();
     }
 
     pub fn knife_totals(&self, gpu: &GpuContext) -> Result<PaintTotals, GpuLost> {
