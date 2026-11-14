@@ -1,12 +1,12 @@
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, StateTexture, Weave},
-    document::{self, ExportedImage},
+    document,
     gpu::GpuContext,
     render::ViewMode,
     session::PaintSession,
 };
 
-use crate::{TempDir, painted_session, painted_spec, squeeze_on_the_tray};
+use crate::{TempDir, painted_session};
 
 #[test]
 fn export_png_has_canvas_dimensions() {
@@ -56,20 +56,4 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
         s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap(),
         height_display
     );
-}
-
-#[test]
-fn export_ignores_the_tray() {
-    let gpu = GpuContext::new().unwrap();
-    let mut fresh = PaintSession::new(&gpu, painted_spec()).unwrap();
-    let mut with_tray_paint = PaintSession::new(&gpu, painted_spec()).unwrap();
-    squeeze_on_the_tray(&gpu, &mut with_tray_paint);
-    assert!(with_tray_paint.tray.wet_totals(&gpu).unwrap().volume > 0.0);
-    let fresh = ExportedImage::render(&gpu, &mut fresh).unwrap();
-    let with_tray_paint = ExportedImage::render(&gpu, &mut with_tray_paint).unwrap();
-    assert_eq!(
-        (with_tray_paint.width, with_tray_paint.height),
-        (fresh.width, fresh.height)
-    );
-    assert!(with_tray_paint.rgba == fresh.rgba);
 }

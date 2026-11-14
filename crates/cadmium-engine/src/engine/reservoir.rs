@@ -1,13 +1,10 @@
 use super::bristles::disc_texel_count;
 use super::pass::dip::Fill;
 use super::{FULL_DIP, MAX_TIP_THICKNESS_UM, PIGMENT_CHANNELS, VOLUME_CHANNEL, WetOilEngine};
-use crate::brush::{DEFAULT_LOAD, FULL_RESERVOIR_VOLUME_UM};
-use crate::canvas::PaintTotals;
+use crate::brush::FULL_RESERVOIR_VOLUME_UM;
 use crate::compute::read_buffer;
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::pigments::Mixture;
-
-const DRAWN_LOADED_THICKNESS_UM: f32 = FULL_RESERVOIR_VOLUME_UM * DEFAULT_LOAD;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -119,52 +116,6 @@ impl WetOilEngine {
         gpu.queue.submit([encoder.finish()]);
     }
 
-    pub(crate) fn draw_up(
-        &mut self,
-        gpu: &GpuContext,
-        into_knife: bool,
-        take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
-    ) -> Result<(PaintTotals, f32), GpuLost> {
-        if into_knife {
-            self.draw_up_into_knife(gpu, take)
-        } else {
-            self.draw_up_into_reserve(gpu, take)
-        }
-    }
-
-    fn draw_up_into_reserve(
-        &mut self,
-        gpu: &GpuContext,
-        take: impl FnOnce(f32) -> Result<PaintTotals, GpuLost>,
-    ) -> Result<(PaintTotals, f32), GpuLost> {
-        let held = self.reserve_totals(gpu)?.volume as f32;
-        let capacity = self.full_reserve_volume();
-        let taken = take(capacity - held)?;
-        let drew_paint = holds_paint(&taken);
-        if drew_paint {
-            self.add_to_reserve(gpu, &taken);
-        }
-        if drew_paint && held <= 0.0 {
-            self.loaded_thickness_um = self.loaded_thickness_um.max(DRAWN_LOADED_THICKNESS_UM);
-        }
-        Ok((taken, level_after(held, capacity, &taken)))
-    }
-
-    fn add_to_reserve(&self, gpu: &GpuContext, taken: &PaintTotals) {
-        let record = DipRecord {
-            fractions: std::array::from_fn(|slot| (taken.pigment[slot] / taken.volume) as f32),
-            tip_radius: self.tip_radius,
-            tip_add_um: 0.0,
-            tip_limit_um: 0.0,
-            body_add_um: taken.volume as f32,
-            body_limit_um: f32::MAX,
-            _pad: [0.0; 3],
-        };
-        let mut encoder = new_encoder(gpu, "add_to_reserve");
-        self.encode_fill(gpu, &record, false, &mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-    }
-
     fn encode_fill(
         &self,
         gpu: &GpuContext,
@@ -216,18 +167,6 @@ impl WetOilEngine {
 
 fn share_of(amount: f32, volume: f32) -> f32 {
     if volume > 0.0 { amount / volume } else { 0.0 }
-}
-
-pub(super) fn level_after(held_um: f32, capacity_um: f32, taken: &PaintTotals) -> f32 {
-    if capacity_um > 0.0 {
-        ((held_um + taken.volume as f32) / capacity_um).clamp(0.0, 1.0)
-    } else {
-        0.0
-    }
-}
-
-pub(super) fn holds_paint(totals: &PaintTotals) -> bool {
-    totals.volume.is_finite() && totals.volume > 0.0
 }
 
 pub(super) fn dip_thickness(mixture: &Mixture) -> Option<f32> {

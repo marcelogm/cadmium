@@ -15,7 +15,6 @@ impl PaintSession {
     /// Queues a stroke behind whatever is still waiting to paint; the engine crosses into
     /// it only once the strokes and brush changes ahead of it are encoded.
     pub fn begin_stroke_on(&mut self, surface: Surface, sample: StrokeSample) {
-        self.end_hold();
         self.end_stroke();
         let brush = self.brush.clone();
         let mut builder = StrokeBuilder::new(brush.stroke_geometry());
@@ -101,7 +100,6 @@ impl PaintSession {
     }
 
     pub(super) fn settle_pending_step(&mut self, gpu: &GpuContext) {
-        self.end_hold();
         self.end_stroke();
         self.flush(gpu);
     }

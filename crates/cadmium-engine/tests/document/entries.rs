@@ -1,19 +1,16 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, StateTexture, Weave},
     document::{DocumentError, DocumentSnapshot},
     pigments::PigmentDb,
-    surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, TRAY_HEIGHT, TRAY_WIDTH},
 };
 
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES,
     GRAPHITE_ENTRY, TempDir,
 };
-
-const TRAY_PREFIX: &str = "tray/";
 
 pub(super) struct Entries(pub(super) Vec<(String, Vec<u8>)>);
 
@@ -94,56 +91,6 @@ impl Entries {
         self.edit_manifest(|m| m["format"] = 2.into())
     }
 
-    pub(super) fn saved(path: &Path) -> Entries {
-        let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
-        let entries = (0..archive.len())
-            .map(|index| {
-                let mut entry = archive.by_index(index).unwrap();
-                let mut bytes = Vec::new();
-                entry.read_to_end(&mut bytes).unwrap();
-                (entry.name().to_string(), bytes)
-            })
-            .collect();
-        Entries(entries)
-    }
-
-    pub(super) fn saved_as_format_2(path: &Path) -> Entries {
-        Entries::saved(path)
-            .without_tray()
-            .edit_manifest(|m| m["format"] = 2.into())
-    }
-
-    /// The saved entries as format 3 wrote them: the tray cut down to the 768×512 one it had,
-    /// keeping the middle of the current tray.
-    pub(super) fn saved_as_format_3(path: &Path) -> Entries {
-        let mut entries = Entries::saved(path);
-        for (name, bytes) in entries
-            .0
-            .iter_mut()
-            .filter(|(name, _)| name.starts_with(TRAY_PREFIX))
-        {
-            let raw = zstd::decode_all(bytes.as_slice()).unwrap();
-            let cut = middle_of_tray(&raw, name);
-            *bytes = zstd::encode_all(cut.as_slice(), 3).unwrap();
-        }
-        entries.edit_manifest(|m| m["format"] = 3.into())
-    }
-
-    pub(super) fn manifest(&self) -> serde_json::Value {
-        let bytes = &self
-            .0
-            .iter()
-            .find(|(name, _)| name == "manifest.json")
-            .unwrap()
-            .1;
-        serde_json::from_slice(bytes).unwrap()
-    }
-
-    fn without_tray(mut self) -> Entries {
-        self.0.retain(|(entry, _)| !entry.starts_with(TRAY_PREFIX));
-        self
-    }
-
     pub(super) fn without(mut self, name: &str) -> Entries {
         self.0.retain(|(entry, _)| entry != name);
         self
@@ -159,22 +106,6 @@ impl Entries {
         }
         writer.finish().unwrap();
     }
-}
-
-fn middle_of_tray(raw: &[u8], name: &str) -> Vec<u8> {
-    let (width, height) = (TRAY_WIDTH as usize, TRAY_HEIGHT as usize);
-    let texels = width * height;
-    assert_eq!(raw.len() % texels, 0, "{name}");
-    let texel = raw.len() / texels;
-    let (old_w, old_h) = (LEGACY_TRAY_WIDTH as usize, LEGACY_TRAY_HEIGHT as usize);
-    let x0 = (width - old_w) / 2;
-    let y0 = (height - old_h) / 2;
-    let mut cut = Vec::with_capacity(old_w * old_h * texel);
-    for y in y0..y0 + old_h {
-        let start = (y * width + x0) * texel;
-        cut.extend_from_slice(&raw[start..start + old_w * texel]);
-    }
-    cut
 }
 
 pub(super) fn read_entries(entries: Entries) -> Result<DocumentSnapshot, DocumentError> {

@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
-use crate::draw_up::DrawUp;
 use crate::engine::{PaintEngine, PickRequest, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::{History, bytes_per_tile_all_textures};
@@ -11,11 +10,9 @@ use crate::present::Presenter;
 use crate::render::{Renderer, ShadeRequest, ViewMode};
 use crate::stroke::StrokeBuilder;
 use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::Tube;
 
 mod brush;
 mod command;
-mod hold;
 mod queue;
 mod removal;
 mod replacement;
@@ -23,7 +20,6 @@ mod settle;
 mod stroke;
 mod walk;
 
-use hold::Hold;
 use queue::Queued;
 use settle::MotionAnchor;
 
@@ -59,10 +55,7 @@ pub struct PaintSession {
     frame_dab_limit: Option<usize>,
     last_frame_dabs: usize,
     walked_surface: Surface,
-    hold: Option<Hold>,
     motion_anchor: Option<MotionAnchor>,
-    tube: Tube,
-    drawer: DrawUp,
 }
 
 impl PaintSession {
@@ -116,10 +109,7 @@ impl PaintSession {
             frame_dab_limit: None,
             last_frame_dabs: 0,
             walked_surface: Surface::Painting,
-            hold: None,
             motion_anchor: None,
-            tube: Tube::new(gpu),
-            drawer: DrawUp::new(gpu),
         };
         session.reload_brush(gpu);
         Ok(session)

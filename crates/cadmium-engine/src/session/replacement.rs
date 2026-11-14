@@ -14,7 +14,6 @@ impl PaintSession {
         gpu: &GpuContext,
         spec: CanvasSpec,
     ) -> Result<(), CanvasError> {
-        self.end_hold();
         self.stroke = None;
         self.queued.clear();
         self.history.clear();

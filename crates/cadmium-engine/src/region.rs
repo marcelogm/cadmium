@@ -1,12 +1,3 @@
-pub(crate) fn region_rect(origin: [i32; 2], size: [u32; 2]) -> [f32; 4] {
-    [
-        origin[0] as f32,
-        origin[1] as f32,
-        (origin[0] + size[0] as i32 - 1) as f32,
-        (origin[1] + size[1] as i32 - 1) as f32,
-    ]
-}
-
 pub(crate) fn clamped_region(
     first: [i32; 2],
     last: [i32; 2],

@@ -22,7 +22,7 @@ pub struct ParamSpec {
     pub default: f32,
 }
 
-const PARAM_COUNT: usize = 26;
+const PARAM_COUNT: usize = 22;
 
 const UNKNOWN_KEY_VALUE: f32 = 0.0;
 

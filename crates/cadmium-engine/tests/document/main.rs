@@ -5,7 +5,6 @@ mod entries;
 mod export;
 mod read;
 mod save;
-mod tray;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -15,8 +14,6 @@ use cadmium_engine::{
     gpu::GpuContext,
     session::PaintSession,
     stroke::StrokeSample,
-    surface::Surface,
-    tube::Nozzle,
 };
 
 use crate::support::encode_frame;
@@ -112,25 +109,4 @@ fn painted_session_with_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64
     let mut s = session_with_ended_stroke(gpu, from, to);
     encode_frame(gpu, &mut s);
     s
-}
-
-fn squeeze_on_the_tray(gpu: &GpuContext, s: &mut PaintSession) {
-    squeeze_on_the_tray_at(gpu, s, [300.0, 300.0]);
-}
-
-fn squeeze_on_the_tray_at(gpu: &GpuContext, s: &mut PaintSession, at: [f32; 2]) {
-    s.begin_hold(gpu, Surface::Tray);
-    s.squeeze(
-        gpu,
-        Nozzle {
-            from: at,
-            to: at,
-            radius: 12.0,
-            slot: 1,
-            pressure: 1.0,
-            seconds: 0.2,
-            still_reach_px: 0.0,
-        },
-    );
-    s.end_hold();
 }
