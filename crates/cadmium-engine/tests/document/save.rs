@@ -7,7 +7,7 @@ use cadmium_engine::{
     session::PaintSession,
 };
 
-use crate::entries::state_entry_name;
+use crate::entries::STATE_ENTRIES;
 use crate::support::session;
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, TempDir, painted_session,
@@ -224,10 +224,11 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
         names.push(entry.name().to_string());
     }
-    let saved_entries = StateTexture::PAINT_STATE.map(state_entry_name);
-    for expected in std::iter::once("manifest.json".to_string()).chain(saved_entries) {
-        assert!(names.contains(&expected), "{expected} missing");
-    }
+    let mut expected: Vec<&str> = STATE_ENTRIES.iter().map(|(name, _)| *name).collect();
+    expected.push("manifest.json");
+    names.sort();
+    expected.sort();
+    assert_eq!(names, expected);
     let mut manifest = String::new();
     archive
         .by_name("manifest.json")

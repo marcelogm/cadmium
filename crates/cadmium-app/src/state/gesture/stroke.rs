@@ -4,7 +4,7 @@ use cadmium_engine::stroke::{StrokeSample, Tool};
 use crate::state::AppState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum StrokePreparation {
+enum StrokePreparation {
     None,
     TopUp,
     CleanAndLoad,
@@ -46,7 +46,7 @@ impl AppState {
             StrokePreparation::CleanAndLoad => self.clean_and_load(),
         }
         self.provisional.colour = (tool == Tool::Brush)
-            .then(|| self.held_colour(tool))
+            .then(|| self.reserve_colour())
             .flatten();
         self.session.begin_stroke(sample);
         self.stroking = true;
@@ -64,12 +64,8 @@ impl AppState {
         self.wake();
     }
 
-    fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
-        let held = if tool.profile().holds_on_blade() {
-            &self.knife_mixture
-        } else {
-            &self.reserve_mixture
-        };
+    fn reserve_colour(&self) -> Option<[u8; 3]> {
+        let held = &self.reserve_mixture;
         (!held.is_empty()).then(|| {
             mixture_srgb8(
                 &self.session.db,

@@ -10,6 +10,19 @@ use cadmium_engine::{
 
 use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
+/// The entry names of format 6, spelled out so that renaming one changes a test.
+pub(super) const STATE_ENTRIES: [(&str, StateTexture); 9] = [
+    ("state/wet_pig0.zst", StateTexture::WetPig0),
+    ("state/wet_pig1.zst", StateTexture::WetPig1),
+    ("state/wet_vol.zst", StateTexture::WetVol),
+    ("state/dry_refl0.zst", StateTexture::DryRefl0),
+    ("state/dry_refl1.zst", StateTexture::DryRefl1),
+    (DRY_RELIEF, StateTexture::DryHeight),
+    ("state/dry_top_pig0.zst", StateTexture::DryTopPig0),
+    ("state/dry_top_pig1.zst", StateTexture::DryTopPig1),
+    (GRAPHITE_ENTRY, StateTexture::Graphite),
+];
+
 pub(super) struct Entries(pub(super) Vec<(String, Vec<u8>)>);
 
 impl Entries {
@@ -32,10 +45,10 @@ impl Entries {
             "manifest.json".to_string(),
             serde_json::to_vec(&manifest).unwrap(),
         )];
-        for which in StateTexture::PAINT_STATE {
+        for (name, which) in STATE_ENTRIES {
             let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * which.bytes_per_texel()) as usize];
             entries.push((
-                state_entry_name(which),
+                name.to_string(),
                 zstd::encode_all(raw.as_slice(), 3).unwrap(),
             ));
         }
@@ -84,6 +97,11 @@ impl Entries {
         self
     }
 
+    pub(super) fn with(mut self, name: &str, bytes: Vec<u8>) -> Entries {
+        self.0.push((name.to_string(), bytes));
+        self
+    }
+
     pub(super) fn without(mut self, name: &str) -> Entries {
         self.0.retain(|(entry, _)| entry != name);
         self
@@ -98,14 +116,6 @@ impl Entries {
             writer.write_all(bytes).unwrap();
         }
         writer.finish().unwrap();
-    }
-}
-
-pub(super) fn state_entry_name(which: StateTexture) -> String {
-    if which == StateTexture::DryHeight {
-        DRY_RELIEF.to_string()
-    } else {
-        format!("state/{}.zst", which.label())
     }
 }
 

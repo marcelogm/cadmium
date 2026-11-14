@@ -4,8 +4,6 @@ use std::rc::Rc;
 use crate::state::test_support::painting_state;
 use crate::state::{SharedState, stroking_or_busy};
 
-// `clean_brush` stands in for any state change: it wakes the views, and `wake` is private.
-
 #[test]
 fn every_wake_reaches_each_view() {
     let mut state = painting_state();

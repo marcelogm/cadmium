@@ -7,9 +7,9 @@ const DIRECTION: f32 = 0.7;
 const KNIFE_ELONGATION: f32 = 0.12;
 const ELONGATION_TOLERANCE: f32 = 1e-6;
 
-fn blade_of(tool: Tool) -> Footprint {
+fn knife_blade() -> Footprint {
     let mut brush = BrushSettings {
-        tool,
+        tool: Tool::Knife,
         ..BrushSettings::default()
     };
     brush.geometry.max_diameter_px = DIAMETER_PX;
@@ -29,13 +29,13 @@ fn blade_of(tool: Tool) -> Footprint {
 
 #[test]
 fn the_knife_blade_is_a_thin_edge_across_the_stroke() {
-    let knife = blade_of(Tool::Knife);
+    let knife = knife_blade();
     assert!((knife.elongation - KNIFE_ELONGATION).abs() < ELONGATION_TOLERANCE);
 }
 
 #[test]
 fn the_knife_lays_its_blade_along_the_stroke() {
-    assert_eq!(blade_of(Tool::Knife).orientation, DIRECTION);
+    assert_eq!(knife_blade().orientation, DIRECTION);
 }
 
 const HALF_LENGTH_PX: f32 = 40.0;

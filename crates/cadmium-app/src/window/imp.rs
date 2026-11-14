@@ -21,11 +21,7 @@ pub struct CadmiumWindow {
     #[template_child]
     pub toast_overlay: TemplateChild<adw::ToastOverlay>,
     #[template_child]
-    pub canvas_overlay: TemplateChild<gtk::Overlay>,
-    #[template_child]
     pub canvas_slot: TemplateChild<gtk::Box>,
-    #[template_child]
-    pub zoom_osd: TemplateChild<gtk::Box>,
     #[template_child]
     pub zoom_label: TemplateChild<gtk::Label>,
     #[template_child]

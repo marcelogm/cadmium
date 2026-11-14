@@ -81,15 +81,15 @@ impl CursorOutline {
     }
 }
 
-pub(crate) struct RingStroke {
-    pub(crate) centre: (f32, f32),
-    pub(crate) semi_axes: [f32; 2],
-    pub(crate) rotation_deg: f32,
-    pub(crate) colour: gdk::RGBA,
-    pub(crate) width: f32,
+struct RingStroke {
+    centre: (f32, f32),
+    semi_axes: [f32; 2],
+    rotation_deg: f32,
+    colour: gdk::RGBA,
+    width: f32,
 }
 
-pub(crate) fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
+fn append_ring(snapshot: &gtk::Snapshot, ring: &RingStroke) {
     let (x, y) = ring.centre;
     let [along, across] = ring.semi_axes;
     snapshot.save();

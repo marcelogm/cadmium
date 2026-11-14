@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 
-use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE, TexelBlock};
+use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
 use crate::session::PaintSession;
 
@@ -153,11 +153,7 @@ impl DocumentSnapshot {
     }
 
     fn upload(self, gpu: &GpuContext, session: &mut PaintSession) {
-        let painting = TexelBlock {
-            origin: [0, 0],
-            size: [self.spec.width, self.spec.height],
-        };
-        upload_states_into(gpu, &mut session.canvas, self.states, painting);
+        upload_states(gpu, &mut session.canvas, self.states);
     }
 }
 
@@ -188,20 +184,14 @@ fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, 
     })
 }
 
-/// Writes `states` into `block` of `canvas`; the rest of the canvas keeps what it had.
-fn upload_states_into(
-    gpu: &GpuContext,
-    canvas: &mut Canvas,
-    states: Vec<StateBytes>,
-    block: TexelBlock,
-) {
+fn upload_states(gpu: &GpuContext, canvas: &mut Canvas, states: Vec<StateBytes>) {
     for state in states {
         let (which, raw) = (state.which, state.texels());
-        canvas.write_bytes_at(gpu, which, &raw, block);
+        canvas.write_bytes(gpu, which, &raw);
         gpu.queue.submit([]);
         let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
         if which == StateTexture::WetVol {
-            mark_wet_tiles(canvas, &raw, block);
+            mark_wet_tiles(canvas, &raw);
         }
     }
     canvas.dirty.mark_all();
@@ -227,9 +217,8 @@ pub fn export_png(
     ExportedImage::render(gpu, session)?.write_png(path)
 }
 
-fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8], block: TexelBlock) {
-    let (left, top) = (block.origin[0] as usize, block.origin[1] as usize);
-    let block_width = block.size[0] as usize;
+fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8]) {
+    let width = canvas.spec.width as usize;
     let tile = TILE_SIZE as usize;
     let columns = (canvas.spec.width as usize).div_ceil(tile);
     let rows = (canvas.spec.height as usize).div_ceil(tile);
@@ -241,7 +230,7 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8], block: TexelBlock) {
         .enumerate()
     {
         if f32::from_le_bytes(*texel) > 0.0 {
-            let (x, y) = (left + index % block_width, top + index / block_width);
+            let (x, y) = (index % width, index / width);
             wet[(y / tile) * columns + x / tile] = true;
         }
     }

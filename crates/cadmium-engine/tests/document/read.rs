@@ -64,17 +64,32 @@ fn every_format_but_the_current_one_is_unsupported() {
 }
 
 #[test]
-fn a_well_formed_document_of_the_current_format_reads() {
-    assert!(read_entries(Entries::blank()).is_ok());
+fn a_manifest_whose_format_is_missing_or_not_an_integer_is_a_format_error() {
+    let missing = Entries::blank().edit_manifest(|m| {
+        m.as_object_mut().unwrap().remove("format");
+    });
+    let reason = format_reason(read_entries(missing));
+    assert!(reason.contains("manifest.json"), "{reason}");
+    for format in [serde_json::json!("six"), serde_json::json!(6.5)] {
+        let entries = Entries::blank().edit_manifest(|m| m["format"] = format);
+        let reason = format_reason(read_entries(entries));
+        assert!(reason.contains("manifest.json"), "{reason}");
+    }
+}
+
+#[test]
+fn an_entry_the_format_does_not_name_is_ignored() {
+    let entries = Entries::blank().with("tray/wet_vol.zst", b"not a state".to_vec());
+    assert!(read_entries(entries).is_ok());
 }
 
 #[test]
 fn a_document_without_its_graphite_entry_is_a_format_error() {
-    let entries = Entries::blank().without(GRAPHITE_ENTRY);
-    assert!(matches!(
-        read_entries(entries),
-        Err(DocumentError::Format(_))
-    ));
+    let reason = format_reason(read_entries(Entries::blank().without(GRAPHITE_ENTRY)));
+    assert!(
+        reason.contains(&format!("missing {GRAPHITE_ENTRY}")),
+        "{reason}"
+    );
 }
 
 #[test]

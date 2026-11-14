@@ -48,28 +48,14 @@ fn pick(levels: (gdk::Key, gdk::Key), modifiers: gdk::ModifierType) -> Option<Ui
 #[test]
 fn a_digit_picks_the_paintings_tool_on_either_keyboard_level() {
     let brush = Some(UiTool::Paint(Tool::Brush));
-    let none = gdk::ModifierType::empty();
-    assert_eq!(
-        digit_pick(Some(gdk::Key::_1), Some(gdk::Key::exclam), none),
-        brush
-    );
-    assert_eq!(
-        digit_pick(Some(gdk::Key::ampersand), Some(gdk::Key::_1), none),
-        brush
-    );
+    assert_eq!(pick((gdk::Key::_1, gdk::Key::exclam), NONE), brush);
+    assert_eq!(pick((gdk::Key::ampersand, gdk::Key::_1), NONE), brush);
 }
 
 #[test]
 fn shift_and_a_digit_picks_nothing_now_that_the_tray_is_gone() {
-    let shift = gdk::ModifierType::SHIFT_MASK;
-    assert_eq!(
-        digit_pick(Some(gdk::Key::_1), Some(gdk::Key::exclam), shift),
-        None
-    );
-    assert_eq!(
-        digit_pick(Some(gdk::Key::_4), Some(gdk::Key::dollar), shift),
-        None
-    );
+    assert_eq!(pick((gdk::Key::_1, gdk::Key::exclam), SHIFT), None);
+    assert_eq!(pick((gdk::Key::_4, gdk::Key::dollar), SHIFT), None);
 }
 
 #[test]

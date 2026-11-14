@@ -34,17 +34,6 @@ fn each_stroke_tops_the_reserve_back_up_while_the_tip_keeps_its_dirt() {
 }
 
 #[test]
-fn without_reloading_the_reserve_keeps_running_down() {
-    let mut state = painting_state();
-    state.reload_each_stroke = false;
-    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
-    let worn = reserve_volume(&state);
-    let samples = row_samples(RAG_ROW_Y);
-    state.begin_stroke(Tool::Brush, samples[0]);
-    assert_eq!(reserve_volume(&state), worn);
-}
-
-#[test]
 fn cleaning_each_stroke_starts_every_stroke_from_the_palette_mix() {
     let mut state = painting_state();
     state.clean_each_stroke = true;
@@ -117,7 +106,6 @@ fn knife_comes_down_loaded_to_the_palette_load_and_no_further() {
 #[test]
 fn without_reloading_the_knife_stays_as_empty_as_it_is() {
     let mut state = holding_the_knife();
-    state.reload_each_stroke = false;
     let samples = row_samples(PAINT_ROW_Y);
     state.begin_stroke(Tool::Knife, samples[0]);
     assert_eq!(knife_totals(&state).volume, 0.0);

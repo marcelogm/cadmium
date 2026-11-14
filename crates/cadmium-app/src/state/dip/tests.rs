@@ -1,8 +1,8 @@
 use super::*;
 use crate::state::test_support::{
-    PAINT_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals, finish_painting,
-    holding_the_knife, knife_totals, paint_stroke, painting_state, present_one_frame,
-    reserve_volume, row_samples, stroke,
+    PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals,
+    finish_painting, holding_the_knife, knife_totals, paint_stroke, painting_state,
+    present_one_frame, reserve_volume, row_samples, stroke,
 };
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
@@ -75,10 +75,10 @@ fn clicking_the_loaded_pigment_again_cleans_the_brush_and_loads_it_full() {
 #[test]
 fn a_second_stroke_paints_with_what_the_first_left_on_the_brush() {
     let mut state = painting_state();
-    state.click_pile(0, PigmentClick::Load);
-    paint_stroke(&mut state, Tool::Brush, &row_samples(60.0));
+    state.click_pile(WHITE_SLOT, PigmentClick::Load);
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let after_first = reserve_volume(&state);
-    let samples = row_samples(140.0);
+    let samples = row_samples(RAG_ROW_Y);
     state.begin_stroke(Tool::Brush, samples[0]);
     assert_eq!(reserve_volume(&state), after_first);
     state.add_samples(&samples[1..]);

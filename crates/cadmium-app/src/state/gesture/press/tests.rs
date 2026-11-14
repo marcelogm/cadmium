@@ -12,7 +12,7 @@ fn wipe_the_painted_row(state: &mut AppState) {
 }
 
 #[test]
-fn the_eraser_wipes_the_painting_with_the_rag() {
+fn the_eraser_wipes_with_the_rag() {
     let mut state = painting_state();
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let before = wet_volume(&state);
@@ -36,7 +36,7 @@ fn the_move_tool_and_the_eyedropper_tip_do_not_touch_down() {
 }
 
 #[test]
-fn the_pencil_starts_a_pencil_stroke_on_the_painting() {
+fn the_pencil_starts_a_pencil_stroke() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Pencil));
     assert!(state.press(sample_at(100.0, 100.0, 1.0), false));

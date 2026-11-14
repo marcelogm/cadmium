@@ -24,8 +24,6 @@ pub(super) struct Snapshot {
     pub(super) tooltips: Vec<String>,
     pub(super) addable: Vec<PigmentChoice>,
     pub(super) recipe: Vec<(usize, f32)>,
-    /// What the held paint is made of, to name it.
-    pub(super) held_recipe: Vec<(usize, f32)>,
     pub(super) held_is_clean: bool,
     pub(super) palette_colour: [u8; 3],
     pub(super) held_colour: [u8; 3],
@@ -63,7 +61,6 @@ impl Snapshot {
             addable: addable_pigments(db, &slots),
             slots,
             recipe: session.brush.recipe.clone(),
-            held_recipe: session.brush.recipe.clone(),
             held_is_clean,
             palette_colour,
             held_colour,

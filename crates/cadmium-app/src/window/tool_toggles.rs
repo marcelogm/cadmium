@@ -83,9 +83,8 @@ impl CadmiumWindow {
     }
 
     /// Number-row keys pick tools by the physical key: AZERTY's unshifted `&` is its 1,
-    /// which no keyval trigger gets right, so the key is read on both levels. Taken in the
-    /// capture phase so the digit triggers never see these presses; keypad keys and letters
-    /// still go through them.
+    /// which no keyval trigger gets right, so the key is read on both levels. Keypad keys and
+    /// letters go through the shortcut triggers instead.
     pub(super) fn setup_digit_keys(&self) {
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);

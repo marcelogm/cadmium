@@ -124,7 +124,7 @@ impl BrushPanel {
         let loaded_text = if snapshot.held_is_clean {
             wording.clean.to_string()
         } else {
-            describe_recipe(&snapshot.slot_names, &snapshot.held_recipe)
+            describe_recipe(&snapshot.slot_names, &snapshot.recipe)
         };
         group.loaded_row.set_subtitle(&loaded_text);
     }

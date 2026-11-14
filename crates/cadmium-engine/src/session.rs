@@ -80,7 +80,6 @@ impl PaintSession {
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
-            // After the canvas: the undo atlas shrinks to fit what it leaves.
             history: History::new(gpu, undo.budget_bytes, undo.max_steps),
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
@@ -135,7 +134,6 @@ impl PaintSession {
 
     pub fn undo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
-        self.history.commit_step();
         self.history.undo(gpu, &mut self.canvas)
     }
 
