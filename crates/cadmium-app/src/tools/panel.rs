@@ -53,71 +53,47 @@ pub(super) const NO_CONTROLS: VisibleControls = VisibleControls {
     hardness: false,
 };
 
-pub(super) const TUBE_LABEL: &str = "Tube";
-
-const TUBE_CONTROLS: VisibleControls = VisibleControls {
-    pigments: true,
-    size: true,
-    ..NO_CONTROLS
-};
-
-const TUBE_WORDING: ToolWording = ToolWording {
-    pigments: "Click to pick the tube",
-    size_title: "Nozzle",
-    size_subtitle: None,
-    ..UiTool::Paint(Tool::Brush).profile().wording
-};
-
-/// The tool the side panel describes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PanelTool {
-    Paint(Tool),
-    Tube,
+/// The painting's tool as the side panel shows it; Move shows the tool in hand.
+pub(crate) fn panel_tool(painting: UiTool, tool_in_hand: Tool) -> Tool {
+    match painting {
+        UiTool::Paint(tool) => tool,
+        UiTool::Move => tool_in_hand,
+    }
 }
 
-impl PanelTool {
-    /// The painting's tool as the panel shows it; Move shows the tool in hand.
-    pub(crate) fn of_painting(painting: UiTool, tool_in_hand: Tool) -> PanelTool {
-        match painting {
-            UiTool::Paint(tool) => PanelTool::Paint(tool),
-            UiTool::Move => PanelTool::Paint(tool_in_hand),
-        }
-    }
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            PanelTool::Paint(tool) => UiTool::Paint(tool).label(),
-            PanelTool::Tube => TUBE_LABEL,
-        }
-    }
+/// How the side panel describes a tool.
+pub(crate) trait ToolPanel {
+    fn label(self) -> &'static str;
 
     /// Where the tool carries its paint, if it carries any.
-    pub(crate) fn holder(self) -> Option<Holder> {
-        match self {
-            PanelTool::Paint(tool) => tool.profile().holder,
-            PanelTool::Tube => None,
-        }
-    }
+    fn holder(self) -> Option<Holder>;
 
-    pub(crate) fn wording(self) -> ToolWording {
-        match self {
-            PanelTool::Paint(tool) => UiTool::Paint(tool).profile().wording,
-            PanelTool::Tube => TUBE_WORDING,
-        }
-    }
+    fn wording(self) -> ToolWording;
 
-    pub(crate) fn controls(self) -> VisibleControls {
-        match self {
-            PanelTool::Paint(tool) => UiTool::Paint(tool).profile().controls,
-            PanelTool::Tube => TUBE_CONTROLS,
-        }
-    }
+    fn controls(self) -> VisibleControls;
 
     /// How the tool is held, for the tools that need telling.
-    pub(crate) fn handling(self) -> Option<&'static str> {
-        match self {
-            PanelTool::Paint(tool) => UiTool::Paint(tool).handling(),
-            PanelTool::Tube => None,
-        }
+    fn handling(self) -> Option<&'static str>;
+}
+
+impl ToolPanel for Tool {
+    fn label(self) -> &'static str {
+        UiTool::Paint(self).label()
+    }
+
+    fn holder(self) -> Option<Holder> {
+        self.profile().holder
+    }
+
+    fn wording(self) -> ToolWording {
+        UiTool::Paint(self).profile().wording
+    }
+
+    fn controls(self) -> VisibleControls {
+        UiTool::Paint(self).profile().controls
+    }
+
+    fn handling(self) -> Option<&'static str> {
+        UiTool::Paint(self).handling()
     }
 }

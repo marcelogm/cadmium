@@ -9,7 +9,6 @@ use super::AppState;
 use super::dip::{fill_level, mean_mixture};
 use super::recipe::recipe_from_fractions;
 use crate::settings::{DEFAULT_MIXING_KNIFE_DIAMETER_PX, SettingsStore, mixing_knife_diameter};
-use crate::tools::panel::PanelTool;
 
 /// The tray's mixing knife: a blade of its own size, whose face keeps the paint it
 /// scrapes up from one pass to the next.
@@ -67,7 +66,7 @@ impl AppState {
     }
 
     fn mixing_knife_is_focused(&self) -> bool {
-        self.focused_tool() == PanelTool::Paint(Tool::MixingKnife)
+        self.focused_tool() == Tool::MixingKnife
     }
 
     /// The size of the tool the side panel describes.

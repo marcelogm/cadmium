@@ -82,9 +82,6 @@ fn painting_tools_press_into_the_painting() {
         Press::Stroke(Tool::Rag),
         Press::Stroke(Tool::Pencil),
         Press::Stroke(Tool::Eyedropper),
-        Press::LoadFromPile(Tool::Brush),
-        Press::LoadFromPile(Tool::Knife),
-        Press::Squeeze,
     ];
     for press in presses {
         assert_eq!(down_outcome(press, false), DownOutcome::Press);

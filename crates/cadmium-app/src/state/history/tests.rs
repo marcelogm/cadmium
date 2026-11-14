@@ -36,13 +36,13 @@ fn drying_wet_paint_can_be_undone() {
 }
 
 #[test]
-fn undo_lifts_a_hold_that_is_still_down() {
+fn undo_lifts_a_tray_stroke_that_is_still_down() {
     let mut state = painting_state();
-    state.set_tray_tool(TrayTool::Tube);
-    state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
-    state.advance_hold(0.1);
+    state.set_tray_tool(TrayTool::Load);
+    state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), false);
+    state.motion(&[sample_at(320.0, 300.0, 1.0)]);
     assert!(state.undo());
-    assert!(!state.holds_on(Surface::Tray));
+    assert!(!state.is_stroking());
     assert_eq!(
         state.session.tray.wet_totals(&state.gpu).unwrap().volume,
         0.0

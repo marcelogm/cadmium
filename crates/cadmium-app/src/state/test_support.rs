@@ -6,8 +6,8 @@ use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 
-use super::AppState;
 use super::clock::Clock;
+use super::{AppState, PigmentClick};
 use crate::presets::starting_canvas_spec;
 use crate::tools::{TrayTool, UiTool};
 
@@ -138,14 +138,31 @@ pub(super) fn present_one_tray_frame(state: &mut AppState) {
     gpu.queue.submit([encoder.finish()]);
 }
 
-pub(super) fn squeeze_blob_on_tray(state: &mut AppState, slot: usize) {
-    let (tray_tool, focus) = (state.tray_tool, state.focus);
-    state.set_tray_tool(TrayTool::Tube);
-    state.set_tube_slot(slot);
-    state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
-    state.advance_hold(1.0);
-    state.release();
-    state.tray_tool = tray_tool;
+const BLOB_PASSES: u32 = 4;
+const BLOB_ROW_Y: f64 = 300.0;
+const BLOB_FROM_X: f64 = 280.0;
+const BLOB_TO_X: f64 = 320.0;
+
+/// Loads the brush with `slot` and passes it over the middle of the tray, then puts the
+/// tools back as they were; the brush keeps the paint it was loaded with.
+pub(super) fn paint_blob_on_tray(state: &mut AppState, slot: usize) {
+    let tools = (state.ui_tool, state.resting_tool, state.tray_tool);
+    let focus = state.focus;
+    state.set_ui_tool(UiTool::Paint(Tool::Brush));
+    state.set_tray_tool(TrayTool::Load);
+    state.choose_pigment(slot, PigmentClick::CleanAndLoad);
+    for _ in 0..BLOB_PASSES {
+        state.press(
+            Surface::Tray,
+            sample_at(BLOB_FROM_X, BLOB_ROW_Y, 1.0),
+            false,
+        );
+        state.motion(&[sample_at(BLOB_TO_X, BLOB_ROW_Y, 1.0)]);
+        state.release();
+    }
+    finish_painting(state, present_one_tray_frame);
+    (state.ui_tool, state.resting_tool, state.tray_tool) = tools;
+    state.session.brush.tool = state.resting_tool;
     state.focus = focus;
 }
 

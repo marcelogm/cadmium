@@ -1,3 +1,4 @@
+use cadmium_engine::pigments::mixture_srgb8;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tool::Holder;
@@ -53,7 +54,7 @@ impl AppState {
         true
     }
 
-    pub(super) fn begin_prepared_stroke(
+    fn begin_prepared_stroke(
         &mut self,
         surface: Surface,
         tool: Tool,
@@ -87,6 +88,21 @@ impl AppState {
         self.session.add_samples(samples);
         self.note_samples(samples);
         self.wake();
+    }
+
+    fn held_colour(&self, tool: Tool) -> Option<[u8; 3]> {
+        let held = if tool.profile().holds_on_blade() {
+            &self.knife_mixture
+        } else {
+            &self.reserve_mixture
+        };
+        (!held.is_empty()).then(|| {
+            mixture_srgb8(
+                &self.session.db,
+                &self.session.canvas.spec.pigment_slots,
+                &held.fractions,
+            )
+        })
     }
 
     pub(super) fn finish_stroke(&mut self) {

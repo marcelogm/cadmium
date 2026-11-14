@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Instant;
 
 use cadmium_engine::canvas::{CanvasError, CanvasSpec};
 use cadmium_engine::gpu::GpuContext;
@@ -18,7 +17,6 @@ use crate::tools::{TrayTool, UiTool};
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
 use gesture::Contact;
-pub use gesture::LoadRing;
 pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use pen::PenReadout;
@@ -91,7 +89,6 @@ pub struct AppState {
     tray_tool: TrayTool,
     /// The surface whose tool was chosen last; the side panel describes that tool.
     focus: Surface,
-    pub tube_slot: usize,
     edits: EditCounter,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
@@ -106,7 +103,6 @@ pub struct AppState {
     knife_volume: f32,
     mixing_knife: mixing_knife::MixingKnife,
     contact: Option<Contact>,
-    hold_clock: Option<Instant>,
     /// How the tray widget shows the tray, in device px.
     pub tray_view: ViewTransform,
     /// Device px per widget px on the tray's screen.
@@ -134,7 +130,6 @@ impl AppState {
             ui_tool: UiTool::default(),
             tray_tool: TrayTool::default(),
             focus: Surface::Painting,
-            tube_slot: 0,
             edits: EditCounter::default(),
             file: None,
             pen: PenReadout::default(),
@@ -148,7 +143,6 @@ impl AppState {
             knife_volume: 0.0,
             mixing_knife: mixing_knife::MixingKnife::default(),
             contact: None,
-            hold_clock: None,
             tray_view: UNMOVED_VIEW,
             tray_device_scale: 1.0,
             resting_tool,

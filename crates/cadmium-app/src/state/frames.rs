@@ -18,7 +18,6 @@ impl AppState {
 
     pub fn encode_tray_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
         self.prepare_frame();
-        self.advance_hold_by_clock();
         let now_ms = self.now_ms();
         self.pacing.begin_frame(&self.gpu, encoder);
         self.session.encode_tray_frame(&self.gpu, now_ms, encoder);

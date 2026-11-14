@@ -39,14 +39,6 @@ fn every_toggle_tooltip_names_the_tool_and_its_first_key() {
 }
 
 #[test]
-fn the_tube_is_not_a_painting_tool() {
-    assert_eq!(UiTool::from_name("tube"), None);
-    for tool in UiTool::ALL {
-        assert_ne!(tool.profile().on_painting, Press::Squeeze, "{tool:?}");
-    }
-}
-
-#[test]
 fn unknown_toggle_name_is_not_a_tool() {
     assert_eq!(UiTool::from_name("spray"), None);
 }
@@ -64,16 +56,6 @@ fn only_the_knife_explains_how_it_is_held() {
 #[test]
 fn app_starts_with_the_brush() {
     assert_eq!(UiTool::default(), UiTool::Paint(Tool::Brush));
-}
-
-#[test]
-fn no_painting_tool_loads_on_the_painting() {
-    for tool in UiTool::ALL {
-        assert!(
-            !matches!(tool.profile().on_painting, Press::LoadFromPile(_)),
-            "{tool:?}"
-        );
-    }
 }
 
 #[test]

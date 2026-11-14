@@ -1,6 +1,6 @@
 use gtk::gdk;
 
-use super::panel::{PanelTool, TUBE_LABEL};
+use super::panel::panel_tool;
 use super::{Press, Tool, UiTool, mixing_knife};
 
 /// What the pen does on the tray, chosen in the tray's own header.
@@ -13,7 +13,6 @@ pub enum TrayTool {
     MixingKnife,
     Blender,
     Rag,
-    Tube,
 }
 
 pub(crate) struct TrayToolProfile {
@@ -52,21 +51,13 @@ const RAG: TrayToolProfile = TrayToolProfile {
     tooltip: "Rag (Shift+5): wipes paint off the tray",
     key: gdk::Key::_5,
 };
-const TUBE: TrayToolProfile = TrayToolProfile {
-    name: "tray-tube",
-    label: TUBE_LABEL,
-    icon: "cadmium-tube-symbolic",
-    tooltip: "Tube (Shift+6): squeezes pure pigment onto the tray",
-    key: gdk::Key::_6,
-};
 
 impl TrayTool {
-    pub const ALL: [TrayTool; 5] = [
+    pub const ALL: [TrayTool; 4] = [
         TrayTool::Load,
         TrayTool::MixingKnife,
         TrayTool::Blender,
         TrayTool::Rag,
-        TrayTool::Tube,
     ];
 
     pub(crate) const fn profile(self) -> &'static TrayToolProfile {
@@ -75,7 +66,6 @@ impl TrayTool {
             TrayTool::MixingKnife => &MIXING_KNIFE,
             TrayTool::Blender => &BLENDER,
             TrayTool::Rag => &RAG,
-            TrayTool::Tube => &TUBE,
         }
     }
 
@@ -100,13 +90,12 @@ impl TrayTool {
     pub(crate) fn press(self, painting: UiTool) -> Press {
         match self {
             TrayTool::Load => match loaded_tool(painting) {
-                Some(tool) => Press::LoadFromPile(tool),
+                Some(tool) => Press::Stroke(tool),
                 None => Press::Nothing,
             },
             TrayTool::MixingKnife => Press::Stroke(Tool::MixingKnife),
             TrayTool::Blender => Press::Stroke(Tool::Blender),
             TrayTool::Rag => Press::Stroke(Tool::Rag),
-            TrayTool::Tube => Press::Squeeze,
         }
     }
 
@@ -141,13 +130,12 @@ impl TrayTool {
     }
 
     /// The tool the side panel describes while this one is in use.
-    pub(crate) fn panel_tool(self, painting: UiTool, tool_in_hand: Tool) -> PanelTool {
+    pub(crate) fn panel_tool(self, painting: UiTool, tool_in_hand: Tool) -> Tool {
         match self {
-            TrayTool::Load => PanelTool::of_painting(painting, tool_in_hand),
-            TrayTool::MixingKnife => PanelTool::Paint(Tool::MixingKnife),
-            TrayTool::Blender => PanelTool::Paint(Tool::Blender),
-            TrayTool::Rag => PanelTool::Paint(Tool::Rag),
-            TrayTool::Tube => PanelTool::Tube,
+            TrayTool::Load => panel_tool(painting, tool_in_hand),
+            TrayTool::MixingKnife => Tool::MixingKnife,
+            TrayTool::Blender => Tool::Blender,
+            TrayTool::Rag => Tool::Rag,
         }
     }
 }

@@ -4,7 +4,7 @@ use cadmium_engine::surface::Surface;
 use cadmium_engine::tool::UNTILTED_MIXING_KNIFE_TILT_DEG;
 
 use super::AppState;
-use crate::tools::panel::PanelTool;
+use crate::tools::panel::panel_tool;
 use crate::tools::{Press, TrayTool};
 
 impl AppState {
@@ -41,10 +41,10 @@ impl AppState {
     }
 
     /// The tool the side panel and the pigment piles answer to.
-    pub(crate) fn focused_tool(&self) -> PanelTool {
+    pub(crate) fn focused_tool(&self) -> Tool {
         let tool_in_hand = self.session.brush.tool;
         match self.focus {
-            Surface::Painting => PanelTool::of_painting(self.ui_tool, tool_in_hand),
+            Surface::Painting => panel_tool(self.ui_tool, tool_in_hand),
             Surface::Tray => self.tray_tool.panel_tool(self.ui_tool, tool_in_hand),
         }
     }

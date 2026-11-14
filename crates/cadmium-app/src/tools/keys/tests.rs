@@ -54,7 +54,7 @@ fn a_digit_picks_the_painting_tool_and_shift_and_it_the_tray_tool() {
     );
     assert_eq!(pick(us_one, SHIFT), Some(DigitPick::Tray(TrayTool::Load)));
     let us_six = (gdk::Key::_6, gdk::Key::asciicircum);
-    assert_eq!(pick(us_six, SHIFT), Some(DigitPick::Tray(TrayTool::Tube)));
+    assert_eq!(pick(us_six, SHIFT), None);
     assert_eq!(pick(us_six, NONE), None);
 }
 

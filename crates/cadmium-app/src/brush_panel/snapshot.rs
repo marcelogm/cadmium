@@ -6,7 +6,8 @@ use cadmium_engine::tool::Holder;
 use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
 use crate::state::AppState;
 use crate::thumbnails::ThumbnailKey;
-use crate::tools::panel::PanelTool;
+use crate::tools::Tool;
+use crate::tools::panel::ToolPanel;
 
 pub(super) struct PigmentChoice {
     pub(super) id: &'static str,
@@ -16,8 +17,7 @@ pub(super) struct PigmentChoice {
 }
 
 pub(super) struct Snapshot {
-    pub(super) tool: PanelTool,
-    pub(super) tube_slot: usize,
+    pub(super) tool: Tool,
     pub(super) slots: Vec<String>,
     pub(super) slot_names: Vec<&'static str>,
     pub(super) slot_colours: Vec<[u8; 3]>,
@@ -57,7 +57,6 @@ impl Snapshot {
         let worn = state.worn_library_brush();
         Snapshot {
             tool,
-            tube_slot: state.tube_slot,
             slot_names: pigments.iter().map(|pigment| pigment.name).collect(),
             slot_colours: slots.iter().map(|id| db.masstone_srgb8(id)).collect(),
             tooltips: pigment_tooltips(&pigments),
@@ -106,7 +105,7 @@ fn mixture_colour(db: &PigmentDb, slots: &[String], primer: [u8; 3], mixture: &M
 
 fn held_paint(
     state: &AppState,
-    tool: PanelTool,
+    tool: Tool,
     colour_of: impl Fn(&Mixture) -> [u8; 3],
 ) -> ([u8; 3], f32, bool) {
     if state.shows_tray_tip() {

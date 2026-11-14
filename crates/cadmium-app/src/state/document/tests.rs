@@ -1,7 +1,7 @@
 use super::*;
 use crate::presets::starting_canvas_spec;
 use crate::state::test_support::{
-    PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, painting_state, row_samples, squeeze_blob_on_tray, stroke,
+    PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, paint_blob_on_tray, painting_state, row_samples, stroke,
     wet_volume,
 };
 use cadmium_engine::engine::PaintEngine;
@@ -70,20 +70,9 @@ fn a_new_painting_keeps_the_lab_and_starts_untitled_without_undo() {
 }
 
 #[test]
-fn the_tube_falls_back_to_the_first_pigment_on_a_smaller_palette() {
-    let mut state = painting_state();
-    let last = state.slot_count() - 1;
-    state.set_tube_slot(last);
-    let mut spec = state.session.canvas.spec.clone();
-    spec.pigment_slots.truncate(2);
-    state.start_painting(spec).unwrap();
-    assert_eq!(state.tube_slot, 0);
-}
-
-#[test]
 fn a_new_painting_starts_with_a_clean_tray() {
     let mut state = painting_state();
-    squeeze_blob_on_tray(&mut state, 0);
+    paint_blob_on_tray(&mut state, 0);
     state.start_painting(starting_canvas_spec()).unwrap();
     assert_eq!(
         state.session.tray.wet_totals(&state.gpu).unwrap().volume,

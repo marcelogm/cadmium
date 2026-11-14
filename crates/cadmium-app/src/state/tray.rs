@@ -1,8 +1,8 @@
+use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::ClearOutcome;
 
 use super::AppState;
 use super::recipe::PigmentClick;
-use crate::tools::panel::PanelTool;
 
 impl AppState {
     pub fn slot_count(&self) -> usize {
@@ -18,16 +18,22 @@ impl AppState {
     }
 
     pub fn click_pile(&mut self, slot: usize, click: PigmentClick) {
-        match self.focused_tool() {
-            PanelTool::Tube => self.set_tube_slot(slot),
-            PanelTool::Paint(_) => self.choose_pigment(slot, click),
+        self.choose_pigment(slot, click);
+    }
+
+    /// Keeps how the tray widget shows the tray, on a screen of `device_scale` device px
+    /// per widget px; a view or a scale that isn't a scale is ignored.
+    pub fn set_tray_view(&mut self, view: ViewTransform, device_scale: f64) {
+        let zoom_is_a_scale = view.zoom.is_finite() && view.zoom > 0.0;
+        if zoom_is_a_scale && device_scale.is_finite() && device_scale > 0.0 {
+            self.tray_view = view;
+            self.tray_device_scale = device_scale;
         }
     }
 
-    pub fn set_tube_slot(&mut self, slot: usize) {
-        if slot < self.slot_count() {
-            self.tube_slot = slot;
-        }
+    /// Widget px per tray px: what screen distances on the tray are measured in.
+    pub fn tray_screen_zoom(&self) -> f32 {
+        self.tray_view.zoom / self.tray_device_scale as f32
     }
 
     pub fn clear_tray(&mut self) {

@@ -14,7 +14,6 @@ pub struct TrayView {
     pub pointer: Cell<Option<(f64, f64)>>,
     pub auto_fit: Cell<AutoFit>,
     pub(crate) held_keys: HeldKeys,
-    pub(super) shown_ring: Cell<Option<ShownRing>>,
     pub released_handlers: RefCell<Vec<TrayHandler>>,
     pub colour_picked_handlers: RefCell<Vec<PickHandler>>,
     pub pen_observed_handlers: RefCell<Vec<TrayHandler>>,
@@ -83,17 +82,11 @@ impl WidgetImpl for TrayView {
         if let Some(texture) = self.texture.borrow().as_ref() {
             append_tray_image(snapshot, texture, scale);
         }
-        let outline = tray.cursor_outline();
         if let Some((x, y)) = self.hover.get()
-            && let Some(outline) = outline.as_ref()
+            && let Some(outline) = tray.cursor_outline()
             && outline.is_visible()
         {
             outline.append_to(snapshot, (x as f32, y as f32));
-        }
-        if let Some(shown) = self.shown_ring.get()
-            && let Some(outline) = outline.as_ref()
-        {
-            append_load_ring(snapshot, &shown, outline);
         }
     }
 }

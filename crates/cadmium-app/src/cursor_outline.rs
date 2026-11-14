@@ -27,7 +27,7 @@ impl CursorOutline {
 
     pub(crate) fn of_brush(state: &AppState, surface: Surface, to_widget: f32) -> CursorOutline {
         let mut brush = state.session.brush.clone();
-        if let Press::Stroke(tool) | Press::LoadFromPile(tool) = state.press_for(surface) {
+        if let Press::Stroke(tool) = state.press_for(surface) {
             brush.tool = tool;
             brush.geometry.max_diameter_px = state.stroke_diameter_px(tool);
         }

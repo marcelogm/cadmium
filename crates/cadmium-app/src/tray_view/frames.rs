@@ -1,4 +1,3 @@
-use cadmium_engine::surface::Surface;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
@@ -27,8 +26,7 @@ impl TrayView {
     fn advance_frame(&self) -> glib::ControlFlow {
         self.fit_if_held_back();
         self.present_if_needed();
-        let ring_moving = self.follow_load_ring();
-        if ring_moving || self.wants_frame() {
+        if self.wants_frame() {
             return glib::ControlFlow::Continue;
         }
         self.imp().tick.take();
@@ -44,7 +42,6 @@ impl TrayView {
             || state.session.tray_has_pending_work()
             || state.brush_measure_due()
             || state.session.tray_bristles_settling(state.now_ms())
-            || state.holds_on(Surface::Tray)
             || !presenter.matches_size(width_px, height_px)
     }
 

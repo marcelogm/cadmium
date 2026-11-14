@@ -10,7 +10,8 @@ use crate::side_panel::panel_root;
 use crate::state::{AppState, PigmentClick, SharedState};
 use crate::swatch::Swatch;
 use crate::thumbnails::{ThumbnailCache, ThumbnailKey};
-use crate::tools::panel::PanelTool;
+use crate::tools::Tool;
+use crate::tools::panel::ToolPanel;
 use crate::window::CadmiumWindow;
 
 mod build;
@@ -24,8 +25,7 @@ mod thumbnail_job;
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
     RackEntry, describe_recipe, hardness_grade, loaded_swatch_colours, percent_text,
-    pile_is_highlighted, plate_gap_text, size_to_slider, slider_needs_sync, tool_group_description,
-    tool_hint,
+    pile_is_highlighted, plate_gap_text, size_to_slider, slider_needs_sync, tool_hint,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -103,21 +103,13 @@ impl BrushPanel {
         self.show_sliders(&snapshot);
         self.show_rack(&snapshot);
         self.show_stroke_options(&snapshot);
-        self.show_controls_for(
-            snapshot.tool,
-            tool_group_description(snapshot.tool, &snapshot.slot_names, snapshot.tube_slot),
-        );
+        self.show_controls_for(snapshot.tool);
         self.syncing.set(false);
     }
 
     fn highlight_piles(&self, snapshot: &Snapshot) {
         for (slot, swatch) in self.pigment_swatches.borrow().iter().enumerate() {
-            swatch.set_selected(pile_is_highlighted(
-                snapshot.tool,
-                slot,
-                snapshot.tube_slot,
-                &snapshot.recipe,
-            ));
+            swatch.set_selected(pile_is_highlighted(slot, &snapshot.recipe));
         }
     }
 
@@ -204,12 +196,12 @@ impl BrushPanel {
         group.clean_each_row.set_active(snapshot.clean_each_stroke);
     }
 
-    fn show_controls_for(&self, tool: PanelTool, group_description: Option<&str>) {
+    fn show_controls_for(&self, tool: Tool) {
         self.show_wording_for(tool);
-        self.show_visible_controls_for(tool, group_description);
+        self.show_visible_controls_for(tool);
     }
 
-    fn show_wording_for(&self, tool: PanelTool) {
+    fn show_wording_for(&self, tool: Tool) {
         let wording = tool.wording();
         let group = &self.tool_group;
         self.pigments.group.set_description(Some(wording.pigments));
@@ -238,13 +230,12 @@ impl BrushPanel {
         self.hint.set_label(tool_hint(tool));
     }
 
-    fn show_visible_controls_for(&self, tool: PanelTool, group_description: Option<&str>) {
+    fn show_visible_controls_for(&self, tool: Tool) {
         let shown = tool.controls();
         let group = &self.tool_group;
         self.pigments.group.set_visible(shown.pigments);
         group.group.set_visible(shown.tool_group());
         group.group.set_title(tool.label());
-        group.group.set_description(group_description);
         group.loaded_row.set_visible(shown.loaded);
         group.size.row.set_visible(shown.size);
         group.hardness.row.set_visible(shown.hardness);

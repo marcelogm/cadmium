@@ -8,7 +8,6 @@ use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
 use self::geometry::{TRAY_MIN_HEIGHT, TRAY_NATURAL_HEIGHT, is_on_tray, tray_point};
-use self::ring::{ShownRing, append_load_ring};
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
 use crate::input::{NavigableSurface, PaintSurfaceWidget};
@@ -29,7 +28,6 @@ mod frames;
 mod geometry;
 mod imp;
 mod navigation;
-mod ring;
 
 glib::wrapper! {
     pub struct TrayView(ObjectSubclass<imp::TrayView>)

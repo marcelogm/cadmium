@@ -5,11 +5,10 @@ use cadmium_engine::surface::Surface;
 use crate::settings::SettingsStore;
 use crate::state::AppState;
 use crate::state::test_support::{
-    PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, brush_totals, finish_painting, painting_state,
-    present_one_frame, present_one_tray_frame, row_samples, sample_at, squeeze_blob_on_tray,
+    PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, brush_totals, finish_painting, paint_blob_on_tray,
+    painting_state, present_one_frame, present_one_tray_frame, row_samples, sample_at,
 };
 use crate::test_dir::TempDir;
-use crate::tools::panel::PanelTool;
 use crate::tools::{TrayTool, UiTool};
 
 const UPRIGHT_PRESSURE: f32 = 0.8;
@@ -20,9 +19,9 @@ fn face_volume(state: &AppState) -> f64 {
     state.session.engine.face_totals(&state.gpu).unwrap().volume
 }
 
-/// Squeezes a blob on the tray and passes the mixing knife upright across it.
+/// Paints a blob on the tray and passes the mixing knife upright across it.
 fn scrape_the_tray(state: &mut AppState) {
-    squeeze_blob_on_tray(state, 0);
+    paint_blob_on_tray(state, 0);
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.set_tray_tool(TrayTool::MixingKnife);
     assert!(state.press(
@@ -114,7 +113,7 @@ fn cleaning_with_the_mixing_knife_focused_cleans_its_face_and_not_the_brush() {
     scrape_the_tray(&mut state);
     let brush = brush_totals(&state);
     assert!(brush.volume > 0.0);
-    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::MixingKnife));
+    assert_eq!(state.focused_tool(), Tool::MixingKnife);
     state.clean_brush();
     finish_painting(&mut state, present_one_tray_frame);
     assert_eq!(face_volume(&state), 0.0);
@@ -244,7 +243,7 @@ fn a_brush_stroke_queued_behind_the_mixing_knife_keeps_each_its_size() {
     let mut state = painting_state();
     let brush_reserve = state.session.engine.full_reserve_volume();
     state.set_brush_size(BLOB_SIZE_PX);
-    squeeze_blob_on_tray(&mut state, 0);
+    paint_blob_on_tray(&mut state, 0);
     state.set_brush_size(TEST_BRUSH_DIAMETER_PX);
     finish_painting(&mut state, present_both);
     let before = tray_row_volume(&state, OFF_CENTRE_ROW, 280..330);

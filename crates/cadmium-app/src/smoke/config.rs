@@ -10,7 +10,7 @@ use crate::tools::UiTool;
 
 use super::SmokeConfig;
 use super::brushes::SmokeBrushes;
-use super::tray::{TRAY_MIX, TRAY_TOOL, parse_tray_tool};
+use super::tray::{TRAY_TOOL, parse_tray_tool};
 
 pub(super) const EXIT_AFTER_FRAMES: &str = "CADMIUM_SMOKE_EXIT_AFTER_FRAMES";
 pub(super) const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
@@ -18,7 +18,6 @@ pub(super) const DIALOG: &str = "CADMIUM_SMOKE_DIALOG";
 pub(super) const STROKE: &str = "CADMIUM_SMOKE_STROKE";
 pub(super) const PAGE: &str = "CADMIUM_SMOKE_PAGE";
 pub(super) const TRAY: &str = "CADMIUM_SMOKE_TRAY";
-pub(super) const TRAY_PAINT: &str = "CADMIUM_SMOKE_TRAY_PAINT";
 pub(super) const TOOL: &str = "CADMIUM_SMOKE_TOOL";
 pub(super) const SAVE: &str = "CADMIUM_SMOKE_SAVE";
 pub(super) const OPEN: &str = "CADMIUM_SMOKE_OPEN";
@@ -47,8 +46,6 @@ impl SmokeConfig {
             page: non_empty(&lookup, PAGE).map(|value| value.to_string_lossy().into_owned()),
             tray: lookup_flag(&lookup, TRAY),
             tray_tool: None,
-            tray_mix: lookup_flag(&lookup, TRAY_MIX),
-            tray_paint: lookup_flag(&lookup, TRAY_PAINT),
             save: lookup_path(&lookup, SAVE),
             open: lookup_path(&lookup, OPEN),
             export: lookup_path(&lookup, EXPORT),
@@ -79,8 +76,6 @@ impl SmokeConfig {
             && !self.stroke
             && self.page.is_none()
             && !self.tray
-            && !self.tray_mix
-            && !self.tray_paint
             && self.save.is_none()
             && self.open.is_none()
             && self.export.is_none()

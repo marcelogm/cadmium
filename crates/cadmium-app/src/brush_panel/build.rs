@@ -7,7 +7,7 @@ use super::presentation::{
 };
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
-use crate::tools::panel::PanelTool;
+use crate::tools::panel::ToolPanel;
 
 const PIGMENT_SPACING: u32 = 4;
 const PIGMENT_BOX_MARGIN: i32 = 10;
@@ -63,7 +63,7 @@ pub(super) fn pigments_group() -> PigmentsGroup {
     pigment_card.append(&flow);
     let group = adw::PreferencesGroup::builder()
         .title("Pigments")
-        .description(PanelTool::Paint(Tool::Brush).wording().pigments)
+        .description(Tool::Brush.wording().pigments)
         .build();
     group.add(&pigment_card);
     PigmentsGroup { group, flow }
@@ -145,7 +145,7 @@ fn loaded_row() -> (adw::ActionRow, Swatch, gtk::LevelBar) {
 
 fn size_row() -> SliderRow {
     slider_row(
-        PanelTool::Paint(Tool::Brush).wording().size_title,
+        Tool::Brush.wording().size_title,
         MIN_SIZE_PX.ln(),
         MAX_SIZE_PX.ln(),
         SIZE_STEP,

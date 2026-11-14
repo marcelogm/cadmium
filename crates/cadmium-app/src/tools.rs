@@ -29,8 +29,6 @@ pub(crate) enum Press {
     Nothing,
     PickColour,
     Stroke(Tool),
-    LoadFromPile(Tool),
-    Squeeze,
 }
 
 pub(crate) struct UiToolProfile {

@@ -5,10 +5,9 @@ use cadmium_engine::tool::UNTILTED_MIXING_KNIFE_TILT_DEG;
 
 use super::tip_for;
 use crate::state::test_support::{
-    painting_state, present_one_tray_frame, sample_at, squeeze_blob_on_tray,
+    paint_blob_on_tray, painting_state, present_one_tray_frame, sample_at,
 };
 use crate::state::{AppState, PigmentClick};
-use crate::tools::panel::PanelTool;
 use crate::tools::{Press, TrayTool, UiTool};
 
 #[test]
@@ -24,37 +23,23 @@ fn each_surface_answers_with_its_own_tool() {
 }
 
 #[test]
-fn load_on_the_tray_loads_the_painting_tool() {
+fn load_on_the_tray_strokes_with_the_painting_tool() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Knife));
     state.set_tray_tool(TrayTool::Load);
-    assert_eq!(
-        state.press_for(Surface::Tray),
-        Press::LoadFromPile(Tool::Knife)
-    );
+    assert_eq!(state.press_for(Surface::Tray), Press::Stroke(Tool::Knife));
 }
 
 #[test]
 fn the_side_panel_follows_the_tool_chosen_last() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.set_tray_tool(TrayTool::Tube);
-    assert_eq!(state.focused_tool(), PanelTool::Tube);
+    state.set_tray_tool(TrayTool::Rag);
+    assert_eq!(state.focused_tool(), Tool::Rag);
     state.set_ui_tool(UiTool::Paint(Tool::Knife));
-    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Knife));
+    assert_eq!(state.focused_tool(), Tool::Knife);
     state.set_tray_tool(TrayTool::Load);
-    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Knife));
-}
-
-#[test]
-fn a_pile_click_picks_the_tube_while_the_tray_tube_is_focused() {
-    let mut state = painting_state();
-    state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.set_tray_tool(TrayTool::Tube);
-    let recipe_before = state.session.brush.recipe.clone();
-    state.click_pile(1, PigmentClick::CleanAndLoad);
-    assert_eq!(state.tube_slot, 1);
-    assert_eq!(state.session.brush.recipe, recipe_before);
+    assert_eq!(state.focused_tool(), Tool::Knife);
 }
 
 #[test]
@@ -68,7 +53,7 @@ fn choosing_a_tray_tool_keeps_the_brush_in_hand() {
 #[test]
 fn the_tray_rag_wipes_the_tray_and_hands_back_the_painting_tool() {
     let mut state = painting_state();
-    squeeze_blob_on_tray(&mut state, 0);
+    paint_blob_on_tray(&mut state, 0);
     let before = state.session.tray.wet_totals(&state.gpu).unwrap().volume;
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.set_tray_tool(TrayTool::Rag);
@@ -94,10 +79,8 @@ fn a_pile_click_chooses_the_pigment_while_the_tray_loads() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.set_tray_tool(TrayTool::Load);
-    let tube_before = state.tube_slot;
     state.click_pile(1, PigmentClick::Choose);
     assert_eq!(state.session.brush.recipe, [(1, 1.0)]);
-    assert_eq!(state.tube_slot, tube_before);
 }
 
 #[test]
@@ -108,7 +91,7 @@ fn the_eraser_wipes_the_tray_when_the_painting_tool_cannot_load() {
         UiTool::Paint(Tool::Eyedropper),
     ] {
         let mut state = painting_state();
-        squeeze_blob_on_tray(&mut state, 0);
+        paint_blob_on_tray(&mut state, 0);
         let before = state.session.tray.wet_totals(&state.gpu).unwrap().volume;
         state.set_ui_tool(tool);
         state.set_tray_tool(TrayTool::Load);
@@ -126,7 +109,6 @@ fn the_eraser_wipes_the_tray_when_the_painting_tool_cannot_load() {
 fn the_tray_s_own_tools_work_the_tray_s_tip() {
     assert_eq!(tip_for(Surface::Tray, Tool::Blender), Tip::Tray);
     assert_eq!(tip_for(Surface::Tray, Tool::Rag), Tip::Tray);
-    // A load cancelled into a stroke paints with the painting brush.
     assert_eq!(tip_for(Surface::Tray, Tool::Brush), Tip::Painting);
     assert_eq!(tip_for(Surface::Tray, Tool::Knife), Tip::Painting);
     assert_eq!(tip_for(Surface::Painting, Tool::Blender), Tip::Painting);
@@ -143,7 +125,7 @@ fn blend_across_the_tray(state: &mut AppState) {
 #[test]
 fn the_tray_blender_leaves_the_painting_brush_and_keeps_its_own_mix() {
     let mut state = painting_state();
-    squeeze_blob_on_tray(&mut state, 1);
+    paint_blob_on_tray(&mut state, 1);
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     let before = state.session.read_brush(&state.gpu).unwrap();
     state.set_tray_tool(TrayTool::Blender);
@@ -163,14 +145,14 @@ fn the_tray_blender_leaves_the_painting_brush_and_keeps_its_own_mix() {
 #[test]
 fn the_move_tool_s_panel_shows_the_painting_tool_after_a_tray_stroke() {
     let mut state = painting_state();
-    squeeze_blob_on_tray(&mut state, 1);
+    paint_blob_on_tray(&mut state, 1);
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
     state.set_ui_tool(UiTool::Move);
     state.set_tray_tool(TrayTool::Blender);
     blend_across_the_tray(&mut state);
     assert_eq!(state.session.brush.tool, Tool::Brush);
     state.set_tray_tool(TrayTool::Load);
-    assert_eq!(state.focused_tool(), PanelTool::Paint(Tool::Brush));
+    assert_eq!(state.focused_tool(), Tool::Brush);
 }
 
 #[test]
