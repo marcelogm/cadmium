@@ -68,7 +68,6 @@ impl UiTool {
             UiTool::Move => &moving::MOVE,
             UiTool::Paint(Tool::Brush) => &brush::BRUSH,
             UiTool::Paint(Tool::Knife) => &knife::KNIFE,
-            UiTool::Paint(Tool::MixingKnife) => &knife::KNIFE,
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
             UiTool::Paint(Tool::Pencil) => &pencil::PENCIL,

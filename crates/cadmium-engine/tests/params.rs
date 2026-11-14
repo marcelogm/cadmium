@@ -26,7 +26,7 @@ fn assert_each_spec_is_unique_with_its_default_in_range(specs: &[ParamSpec]) {
     }
 }
 
-const GONE_KEYS: [&str; 19] = [
+const GONE_KEYS: [&str; 23] = [
     "bristle_count",
     "bristle_contrast",
     "tilt_elongation",
@@ -46,12 +46,16 @@ const GONE_KEYS: [&str; 19] = [
     "bristle_point_film",
     "bristle_load_limit",
     "wicking_share",
+    "face_pickup_rate",
+    "face_lay_rate",
+    "face_smear",
+    "face_edge_unevenness",
 ];
 
 #[test]
 fn specs_cover_every_lab_parameter_once() {
     let specs = SimParams::specs();
-    assert_eq!(specs.len(), 30);
+    assert_eq!(specs.len(), 26);
     assert_each_spec_is_unique_with_its_default_in_range(specs);
     for gone in GONE_KEYS {
         assert!(specs.iter().all(|spec| spec.key != gone), "{gone}");

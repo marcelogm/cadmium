@@ -1,4 +1,4 @@
-use super::{BLADE_TURN_SHARE, Footprint, MIXING_KNIFE_HALF_WIDTH_RATIO, turned_blade};
+use super::{BLADE_TURN_SHARE, Footprint, turned_blade};
 use crate::brush::BrushSettings;
 use crate::stroke::{Dab, Tool};
 
@@ -28,20 +28,14 @@ fn blade_of(tool: Tool) -> Footprint {
 }
 
 #[test]
-fn the_mixing_knife_blade_is_much_wider_across_the_stroke_than_the_knife_blade() {
+fn the_knife_blade_is_a_thin_edge_across_the_stroke() {
     let knife = blade_of(Tool::Knife);
-    let mixing = blade_of(Tool::MixingKnife);
-    assert_eq!(mixing.radius, knife.radius);
     assert!((knife.elongation - KNIFE_ELONGATION).abs() < ELONGATION_TOLERANCE);
-    assert!((mixing.elongation - MIXING_KNIFE_HALF_WIDTH_RATIO).abs() < ELONGATION_TOLERANCE);
-    assert!(mixing.elongation > 2.0 * knife.elongation);
 }
 
 #[test]
-fn both_knives_lay_their_blade_along_the_stroke() {
-    for tool in [Tool::Knife, Tool::MixingKnife] {
-        assert_eq!(blade_of(tool).orientation, DIRECTION, "{tool:?}");
-    }
+fn the_knife_lays_its_blade_along_the_stroke() {
+    assert_eq!(blade_of(Tool::Knife).orientation, DIRECTION);
 }
 
 const HALF_LENGTH_PX: f32 = 40.0;

@@ -1,4 +1,4 @@
-use super::{BLADE_MODES, DabStage, Holder, TOOL_MODE_MIXING_KNIFE};
+use super::{BLADE_MODES, DabStage, Holder};
 use crate::params::SimParams;
 use crate::stroke::Tool;
 
@@ -42,13 +42,12 @@ fn only_the_brush_and_the_blender_hold_bristles() {
 }
 
 #[test]
-fn the_mixing_knife_carries_its_paint_on_a_face_of_its_blade() {
-    let profile = Tool::MixingKnife.profile();
-    assert_eq!(profile.holder, Some(Holder::Face));
-    assert!(profile.holds_on_face());
-    assert!(!profile.holds_on_blade());
-    assert!(profile.has_blade_footprint());
-    assert_eq!(profile.shader_mode, TOOL_MODE_MIXING_KNIFE);
+fn the_knife_is_the_only_tool_with_a_blade() {
+    let bladed: Vec<_> = Tool::ALL
+        .into_iter()
+        .filter(|tool| tool.profile().has_blade_footprint())
+        .collect();
+    assert_eq!(bladed, [Tool::Knife]);
 }
 
 #[test]
@@ -56,19 +55,6 @@ fn the_painting_knife_still_carries_its_paint_along_its_edge() {
     let profile = Tool::Knife.profile();
     assert_eq!(profile.holder, Some(Holder::Blade));
     assert!(profile.holds_on_blade());
-    assert!(!profile.holds_on_face());
-}
-
-#[test]
-fn only_the_face_holder_works_the_face() {
-    for tool in Tool::ALL {
-        let profile = tool.profile();
-        assert_eq!(
-            profile.works_the_face(),
-            profile.holds_on_face(),
-            "{tool:?}"
-        );
-    }
 }
 
 #[test]

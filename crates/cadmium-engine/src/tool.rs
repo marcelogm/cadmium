@@ -5,7 +5,6 @@ mod blender;
 mod brush;
 mod eyedropper;
 mod knife;
-mod mixing_knife;
 mod pencil;
 mod rag;
 
@@ -14,18 +13,13 @@ pub(crate) const TOOL_MODE_KNIFE: u32 = 1;
 const TOOL_MODE_BLENDER: u32 = 2;
 const TOOL_MODE_RAG: u32 = 3;
 const TOOL_MODE_EYEDROPPER: u32 = 4;
-pub(crate) const TOOL_MODE_MIXING_KNIFE: u32 = 5;
 const TOOL_MODE_PENCIL: u32 = 6;
 const CONTACT_REST_FOLLOW: f32 = 0.25;
 /// The shader modes whose dabs are a flat rectangular blade rather than a tuft;
 /// the WGSL `is_blade_mode` is generated from this list.
-pub(crate) const BLADE_MODES: [u32; 2] = [TOOL_MODE_KNIFE, TOOL_MODE_MIXING_KNIFE];
+pub(crate) const BLADE_MODES: [u32; 1] = [TOOL_MODE_KNIFE];
 const RAG_STRENGTH_PARAM: &str = "rag_strength";
 const PENCIL_STRENGTH_PARAM: &str = "pencil_strength";
-/// The tilt a device without a tilt axis (a mouse) holds the mixing knife at: its altitude
-/// halfway between laid flat (45°) and upright (80°), so the face both scrapes and lays.
-/// Read as upright, the face would only scrape and never mix.
-pub const UNTILTED_MIXING_KNIFE_TILT_DEG: f32 = 27.5;
 
 #[derive(Debug)]
 pub struct ToolProfile {
@@ -43,7 +37,6 @@ pub struct ToolProfile {
 pub enum Holder {
     Reservoir,
     Blade,
-    Face,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,7 +56,6 @@ pub(crate) enum DabStage {
     Refill,
     Spread,
     Blade,
-    Face,
     Wipe,
     Graphite,
 }
@@ -71,15 +63,6 @@ pub(crate) enum DabStage {
 impl ToolProfile {
     pub fn holds_on_blade(&self) -> bool {
         self.holder == Some(Holder::Blade)
-    }
-
-    pub fn holds_on_face(&self) -> bool {
-        self.holder == Some(Holder::Face)
-    }
-
-    /// Whether the tool's dabs work the mixing knife's face.
-    pub(crate) fn works_the_face(&self) -> bool {
-        self.dab_stages.contains(&DabStage::Face)
     }
 
     pub(crate) fn has_blade_footprint(&self) -> bool {
@@ -109,12 +92,11 @@ impl ToolProfile {
             .any(|stage| !PAINTLESS_STAGES.contains(stage))
     }
 
-    /// Whether its dabs settle on the surface: only the exchange, blade and face stages read the
-    /// rest.
+    /// Whether its dabs settle on the surface: only the exchange and blade stages read the rest.
     pub(crate) fn rests_on_surface(&self) -> bool {
         self.dab_stages
             .iter()
-            .any(|stage| matches!(stage, DabStage::Exchange | DabStage::Blade | DabStage::Face))
+            .any(|stage| matches!(stage, DabStage::Exchange | DabStage::Blade))
     }
 }
 
@@ -167,7 +149,6 @@ impl Tool {
         match self {
             Tool::Brush => &brush::BRUSH,
             Tool::Knife => &knife::KNIFE,
-            Tool::MixingKnife => &mixing_knife::MIXING_KNIFE,
             Tool::Blender => &blender::BLENDER,
             Tool::Rag => &rag::RAG,
             Tool::Pencil => &pencil::PENCIL,

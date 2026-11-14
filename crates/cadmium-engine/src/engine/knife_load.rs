@@ -2,7 +2,7 @@ use super::readout::cell_totals;
 use super::reservoir::{dip_fractions, dip_thickness, holds_paint, level_after};
 use super::{
     BLADE_CELLS, KNIFE_DIP_LENGTH_PX, KNIFE_LAID_CAPACITY_UM, MAX_TIP_THICKNESS_UM,
-    PIGMENT_CHANNELS, TIP_CHANNELS, TIP_HALF, VOLUME_CHANNEL, WetOilEngine, ferrule_radius_for,
+    PIGMENT_CHANNELS, TIP_CHANNELS, TIP_HALF, VOLUME_CHANNEL, WetOilEngine,
 };
 use crate::brush::FULL_RESERVOIR_VOLUME_UM;
 use crate::canvas::PaintTotals;
@@ -74,11 +74,6 @@ impl WetOilEngine {
 
     pub fn knife_full_dip_volume(&self, thickness_um: f32) -> f32 {
         full_dip_volume(thickness_um, self.tip_radius)
-    }
-
-    /// What a full dip lays on a blade `diameter_px` long, whatever the tip in use.
-    pub fn blade_full_dip_volume(&self, thickness_um: f32, diameter_px: f32) -> f32 {
-        full_dip_volume(thickness_um, ferrule_radius_for(diameter_px))
     }
 
     pub fn clean_knife(&mut self, gpu: &GpuContext) {

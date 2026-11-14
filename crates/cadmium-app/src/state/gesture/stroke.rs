@@ -1,7 +1,6 @@
 use cadmium_engine::pigments::mixture_srgb8;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
-use cadmium_engine::tool::Holder;
 
 use crate::state::AppState;
 
@@ -17,10 +16,7 @@ fn stroke_preparation(
     reload_each_stroke: bool,
     clean_each_stroke: bool,
 ) -> StrokePreparation {
-    let reloads = matches!(
-        tool.profile().holder,
-        Some(Holder::Reservoir | Holder::Blade)
-    );
+    let reloads = tool.profile().holder.is_some();
     if reloads && clean_each_stroke {
         StrokePreparation::CleanAndLoad
     } else if reloads && reload_each_stroke {

@@ -1,6 +1,5 @@
-// Paint moved between a blade and the surface under it, shared by the knife's
-// blade and the mixing knife's face. The including shader declares `dab` and the
-// wet and dry textures.
+// Paint moved between the knife's blade and the surface under it. The including
+// shader declares `dab` and the wet and dry textures.
 
 const QUANTIZE_LIMIT: f32 = 2.0e9;
 const EMPTY_VOLUME_UM: f32 = 1e-4;

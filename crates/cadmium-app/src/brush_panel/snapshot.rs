@@ -111,7 +111,7 @@ fn held_paint(
             state.knife_level(),
             state.knife_is_clean(),
         ),
-        Some(Holder::Reservoir | Holder::Face) | None => (
+        Some(Holder::Reservoir) | None => (
             colour_of(&state.tip_mixture),
             state.reserve_level(),
             state.brush_is_clean(),

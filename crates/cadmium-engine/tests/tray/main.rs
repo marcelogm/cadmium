@@ -1,10 +1,8 @@
 mod cord;
 mod draw_up;
 mod glass;
-mod mixing_knife;
 mod strokes;
 mod surface;
-mod tray_tip;
 mod tube;
 
 use cadmium_engine::{
