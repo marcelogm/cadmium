@@ -9,8 +9,6 @@ use crate::stroke::Dab;
 use super::queue::{Queued, WalkProgress, WalkStep, next_step};
 use super::{MotionAnchor, PaintSession};
 
-const SAVE_MARGIN_PX: f32 = 4.0;
-
 impl PaintSession {
     pub fn flush(&mut self, gpu: &GpuContext) {
         if self.queued.is_empty() {
@@ -111,7 +109,13 @@ impl PaintSession {
             return;
         };
         self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.time_ms));
-        let touched = tiles_touched_by(&self.engine, &self.canvas, &stroke.brush, &batch);
+        let swept_from = stroke.last_painted_dab.replace(*latest);
+        let stroke_dabs = StrokeDabs {
+            brush: &stroke.brush,
+            swept_from,
+            dabs: &batch,
+        };
+        let touched = tiles_touched_by(&self.engine, &self.canvas, stroke_dabs);
         self.history
             .encode_save_tiles(gpu, &self.canvas, &touched, encoder);
         let batch = DabBatch {
@@ -123,29 +127,55 @@ impl PaintSession {
     }
 }
 
-fn tiles_touched_by(
-    engine: &WetOilEngine,
-    canvas: &Canvas,
-    brush: &BrushSettings,
-    dabs: &[Dab],
-) -> Vec<TileCoord> {
+struct StrokeDabs<'a> {
+    brush: &'a BrushSettings,
+    /// The stroke's dab before these, already painted.
+    swept_from: Option<Dab>,
+    dabs: &'a [Dab],
+}
+
+fn tiles_touched_by(engine: &WetOilEngine, canvas: &Canvas, stroke: StrokeDabs) -> Vec<TileCoord> {
     let width = canvas.spec.width;
     let height = canvas.spec.height;
-    let touched: BTreeSet<TileCoord> = dabs
+    let dabs_before =
+        std::iter::once(stroke.swept_from).chain(stroke.dabs.iter().copied().map(Some));
+    let touched: BTreeSet<TileCoord> = stroke
+        .dabs
         .iter()
-        .filter_map(|dab| engine.dab_bounds(canvas, brush, dab))
-        .flat_map(|[x0, y0, x1, y1]| {
-            tiles_in_rect(
-                width,
-                height,
-                [
-                    x0 - SAVE_MARGIN_PX,
-                    y0 - SAVE_MARGIN_PX,
-                    x1 + SAVE_MARGIN_PX,
-                    y1 + SAVE_MARGIN_PX,
-                ],
-            )
+        .zip(dabs_before)
+        .filter_map(|(dab, before)| {
+            let here = engine.dab_bounds(canvas, stroke.brush, dab);
+            let swept_from = before.and_then(|before| {
+                engine.dab_bounds(canvas, stroke.brush, &moved_to(dab, &before))
+            });
+            covering(here, swept_from)
         })
+        .flat_map(|bounds| tiles_in_rect(width, height, bounds))
         .collect();
     touched.into_iter().collect()
 }
+
+/// The dab's own footprint back where the dab before it lay: `encode_dabs` writes all it
+/// sweeps between the two.
+fn moved_to(dab: &Dab, before: &Dab) -> Dab {
+    Dab {
+        x: before.x,
+        y: before.y,
+        ..*dab
+    }
+}
+
+fn covering(a: Option<[f32; 4]>, b: Option<[f32; 4]>) -> Option<[f32; 4]> {
+    let (Some(a), Some(b)) = (a, b) else {
+        return a.or(b);
+    };
+    Some([
+        a[0].min(b[0]),
+        a[1].min(b[1]),
+        a[2].max(b[2]),
+        a[3].max(b[3]),
+    ])
+}
+
+#[cfg(test)]
+mod tests;

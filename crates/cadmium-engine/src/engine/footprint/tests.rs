@@ -38,6 +38,36 @@ fn the_knife_lays_its_blade_along_the_stroke() {
     assert_eq!(knife_blade().orientation, DIRECTION);
 }
 
+const TURNS: u16 = 180;
+
+#[test]
+fn a_blade_s_extents_at_any_turn_hold_it_at_every_orientation() {
+    let mut knife = knife_blade();
+    let at_any_turn = knife.canvas_half_extents_at_any_turn();
+    for turn in 0..TURNS {
+        knife.orientation = std::f32::consts::PI * f32::from(turn) / f32::from(TURNS);
+        let turned = knife.canvas_half_extents();
+        assert!(
+            turned[0] <= at_any_turn[0] && turned[1] <= at_any_turn[1],
+            "{turned:?} at {}",
+            knife.orientation
+        );
+    }
+}
+
+#[test]
+fn a_blade_s_extents_at_any_turn_reach_no_further_than_its_corners() {
+    let mut knife = knife_blade();
+    let [reach, _] = knife.canvas_half_extents_at_any_turn();
+    let widest = (0..TURNS)
+        .map(|turn| {
+            knife.orientation = std::f32::consts::PI * f32::from(turn) / f32::from(TURNS);
+            knife.canvas_half_extents()[0]
+        })
+        .fold(0.0, f32::max);
+    assert!(reach - widest < 1.0, "{reach} against {widest}");
+}
+
 const HALF_LENGTH_PX: f32 = 40.0;
 const ANGLE_TOLERANCE: f32 = 1e-5;
 

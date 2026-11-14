@@ -14,6 +14,8 @@ pub(super) enum Queued {
 pub(super) struct QueuedStroke {
     pub(super) brush: BrushSettings,
     pub(super) dabs: VecDeque<Dab>,
+    /// The last dab already encoded, which the next one sweeps from.
+    pub(super) last_painted_dab: Option<Dab>,
     pub(super) begun: bool,
     pub(super) ended: bool,
 }
@@ -93,6 +95,7 @@ impl QueuedStroke {
         QueuedStroke {
             brush,
             dabs: VecDeque::new(),
+            last_painted_dab: None,
             begun: false,
             ended: false,
         }

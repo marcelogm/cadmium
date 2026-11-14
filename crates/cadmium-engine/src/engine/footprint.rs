@@ -104,19 +104,36 @@ impl Footprint {
         if let Some(reach_px) = self.bristle_reach_px {
             return [reach_px; 2];
         }
-        let [along, across] = self.semi_axes();
         let (sin, cos) = self.orientation.sin_cos();
         if self.rectangular {
-            let along = along + BLADE_COVERAGE_MARGIN_PX;
-            let across = across + self.lateral_reach;
+            let [along, across] = self.blade_half_sides();
             return [
                 along * cos.abs() + across * sin.abs(),
                 along * sin.abs() + across * cos.abs(),
             ];
         }
+        let [along, across] = self.semi_axes();
         [
             (along * along * cos * cos + across * across * sin * sin).sqrt(),
             (along * along * sin * sin + across * across * cos * cos).sqrt(),
+        ]
+    }
+
+    /// Half extents that hold the footprint however far a blade has turned: only a blade's
+    /// orientation depends on the stroke behind the dab.
+    pub(super) fn canvas_half_extents_at_any_turn(&self) -> [f32; 2] {
+        if !self.rectangular {
+            return self.canvas_half_extents();
+        }
+        let [along, across] = self.blade_half_sides();
+        [along.hypot(across); 2]
+    }
+
+    fn blade_half_sides(&self) -> [f32; 2] {
+        let [along, across] = self.semi_axes();
+        [
+            along + BLADE_COVERAGE_MARGIN_PX,
+            across + self.lateral_reach,
         ]
     }
 }
