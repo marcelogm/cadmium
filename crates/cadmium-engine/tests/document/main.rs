@@ -18,24 +18,13 @@ use cadmium_engine::{
 
 use crate::support::encode_frame;
 
-const CURRENT_FORMAT: u32 = 5;
+const CURRENT_FORMAT: u32 = 6;
 const SKETCH_DENSITY: f32 = 0.75;
 const BLANK_WIDTH: u32 = 64;
 const BLANK_HEIGHT: u32 = 32;
-const FORMAT_1_DRY_HEIGHT: &str = "state/dry_height.zst";
 const DRY_RELIEF: &str = "state/dry_relief.zst";
 const GRAPHITE_ENTRY: &str = "state/graphite.zst";
 const INVALID_THICKNESS: &str = "holds a negative or non-finite thickness";
-const FORMAT_1_STATE_ENTRIES: [(&str, StateTexture); 8] = [
-    ("state/wet_pig0.zst", StateTexture::WetPig0),
-    ("state/wet_pig1.zst", StateTexture::WetPig1),
-    ("state/wet_vol.zst", StateTexture::WetVol),
-    ("state/dry_refl0.zst", StateTexture::DryRefl0),
-    ("state/dry_refl1.zst", StateTexture::DryRefl1),
-    (FORMAT_1_DRY_HEIGHT, StateTexture::DryHeight),
-    ("state/dry_top_pig0.zst", StateTexture::DryTopPig0),
-    ("state/dry_top_pig1.zst", StateTexture::DryTopPig1),
-];
 
 /// Writes a one-texel pencil sketch on the painting and returns the whole graphite field.
 fn sketch_on_the_painting(gpu: &GpuContext, s: &PaintSession) -> Vec<f32> {

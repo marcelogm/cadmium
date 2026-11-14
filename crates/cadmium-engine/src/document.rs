@@ -13,9 +13,7 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 5;
-const ABSOLUTE_DRY_HEIGHT_FORMAT: u32 = 1;
-const TRAYLESS_FORMAT: u32 = 2;
+const FORMAT_VERSION: u32 = 6;
 const PAINTING_PREFIX: &str = "";
 const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
@@ -40,7 +38,7 @@ impl fmt::Display for DocumentError {
             DocumentError::Format(reason) => write!(f, "not a valid Cadmium painting: {reason}"),
             DocumentError::UnsupportedVersion(version) => write!(
                 f,
-                "painting uses file format {version}, this version of Cadmium reads formats up to {FORMAT_VERSION}"
+                "painting uses file format {version}, this version of Cadmium reads only format {FORMAT_VERSION}"
             ),
             DocumentError::GpuLost => write!(f, "{GpuLost}"),
             DocumentError::OutOfVideoMemory => write!(f, "{}", CanvasError::OutOfVideoMemory),
@@ -161,22 +159,6 @@ impl DocumentSnapshot {
         };
         upload_states_into(gpu, &mut session.canvas, self.states, painting);
     }
-
-    fn holds_graphite(&self) -> bool {
-        self.states
-            .iter()
-            .filter(|state| state.which == StateTexture::Graphite)
-            .any(|state| state.texels().iter().any(|byte| *byte != 0))
-    }
-
-    fn file_format(&self) -> u32 {
-        // Older builds would open a sketch and drop it, so only the current format carries one.
-        if self.holds_graphite() {
-            FORMAT_VERSION
-        } else {
-            TRAYLESS_FORMAT
-        }
-    }
 }
 
 fn capture_canvas(gpu: &GpuContext, canvas: &Canvas) -> Result<Vec<StateBytes>, GpuLost> {
@@ -270,8 +252,8 @@ fn mark_wet_tiles(canvas: &mut Canvas, wet_volume: &[u8], block: TexelBlock) {
     }
 }
 
-fn state_entry(prefix: &str, which: StateTexture, format: u32) -> String {
-    let name = if which == StateTexture::DryHeight && format > ABSOLUTE_DRY_HEIGHT_FORMAT {
+fn state_entry(prefix: &str, which: StateTexture) -> String {
+    let name = if which == StateTexture::DryHeight {
         DRY_RELIEF_NAME
     } else {
         which.label()

@@ -1,16 +1,14 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, StateTexture, Weave},
-    document::{DocumentError, DocumentSnapshot},
+    document::{self, DocumentError, DocumentSnapshot},
+    gpu::GpuContext,
     pigments::PigmentDb,
 };
 
-use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES,
-    GRAPHITE_ENTRY, TempDir,
-};
+use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
 pub(super) struct Entries(pub(super) Vec<(String, Vec<u8>)>);
 
@@ -24,7 +22,7 @@ impl Entries {
             pigment_slots: vec!["titanium_white".into()],
         };
         let manifest = serde_json::json!({
-            "format": 1,
+            "format": CURRENT_FORMAT,
             "pigment_db": PigmentDb::VERSION,
             "spec": spec,
             "bands": 8,
@@ -34,14 +32,31 @@ impl Entries {
             "manifest.json".to_string(),
             serde_json::to_vec(&manifest).unwrap(),
         )];
-        for (name, which) in FORMAT_1_STATE_ENTRIES {
+        for which in StateTexture::PAINT_STATE {
             let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * which.bytes_per_texel()) as usize];
             entries.push((
-                name.to_string(),
+                state_entry_name(which),
                 zstd::encode_all(raw.as_slice(), 3).unwrap(),
             ));
         }
         Entries(entries)
+    }
+
+    pub(super) fn saved(path: &Path) -> Entries {
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+        let entries = (0..archive.len())
+            .map(|index| {
+                let mut entry = archive.by_index(index).unwrap();
+                let mut bytes = Vec::new();
+                entry.read_to_end(&mut bytes).unwrap();
+                (entry.name().to_string(), bytes)
+            })
+            .collect();
+        Entries(entries)
+    }
+
+    pub(super) fn names(&self) -> Vec<String> {
+        self.0.iter().map(|(name, _)| name.clone()).collect()
     }
 
     fn bytes(&mut self, name: &str) -> &mut Vec<u8> {
@@ -61,34 +76,12 @@ impl Entries {
         self
     }
 
-    /// Adds a graphite entry, all zero, which `edit_state` can then change.
-    pub(super) fn with_graphite(mut self) -> Entries {
-        let texel = StateTexture::Graphite.bytes_per_texel();
-        let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * texel) as usize];
-        self.0.push((
-            GRAPHITE_ENTRY.to_string(),
-            zstd::encode_all(raw.as_slice(), 3).unwrap(),
-        ));
-        self
-    }
-
     pub(super) fn edit_state(mut self, name: &str, edit: impl FnOnce(&mut Vec<u8>)) -> Entries {
         let bytes = self.bytes(name);
         let mut raw = zstd::decode_all(bytes.as_slice()).unwrap();
         edit(&mut raw);
         *bytes = zstd::encode_all(raw.as_slice(), 3).unwrap();
         self
-    }
-
-    pub(super) fn in_format_2(mut self) -> Entries {
-        for (entry, _) in self
-            .0
-            .iter_mut()
-            .filter(|(entry, _)| entry == FORMAT_1_DRY_HEIGHT)
-        {
-            *entry = DRY_RELIEF.to_string();
-        }
-        self.edit_manifest(|m| m["format"] = 2.into())
     }
 
     pub(super) fn without(mut self, name: &str) -> Entries {
@@ -105,6 +98,14 @@ impl Entries {
             writer.write_all(bytes).unwrap();
         }
         writer.finish().unwrap();
+    }
+}
+
+pub(super) fn state_entry_name(which: StateTexture) -> String {
+    if which == StateTexture::DryHeight {
+        DRY_RELIEF.to_string()
+    } else {
+        format!("state/{}.zst", which.label())
     }
 }
 
@@ -125,4 +126,20 @@ pub(super) fn format_reason(result: Result<DocumentSnapshot, DocumentError>) -> 
 
 pub(super) fn set_first_f32(value: f32) -> impl FnOnce(&mut Vec<u8>) {
     move |raw| raw[..4].copy_from_slice(&value.to_le_bytes())
+}
+
+#[test]
+fn a_saved_painting_holds_its_manifest_and_the_painting_state_only() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("entries");
+    let mut session = crate::painted_session(&gpu);
+    document::save(&gpu, &mut session, &dir.file("p.cadmium")).unwrap();
+    let names = Entries::saved(&dir.file("p.cadmium")).names();
+    assert!(names.iter().any(|name| name == "manifest.json"));
+    assert!(names.iter().any(|name| name == GRAPHITE_ENTRY));
+    assert!(
+        names
+            .iter()
+            .all(|name| name == "manifest.json" || name.starts_with("state/"))
+    );
 }

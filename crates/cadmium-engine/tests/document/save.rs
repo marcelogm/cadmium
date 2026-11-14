@@ -4,16 +4,15 @@ use cadmium_engine::{
     canvas::{CanvasSpec, DirtyTiles, Primer, StateTexture, TILE_SIZE, TileCoord, Weave},
     document::{self, DocumentSnapshot},
     gpu::GpuContext,
-    pigments::PigmentDb,
     session::PaintSession,
 };
 
-use crate::entries::{Entries, read_entries};
+use crate::entries::state_entry_name;
 use crate::support::session;
 use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT,
-    FORMAT_1_STATE_ENTRIES, TempDir, painted_session, painted_session_with_stroke, painted_spec,
-    sample, session_with_ended_stroke, sketch_on_the_painting,
+    BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, TempDir, painted_session,
+    painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
+    sketch_on_the_painting,
 };
 
 const LARGE_WIDTH: u32 = 2048;
@@ -96,41 +95,6 @@ fn a_dried_stroke_survives_save_and_open_bit_for_bit() {
     let path = dir.file("dried.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
     let opened = document::open(&gpu, &path).unwrap();
-    for t in StateTexture::PAINT_STATE {
-        assert_eq!(
-            opened.canvas.read_bytes(&gpu, t).unwrap(),
-            s.canvas.read_bytes(&gpu, t).unwrap(),
-            "{t:?}"
-        );
-    }
-}
-
-#[test]
-fn a_format_1_painting_opens_with_the_dry_height_it_stored() {
-    let gpu = GpuContext::new().unwrap();
-    let s = dried_session(&gpu);
-    let manifest = serde_json::json!({
-        "format": 1,
-        "pigment_db": PigmentDb::VERSION,
-        "spec": s.canvas.spec,
-        "bands": 8,
-        "units": "um",
-    });
-    let mut entries = vec![(
-        "manifest.json".to_string(),
-        serde_json::to_vec(&manifest).unwrap(),
-    )];
-    for (name, which) in FORMAT_1_STATE_ENTRIES {
-        let raw = s.canvas.read_bytes(&gpu, which).unwrap();
-        entries.push((
-            name.to_string(),
-            zstd::encode_all(raw.as_slice(), 3).unwrap(),
-        ));
-    }
-    let opened = read_entries(Entries(entries))
-        .unwrap()
-        .into_session(&gpu)
-        .unwrap();
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
             opened.canvas.read_bytes(&gpu, t).unwrap(),
@@ -250,7 +214,6 @@ fn drying_an_opened_document_clears_its_wet_layer() {
 fn saved_entries_are_stored_uncompressed_in_the_zip() {
     let gpu = GpuContext::new().unwrap();
     let mut s = painted_session(&gpu);
-    sketch_on_the_painting(&gpu, &s);
     let dir = TempDir::new("stored");
     let path = dir.file("stored.cadmium");
     document::save(&gpu, &mut s, &path).unwrap();
@@ -261,15 +224,9 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
         names.push(entry.name().to_string());
     }
-    let saved_entries = FORMAT_1_STATE_ENTRIES.map(|(name, _)| {
-        if name == FORMAT_1_DRY_HEIGHT {
-            DRY_RELIEF
-        } else {
-            name
-        }
-    });
-    for expected in std::iter::once("manifest.json").chain(saved_entries) {
-        assert!(names.iter().any(|n| n == expected), "{expected} missing");
+    let saved_entries = StateTexture::PAINT_STATE.map(state_entry_name);
+    for expected in std::iter::once("manifest.json".to_string()).chain(saved_entries) {
+        assert!(names.contains(&expected), "{expected} missing");
     }
     let mut manifest = String::new();
     archive
