@@ -81,11 +81,9 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
 
 pub(super) fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-        PigmentClick::Mix
-    } else if modifiers.contains(gdk::ModifierType::SHIFT_MASK) {
-        PigmentClick::CleanAndLoad
+        PigmentClick::MixIn
     } else {
-        PigmentClick::Choose
+        PigmentClick::Load
     }
 }
 

@@ -33,10 +33,10 @@ mod lab;
 mod library;
 mod pacing;
 mod pen;
+mod pigments;
 mod provisional;
 mod recipe;
 mod studio_paint;
-mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
     volume_um: 0.0,
@@ -118,7 +118,7 @@ impl AppState {
             file: None,
             pen: PenReadout::default(),
             tip_mixture: EMPTY_MIXTURE,
-            reload_each_stroke: true,
+            reload_each_stroke: false,
             clean_each_stroke: false,
             reserve_volume: 0.0,
             reserve_mixture: EMPTY_MIXTURE,

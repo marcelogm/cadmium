@@ -9,7 +9,7 @@ impl AppState {
     pub fn add_pile(&mut self, id: &str) -> Result<usize, String> {
         let slot = self.session.add_slot(&self.gpu, id)?;
         self.edits.record();
-        self.click_pile(slot, PigmentClick::CleanAndLoad);
+        self.click_pile(slot, PigmentClick::Load);
         self.wake();
         Ok(slot)
     }

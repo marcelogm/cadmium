@@ -18,6 +18,7 @@ fn single_pigment(state: &AppState, slot: usize) -> Mixture {
 #[test]
 fn each_stroke_tops_the_reserve_back_up_while_the_tip_keeps_its_dirt() {
     let mut state = painting_state();
+    state.reload_each_stroke = true;
     let full = reserve_volume(&state);
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     assert!(reserve_volume(&state) < full);
@@ -87,6 +88,7 @@ fn brush_and_knife_reload_or_clean_at_pen_down_and_other_tools_do_not() {
 #[test]
 fn knife_comes_down_loaded_to_the_palette_load_and_no_further() {
     let mut state = holding_the_knife();
+    state.reload_each_stroke = true;
     assert_eq!(knife_totals(&state).volume, 0.0);
     let samples = row_samples(PAINT_ROW_Y);
     state.begin_stroke(Tool::Knife, samples[0]);

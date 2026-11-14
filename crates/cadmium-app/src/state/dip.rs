@@ -101,10 +101,6 @@ impl AppState {
         self.session.brush.recipe = recipe;
         match dip {
             PigmentDip::CleanAndLoad => self.clean_and_load(),
-            PigmentDip::DipAgain => {
-                let mixture = self.palette_mixture();
-                self.dip(&mixture, FULL_DIP);
-            }
             PigmentDip::AddOnTop(slot) => {
                 let mut single = self.session.brush.clone();
                 single.recipe = vec![(slot, 1.0)];
@@ -123,10 +119,7 @@ impl AppState {
             return false;
         };
         self.session.brush.recipe = recipe_from_fractions(&picked.fractions);
-        self.session.reload_brush(&self.gpu);
-        if self.holds_knife() {
-            self.clean_and_load();
-        }
+        self.clean_and_load();
         self.measure_brush();
         self.wake();
         true

@@ -101,22 +101,22 @@ fn moving_keeps_the_panel_of_the_tool_in_hand() {
 }
 
 #[test]
-fn modifiers_choose_how_a_swatch_click_loads_the_brush() {
+fn a_swatch_click_loads_the_brush_and_ctrl_mixes_the_pigment_in() {
     assert_eq!(
         pigment_click(gdk::ModifierType::empty()),
-        PigmentClick::Choose
-    );
-    assert_eq!(
-        pigment_click(gdk::ModifierType::CONTROL_MASK),
-        PigmentClick::Mix
+        PigmentClick::Load
     );
     assert_eq!(
         pigment_click(gdk::ModifierType::SHIFT_MASK),
-        PigmentClick::CleanAndLoad
+        PigmentClick::Load
+    );
+    assert_eq!(
+        pigment_click(gdk::ModifierType::CONTROL_MASK),
+        PigmentClick::MixIn
     );
     assert_eq!(
         pigment_click(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK),
-        PigmentClick::Mix
+        PigmentClick::MixIn
     );
 }
 

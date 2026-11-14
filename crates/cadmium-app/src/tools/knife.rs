@@ -31,7 +31,7 @@ pub(super) const KNIFE: UiToolProfile = UiToolProfile {
 };
 
 const KNIFE_WORDING: ToolWording = ToolWording {
-    pigments: "Click loads a clean knife, click again to pick up more; Ctrl+click mixes in a little",
+    pigments: "Click loads a clean knife; Ctrl+click mixes in a little",
     loaded_title: "On the Knife",
     loaded_tooltip: "Left: mix on the palette · right: paint on the knife",
     level_tooltip: "Paint on the knife",

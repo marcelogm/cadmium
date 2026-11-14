@@ -6,7 +6,7 @@ const YELLOW_SLOT: usize = 1;
 #[test]
 fn a_pile_click_loads_the_brush() {
     let mut state = painting_state();
-    state.click_pile(YELLOW_SLOT, PigmentClick::Choose);
+    state.click_pile(YELLOW_SLOT, PigmentClick::Load);
     assert_eq!(state.session.brush.recipe, [(YELLOW_SLOT, 1.0)]);
     assert!(brush_totals(&state).pigment[YELLOW_SLOT] > 0.0);
 }
