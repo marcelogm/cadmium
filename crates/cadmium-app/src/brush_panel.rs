@@ -24,8 +24,8 @@ mod thumbnail_job;
 
 use build::{PigmentsGroup, ToolGroup};
 use presentation::{
-    RackEntry, describe_recipe, hardness_grade, loaded_swatch_colours, percent_text,
-    pile_is_highlighted, plate_gap_text, size_to_slider, slider_needs_sync, tool_hint,
+    RackEntry, describe_recipe, hardness_grade, percent_text, pile_is_highlighted, plate_gap_text,
+    size_to_slider, slider_needs_sync, tool_hint,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -116,10 +116,10 @@ impl BrushPanel {
     fn show_held_paint(&self, snapshot: &Snapshot) {
         let wording = snapshot.tool.wording();
         let group = &self.tool_group;
-        let (colour, right_half) =
-            loaded_swatch_colours(snapshot.tool, snapshot.palette_colour, snapshot.held_colour);
-        group.loaded_swatch.set_colour(colour);
-        group.loaded_swatch.set_right_half_colour(right_half);
+        group.loaded_swatch.set_colour(snapshot.palette_colour);
+        group
+            .loaded_swatch
+            .set_right_half_colour(Some(snapshot.held_colour));
         group.reserve_bar.set_value(f64::from(snapshot.held_level));
         let loaded_text = if snapshot.held_is_clean {
             wording.clean.to_string()

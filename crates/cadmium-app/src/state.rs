@@ -8,12 +8,11 @@ use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
-use cadmium_engine::surface::Surface;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::settings::SettingsStore;
-use crate::tools::{TrayTool, UiTool};
+use crate::tools::UiTool;
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
 use gesture::Contact;
@@ -33,13 +32,11 @@ mod hand;
 mod history;
 mod lab;
 mod library;
-mod mixing_knife;
 mod pacing;
 mod pen;
 mod provisional;
 mod recipe;
 mod studio_paint;
-mod surface_tools;
 mod tray;
 
 const EMPTY_MIXTURE: Mixture = Mixture {
@@ -86,27 +83,17 @@ pub struct AppState {
     worn_brush_index: Option<usize>,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
-    tray_tool: TrayTool,
-    /// The surface whose tool was chosen last; the side panel describes that tool.
-    focus: Surface,
     edits: EditCounter,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
     pub tip_mixture: Mixture,
-    /// What the tray blender's own tip holds, as last read.
-    pub tray_tip_mixture: Mixture,
     pub reload_each_stroke: bool,
     pub clean_each_stroke: bool,
     reserve_volume: f32,
     reserve_mixture: Mixture,
     pub knife_mixture: Mixture,
     knife_volume: f32,
-    mixing_knife: mixing_knife::MixingKnife,
     contact: Option<Contact>,
-    /// How the tray widget shows the tray, in device px.
-    pub tray_view: ViewTransform,
-    /// Device px per widget px on the tray's screen.
-    tray_device_scale: f64,
     resting_tool: Tool,
     samples_since_frame: u32,
     pacing: FramePacing,
@@ -128,23 +115,17 @@ impl AppState {
             worn_brush_index: None,
             view: UNMOVED_VIEW,
             ui_tool: UiTool::default(),
-            tray_tool: TrayTool::default(),
-            focus: Surface::Painting,
             edits: EditCounter::default(),
             file: None,
             pen: PenReadout::default(),
             tip_mixture: EMPTY_MIXTURE,
-            tray_tip_mixture: EMPTY_MIXTURE,
             reload_each_stroke: true,
             clean_each_stroke: false,
             reserve_volume: 0.0,
             reserve_mixture: EMPTY_MIXTURE,
             knife_mixture: EMPTY_MIXTURE,
             knife_volume: 0.0,
-            mixing_knife: mixing_knife::MixingKnife::default(),
             contact: None,
-            tray_view: UNMOVED_VIEW,
-            tray_device_scale: 1.0,
             resting_tool,
             samples_since_frame: 0,
             pacing: FramePacing::default(),

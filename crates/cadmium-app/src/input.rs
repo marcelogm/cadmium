@@ -67,7 +67,7 @@ pub trait PaintSurfaceWidget:
 }
 
 /// A paint surface the painter navigates: scrolls pan or zoom, pinches zoom, and drags pan,
-/// zoom or turn its view, the same on the canvas and the tray.
+/// zoom or turn its view.
 pub trait NavigableSurface: PaintSurfaceWidget {
     /// Whether the window holds Space down for this surface.
     fn space_held(&self) -> bool;
@@ -146,9 +146,8 @@ enum DownOutcome {
 fn down_outcome(press: Press, eraser: bool) -> DownOutcome {
     match press {
         Press::Pan => DownOutcome::Ignore,
-        Press::Nothing if !eraser => DownOutcome::Ignore,
         Press::PickColour if !eraser => DownOutcome::PickColour,
-        Press::Nothing | Press::PickColour | Press::Stroke(_) => DownOutcome::Press,
+        Press::PickColour | Press::Stroke(_) => DownOutcome::Press,
     }
 }
 

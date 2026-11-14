@@ -8,11 +8,10 @@ use cadmium_engine::stroke::StrokeSample;
 use gtk::{glib, graphene, gsk};
 
 use crate::LOG_DOMAIN;
-use crate::tools::{TrayTool, UiTool};
+use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
 use super::brushes::BrushStep;
-use super::tray::choose_tray_tool;
 use super::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig, editor};
 
 const TOOL_ACTION: &str = "win.tool";
@@ -78,8 +77,6 @@ pub(super) enum SmokeStep {
     Export(PathBuf),
     Brush(BrushStep),
     ShowPage(String),
-    ShowTray,
-    ChooseTrayTool(TrayTool),
     Screenshot(PathBuf),
     Quit,
 }
@@ -93,11 +90,7 @@ impl SmokeStep {
         window: &CadmiumWindow,
     ) -> bool {
         match self {
-            SmokeStep::ChooseTool(_)
-            | SmokeStep::OpenDialog(_)
-            | SmokeStep::ShowPage(_)
-            | SmokeStep::ShowTray
-            | SmokeStep::ChooseTrayTool(_) => true,
+            SmokeStep::ChooseTool(_) | SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
             SmokeStep::Brush(step) => step.is_ready(window),
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
@@ -132,8 +125,6 @@ impl SmokeStep {
             }
             SmokeStep::Brush(step) => step.run(window),
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
-            SmokeStep::ShowTray => window.show_tray(),
-            SmokeStep::ChooseTrayTool(tool) => choose_tray_tool(window, *tool),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
                     return false;
@@ -153,7 +144,7 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, tray, tray tool, brush editor,
+    /// open, export, brush export, brush delete, page, brush editor,
     /// sheet stroke, screenshot, quit.
     /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
     /// it at start-up.
@@ -170,10 +161,6 @@ impl SmokeConfig {
         steps.extend(self.export.clone().map(SmokeStep::Export));
         steps.extend(self.brushes.after_files());
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
-        if self.tray {
-            steps.push(SmokeStep::ShowTray);
-        }
-        steps.extend(self.tray_tool.map(SmokeStep::ChooseTrayTool));
         steps.extend(self.brushes.editor_steps());
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));
         steps.push(SmokeStep::Quit);

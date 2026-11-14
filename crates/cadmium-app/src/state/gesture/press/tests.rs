@@ -1,20 +1,25 @@
 use super::*;
 use crate::state::test_support::{
-    finish_painting, paint_blob_on_tray, painting_state, present_one_tray_frame, sample_at,
+    PAINT_ROW_Y, finish_painting, paint_stroke, painting_state, present_one_frame, row_samples,
+    sample_at, wet_volume,
 };
-use crate::tools::{TrayTool, UiTool};
+use crate::tools::UiTool;
+
+fn wipe_the_painted_row(state: &mut AppState) {
+    state.motion(&[sample_at(290.0, PAINT_ROW_Y, 1.0)]);
+    state.release();
+    finish_painting(state, present_one_frame);
+}
 
 #[test]
-fn the_eraser_wipes_the_tray_with_the_rag() {
+fn the_eraser_wipes_the_painting_with_the_rag() {
     let mut state = painting_state();
-    paint_blob_on_tray(&mut state, 0);
-    let before = state.session.tray.wet_totals(&state.gpu).unwrap().volume;
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    let before = wet_volume(&state);
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), true);
-    state.motion(&[sample_at(320.0, 300.0, 1.0)]);
-    state.release();
-    present_one_tray_frame(&mut state);
-    assert!(state.session.tray.wet_totals(&state.gpu).unwrap().volume < before);
+    assert!(state.press(Surface::Painting, sample_at(100.0, PAINT_ROW_Y, 1.0), true));
+    wipe_the_painted_row(&mut state);
+    assert!(wet_volume(&state) < before);
 }
 
 #[test]
@@ -37,55 +42,13 @@ fn the_pencil_starts_a_pencil_stroke_on_the_painting() {
 }
 
 #[test]
-fn the_pencil_tip_does_nothing_on_the_tray() {
+fn the_eraser_end_wipes_the_painting_while_the_pencil_is_chosen() {
     let mut state = painting_state();
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    let before = wet_volume(&state);
     state.set_ui_tool(UiTool::Paint(Tool::Pencil));
-    state.set_tray_tool(TrayTool::Load);
-    assert!(!state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false));
-    assert!(!state.is_stroking());
-}
-
-#[test]
-fn the_eraser_end_wipes_the_tray_while_the_pencil_is_chosen() {
-    let mut state = painting_state();
-    paint_blob_on_tray(&mut state, 0);
-    let before = state.session.tray.wet_totals(&state.gpu).unwrap().volume;
-    state.set_ui_tool(UiTool::Paint(Tool::Pencil));
-    state.set_tray_tool(TrayTool::Load);
-    assert!(state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), true));
+    assert!(state.press(Surface::Painting, sample_at(100.0, PAINT_ROW_Y, 1.0), true));
     assert_eq!(state.session.brush.tool, Tool::Rag);
-    state.motion(&[sample_at(320.0, 300.0, 1.0)]);
-    state.release();
-    present_one_tray_frame(&mut state);
-    assert!(state.session.tray.wet_totals(&state.gpu).unwrap().volume < before);
-}
-
-#[test]
-fn touching_a_surface_shows_its_tool_in_the_side_panel() {
-    let mut state = painting_state();
-    state.set_ui_tool(UiTool::Paint(Tool::Knife));
-    state.set_tray_tool(TrayTool::MixingKnife);
-    state.press(Surface::Painting, sample_at(100.0, 100.0, 1.0), false);
-    state.release();
-    assert_eq!(state.focused_tool(), Tool::Knife);
-    state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), false);
-    state.release();
-    assert_eq!(state.focused_tool(), Tool::MixingKnife);
-}
-
-#[test]
-fn the_brush_and_the_knife_paint_the_tray_at_once_under_load() {
-    for tool in [Tool::Brush, Tool::Knife] {
-        let mut state = painting_state();
-        state.set_ui_tool(UiTool::Paint(tool));
-        state.set_tray_tool(TrayTool::Load);
-        assert!(state.press(Surface::Tray, sample_at(280.0, 300.0, 1.0), false));
-        assert!(state.contact_on(Surface::Tray), "{tool:?}");
-        assert_eq!(state.session.brush.tool, tool);
-        state.motion(&[sample_at(320.0, 300.0, 1.0)]);
-        state.release();
-        finish_painting(&mut state, present_one_tray_frame);
-        let painted = state.session.tray.wet_totals(&state.gpu).unwrap().volume;
-        assert!(painted > 0.0, "{tool:?}");
-    }
+    wipe_the_painted_row(&mut state);
+    assert!(wet_volume(&state) < before);
 }

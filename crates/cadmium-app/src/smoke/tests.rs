@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use super::brushes::{BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep};
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
-    PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL, TRAY,
+    PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL,
 };
 use super::steps::{
     STROKE_PRESSURE_END, STROKE_PRESSURE_START, STROKE_SAMPLES, SmokeDialog, SmokeStep,
@@ -125,30 +125,6 @@ fn file_steps_run_after_the_stroke_and_before_the_page_and_screenshot() {
             SmokeStep::Quit,
         ]
     );
-}
-
-#[test]
-fn tray_opens_after_the_page_and_before_the_screenshot() {
-    let config = SmokeConfig::from_lookup(lookup(&[
-        (TRAY, "1"),
-        (PAGE, "lab"),
-        (SCREENSHOT, "/tmp/shot.png"),
-    ]))
-    .unwrap();
-    assert_eq!(
-        config.steps(),
-        [
-            SmokeStep::ShowPage("lab".to_string()),
-            SmokeStep::ShowTray,
-            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
-            SmokeStep::Quit,
-        ]
-    );
-}
-
-#[test]
-fn tray_zero_does_not_open_the_tray() {
-    assert_eq!(SmokeConfig::from_lookup(lookup(&[(TRAY, "0")])), None);
 }
 
 #[test]

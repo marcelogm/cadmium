@@ -7,7 +7,7 @@ use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
 use crate::state::AppState;
 use crate::thumbnails::ThumbnailKey;
 use crate::tools::Tool;
-use crate::tools::panel::ToolPanel;
+use crate::tools::panel::{ToolPanel, panel_tool};
 
 pub(super) struct PigmentChoice {
     pub(super) id: &'static str,
@@ -49,7 +49,7 @@ impl Snapshot {
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
         let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
-        let tool = state.focused_tool();
+        let tool = panel_tool(state.ui_tool, session.brush.tool);
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| mixture_colour(db, &slots, primer, mixture);
         let palette_colour = colour_of(&state.palette_mixture());
@@ -63,15 +63,12 @@ impl Snapshot {
             addable: addable_pigments(db, &slots),
             slots,
             recipe: session.brush.recipe.clone(),
-            held_recipe: match tool.holder() {
-                Some(Holder::Face) => state.mixing_knife_recipe(),
-                _ => session.brush.recipe.clone(),
-            },
+            held_recipe: session.brush.recipe.clone(),
             held_is_clean,
             palette_colour,
             held_colour,
             held_level,
-            diameter_px: state.focused_size(),
+            diameter_px: state.brush_diameter_px(),
             pencil_hardness: session.brush.pencil_hardness,
             load: session.brush.load,
             plate_gap: session.engine.params().get(PLATE_GAP_KEY),
@@ -108,22 +105,13 @@ fn held_paint(
     tool: Tool,
     colour_of: impl Fn(&Mixture) -> [u8; 3],
 ) -> ([u8; 3], f32, bool) {
-    if state.shows_tray_tip() {
-        let mixture = &state.tray_tip_mixture;
-        return (colour_of(mixture), 0.0, mixture.is_empty());
-    }
     match tool.holder() {
         Some(Holder::Blade) => (
             colour_of(&state.knife_mixture),
             state.knife_level(),
             state.knife_is_clean(),
         ),
-        Some(Holder::Face) => (
-            colour_of(&state.mixing_knife_mixture()),
-            state.mixing_knife_level(),
-            state.mixing_knife_is_clean(),
-        ),
-        Some(Holder::Reservoir) | None => (
+        Some(Holder::Reservoir | Holder::Face) | None => (
             colour_of(&state.tip_mixture),
             state.reserve_level(),
             state.brush_is_clean(),

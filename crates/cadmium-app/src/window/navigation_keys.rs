@@ -77,8 +77,7 @@ impl CadmiumWindow {
             .is_some_and(|canvas| canvas.space_held())
     }
 
-    /// Tells the canvas and the tray which navigation keys are held; while a dialog is up,
-    /// none are.
+    /// Tells the canvas which navigation keys are held; while a dialog is up, none are.
     fn show_held_keys(&self, space_held: bool, modifiers: gdk::ModifierType) {
         let (space_held, modifiers) = if self.visible_dialog().is_some() {
             (false, gdk::ModifierType::empty())
@@ -88,13 +87,10 @@ impl CadmiumWindow {
         if let Some(canvas) = self.imp().canvas.get() {
             canvas.set_held_keys(space_held, modifiers);
         }
-        if let Some(tray) = self.imp().tray.get() {
-            tray.set_held_keys(space_held, modifiers);
-        }
     }
 
-    /// Whether the window may take keys for itself (Space for navigation, Shift+digit for
-    /// the tray): no dialog is up and no text field has focus.
+    /// Whether the window may take keys for itself (Space for navigation, the digits for
+    /// the tools): no dialog is up and no text field has focus.
     pub(super) fn window_keys_are_free(&self) -> bool {
         let typing = gtk::prelude::RootExt::focus(self)
             .is_some_and(|focus| focus.dynamic_cast_ref::<gtk::Editable>().is_some());

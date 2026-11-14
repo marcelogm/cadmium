@@ -31,7 +31,6 @@ pub type SheetLink = Weak<RefCell<TestSheet>>;
 pub enum PresentSource {
     #[default]
     Painting,
-    Tray,
     /// The brush editor's test sheet, its canvas covering the target.
     TestSheet(SheetLink),
 }
@@ -50,15 +49,6 @@ impl PresentSource {
                 state.session.presenter.encode_present(
                     gpu,
                     PresentRequest::of_canvas(&state.session.canvas, state.view),
-                    target,
-                    encoder,
-                );
-            }
-            PresentSource::Tray => {
-                state.encode_tray_frame(encoder);
-                state.session.presenter.encode_present(
-                    gpu,
-                    PresentRequest::of_canvas(&state.session.tray, state.tray_view),
                     target,
                     encoder,
                 );

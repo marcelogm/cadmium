@@ -48,7 +48,7 @@ impl BrushPanel {
 
     fn resize_brush(self: &Rc<Self>, scale: &gtk::Scale) {
         let diameter = slider_to_size(scale.value());
-        self.change_brush(|state| state.set_focused_size(diameter));
+        self.change_brush(|state| state.set_brush_size(diameter));
     }
 
     fn change_hardness(self: &Rc<Self>, scale: &gtk::Scale) {

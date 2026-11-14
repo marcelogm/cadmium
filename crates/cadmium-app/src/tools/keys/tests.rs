@@ -41,51 +41,50 @@ fn no_two_tools_share_a_key() {
 const NONE: gdk::ModifierType = gdk::ModifierType::empty();
 const SHIFT: gdk::ModifierType = gdk::ModifierType::SHIFT_MASK;
 
-fn pick(levels: (gdk::Key, gdk::Key), modifiers: gdk::ModifierType) -> Option<DigitPick> {
+fn pick(levels: (gdk::Key, gdk::Key), modifiers: gdk::ModifierType) -> Option<UiTool> {
     digit_pick(Some(levels.0), Some(levels.1), modifiers)
 }
 
 #[test]
-fn a_digit_picks_the_painting_tool_and_shift_and_it_the_tray_tool() {
-    let us_one = (gdk::Key::_1, gdk::Key::exclam);
+fn a_digit_picks_the_paintings_tool_on_either_keyboard_level() {
+    let brush = Some(UiTool::Paint(Tool::Brush));
+    let none = gdk::ModifierType::empty();
     assert_eq!(
-        pick(us_one, NONE),
-        Some(DigitPick::Painting(UiTool::Paint(Tool::Brush)))
+        digit_pick(Some(gdk::Key::_1), Some(gdk::Key::exclam), none),
+        brush
     );
-    assert_eq!(pick(us_one, SHIFT), Some(DigitPick::Tray(TrayTool::Load)));
-    let us_six = (gdk::Key::_6, gdk::Key::asciicircum);
-    assert_eq!(pick(us_six, SHIFT), None);
-    assert_eq!(pick(us_six, NONE), None);
+    assert_eq!(
+        digit_pick(Some(gdk::Key::ampersand), Some(gdk::Key::_1), none),
+        brush
+    );
 }
 
 #[test]
-fn the_key_decides_where_the_digits_are_on_the_shift_level() {
-    // French AZERTY: the key that gives `&` gives `1` with Shift.
-    let azerty_one = (gdk::Key::ampersand, gdk::Key::_1);
+fn shift_and_a_digit_picks_nothing_now_that_the_tray_is_gone() {
+    let shift = gdk::ModifierType::SHIFT_MASK;
     assert_eq!(
-        pick(azerty_one, NONE),
-        Some(DigitPick::Painting(UiTool::Paint(Tool::Brush)))
+        digit_pick(Some(gdk::Key::_1), Some(gdk::Key::exclam), shift),
+        None
     );
     assert_eq!(
-        pick(azerty_one, SHIFT),
-        Some(DigitPick::Tray(TrayTool::Load))
+        digit_pick(Some(gdk::Key::_4), Some(gdk::Key::dollar), shift),
+        None
     );
-    let azerty_five = (gdk::Key::parenleft, gdk::Key::_5);
-    assert_eq!(
-        pick(azerty_five, SHIFT),
-        Some(DigitPick::Tray(TrayTool::Rag))
-    );
+}
+
+#[test]
+fn a_digit_no_tool_has_picks_nothing() {
+    let us_six = (gdk::Key::_6, gdk::Key::asciicircum);
+    assert_eq!(pick(us_six, NONE), None);
+    assert_eq!(pick(us_six, SHIFT), None);
 }
 
 #[test]
 fn caps_lock_does_not_change_the_pick() {
     let lock = gdk::ModifierType::LOCK_MASK;
     let us_four = (gdk::Key::_4, gdk::Key::dollar);
-    assert_eq!(
-        pick(us_four, SHIFT | lock),
-        Some(DigitPick::Tray(TrayTool::Blender))
-    );
-    assert_eq!(pick(us_four, lock), pick(us_four, NONE));
+    assert_eq!(pick(us_four, lock), Some(UiTool::Paint(Tool::Rag)));
+    assert_eq!(pick(us_four, SHIFT | lock), None);
 }
 
 #[test]

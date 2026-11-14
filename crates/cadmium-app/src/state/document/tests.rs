@@ -1,8 +1,6 @@
 use super::*;
-use crate::presets::starting_canvas_spec;
 use crate::state::test_support::{
-    PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, paint_blob_on_tray, painting_state, row_samples, stroke,
-    wet_volume,
+    PAINT_ROW_Y, TEST_BRUSH_DIAMETER_PX, painting_state, row_samples, stroke, wet_volume,
 };
 use cadmium_engine::engine::PaintEngine;
 use cadmium_engine::params::SimParams;
@@ -67,15 +65,4 @@ fn a_new_painting_keeps_the_lab_and_starts_untitled_without_undo() {
     assert_eq!(wet_volume(&state), 0.0);
     assert_eq!(state.session.engine.params().get(spec.key), tuned);
     assert!(!state.brush_is_clean());
-}
-
-#[test]
-fn a_new_painting_starts_with_a_clean_tray() {
-    let mut state = painting_state();
-    paint_blob_on_tray(&mut state, 0);
-    state.start_painting(starting_canvas_spec()).unwrap();
-    assert_eq!(
-        state.session.tray.wet_totals(&state.gpu).unwrap().volume,
-        0.0
-    );
 }

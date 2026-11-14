@@ -15,7 +15,6 @@ mod imp;
 mod navigation_keys;
 mod surface_events;
 mod tool_toggles;
-mod tray_pane;
 
 pub type PanelRefresher = Rc<dyn Fn()>;
 
@@ -47,13 +46,6 @@ impl CadmiumWindow {
 
     pub fn state(&self) -> SharedState {
         self.canvas().state()
-    }
-
-    /// Saves the mixing knife's size; the window calls it as it closes.
-    fn remember_mixing_knife_size(&self) {
-        if let Err(error) = self.state().borrow_mut().remember_mixing_knife_size() {
-            glib::g_warning!(LOG_DOMAIN, "couldn't save the mixing knife size: {error}");
-        }
     }
 
     /// Saves the pencil's hardness; the window calls it as it closes.

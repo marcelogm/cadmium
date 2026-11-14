@@ -1,8 +1,6 @@
 use std::cell::{Cell, OnceCell, RefCell};
 
 use super::*;
-use crate::tools::TrayTool;
-use crate::tray_view::TrayView;
 use crate::writes::Closing;
 
 /// The open brush editor's dialog, and what stops the editor before the window closes it.
@@ -35,19 +33,11 @@ pub struct CadmiumWindow {
     #[template_child]
     pub sidebar_stack: TemplateChild<adw::ViewStack>,
     #[template_child]
-    pub tray_sheet: TemplateChild<adw::BottomSheet>,
-    #[template_child]
-    pub tray_tool_group: TemplateChild<adw::ToggleGroup>,
-    #[template_child]
-    pub tray_slot: TemplateChild<gtk::Box>,
-    #[template_child]
     pub brush_panel_slot: TemplateChild<gtk::Box>,
     #[template_child]
     pub lab_panel_slot: TemplateChild<gtk::Box>,
     pub tool: Cell<UiTool>,
-    pub tray_tool: Cell<TrayTool>,
     pub canvas: OnceCell<CadmiumCanvas>,
-    pub tray: OnceCell<TrayView>,
     /// Whether the window has claimed the Space press now held down.
     pub space_claimed: Cell<bool>,
     pub panel_refreshers: RefCell<Vec<PanelRefresher>>,
@@ -86,13 +76,11 @@ impl ObjectImpl for CadmiumWindow {
         self.parent_constructed();
         let window = self.obj();
         window.fill_tool_group();
-        window.fill_tray_tool_group();
         window.setup_actions();
         window.setup_tool_shortcuts();
         window.setup_digit_keys();
         window.setup_navigation_keys();
         window.follow_tool_group();
-        window.follow_tray_tool_group();
         window.keep_window_buttons_reachable();
         self.tool_group
             .set_active_name(Some(UiTool::default().name()));
@@ -102,7 +90,6 @@ impl ObjectImpl for CadmiumWindow {
 impl WidgetImpl for CadmiumWindow {}
 impl WindowImpl for CadmiumWindow {
     fn close_request(&self) -> glib::Propagation {
-        self.obj().remember_mixing_knife_size();
         self.obj().remember_pencil_hardness();
         if self.obj().may_close() {
             self.parent_close_request()

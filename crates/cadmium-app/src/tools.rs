@@ -2,19 +2,16 @@ use gtk::gdk;
 
 pub use cadmium_engine::stroke::Tool;
 use panel::{ToolWording, VisibleControls};
-pub use tray_tool::TrayTool;
 
 mod blender;
 mod brush;
 mod eyedropper;
 pub(crate) mod keys;
 pub(crate) mod knife;
-pub(crate) mod mixing_knife;
 mod moving;
 pub(crate) mod panel;
 mod pencil;
 mod rag;
-pub(crate) mod tray_tool;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
@@ -25,8 +22,6 @@ pub enum UiTool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Press {
     Pan,
-    /// The tip does nothing here; the eraser end still wipes.
-    Nothing,
     PickColour,
     Stroke(Tool),
 }
@@ -66,7 +61,7 @@ impl UiTool {
             UiTool::Move => &moving::MOVE,
             UiTool::Paint(Tool::Brush) => &brush::BRUSH,
             UiTool::Paint(Tool::Knife) => &knife::KNIFE,
-            UiTool::Paint(Tool::MixingKnife) => &mixing_knife::MIXING_KNIFE,
+            UiTool::Paint(Tool::MixingKnife) => &knife::KNIFE,
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
             UiTool::Paint(Tool::Pencil) => &pencil::PENCIL,

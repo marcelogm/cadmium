@@ -68,19 +68,7 @@ fn a_paint_tool_strokes_as_itself() {
 }
 
 #[test]
-fn the_mixing_knife_is_no_header_tool_and_does_nothing_on_the_painting() {
-    let mixing_knife = UiTool::Paint(Tool::MixingKnife);
-    assert!(!UiTool::ALL.contains(&mixing_knife));
-    assert_eq!(UiTool::from_name(mixing_knife.name()), None);
-    let profile = mixing_knife.profile();
-    assert!(profile.keys.is_empty() && profile.keypad_keys.is_empty());
-    assert_eq!(profile.on_painting, Press::Nothing);
-}
-
-#[test]
-fn the_pencil_strokes_on_the_painting_and_ignores_the_tray() {
+fn the_pencil_strokes_on_the_painting() {
     let pencil = UiTool::Paint(Tool::Pencil);
     assert_eq!(pencil.profile().on_painting, Press::Stroke(Tool::Pencil));
-    assert_eq!(TrayTool::Load.press(pencil), Press::Nothing);
-    assert!(!TrayTool::Load.is_enabled(pencil));
 }

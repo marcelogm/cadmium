@@ -4,39 +4,8 @@ use super::*;
 use crate::state::recipe::PARTIAL_DIP;
 use crate::state::test_support::{
     PAINT_ROW_Y, RAG_ROW_Y, RESERVE_TOLERANCE, ULTRAMARINE_SLOT, WHITE_SLOT, brush_totals,
-    finish_painting, holding_the_knife, knife_totals, paint_stroke, painting_state,
-    present_one_tray_frame, reserve_volume, row_samples, sample_at, settle_both_surfaces,
+    holding_the_knife, knife_totals, paint_stroke, painting_state, reserve_volume, row_samples,
 };
-use crate::tools::{TrayTool, UiTool};
-
-#[test]
-fn a_tray_stroke_leaves_the_painting_with_no_pending_work() {
-    let mut state = painting_state();
-    settle_both_surfaces(&mut state);
-    state.set_tray_tool(TrayTool::Blender);
-    state.press(Surface::Tray, sample_at(300.0, 300.0, 0.9), false);
-    state.motion(&[sample_at(340.0, 300.0, 0.9)]);
-    assert!(state.session.tray_has_pending_work());
-    assert!(!state.session.has_pending_work());
-    state.release();
-    assert!(state.session.tray_has_pending_work());
-    assert!(!state.session.has_pending_work());
-    finish_painting(&mut state, present_one_tray_frame);
-    present_one_tray_frame(&mut state);
-    assert!(!state.session.tray_has_pending_work());
-}
-
-#[test]
-fn a_painting_stroke_leaves_the_tray_with_no_pending_work() {
-    let mut state = painting_state();
-    settle_both_surfaces(&mut state);
-    state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.press(Surface::Painting, sample_at(100.0, 100.0, 0.9), false);
-    state.motion(&[sample_at(140.0, 100.0, 0.9)]);
-    state.release();
-    assert!(state.session.has_pending_work());
-    assert!(!state.session.tray_has_pending_work());
-}
 
 const DIRT_DIP: f32 = 0.1;
 
@@ -107,13 +76,7 @@ fn brush_and_knife_reload_or_clean_at_pen_down_and_other_tools_do_not() {
             StrokePreparation::None
         );
     }
-    for tool in [
-        Tool::Blender,
-        Tool::Rag,
-        Tool::Pencil,
-        Tool::Eyedropper,
-        Tool::MixingKnife,
-    ] {
+    for tool in [Tool::Blender, Tool::Rag, Tool::Pencil, Tool::Eyedropper] {
         assert_eq!(
             stroke_preparation(tool, true, true),
             StrokePreparation::None

@@ -4,12 +4,11 @@ use std::rc::Rc;
 use cadmium_engine::canvas::{CanvasSpec, PaintTotals, StateTexture};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::stroke::{StrokeSample, Tool};
-use cadmium_engine::surface::Surface;
 
+use super::AppState;
 use super::clock::Clock;
-use super::{AppState, PigmentClick};
 use crate::presets::starting_canvas_spec;
-use crate::tools::{TrayTool, UiTool};
+use crate::tools::UiTool;
 
 const TEST_CANVAS: (u32, u32) = (512, 256);
 
@@ -127,50 +126,6 @@ pub(super) fn sample_at(x: f64, y: f64, pressure: f32) -> StrokeSample {
         tilt_y_deg: 0.0,
         time_ms: 0,
     }
-}
-
-pub(super) fn present_one_tray_frame(state: &mut AppState) {
-    let gpu = state.gpu.clone();
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    state.encode_tray_frame(&mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-}
-
-const BLOB_PASSES: u32 = 4;
-const BLOB_ROW_Y: f64 = 300.0;
-const BLOB_FROM_X: f64 = 280.0;
-const BLOB_TO_X: f64 = 320.0;
-
-/// Loads the brush with `slot` and passes it over the middle of the tray, then puts the
-/// tools back as they were; the brush keeps the paint it was loaded with.
-pub(super) fn paint_blob_on_tray(state: &mut AppState, slot: usize) {
-    let tools = (state.ui_tool, state.resting_tool, state.tray_tool);
-    let focus = state.focus;
-    state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.set_tray_tool(TrayTool::Load);
-    state.choose_pigment(slot, PigmentClick::CleanAndLoad);
-    for _ in 0..BLOB_PASSES {
-        state.press(
-            Surface::Tray,
-            sample_at(BLOB_FROM_X, BLOB_ROW_Y, 1.0),
-            false,
-        );
-        state.motion(&[sample_at(BLOB_TO_X, BLOB_ROW_Y, 1.0)]);
-        state.release();
-    }
-    finish_painting(state, present_one_tray_frame);
-    (state.ui_tool, state.resting_tool, state.tray_tool) = tools;
-    state.session.brush.tool = state.resting_tool;
-    state.focus = focus;
-}
-
-pub(super) fn settle_both_surfaces(state: &mut AppState) {
-    present_one_frame(state);
-    present_one_tray_frame(state);
-    assert!(!state.session.has_pending_work());
-    assert!(!state.session.tray_has_pending_work());
 }
 
 #[derive(Clone)]

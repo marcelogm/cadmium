@@ -112,27 +112,22 @@ fn every_action_is_in_the_menu() {
 }
 
 #[test]
-fn the_tray_starts_shown() {
-    assert!(Settings::default().tray_shown);
+fn a_file_from_the_days_of_the_tray_still_reads() {
+    let text =
+        r#"{"tray_shown": false, "mixing_knife_diameter_px": 120.0, "pencil_hardness": 0.25}"#;
+    let settings = Settings::from_json(text);
+    assert_eq!(settings.pencil_hardness, 0.25);
+    assert_eq!(
+        settings.lower_pen_button,
+        Settings::default().lower_pen_button
+    );
 }
 
 #[test]
-fn whether_the_tray_shows_round_trips_through_json() {
-    let settings = Settings {
-        tray_shown: false,
-        ..Settings::default()
-    };
-    assert_eq!(Settings::from_json(&settings.to_json()), settings);
-    assert!(Settings::from_json(r#"{"tray_shown": 3}"#).tray_shown);
-}
-
-#[test]
-fn a_file_from_the_tray_divider_still_reads() {
-    let read =
-        Settings::from_json(r#"{"lower_pen_button":"zoom","tray_share":0.5,"tray_shown":false}"#);
-    assert_eq!(read.lower_pen_button, PenButtonAction::Zoom);
-    assert!(!read.tray_shown);
-    assert!(!read.to_json().contains("tray_share"));
+fn saved_settings_no_longer_mention_the_tray_or_the_mixing_knife() {
+    let text = Settings::default().to_json();
+    assert!(!text.contains("tray"));
+    assert!(!text.contains("mixing_knife"));
 }
 
 #[test]
@@ -205,33 +200,4 @@ fn a_changed_curve_is_saved_and_read_back() {
         .update(|settings| settings.pressure_curve = soft_curve())
         .unwrap();
     assert_eq!(SettingsStore::load(path).get().pressure_curve, soft_curve());
-}
-
-#[test]
-fn the_mixing_knife_size_round_trips_and_starts_at_eighty() {
-    assert_eq!(Settings::default().mixing_knife_diameter_px, 80.0);
-    let settings = Settings {
-        mixing_knife_diameter_px: 150.0,
-        ..Settings::default()
-    };
-    assert_eq!(Settings::from_json(&settings.to_json()), settings);
-}
-
-#[test]
-fn a_mixing_knife_size_out_of_range_is_clamped_and_a_bad_one_falls_back_alone() {
-    let read = |text: &str| Settings::from_json(text).mixing_knife_diameter_px;
-    assert_eq!(
-        read(r#"{"mixing_knife_diameter_px":9000}"#),
-        MAX_MIXING_KNIFE_DIAMETER_PX
-    );
-    assert_eq!(
-        read(r#"{"mixing_knife_diameter_px":0.5}"#),
-        MIN_MIXING_KNIFE_DIAMETER_PX
-    );
-    let settings = Settings::from_json(r#"{"mixing_knife_diameter_px":"wide","tray_shown":false}"#);
-    assert_eq!(
-        settings.mixing_knife_diameter_px,
-        DEFAULT_MIXING_KNIFE_DIAMETER_PX
-    );
-    assert!(!settings.tray_shown);
 }

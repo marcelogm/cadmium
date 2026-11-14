@@ -60,22 +60,6 @@ impl PenButtonAction {
     }
 }
 
-/// The mixing knife's blade length by default.
-pub const DEFAULT_MIXING_KNIFE_DIAMETER_PX: f32 = 80.0;
-/// The shortest blade the mixing knife may have, as short as the size slider goes.
-pub const MIN_MIXING_KNIFE_DIAMETER_PX: f32 = 4.0;
-/// The longest blade the mixing knife may have, as long as the size slider goes.
-pub const MAX_MIXING_KNIFE_DIAMETER_PX: f32 = 500.0;
-
-/// A mixing knife size the knife can have; one that isn't a size gives the default.
-pub fn mixing_knife_diameter(diameter_px: f32) -> f32 {
-    if diameter_px.is_finite() {
-        diameter_px.clamp(MIN_MIXING_KNIFE_DIAMETER_PX, MAX_MIXING_KNIFE_DIAMETER_PX)
-    } else {
-        DEFAULT_MIXING_KNIFE_DIAMETER_PX
-    }
-}
-
 /// The painter's preferences. They are read through [`Settings::from_json`], which gives each
 /// field its own fallback, so this does not derive `Deserialize`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -86,10 +70,6 @@ pub struct Settings {
     pub upper_pen_button: PenButtonAction,
     /// How the pen's pressure maps onto the brush's.
     pub pressure_curve: PressureCurve,
-    /// Whether the tray's sheet is open under the canvas.
-    pub tray_shown: bool,
-    /// The mixing knife's blade length, in canvas px.
-    pub mixing_knife_diameter_px: f32,
     /// The pencil's lead, from the softest B (0) to the hardest H (1).
     #[serde(serialize_with = "round_fraction")]
     pub pencil_hardness: f32,
@@ -106,8 +86,6 @@ impl Default for Settings {
             lower_pen_button: PenButtonAction::PickColour,
             upper_pen_button: PenButtonAction::Pan,
             pressure_curve: PressureCurve::linear(),
-            tray_shown: true,
-            mixing_knife_diameter_px: DEFAULT_MIXING_KNIFE_DIAMETER_PX,
             pencil_hardness: DEFAULT_PENCIL_HARDNESS,
         }
     }
@@ -134,15 +112,6 @@ impl Settings {
                 .get("pressure_curve")
                 .and_then(PressureCurve::from_json)
                 .unwrap_or(defaults.pressure_curve),
-            tray_shown: fields
-                .get("tray_shown")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(defaults.tray_shown),
-            mixing_knife_diameter_px: fields
-                .get("mixing_knife_diameter_px")
-                .and_then(serde_json::Value::as_f64)
-                .map(|diameter| mixing_knife_diameter(diameter as f32))
-                .unwrap_or(defaults.mixing_knife_diameter_px),
             pencil_hardness: fields
                 .get("pencil_hardness")
                 .and_then(serde_json::Value::as_f64)

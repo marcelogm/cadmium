@@ -34,18 +34,17 @@ impl AppState {
     pub fn set_param(&mut self, key: &str, value: f32) {
         self.session.engine.params_mut().set(key, value);
         if is_render_param(key) {
-            self.reshade_both_surfaces();
+            self.reshade();
         }
     }
 
     pub fn reset_params(&mut self) {
         *self.session.engine.params_mut() = SimParams::default();
-        self.reshade_both_surfaces();
+        self.reshade();
     }
 
-    fn reshade_both_surfaces(&mut self) {
+    fn reshade(&mut self) {
         self.session.canvas.dirty.mark_all();
-        self.session.tray.dirty.mark_all();
         self.wake();
     }
 }

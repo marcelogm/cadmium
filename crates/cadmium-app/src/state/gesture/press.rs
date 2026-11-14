@@ -5,17 +5,23 @@ use crate::state::AppState;
 use crate::tools::Press;
 
 impl AppState {
-    /// A touch on `surface`, which also brings that surface's tool to the side panel.
+    /// What a touch on `surface` does.
+    pub(crate) fn press_for(&self, _surface: Surface) -> Press {
+        self.ui_tool.profile().on_painting
+    }
+
     pub fn press(&mut self, surface: Surface, sample: StrokeSample, eraser: bool) -> bool {
-        self.focus = surface;
         let press = if eraser {
             Press::Stroke(Tool::Rag)
         } else {
             self.press_for(surface)
         };
         let began = match press {
-            Press::Pan | Press::Nothing | Press::PickColour => false,
-            Press::Stroke(tool) => self.begin_stroke_on(surface, tool, sample),
+            Press::Pan | Press::PickColour => false,
+            Press::Stroke(tool) => {
+                self.begin_stroke_on(surface, tool, sample);
+                true
+            }
         };
         self.wake();
         began
