@@ -14,7 +14,7 @@ pub(super) const KNIFE: UiToolProfile = UiToolProfile {
     tooltip: "Knife (2): flat lays slabs, upright scrapes and carves a groove; light pressure leaves a thicker slab",
     keys: &[gdk::Key::_2],
     keypad_keys: &[gdk::Key::KP_2],
-    on_painting: Press::Stroke(Tool::Knife),
+    press: Press::Stroke(Tool::Knife),
     controls: VisibleControls {
         pigments: true,
         loaded: true,

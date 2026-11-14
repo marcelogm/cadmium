@@ -106,7 +106,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         return;
     }
     let state = widget.state();
-    let press = state.borrow().press_for(widget.surface());
+    let press = state.borrow().ui_tool.profile().press();
     let eraser = is_eraser(&event);
     match down_outcome(press, eraser) {
         DownOutcome::Ignore => return,
@@ -117,7 +117,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         DownOutcome::Press => {}
     }
     let sample = widget_sample(widget, &event, x, y);
-    if !state.borrow_mut().press(widget.surface(), sample, eraser) {
+    if !state.borrow_mut().press(sample, eraser) {
         return;
     }
     if widget.claims_strokes() {
@@ -141,7 +141,7 @@ fn stylus_motion<W: PaintSurfaceWidget>(
         return;
     };
     let state = widget.state();
-    if !state.borrow().contact_on(widget.surface()) {
+    if !state.borrow().is_stroking() {
         if comes_from_a_pen(&event) {
             widget.observe_hover_pen(&widget_sample(widget, &event, x, y));
         }

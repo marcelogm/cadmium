@@ -3,7 +3,6 @@ use cadmium_engine::stroke::{StrokeSample, Tool};
 use cadmium_engine::surface::Surface;
 use cadmium_engine::tool::Holder;
 
-use super::Contact;
 use crate::state::AppState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,17 +32,12 @@ fn stroke_preparation(
 
 impl AppState {
     pub fn begin_stroke(&mut self, tool: Tool, sample: StrokeSample) {
-        self.begin_stroke_on(Surface::Painting, tool, sample);
-    }
-
-    pub(super) fn begin_stroke_on(&mut self, surface: Surface, tool: Tool, sample: StrokeSample) {
         let preparation = stroke_preparation(tool, self.reload_each_stroke, self.clean_each_stroke);
-        self.begin_prepared_stroke(surface, tool, sample, preparation);
+        self.begin_prepared_stroke(tool, sample, preparation);
     }
 
     fn begin_prepared_stroke(
         &mut self,
-        surface: Surface,
         tool: Tool,
         sample: StrokeSample,
         preparation: StrokePreparation,
@@ -56,18 +50,18 @@ impl AppState {
             StrokePreparation::TopUp => self.top_up(),
             StrokePreparation::CleanAndLoad => self.clean_and_load(),
         }
-        self.provisional.colour = (surface == Surface::Painting && tool == Tool::Brush)
+        self.provisional.colour = (tool == Tool::Brush)
             .then(|| self.held_colour(tool))
             .flatten();
-        self.session.begin_stroke_on(surface, sample);
-        self.contact = Some(Contact::Stroke { surface });
+        self.session.begin_stroke_on(Surface::Painting, sample);
+        self.stroking = true;
         self.last_sample_time_ms = None;
         self.note_samples(std::slice::from_ref(&sample));
         self.wake();
     }
 
     pub fn add_samples(&mut self, samples: &[StrokeSample]) {
-        if !matches!(self.contact, Some(Contact::Stroke { .. })) || samples.is_empty() {
+        if !self.stroking || samples.is_empty() {
             return;
         }
         self.session.add_samples(samples);

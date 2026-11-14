@@ -75,7 +75,7 @@ fn eyedropper_on_bare_canvas_changes_nothing() {
     let before = brush_totals(&state);
     let recipe = state.session.brush.recipe.clone();
     let (x, y) = BARE_CANVAS_POINT;
-    assert!(!state.pick_colour_on(Surface::Painting, x, y));
+    assert!(!state.pick_colour(x, y));
     assert_eq!(brush_totals(&state), before);
     assert_eq!(state.session.brush.recipe, recipe);
 }
@@ -87,7 +87,7 @@ fn eyedropper_mixes_the_picked_paint_on_the_palette_and_loads_it() {
     paint_stroke(&mut state, Tool::Brush, &samples);
     state.choose_pigment(WHITE_SLOT, PigmentClick::Choose);
     let middle = samples[samples.len() / 2];
-    assert!(state.pick_colour_on(Surface::Painting, middle.x as f32, middle.y as f32));
+    assert!(state.pick_colour(middle.x as f32, middle.y as f32));
     let recipe = &state.session.brush.recipe;
     assert_eq!(recipe.len(), 1, "{recipe:?}");
     assert_eq!(recipe[0].0, ULTRAMARINE_SLOT);
@@ -105,7 +105,7 @@ fn picking_the_colour_already_on_the_brush_refreshes_it() {
     paint_stroke(&mut state, Tool::Brush, &samples);
     assert!(reserve_volume(&state) < full);
     let middle = samples[samples.len() / 2];
-    assert!(state.pick_colour_on(Surface::Painting, middle.x as f32, middle.y as f32));
+    assert!(state.pick_colour(middle.x as f32, middle.y as f32));
     assert!((reserve_volume(&state) - full).abs() <= full * RESERVE_TOLERANCE);
     assert_eq!(state.session.brush.recipe.len(), 1);
     assert_eq!(state.session.brush.recipe[0].0, ULTRAMARINE_SLOT);

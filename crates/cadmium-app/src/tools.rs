@@ -33,10 +33,17 @@ pub(crate) struct UiToolProfile {
     pub(crate) tooltip: &'static str,
     pub(crate) keys: &'static [gdk::Key],
     keypad_keys: &'static [gdk::Key],
-    pub(crate) on_painting: Press,
+    press: Press,
     pub(crate) controls: VisibleControls,
     pub(crate) wording: ToolWording,
     handling: Option<&'static str>,
+}
+
+impl UiToolProfile {
+    /// What a touch does while this tool is chosen.
+    pub(crate) const fn press(&self) -> Press {
+        self.press
+    }
 }
 
 impl Default for UiTool {

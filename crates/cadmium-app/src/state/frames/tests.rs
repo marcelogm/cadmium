@@ -7,7 +7,6 @@ use crate::state::test_support::{
 use crate::tools::UiTool;
 use cadmium_engine::engine::BRISTLE_SETTLE_MS;
 use cadmium_engine::stroke::Tool;
-use cadmium_engine::surface::Surface;
 
 const FRAME_INTERVAL_MS: f64 = 16.0;
 const CLOCK_START_MS: f64 = 73_000.0;
@@ -39,7 +38,7 @@ fn a_stroke_still_queued_when_the_eraser_comes_down_is_painted_with_its_own_brus
 fn an_eraser_stroke_puts_the_rag_down_after_the_frame() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.press(Surface::Painting, sample_at(300.0, 100.0, 0.9), true);
+    state.press(sample_at(300.0, 100.0, 0.9), true);
     state.motion(&[sample_at(340.0, 100.0, 0.9)]);
     assert_eq!(state.session.brush.tool, Tool::Rag);
     state.release();
@@ -51,7 +50,7 @@ fn an_eraser_stroke_puts_the_rag_down_after_the_frame() {
 fn frames_report_the_pen_samples_they_drew() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Blender));
-    state.press(Surface::Painting, sample_at(300.0, 100.0, 0.9), false);
+    state.press(sample_at(300.0, 100.0, 0.9), false);
     state.motion(&[sample_at(320.0, 100.0, 0.9), sample_at(340.0, 100.0, 0.9)]);
     present_one_frame(&mut state);
     assert_eq!(state.pen.samples_last_frame, 3);

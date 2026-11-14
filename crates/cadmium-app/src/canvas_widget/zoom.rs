@@ -1,5 +1,4 @@
 use cadmium_engine::present::ViewTransform;
-use cadmium_engine::surface::Surface;
 use gtk::gdk;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
@@ -135,10 +134,7 @@ impl CadmiumCanvas {
     pub(super) fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        Some(
-            CursorOutline::of_brush(&state, Surface::Painting, to_widget)
-                .turned(state.view.rotation),
-        )
+        Some(CursorOutline::of_brush(&state, to_widget).turned(state.view.rotation))
     }
 
     pub(super) fn provisional_marks(&self) -> Option<([u8; 3], f32, Vec<Mark>)> {

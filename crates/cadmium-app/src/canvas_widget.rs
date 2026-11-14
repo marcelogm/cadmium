@@ -2,7 +2,6 @@ use std::cell::{Cell, OnceCell, RefCell};
 use std::rc::Rc;
 
 use cadmium_engine::stroke::StrokeSample;
-use cadmium_engine::surface::Surface;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
@@ -118,10 +117,6 @@ impl PaintSurfaceWidget for CadmiumCanvas {
         CadmiumCanvas::state(self)
     }
 
-    fn surface(&self) -> Surface {
-        Surface::Painting
-    }
-
     fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64) {
         self.canvas_point(widget_x, widget_y)
     }
@@ -134,10 +129,7 @@ impl PaintSurfaceWidget for CadmiumCanvas {
 
     fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
-        let found_paint =
-            self.state()
-                .borrow_mut()
-                .pick_colour_on(Surface::Painting, x as f32, y as f32);
+        let found_paint = self.state().borrow_mut().pick_colour(x as f32, y as f32);
         for handler in self.imp().colour_picked_handlers.borrow().iter() {
             handler(self, found_paint);
         }

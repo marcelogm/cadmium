@@ -10,7 +10,7 @@ pub(super) const BRUSH: UiToolProfile = UiToolProfile {
     tooltip: "Brush (1)",
     keys: &[gdk::Key::_1],
     keypad_keys: &[gdk::Key::KP_1],
-    on_painting: Press::Stroke(Tool::Brush),
+    press: Press::Stroke(Tool::Brush),
     controls: VisibleControls {
         pigments: true,
         loaded: true,

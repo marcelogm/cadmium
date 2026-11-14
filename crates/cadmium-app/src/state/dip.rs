@@ -117,9 +117,12 @@ impl AppState {
         self.wake();
     }
 
-    pub fn pick_colour_on(&mut self, surface: Surface, x: f32, y: f32) -> bool {
+    pub fn pick_colour(&mut self, x: f32, y: f32) -> bool {
         self.put_down_stroke_tool();
-        let Ok(Some(picked)) = self.session.pick_colour_on(&self.gpu, surface, x, y) else {
+        let Ok(Some(picked)) = self
+            .session
+            .pick_colour_on(&self.gpu, Surface::Painting, x, y)
+        else {
             self.wake();
             return false;
         };

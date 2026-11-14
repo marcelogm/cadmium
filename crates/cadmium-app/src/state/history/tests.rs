@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use cadmium_engine::stroke::Tool;
-use cadmium_engine::surface::Surface;
 
 use super::*;
 use crate::state::test_support::{
@@ -40,7 +39,7 @@ fn drying_wet_paint_can_be_undone() {
 #[test]
 fn undo_lifts_a_stroke_that_is_still_down() {
     let mut state = painting_state();
-    state.press(Surface::Painting, sample_at(280.0, 100.0, 1.0), false);
+    state.press(sample_at(280.0, 100.0, 1.0), false);
     state.motion(&[sample_at(320.0, 100.0, 1.0)]);
     assert!(state.undo());
     assert!(!state.is_stroking());

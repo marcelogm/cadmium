@@ -15,7 +15,6 @@ use crate::settings::SettingsStore;
 use crate::tools::UiTool;
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
-use gesture::Contact;
 pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use pen::PenReadout;
@@ -93,7 +92,7 @@ pub struct AppState {
     reserve_mixture: Mixture,
     pub knife_mixture: Mixture,
     knife_volume: f32,
-    contact: Option<Contact>,
+    stroking: bool,
     resting_tool: Tool,
     samples_since_frame: u32,
     pacing: FramePacing,
@@ -125,7 +124,7 @@ impl AppState {
             reserve_mixture: EMPTY_MIXTURE,
             knife_mixture: EMPTY_MIXTURE,
             knife_volume: 0.0,
-            contact: None,
+            stroking: false,
             resting_tool,
             samples_since_frame: 0,
             pacing: FramePacing::default(),

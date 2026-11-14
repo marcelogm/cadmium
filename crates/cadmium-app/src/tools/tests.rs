@@ -59,16 +59,21 @@ fn app_starts_with_the_brush() {
 }
 
 #[test]
-fn a_paint_tool_strokes_as_itself() {
-    for tool in UiTool::ALL {
-        if let Press::Stroke(pressed) = tool.profile().on_painting {
-            assert_eq!(UiTool::Paint(pressed), tool);
-        }
-    }
-}
-
-#[test]
-fn the_pencil_strokes_on_the_painting() {
-    let pencil = UiTool::Paint(Tool::Pencil);
-    assert_eq!(pencil.profile().on_painting, Press::Stroke(Tool::Pencil));
+fn every_tool_presses_one_way() {
+    let presses: Vec<_> = UiTool::ALL
+        .into_iter()
+        .map(|tool| tool.profile().press())
+        .collect();
+    assert_eq!(
+        presses,
+        [
+            Press::Pan,
+            Press::Stroke(Tool::Pencil),
+            Press::Stroke(Tool::Brush),
+            Press::Stroke(Tool::Knife),
+            Press::Stroke(Tool::Blender),
+            Press::Stroke(Tool::Rag),
+            Press::PickColour,
+        ]
+    );
 }
