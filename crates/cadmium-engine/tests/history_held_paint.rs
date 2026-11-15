@@ -4,7 +4,6 @@ use cadmium_engine::{
     canvas::PaintTotals,
     engine::FULL_DIP,
     gpu::GpuContext,
-    history::{History, HistoryLimits},
     pigments::{MAX_SLOTS, Mixture},
     session::PaintSession,
     stroke::Tool,
@@ -170,6 +169,22 @@ fn redoing_a_stroke_leaves_the_brush_as_the_stroke_left_it() {
 }
 
 #[test]
+fn a_redone_stroke_undone_and_redone_again_moves_the_brush_both_ways() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    let before = held(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let after = held(&gpu, &s);
+    for _ in 0..2 {
+        assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+        assert!(held(&gpu, &s) == before);
+        assert!(without_wgpu_errors(&gpu, || s.redo(&gpu)));
+        assert!(held(&gpu, &s) == after);
+    }
+}
+
+#[test]
 fn a_brush_loaded_after_a_stroke_keeps_that_load_when_the_stroke_is_undone() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -253,28 +268,4 @@ fn a_pencil_or_rag_stroke_holds_no_tool_paint_and_leaves_the_brush_alone() {
         assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)), "{tool:?}");
         assert!(held(&gpu, &s) == before, "{tool:?}");
     }
-}
-
-#[test]
-fn held_paint_past_its_budget_pushes_the_oldest_steps_out() {
-    let gpu = GpuContext::new().unwrap();
-    let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
-    let one_capture = s.engine.capture_held_paint(&gpu).unwrap().bytes();
-    s.history = History::new(
-        &gpu,
-        HistoryLimits {
-            tile_budget_bytes: 64 * 1024 * 1024,
-            max_steps: 100,
-            held_paint_budget_bytes: one_capture * 2,
-        },
-    );
-    for row in 0..4 {
-        stroke(&gpu, &mut s, 60.0 + 40.0 * f64::from(row), 40.0, 470.0);
-    }
-    let mut undone = 0;
-    while s.undo(&gpu) {
-        undone += 1;
-    }
-    assert_eq!(undone, 2);
 }

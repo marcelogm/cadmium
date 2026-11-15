@@ -239,8 +239,11 @@ impl History {
         for saved in &step.tiles {
             self.undo_tile(canvas, saved, &mut encoder);
         }
-        if let Some(held) = step.held.as_mut() {
-            held.encode_undo(gpu, engine, &mut encoder);
+        if let Some(held) = step.held.as_mut().filter(|_| redoable) {
+            held.encode_keep_after(gpu, engine, &mut encoder);
+        }
+        if let Some(held) = &step.held {
+            held.encode_undo(engine, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
         if redoable {
@@ -257,14 +260,14 @@ impl History {
         canvas: &mut Canvas,
         engine: &mut WetOilEngine,
     ) -> bool {
-        let Some(step) = self.redo_steps.pop() else {
+        let Some(mut step) = self.redo_steps.pop() else {
             return false;
         };
         let mut encoder = new_encoder(gpu, "redo");
         for saved in &step.tiles {
             self.redo_tile(canvas, saved, step.removes_wet_paint, &mut encoder);
         }
-        if let Some(held) = &step.held {
+        if let Some(held) = step.held.as_mut() {
             held.encode_redo(engine, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
