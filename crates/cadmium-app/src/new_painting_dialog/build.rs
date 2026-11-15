@@ -1,6 +1,6 @@
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use cadmium_engine::canvas::{CanvasSpec, MAX_CANVAS_SIZE, primer_srgb8};
+use cadmium_engine::canvas::{CanvasSpec, MAX_PAINTING_SIZE, primer_srgb8};
 use cadmium_engine::pigments::PigmentDb;
 use gtk::gio;
 
@@ -195,7 +195,7 @@ fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow
     );
     let side_row = |title: &str, value: u32| {
         let row =
-            adw::SpinRow::with_range(MIN_SIDE as f64, MAX_CANVAS_SIZE as f64, SIDE_STEP as f64);
+            adw::SpinRow::with_range(MIN_SIDE as f64, MAX_PAINTING_SIZE as f64, SIDE_STEP as f64);
         row.set_title(title);
         row.set_digits(0);
         row.set_value(value as f64);

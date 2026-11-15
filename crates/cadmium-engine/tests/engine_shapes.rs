@@ -36,6 +36,7 @@ fn session(gpu: &GpuContext, head: HeadSpec) -> PaintSession {
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["ultramarine_blue".into()],
+            margin_px: 0,
         },
     )
     .unwrap();

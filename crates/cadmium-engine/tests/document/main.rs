@@ -82,6 +82,7 @@ fn painted_spec() -> CanvasSpec {
         primer: Primer::SiennaImprimatura,
         weave: Weave::Cotton,
         pigment_slots: vec!["burnt_sienna".into(), "titanium_white".into()],
+        margin_px: 0,
     }
 }
 

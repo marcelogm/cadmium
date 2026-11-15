@@ -34,6 +34,7 @@ impl Entries {
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["titanium_white".into()],
+            margin_px: 0,
         };
         let manifest = serde_json::json!({
             "format": CURRENT_FORMAT,

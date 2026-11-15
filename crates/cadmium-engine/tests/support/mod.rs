@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use cadmium_engine::{
-    canvas::{CanvasSpec, Primer, Weave},
+    canvas::{CanvasSpec, PaintingRequest, Primer, Weave},
     gpu::GpuContext,
     present::{PresentRequest, ViewTransform, readback_rgba8},
     session::PaintSession,
@@ -31,7 +31,35 @@ pub fn spec(width: u32, height: u32) -> CanvasSpec {
             "cadmium_yellow".into(),
             "titanium_white".into(),
         ],
+        margin_px: 0,
     }
+}
+
+pub fn painting_request(width: u32, height: u32) -> PaintingRequest {
+    let CanvasSpec {
+        primer,
+        weave,
+        pigment_slots,
+        ..
+    } = spec(width, height);
+    PaintingRequest {
+        width,
+        height,
+        primer,
+        weave,
+        pigment_slots,
+    }
+}
+
+pub fn painting_session(gpu: &GpuContext, width: u32, height: u32) -> PaintSession {
+    let spec = CanvasSpec::for_painting(painting_request(width, height));
+    without_wgpu_errors(gpu, || PaintSession::new(gpu, spec).unwrap())
+}
+
+pub fn load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
+    s.brush.recipe = vec![(slot, 1.0)];
+    s.reload_brush(gpu);
+    s.flush(gpu);
 }
 
 pub fn session(gpu: &GpuContext) -> PaintSession {

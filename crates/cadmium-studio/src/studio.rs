@@ -78,6 +78,7 @@ fn studio_spec() -> CanvasSpec {
         primer: Primer::WhiteGesso,
         weave: Weave::Smooth,
         pigment_slots: vec![DEMO_PIGMENT.to_string()],
+        margin_px: 0,
     }
 }
 

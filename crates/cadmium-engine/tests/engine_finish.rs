@@ -174,6 +174,7 @@ fn drying_a_large_canvas_in_chunks_dries_every_wet_tile() {
                 primer: Primer::WhiteGesso,
                 weave: Weave::Smooth,
                 pigment_slots: vec!["ultramarine_blue".into()],
+                margin_px: 0,
             },
         )
         .unwrap()

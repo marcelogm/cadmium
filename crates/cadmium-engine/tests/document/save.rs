@@ -115,6 +115,7 @@ fn a_large_painting_with_one_stroke_saves_without_its_weave() {
             primer: Primer::WhiteGesso,
             weave: Weave::Linen,
             pigment_slots: vec!["ultramarine_blue".into()],
+            margin_px: 0,
         },
     )
     .unwrap();

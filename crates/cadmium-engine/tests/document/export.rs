@@ -19,6 +19,7 @@ fn export_png_has_canvas_dimensions() {
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["titanium_white".into()],
+            margin_px: 0,
         },
     )
     .unwrap();

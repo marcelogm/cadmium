@@ -1,7 +1,16 @@
 struct InitParams {
     primer_bands_low: vec4<f32>,
     primer_bands_high: vec4<f32>,
+    margin_bands_low: vec4<f32>,
+    margin_bands_high: vec4<f32>,
+    painting_origin: vec2<u32>,
+    painting_size: vec2<u32>,
 };
+
+fn in_painting(texel: vec2<u32>) -> bool {
+    let offset = texel - params.painting_origin;
+    return all(texel >= params.painting_origin) && all(offset < params.painting_size);
+}
 
 @group(0) @binding(0) var<uniform> params: InitParams;
 @group(0) @binding(1) var wet_pig0: texture_storage_2d<rgba16float, write>;
@@ -26,8 +35,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(wet_pig0, pixel, empty);
     textureStore(wet_pig1, pixel, empty);
     textureStore(wet_vol, pixel, empty);
-    textureStore(dry_refl0, pixel, params.primer_bands_low);
-    textureStore(dry_refl1, pixel, params.primer_bands_high);
+    let painting = in_painting(id.xy);
+    textureStore(dry_refl0, pixel, select(params.margin_bands_low, params.primer_bands_low, painting));
+    textureStore(dry_refl1, pixel, select(params.margin_bands_high, params.primer_bands_high, painting));
     textureStore(dry_height, pixel, empty);
     textureStore(dry_top_pig0, pixel, empty);
     textureStore(dry_top_pig1, pixel, empty);

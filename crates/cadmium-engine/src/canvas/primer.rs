@@ -5,7 +5,9 @@ use crate::gpu::{GpuContext, new_encoder};
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
 use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
 
-use super::{BANDS_PER_VEC4, Canvas, Primer, StateTexture, weave_heights};
+use super::{
+    BANDS_PER_VEC4, Canvas, CanvasSpec, MARGIN_REFLECTANCE, Primer, StateTexture, weave_heights,
+};
 
 const PRIMER_WHITE_ID: &str = "titanium_white";
 const IMPRIMATURA_PIGMENT_ID: &str = "burnt_sienna";
@@ -22,6 +24,10 @@ const INIT_WORKGROUP_SIZE: u32 = 8;
 struct InitParams {
     primer_bands_low: [f32; 4],
     primer_bands_high: [f32; 4],
+    margin_bands_low: [f32; 4],
+    margin_bands_high: [f32; 4],
+    painting_origin: [u32; 2],
+    painting_size: [u32; 2],
 }
 
 pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
@@ -56,7 +62,7 @@ pub fn primer_srgb8(db: &PigmentDb, primer: Primer) -> [u8; 3] {
 
 impl Canvas {
     pub(super) fn initialise(&self, gpu: &GpuContext, db: &PigmentDb) {
-        let params_buffer = init_params_buffer(gpu, db, self.spec.primer);
+        let params_buffer = init_params_buffer(gpu, db, &self.spec);
         let stage = AutoLayoutStage::new(
             gpu,
             "canvas_init",
@@ -88,11 +94,16 @@ impl Canvas {
     }
 }
 
-fn init_params_buffer(gpu: &GpuContext, db: &PigmentDb, primer: Primer) -> wgpu::Buffer {
-    let reflectance = primer_reflectance(db, primer);
+fn init_params_buffer(gpu: &GpuContext, db: &PigmentDb, spec: &CanvasSpec) -> wgpu::Buffer {
+    let reflectance = primer_reflectance(db, spec.primer);
+    let painting = spec.painting_rect();
     let params = InitParams {
         primer_bands_low: std::array::from_fn(|band| reflectance[band]),
         primer_bands_high: std::array::from_fn(|band| reflectance[BANDS_PER_VEC4 + band]),
+        margin_bands_low: [MARGIN_REFLECTANCE; BANDS_PER_VEC4],
+        margin_bands_high: [MARGIN_REFLECTANCE; BANDS_PER_VEC4],
+        painting_origin: [painting.x, painting.y],
+        painting_size: [painting.width, painting.height],
     };
     gpu.device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {

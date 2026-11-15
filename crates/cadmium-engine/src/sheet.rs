@@ -11,5 +11,6 @@ pub fn sheet_spec(pigment_slots: &[String]) -> CanvasSpec {
         primer: Primer::Paper,
         weave: Weave::Smooth,
         pigment_slots: pigment_slots.to_vec(),
+        margin_px: 0,
     }
 }

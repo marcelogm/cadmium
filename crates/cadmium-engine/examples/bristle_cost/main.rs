@@ -45,6 +45,7 @@ fn measure(
         primer: Primer::WhiteGesso,
         weave: Weave::Linen,
         pigment_slots: PIGMENTS.iter().map(|id| id.to_string()).collect(),
+        margin_px: 0,
     };
     let mut bench = Bench {
         gpu,

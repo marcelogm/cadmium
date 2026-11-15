@@ -85,6 +85,7 @@ impl NewPaintingDialog {
                 .get(widgets.weave_row.selected() as usize)
                 .map_or(Weave::Linen, |(weave, _)| *weave),
             pigment_slots: self.with_selection(PigmentSelection::slots),
+            margin_px: 0,
         }
     }
 

@@ -1,5 +1,5 @@
 use cadmium_engine::{
-    canvas::MAX_CANVAS_SIZE,
+    canvas::MAX_PAINTING_SIZE,
     document::{DocumentError, DocumentSnapshot},
 };
 
@@ -118,11 +118,11 @@ fn unknown_pigment_in_manifest_is_a_format_error() {
 #[test]
 fn oversized_canvas_in_manifest_is_a_format_error() {
     let entries = Entries::blank().edit_manifest(|m| {
-        m["spec"]["width"] = (MAX_CANVAS_SIZE + 1).into();
+        m["spec"]["width"] = (MAX_PAINTING_SIZE + 1).into();
     });
     let reason = format_reason(read_entries(entries));
-    assert!(reason.contains("canvas size"), "{reason}");
-    assert!(reason.contains(&MAX_CANVAS_SIZE.to_string()), "{reason}");
+    assert!(reason.contains("painting size"), "{reason}");
+    assert!(reason.contains(&MAX_PAINTING_SIZE.to_string()), "{reason}");
 }
 
 #[test]

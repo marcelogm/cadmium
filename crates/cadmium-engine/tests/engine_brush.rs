@@ -21,6 +21,7 @@ fn session(gpu: &GpuContext) -> PaintSession {
                 "cadmium_yellow".into(),
                 "titanium_white".into(),
             ],
+            margin_px: 0,
         },
     )
     .unwrap()

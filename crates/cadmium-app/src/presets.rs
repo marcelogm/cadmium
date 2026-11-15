@@ -62,6 +62,7 @@ pub fn starting_canvas_spec() -> CanvasSpec {
         primer: Primer::WhiteGesso,
         weave: Weave::Linen,
         pigment_slots: PRIMARIES.iter().map(|id| id.to_string()).collect(),
+        margin_px: 0,
     }
 }
 
