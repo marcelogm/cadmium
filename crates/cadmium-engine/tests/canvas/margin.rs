@@ -5,9 +5,8 @@ use cadmium_engine::{
     stroke::{StrokeSample, Tool},
 };
 
-use crate::support;
 use crate::support::{
-    drag, frame, line, load, painting_request, painting_session, presented_rgba, stroke,
+    self, drag, frame, line, load, painting_request, painting_session, presented_rgba, stroke,
     without_wgpu_errors,
 };
 
@@ -268,4 +267,48 @@ fn redoing_a_margin_clear_leaves_the_margin_dry_and_the_edge_of_the_painting_wet
     assert!(s.redo(&gpu));
     assert!(!s.canvas.wet_tiles.contains(wholly_in_margin));
     assert!(s.canvas.wet_tiles.contains(cut_by_the_edge()));
+}
+
+#[test]
+fn paint_wholly_on_the_painting_leaves_nothing_to_clear_on_the_margin() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 316, 316);
+    let margin = f64::from(MARGIN_PX);
+    s.brush.geometry.max_diameter_px = 20.0;
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, margin + 158.0, margin + 130.0, margin + 250.0);
+    let cut_by_the_edge = TileCoord {
+        x: (MARGIN_PX + 315) / TILE_SIZE,
+        y: (MARGIN_PX + 158) / TILE_SIZE,
+    };
+    assert!(s.canvas.wet_tiles.contains(cut_by_the_edge));
+    assert!(painting_wet_volume(&gpu, &s) > 0.0);
+    assert_eq!(s.clear_margin(&gpu), ClearOutcome::NothingToClear);
+}
+
+#[test]
+fn a_margin_just_cleared_has_nothing_left_to_clear() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, margin_row(), 40.0, 400.0);
+    assert!(matches!(s.clear_margin(&gpu), ClearOutcome::Cleared { .. }));
+    assert_eq!(s.clear_margin(&gpu), ClearOutcome::NothingToClear);
+}
+
+#[test]
+fn a_margin_clear_undone_can_be_cleared_again() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    let blank = state_snapshot(&gpu, &s);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, margin_row(), 40.0, 400.0);
+    s.clear_margin(&gpu);
+    assert!(s.undo(&gpu));
+    assert!(margin_wet_volume(&gpu, &s) > 0.0);
+    assert!(matches!(s.clear_margin(&gpu), ClearOutcome::Cleared { .. }));
+    assert_eq!(
+        margin_texels(&s, &state_snapshot(&gpu, &s)),
+        margin_texels(&s, &blank)
+    );
 }

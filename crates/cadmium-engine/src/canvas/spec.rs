@@ -58,6 +58,16 @@ pub struct PaintingRequest {
     pub pigment_slots: Vec<String>,
 }
 
+impl PaintingRect {
+    /// Whether every texel of `[x0, y0, x1, y1]`, corners included, lies on the painting.
+    pub fn contains_rect(&self, [x0, y0, x1, y1]: [f32; 4]) -> bool {
+        let (left, top) = (self.x as f32, self.y as f32);
+        let right = (self.x + self.width) as f32;
+        let bottom = (self.y + self.height) as f32;
+        x0.min(x1) >= left && y0.min(y1) >= top && x0.max(x1) < right && y0.max(y1) < bottom
+    }
+}
+
 impl CanvasSpec {
     pub fn for_painting(request: PaintingRequest) -> CanvasSpec {
         CanvasSpec {
@@ -90,14 +100,12 @@ impl CanvasSpec {
     /// between them; none without a margin.
     pub(crate) fn margin_strips(&self) -> Vec<TexelBlock> {
         let margin = self.margin_px;
-        let (Some(_), Some(inner_height)) =
-            (self.inner_side(self.width), self.inner_side(self.height))
-        else {
-            return Vec::new();
-        };
         if margin == 0 {
             return Vec::new();
         }
+        let Some(inner_height) = self.inner_side(self.height) else {
+            return Vec::new();
+        };
         let across = [self.width, margin];
         let down = [margin, inner_height];
         [

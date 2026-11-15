@@ -40,19 +40,9 @@ pub(super) fn mark_restored(canvas: &mut Canvas, tile: TileCoord) {
 }
 
 pub(super) fn mark_wet(canvas: &mut Canvas, tile: TileCoord) {
-    if let Some([x0, y0, x1, y1]) = tile_rect(canvas, tile) {
-        canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
-    }
+    canvas.wet_tiles.mark_tile(tile);
 }
 
 pub(super) fn forget_wet(canvas: &mut Canvas, dried: &HashSet<TileCoord>) {
-    let still_wet: Vec<TileCoord> = canvas
-        .wet_tiles
-        .take()
-        .into_iter()
-        .filter(|tile| !dried.contains(tile))
-        .collect();
-    for tile in still_wet {
-        mark_wet(canvas, tile);
-    }
+    canvas.wet_tiles.retain(|tile| !dried.contains(&tile));
 }

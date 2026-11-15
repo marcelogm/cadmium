@@ -6,8 +6,8 @@ use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
 use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
 
 use super::{
-    BANDS_PER_VEC4, Canvas, CanvasSpec, DirtyTiles, MARGIN_REFLECTANCE, Primer, StateTexture,
-    TILE_SIZE, TexelBlock, TileCoord, weave_heights,
+    BANDS_PER_VEC4, Canvas, CanvasSpec, MARGIN_REFLECTANCE, Primer, StateTexture, weave_heights,
+    weave_heights_in,
 };
 
 const PRIMER_WHITE_ID: &str = "titanium_white";
@@ -85,25 +85,17 @@ impl Canvas {
     /// and leaves every texel of the painting alone.
     pub(crate) fn reset_margin(&mut self, gpu: &GpuContext, db: &PigmentDb) {
         self.encode_init(gpu, db, InitScope::MarginOnly);
-        let heights = weave_heights(self.spec.weave, self.spec.width, self.spec.height);
         for strip in self.spec.margin_strips() {
-            let bytes = strip_bytes(&heights, self.spec.width, strip);
-            self.write_bytes_at(gpu, StateTexture::DryHeight, &bytes, strip);
+            let heights = weave_heights_in(self.spec.weave, strip);
+            self.write_f32_at(gpu, StateTexture::DryHeight, &heights, strip);
         }
-        let margin_tiles = self.spec.margin_tiles();
-        for tile in &margin_tiles {
-            mark_tile(&mut self.dirty, *tile);
+        for tile in self.spec.margin_tiles() {
+            self.dirty.mark_tile(tile);
         }
         self.margin_touched.clear();
-        let still_wet: Vec<TileCoord> = self
-            .wet_tiles
-            .take()
-            .into_iter()
-            .filter(|tile| !self.spec.is_tile_wholly_in_margin(*tile))
-            .collect();
-        for tile in still_wet {
-            mark_tile(&mut self.wet_tiles, tile);
-        }
+        let spec = &self.spec;
+        self.wet_tiles
+            .retain(|tile| !spec.is_tile_wholly_in_margin(tile));
     }
 
     fn encode_init(&self, gpu: &GpuContext, db: &PigmentDb, scope: InitScope) {
@@ -132,23 +124,6 @@ impl Canvas {
         );
         gpu.queue.submit([encoder.finish()]);
     }
-}
-
-fn strip_bytes(heights: &[f32], width: u32, strip: TexelBlock) -> Vec<u8> {
-    let [x, y] = strip.origin.map(|value| value as usize);
-    let [strip_width, strip_height] = strip.size.map(|value| value as usize);
-    let width = width as usize;
-    (y..y + strip_height)
-        .flat_map(|row| &heights[row * width + x..][..strip_width])
-        .flat_map(|height| height.to_le_bytes())
-        .collect()
-}
-
-fn mark_tile(tiles: &mut DirtyTiles, tile: TileCoord) {
-    let x0 = (tile.x * TILE_SIZE) as f32;
-    let y0 = (tile.y * TILE_SIZE) as f32;
-    let last = (TILE_SIZE - 1) as f32;
-    tiles.mark_rect(x0, y0, x0 + last, y0 + last);
 }
 
 fn init_params_buffer(
