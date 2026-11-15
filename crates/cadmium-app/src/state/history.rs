@@ -52,8 +52,13 @@ impl AppState {
         DryOutcome::Dried { undoable }
     }
 
-    /// Clears the margin around the painting of wet paint, dry paint and graphite.
+    /// Clears the margin around the painting of wet paint, dry paint and graphite; not while
+    /// the Palette dialog hides the painting, where the clearing could be neither seen nor
+    /// undone.
     pub fn clear_margin(&mut self) -> ClearOutcome {
+        if self.is_editing_palette() {
+            return ClearOutcome::NothingToClear;
+        }
         self.release(EaselId::Painting);
         let outcome = self.painting.session.clear_margin(&self.gpu);
         if matches!(outcome, ClearOutcome::Cleared { .. }) {

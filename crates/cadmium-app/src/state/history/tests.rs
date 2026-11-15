@@ -75,6 +75,23 @@ fn clearing_the_margin_is_an_edit_that_undo_takes_back() {
 }
 
 #[test]
+fn the_margin_is_not_cleared_under_the_palette_dialog() {
+    let mut state = painting_state();
+    stroke(
+        &mut state,
+        Tool::Brush,
+        &row_samples(f64::from(MARGIN_PX) / 2.0),
+    );
+    state.begin_palette_edit();
+    assert_eq!(state.clear_margin(), ClearOutcome::NothingToClear);
+    state.end_palette_edit();
+    assert_eq!(
+        state.clear_margin(),
+        ClearOutcome::Cleared { undoable: true }
+    );
+}
+
+#[test]
 fn undo_lifts_a_stroke_that_is_still_down() {
     let mut state = painting_state();
     state.press(EaselId::Painting, sample_at(280.0, 100.0, 1.0), false);
