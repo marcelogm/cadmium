@@ -1,10 +1,11 @@
 use cadmium_engine::{
-    canvas::{CanvasSpec, MARGIN_PX, StateTexture},
+    canvas::{CanvasSpec, MARGIN_PX, StateTexture, TILE_SIZE, TileCoord},
     gpu::GpuContext,
-    session::PaintSession,
-    stroke::StrokeSample,
+    session::{ClearOutcome, PaintSession},
+    stroke::{StrokeSample, Tool},
 };
 
+use crate::support;
 use crate::support::{
     drag, frame, line, load, painting_request, painting_session, presented_rgba, stroke,
     without_wgpu_errors,
@@ -128,4 +129,122 @@ fn one_stroke_from_the_painting_into_the_margin_is_one_undo_step() {
     assert!(s.undo(&gpu));
     assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
     assert!(!s.undo(&gpu));
+}
+
+fn state_snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
+    StateTexture::PAINT_STATE
+        .iter()
+        .map(|which| s.canvas.read_bytes(gpu, *which).unwrap())
+        .collect()
+}
+
+fn texels_where(s: &PaintSession, snapshot: &[Vec<u8>], in_margin: bool) -> Vec<Vec<u8>> {
+    let spec = &s.canvas.spec;
+    StateTexture::PAINT_STATE
+        .iter()
+        .zip(snapshot)
+        .map(|(which, bytes)| {
+            bytes
+                .chunks_exact(which.bytes_per_texel() as usize)
+                .enumerate()
+                .filter(|(index, _)| {
+                    let index = *index as u32;
+                    spec.is_in_margin(index % spec.width, index / spec.width) == in_margin
+                })
+                .flat_map(|(_, texel)| texel.iter().copied())
+                .collect()
+        })
+        .collect()
+}
+
+fn margin_texels(s: &PaintSession, snapshot: &[Vec<u8>]) -> Vec<Vec<u8>> {
+    texels_where(s, snapshot, true)
+}
+
+fn painting_texels(s: &PaintSession, snapshot: &[Vec<u8>]) -> Vec<Vec<u8>> {
+    texels_where(s, snapshot, false)
+}
+
+fn paint_out_across_the_right_edge(gpu: &GpuContext, s: &mut PaintSession) -> Vec<Vec<u8>> {
+    let margin = f64::from(MARGIN_PX);
+    load(gpu, s, BLUE);
+    stroke(gpu, s, margin + 100.0, margin + 200.0, margin + 340.0);
+    assert!(margin_wet_volume(gpu, s) > 0.0 && painting_wet_volume(gpu, s) > 0.0);
+    state_snapshot(gpu, s)
+}
+
+#[test]
+fn clearing_the_margin_resets_it_and_leaves_every_texel_of_the_painting_alone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    let blank = state_snapshot(&gpu, &s);
+    let cut_by_the_edge = TileCoord {
+        x: (MARGIN_PX + 299) / TILE_SIZE,
+        y: (MARGIN_PX + 100) / TILE_SIZE,
+    };
+    let painted = paint_out_across_the_right_edge(&gpu, &mut s);
+    let outcome = without_wgpu_errors(&gpu, || s.clear_margin(&gpu));
+    assert_eq!(outcome, ClearOutcome::Cleared { undoable: true });
+    let cleared = state_snapshot(&gpu, &s);
+    assert_eq!(margin_texels(&s, &cleared), margin_texels(&s, &blank));
+    assert_eq!(painting_texels(&s, &cleared), painting_texels(&s, &painted));
+    assert!(s.canvas.wet_tiles.contains(cut_by_the_edge));
+    assert!(s.undo(&gpu));
+    assert_eq!(state_snapshot(&gpu, &s), painted);
+    assert!(s.redo(&gpu));
+    assert_eq!(state_snapshot(&gpu, &s), cleared);
+    assert!(s.canvas.wet_tiles.contains(cut_by_the_edge));
+}
+
+#[test]
+fn clearing_a_margin_with_only_dry_paint_still_clears_it() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    let blank = state_snapshot(&gpu, &s);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, margin_row(), 40.0, 400.0);
+    s.dry(&gpu);
+    assert!(matches!(s.clear_margin(&gpu), ClearOutcome::Cleared { .. }));
+    assert_eq!(
+        margin_texels(&s, &state_snapshot(&gpu, &s)),
+        margin_texels(&s, &blank)
+    );
+}
+
+#[test]
+fn clearing_the_margin_rubs_out_a_pencil_line_there_and_keeps_the_one_on_the_painting() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    let margin = f64::from(MARGIN_PX);
+    s.brush.tool = Tool::Pencil;
+    drag(&gpu, &mut s, &line(margin_row(), 40.0, 400.0, 0.9, 0.0));
+    drag(
+        &gpu,
+        &mut s,
+        &line(margin + 100.0, margin + 20.0, margin + 280.0, 0.9, 0.0),
+    );
+    assert!(total_where(&gpu, &s, StateTexture::Graphite, true) > 0.0);
+    assert!(total_where(&gpu, &s, StateTexture::Graphite, false) > 0.0);
+    assert!(s.canvas.wet_tiles.is_empty());
+    let sketched = state_snapshot(&gpu, &s);
+    assert_eq!(
+        s.clear_margin(&gpu),
+        ClearOutcome::Cleared { undoable: true }
+    );
+    assert_eq!(total_where(&gpu, &s, StateTexture::Graphite, true), 0.0);
+    let cleared = state_snapshot(&gpu, &s);
+    assert_eq!(
+        painting_texels(&s, &cleared),
+        painting_texels(&s, &sketched)
+    );
+}
+
+#[test]
+fn there_is_nothing_to_clear_on_a_clean_margin_or_without_one() {
+    let gpu = GpuContext::new().unwrap();
+    let mut with_margin = painting_session(&gpu, 300, 200);
+    assert_eq!(with_margin.clear_margin(&gpu), ClearOutcome::NothingToClear);
+    let mut without = support::session(&gpu);
+    stroke(&gpu, &mut without, 128.0, 40.0, 470.0);
+    assert_eq!(without.clear_margin(&gpu), ClearOutcome::NothingToClear);
 }

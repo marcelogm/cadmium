@@ -33,7 +33,7 @@ const HISTORY_PAINTING_COPIES: u64 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClearOutcome {
-    NothingWet,
+    NothingToClear,
     Cleared { undoable: bool },
 }
 

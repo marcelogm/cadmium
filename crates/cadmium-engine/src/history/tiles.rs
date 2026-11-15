@@ -35,6 +35,7 @@ fn tile_rect(canvas: &Canvas, tile: TileCoord) -> Option<[f32; 4]> {
 pub(super) fn mark_restored(canvas: &mut Canvas, tile: TileCoord) {
     if let Some([x0, y0, x1, y1]) = tile_rect(canvas, tile) {
         canvas.dirty.mark_rect(x0, y0, x1, y1);
+        canvas.margin_touched.mark_rect(x0, y0, x1, y1);
     }
 }
 

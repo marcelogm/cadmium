@@ -216,6 +216,7 @@ fn upload_states(gpu: &GpuContext, canvas: &mut Canvas, states: Vec<StateBytes>)
         }
     }
     canvas.dirty.mark_all();
+    canvas.margin_touched.mark_all();
 }
 
 pub fn save(

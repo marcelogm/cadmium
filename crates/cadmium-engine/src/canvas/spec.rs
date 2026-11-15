@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::pigments::{MAX_SLOTS, PigmentDb};
 
-use super::TILE_SIZE;
+use super::{TILE_SIZE, TexelBlock, TileCoord, tiles_in_rect};
 
 pub const MAX_PAINTING_SIZE: u32 = 4096;
 /// The width of the border of canvas around a painting, on every side: whole tiles.
@@ -86,6 +86,53 @@ impl CanvasSpec {
         !(inside_x && inside_y)
     }
 
+    /// The four bands of the margin, top and bottom across the whole width, left and right
+    /// between them; none without a margin.
+    pub(crate) fn margin_strips(&self) -> Vec<TexelBlock> {
+        let margin = self.margin_px;
+        let (Some(_), Some(inner_height)) =
+            (self.inner_side(self.width), self.inner_side(self.height))
+        else {
+            return Vec::new();
+        };
+        if margin == 0 {
+            return Vec::new();
+        }
+        let across = [self.width, margin];
+        let down = [margin, inner_height];
+        [
+            [0, 0],
+            [0, self.height - margin],
+            [0, margin],
+            [self.width - margin, margin],
+        ]
+        .into_iter()
+        .zip([across, across, down, down])
+        .map(|(origin, size)| TexelBlock { origin, size })
+        .collect()
+    }
+
+    /// The tiles holding at least one texel of the margin.
+    pub(crate) fn margin_tiles(&self) -> Vec<TileCoord> {
+        let mut tiles: Vec<TileCoord> = self
+            .margin_strips()
+            .into_iter()
+            .flat_map(|strip| tiles_in_rect(self.width, self.height, block_rect(strip)))
+            .collect();
+        tiles.sort_unstable();
+        tiles.dedup();
+        tiles
+    }
+
+    pub(crate) fn is_tile_wholly_in_margin(&self, tile: TileCoord) -> bool {
+        let rect = self.painting_rect();
+        let overlaps = |start: u32, painting_start: u32, painting_length: u32| {
+            start < painting_start + painting_length && start + TILE_SIZE > painting_start
+        };
+        !(overlaps(tile.x * TILE_SIZE, rect.x, rect.width)
+            && overlaps(tile.y * TILE_SIZE, rect.y, rect.height))
+    }
+
     pub fn validate(&self, db: &PigmentDb) -> Result<(), String> {
         self.validate_size()?;
         if !(1..=MAX_SLOTS).contains(&self.pigment_slots.len()) {
@@ -129,6 +176,17 @@ impl CanvasSpec {
         }
         Ok(())
     }
+}
+
+fn block_rect(block: TexelBlock) -> [f32; 4] {
+    let [x, y] = block.origin;
+    let [width, height] = block.size;
+    [
+        x as f32,
+        y as f32,
+        (x + width - 1) as f32,
+        (y + height - 1) as f32,
+    ]
 }
 
 fn validate_slot<'a>(

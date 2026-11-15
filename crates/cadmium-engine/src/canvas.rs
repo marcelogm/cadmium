@@ -79,6 +79,8 @@ pub struct Canvas {
     pub dirty: DirtyTiles,
     pub possibly_dirty: DirtyTiles,
     pub wet_tiles: DirtyTiles,
+    /// The tiles changed since the canvas was made or its margin last cleared.
+    pub margin_touched: DirtyTiles,
     changes: TileChanges,
     surfaces: Vec<StateSurface>,
     slot_table: wgpu::Buffer,
@@ -115,6 +117,7 @@ impl Canvas {
             dirty: DirtyTiles::new(spec.width, spec.height),
             possibly_dirty: DirtyTiles::new(spec.width, spec.height),
             wet_tiles: DirtyTiles::new(spec.width, spec.height),
+            margin_touched: DirtyTiles::new(spec.width, spec.height),
             changes: TileChanges::new(gpu, spec.width, spec.height),
             spec,
             surfaces,

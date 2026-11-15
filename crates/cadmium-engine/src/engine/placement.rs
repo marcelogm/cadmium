@@ -347,6 +347,7 @@ pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
         } else {
             canvas.dirty.mark_rect(x0, y0, x1, y1);
         }
+        canvas.margin_touched.mark_rect(x0, y0, x1, y1);
         if placement.profile.touches_paint() {
             canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
         }
