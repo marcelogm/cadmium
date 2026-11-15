@@ -1,51 +1,58 @@
 use cadmium_engine::brush::{BrushSpec, DEFAULT_PENCIL_HARDNESS};
+use cadmium_engine::gpu::GpuContext;
 use gtk::glib;
 
-use super::AppState;
+use super::{AppState, Easel, EaselId};
 use crate::LOG_DOMAIN;
 use crate::settings::SettingsStore;
 use crate::tools::UiTool;
 
-impl AppState {
+impl Easel {
     pub fn holds_knife(&self) -> bool {
         self.session.brush.tool.profile().holds_on_blade()
     }
 
-    pub(super) fn put_down_stroke_tool(&mut self) {
-        self.release();
+    pub(super) fn put_down_stroke_tool(&mut self, gpu: &GpuContext) {
+        self.release(gpu);
         self.session.brush.tool = self.resting_tool;
+    }
+}
+
+impl AppState {
+    pub fn holds_knife(&self) -> bool {
+        self.painting.holds_knife()
     }
 
     /// Takes on `store`'s settings, the pencil's hardness with them.
     pub fn use_settings(&mut self, store: SettingsStore) {
         self.settings = store;
-        self.session.brush.pencil_hardness = self.settings.get().pencil_hardness;
+        self.painting.session.brush.pencil_hardness = self.settings.get().pencil_hardness;
     }
 
     pub fn brush_diameter_px(&self) -> f32 {
-        self.session.brush.geometry.max_diameter_px
+        self.painting.session.brush.geometry.max_diameter_px
     }
 
     pub fn set_brush_size(&mut self, diameter_px: f32) {
-        self.release();
-        self.session.brush.geometry.max_diameter_px = diameter_px;
-        self.session.resize_tip();
+        self.release(EaselId::Painting);
+        self.painting.session.brush.geometry.max_diameter_px = diameter_px;
+        self.painting.session.resize_tip();
     }
 
     /// Wears a brush that is not picked from the library, forgetting the picked one.
     pub fn wear_brush(&mut self, brush: &BrushSpec) {
         self.worn_brush_index = None;
-        self.release();
-        self.session.brush.wear(brush);
-        self.session.resize_tip();
+        self.release(EaselId::Painting);
+        self.painting.session.brush.wear(brush);
+        self.painting.session.resize_tip();
     }
 
     pub fn set_load(&mut self, load: f32) {
-        self.session.brush.load = load;
+        self.painting.session.brush.load = load;
     }
 
     pub fn set_medium(&mut self, medium: f32) {
-        self.session.brush.medium = medium;
+        self.painting.session.brush.medium = medium;
     }
 
     /// Sharpens the pencil to `hardness`, 0 the softest B to 1 the hardest H. The settings keep
@@ -56,12 +63,12 @@ impl AppState {
         } else {
             hardness.clamp(0.0, 1.0)
         };
-        self.session.brush.pencil_hardness = hardness;
+        self.painting.session.brush.pencil_hardness = hardness;
     }
 
     /// Saves the pencil's hardness, if it changed; the window calls it as it closes.
     pub fn remember_pencil_hardness(&mut self) -> std::io::Result<()> {
-        let hardness = self.session.brush.pencil_hardness;
+        let hardness = self.painting.session.brush.pencil_hardness;
         if self.settings.get().pencil_hardness == hardness {
             return Ok(());
         }
@@ -78,14 +85,7 @@ impl AppState {
             );
             return;
         }
-        self.ui_tool = tool;
-        let UiTool::Paint(paint_tool) = tool else {
-            return;
-        };
-        self.resting_tool = paint_tool;
-        if !self.is_stroking() {
-            self.session.brush.tool = paint_tool;
-        }
+        self.painting.set_ui_tool(tool);
     }
 }
 

@@ -9,7 +9,7 @@ use gtk::{gdk, glib, graphene, gsk};
 use crate::handlers::run_handlers;
 use crate::input::{NavigableSurface, PaintSurfaceWidget};
 use crate::presenter::FramePresenter;
-use crate::state::SharedState;
+use crate::state::{EaselId, SharedState};
 use crate::surface_scale::{SurfaceScaleWatch, widget_centre};
 use crate::view::ViewStep;
 
@@ -117,6 +117,10 @@ impl PaintSurfaceWidget for CadmiumCanvas {
         CadmiumCanvas::state(self)
     }
 
+    fn easel(&self) -> EaselId {
+        EaselId::Painting
+    }
+
     fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64) {
         self.canvas_point(widget_x, widget_y)
     }
@@ -129,7 +133,10 @@ impl PaintSurfaceWidget for CadmiumCanvas {
 
     fn pick_colour_at(&self, widget_x: f64, widget_y: f64) {
         let (x, y) = self.canvas_point(widget_x, widget_y);
-        let found_paint = self.state().borrow_mut().pick_colour(x as f32, y as f32);
+        let found_paint =
+            self.state()
+                .borrow_mut()
+                .pick_colour(EaselId::Painting, x as f32, y as f32);
         for handler in self.imp().colour_picked_handlers.borrow().iter() {
             handler(self, found_paint);
         }

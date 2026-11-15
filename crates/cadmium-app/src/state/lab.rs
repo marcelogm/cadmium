@@ -24,27 +24,27 @@ pub(super) fn is_render_param(key: &str) -> bool {
 impl AppState {
     pub fn set_view_mode(&mut self, mode: ViewMode) {
         let mode = clamp_view_mode(mode, self.slot_count());
-        if self.session.view_mode != mode {
-            self.session.view_mode = mode;
-            self.session.canvas.dirty.mark_all();
+        if self.painting.session.view_mode != mode {
+            self.painting.session.view_mode = mode;
+            self.painting.session.canvas.dirty.mark_all();
             self.wake();
         }
     }
 
     pub fn set_param(&mut self, key: &str, value: f32) {
-        self.session.engine.params_mut().set(key, value);
+        self.painting.session.engine.params_mut().set(key, value);
         if is_render_param(key) {
             self.reshade();
         }
     }
 
     pub fn reset_params(&mut self) {
-        *self.session.engine.params_mut() = SimParams::default();
+        *self.painting.session.engine.params_mut() = SimParams::default();
         self.reshade();
     }
 
     fn reshade(&mut self) {
-        self.session.canvas.dirty.mark_all();
+        self.painting.session.canvas.dirty.mark_all();
         self.wake();
     }
 }

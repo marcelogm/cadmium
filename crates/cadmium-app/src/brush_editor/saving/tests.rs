@@ -42,7 +42,7 @@ fn saving_a_factory_draft_adds_a_copy_and_wears_it() {
     let saved = store(&mut state, &draft).unwrap();
     assert_eq!(saved.name, "Round · Synthetic (copy)");
     assert_eq!(state.worn_library_brush(), Some(saved.index));
-    assert_eq!(state.session.brush.geometry.max_diameter_px, 50.0);
+    assert_eq!(state.painting.session.brush.geometry.max_diameter_px, 50.0);
     assert_eq!(state.brushes.get(0), Some(&factory_brushes()[0]));
 }
 

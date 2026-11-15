@@ -25,7 +25,7 @@ const DELETE_FAILED: &str = "Can't delete brush";
 fn worn_brush_spec(window: &CadmiumWindow) -> (BrushSpec, Option<usize>) {
     let state = window.state();
     let state = state.borrow();
-    let settings = &state.session.brush;
+    let settings = &state.painting.session.brush;
     let (name, index) = export_name(&state.brushes, state.worn_library_brush(), settings);
     let spec = BrushSpec {
         name,

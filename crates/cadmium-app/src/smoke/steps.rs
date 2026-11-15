@@ -13,6 +13,7 @@ use crate::window::CadmiumWindow;
 
 use super::brushes::BrushStep;
 use super::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig, editor};
+use crate::state::EaselId;
 
 const TOOL_ACTION: &str = "win.tool";
 const STROKE_PIGMENT: &str = "ultramarine_blue";
@@ -282,7 +283,7 @@ fn paint_stroke(window: &CadmiumWindow) {
     let canvas = window.canvas();
     let state = canvas.state();
     let mut state = state.borrow_mut();
-    let spec = &state.session.canvas.spec;
+    let spec = &state.painting.session.canvas.spec;
     let Some(slot) = spec
         .pigment_slots
         .iter()
@@ -296,12 +297,12 @@ fn paint_stroke(window: &CadmiumWindow) {
     };
     let samples = smoke_stroke(spec.width, spec.height);
     let gpu = state.gpu.clone();
-    state.session.brush.recipe = vec![(slot, 1.0)];
-    state.session.reload_brush(&gpu);
-    let tool = state.session.brush.tool;
-    state.begin_stroke(tool, samples[0]);
-    state.add_samples(&samples[1..]);
-    state.release();
+    state.painting.session.brush.recipe = vec![(slot, 1.0)];
+    state.painting.session.reload_brush(&gpu);
+    let tool = state.painting.session.brush.tool;
+    state.begin_stroke(EaselId::Painting, tool, samples[0]);
+    state.add_samples(EaselId::Painting, &samples[1..]);
+    state.release(EaselId::Painting);
     drop(state);
     canvas.queue_present();
     window.refresh_panels();

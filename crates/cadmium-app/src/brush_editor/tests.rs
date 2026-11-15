@@ -30,7 +30,7 @@ fn a_worn_user_brush_is_saved_over_itself() {
 #[test]
 fn a_brush_in_no_library_is_edited_as_the_current_brush() {
     let mut state = painting_state();
-    state.session.brush.head.dome = 0.37;
+    state.painting.session.brush.head.dome = 0.37;
     let draft = draft_for(&state);
     assert_eq!(draft.original().name, "Current Brush");
     assert_eq!(draft.deletable(), None);

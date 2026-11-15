@@ -37,7 +37,7 @@ fn deleting_an_earlier_brush_keeps_the_worn_one() {
     state.delete_library_brush(first).unwrap();
     let worn = state.worn_library_brush().unwrap();
     assert_eq!(state.brushes.get(worn).unwrap().name, "Large");
-    assert_eq!(state.session.brush.geometry.max_diameter_px, 60.0);
+    assert_eq!(state.painting.session.brush.geometry.max_diameter_px, 60.0);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn wearing_a_brush_from_elsewhere_forgets_the_picked_one() {
 fn the_worn_library_brush_is_shown_at_the_current_size() {
     let mut state = painting_state();
     assert!(state.wear_library_brush(2));
-    state.session.brush.geometry.max_diameter_px = 33.0;
+    state.painting.session.brush.geometry.max_diameter_px = 33.0;
     let expected = BrushSpec {
         size_px: 33.0,
         ..state.brushes.get(2).unwrap().clone()
@@ -65,9 +65,9 @@ fn the_worn_library_brush_is_shown_at_the_current_size() {
 #[test]
 fn a_brush_outside_the_library_is_the_current_brush() {
     let mut state = painting_state();
-    state.session.brush.head.thickness += 0.123;
+    state.painting.session.brush.head.thickness += 0.123;
     assert_eq!(state.worn_library_brush(), None);
-    let settings = &state.session.brush;
+    let settings = &state.painting.session.brush;
     let expected = BrushSpec {
         name: "Current Brush".into(),
         size_px: settings.geometry.max_diameter_px,
@@ -89,7 +89,7 @@ fn a_brush_saved_over_itself_is_worn_at_its_new_size() {
     state.set_brush_size(30.0);
     let saved = state.save_library_brush(index, &original, &edited).unwrap();
     assert_eq!(state.worn_library_brush(), Some(saved.index));
-    assert_eq!(state.session.brush.geometry.max_diameter_px, 64.0);
+    assert_eq!(state.painting.session.brush.geometry.max_diameter_px, 64.0);
 }
 
 #[test]
@@ -103,5 +103,5 @@ fn a_brush_added_from_the_editor_is_worn() {
     let saved = state.add_library_brush(brush);
     assert!(state.brushes.is_user(saved.index));
     assert_eq!(state.worn_library_brush(), Some(saved.index));
-    assert_eq!(state.session.brush.geometry.max_diameter_px, 33.0);
+    assert_eq!(state.painting.session.brush.geometry.max_diameter_px, 33.0);
 }

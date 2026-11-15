@@ -5,16 +5,12 @@ use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::gpu_timer::GpuFrameTimer;
 
 /// Paces the dabs of a stroke over frames: learns from timed frames how long the GPU takes
-/// per dab, and allows each frame as many as keep it near its target. A stroke that ends
-/// with dabs still queued has its brush read once they are painted.
+/// per dab, and allows each frame as many as keep it near its target.
 #[derive(Default)]
 pub(crate) struct FramePacing {
     budget: DabBudget,
     timer: OnceCell<Option<GpuFrameTimer>>,
     timing: Option<usize>,
-    pub(crate) brush_measure_waits: bool,
-    /// Set when a deferred brush read lands; the window drains it to refresh the panels.
-    pub(crate) brush_measured: bool,
 }
 
 impl FramePacing {

@@ -125,7 +125,7 @@ impl BrushPanel {
         }
         let state = self.state.borrow();
         let image = wheel_image(&WheelPaint {
-            db: &state.session.db,
+            db: &state.painting.session.db,
             slots: &wanted.slots,
             palette: &wanted.palette,
             axes: circle_axes(&wanted.slots),

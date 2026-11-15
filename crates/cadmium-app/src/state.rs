@@ -7,14 +7,13 @@ use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::pigments::{MAX_SLOTS, Mixture};
 use cadmium_engine::present::ViewTransform;
 use cadmium_engine::session::PaintSession;
-use cadmium_engine::stroke::Tool;
 
 use crate::brush_library::BrushLibrary;
 use crate::presets::{STARTING_LOAD, starting_recipe};
 use crate::settings::SettingsStore;
-use crate::tools::UiTool;
 use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
+pub use easel::{Easel, EaselId};
 pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use palette::PaletteView;
@@ -26,6 +25,7 @@ pub use recipe::ColourClick;
 mod clock;
 mod dip;
 mod document;
+mod easel;
 mod frames;
 mod gesture;
 mod hand;
@@ -76,27 +76,17 @@ pub type Waker = Rc<dyn Fn() -> bool>;
 
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
-    pub session: PaintSession,
+    pub painting: Easel,
     pub brushes: BrushLibrary,
     pub settings: SettingsStore,
     /// The library brush last picked, told apart from others with the same head and hair.
     worn_brush_index: Option<usize>,
     pub view: ViewTransform,
-    pub ui_tool: UiTool,
     pub palette_view: PaletteView,
     circle_darken: f32,
     edits: EditCounter,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
-    pub tip_mixture: Mixture,
-    pub reload_each_stroke: bool,
-    pub clean_each_stroke: bool,
-    reserve_volume: f32,
-    reserve_mixture: Mixture,
-    pub knife_mixture: Mixture,
-    knife_volume: f32,
-    stroking: bool,
-    resting_tool: Tool,
     samples_since_frame: u32,
     pacing: FramePacing,
     provisional: Provisional,
@@ -107,30 +97,19 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(gpu: Rc<GpuContext>, spec: CanvasSpec) -> Result<AppState, CanvasError> {
-        let session = starting_session(&gpu, spec)?;
-        let resting_tool = session.brush.tool;
+        let painting = Easel::new(starting_session(&gpu, spec)?);
         let mut state = AppState {
             gpu,
-            session,
+            painting,
             brushes: BrushLibrary::factory_only(),
             settings: SettingsStore::default(),
             worn_brush_index: None,
             view: UNMOVED_VIEW,
-            ui_tool: UiTool::default(),
             palette_view: PaletteView::default(),
             circle_darken: 0.0,
             edits: EditCounter::default(),
             file: None,
             pen: PenReadout::default(),
-            tip_mixture: EMPTY_MIXTURE,
-            reload_each_stroke: false,
-            clean_each_stroke: false,
-            reserve_volume: 0.0,
-            reserve_mixture: EMPTY_MIXTURE,
-            knife_mixture: EMPTY_MIXTURE,
-            knife_volume: 0.0,
-            stroking: false,
-            resting_tool,
             samples_since_frame: 0,
             pacing: FramePacing::default(),
             provisional: Provisional::default(),
@@ -149,6 +128,18 @@ impl AppState {
     #[cfg(test)]
     fn use_clock(&mut self, clock: Box<dyn Clock>) {
         self.clock = clock;
+    }
+
+    pub fn easel(&self, id: EaselId) -> &Easel {
+        match id {
+            EaselId::Painting => &self.painting,
+        }
+    }
+
+    pub fn easel_mut(&mut self, id: EaselId) -> &mut Easel {
+        match id {
+            EaselId::Painting => &mut self.painting,
+        }
     }
 
     pub fn add_waker(&mut self, waker: Waker) {

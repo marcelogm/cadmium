@@ -5,8 +5,8 @@ use cadmium_engine::canvas::{CanvasSpec, PaintTotals, StateTexture};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 
-use super::AppState;
 use super::clock::Clock;
+use super::{AppState, EaselId};
 use crate::presets::starting_canvas_spec;
 use crate::tools::UiTool;
 
@@ -26,7 +26,7 @@ pub(crate) fn painting_state() -> AppState {
         ..starting_canvas_spec()
     };
     let mut state = AppState::new(gpu, spec).unwrap();
-    state.session.brush.geometry.max_diameter_px = TEST_BRUSH_DIAMETER_PX;
+    state.painting.session.brush.geometry.max_diameter_px = TEST_BRUSH_DIAMETER_PX;
     state.reload_brush();
     state
 }
@@ -45,16 +45,16 @@ pub(crate) fn row_samples(y: f64) -> Vec<StrokeSample> {
 }
 
 pub(crate) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample]) {
-    state.begin_stroke(tool, samples[0]);
-    state.add_samples(&samples[1..]);
-    state.release();
+    state.begin_stroke(EaselId::Painting, tool, samples[0]);
+    state.add_samples(EaselId::Painting, &samples[1..]);
+    state.release(EaselId::Painting);
 }
 
 /// Presents frames with `present` until the queued dabs are painted and the brush is read
 /// after them, as the app does over the frames that follow a stroke.
 pub(crate) fn finish_painting(state: &mut AppState, present: fn(&mut AppState)) {
     let mut frames = 0;
-    while state.session.has_queued_dabs() || state.pacing.brush_measure_waits {
+    while state.painting.session.has_queued_dabs() || state.painting.brush_measure_waits {
         present(state);
         frames += 1;
         assert!(
@@ -74,12 +74,13 @@ pub(crate) fn present_one_frame(state: &mut AppState) {
     let mut encoder = gpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    state.encode_frame(&mut encoder);
+    state.encode_frame(EaselId::Painting, &mut encoder);
     gpu.queue.submit([encoder.finish()]);
 }
 
 pub(super) fn wet_volume(state: &AppState) -> f32 {
     state
+        .painting
         .session
         .canvas
         .read_f32(&state.gpu, StateTexture::WetVol)
@@ -95,11 +96,17 @@ pub(super) const ULTRAMARINE_SLOT: usize = 4;
 pub(super) const RESERVE_TOLERANCE: f64 = 1e-3;
 
 pub(crate) fn brush_totals(state: &AppState) -> PaintTotals {
-    state.session.engine.brush_totals(&state.gpu).unwrap()
+    state
+        .painting
+        .session
+        .engine
+        .brush_totals(&state.gpu)
+        .unwrap()
 }
 
 pub(super) fn reserve_volume(state: &AppState) -> f64 {
     state
+        .painting
         .session
         .engine
         .reserve_totals(&state.gpu)
@@ -108,7 +115,12 @@ pub(super) fn reserve_volume(state: &AppState) -> f64 {
 }
 
 pub(super) fn knife_totals(state: &AppState) -> PaintTotals {
-    state.session.engine.knife_totals(&state.gpu).unwrap()
+    state
+        .painting
+        .session
+        .engine
+        .knife_totals(&state.gpu)
+        .unwrap()
 }
 
 pub(super) fn holding_the_knife() -> AppState {

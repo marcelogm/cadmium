@@ -9,6 +9,7 @@ use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
 use crate::state::ColourClick;
+use crate::state::EaselId;
 use crate::state::recipe::PARTIAL_DIP;
 use crate::tools::UiTool;
 
@@ -22,7 +23,7 @@ fn choosing_another_pigment_cleans_the_brush_before_loading_it() {
     let totals = brush_totals(&state);
     assert_eq!(totals.pigment[ULTRAMARINE_SLOT], 0.0);
     assert!(totals.pigment[WHITE_SLOT] > 0.0);
-    assert_eq!(state.session.brush.recipe, [(WHITE_SLOT, 1.0)]);
+    assert_eq!(state.painting.session.brush.recipe, [(WHITE_SLOT, 1.0)]);
 }
 
 #[test]
@@ -30,10 +31,13 @@ fn choosing_a_pigment_behind_a_queued_stroke_leaves_its_dabs_to_the_frames() {
     let mut state = painting_state();
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     state.click_colour(ColourRef::Paint(WHITE_SLOT), ColourClick::Load);
-    assert!(state.session.has_queued_dabs());
+    assert!(state.painting.session.has_queued_dabs());
     finish_painting(&mut state, present_one_frame);
-    assert!(state.reserve_mixture.fractions[WHITE_SLOT] > 0.0);
-    assert_eq!(state.reserve_mixture.fractions[ULTRAMARINE_SLOT], 0.0);
+    assert!(state.painting.reserve_mixture.fractions[WHITE_SLOT] > 0.0);
+    assert_eq!(
+        state.painting.reserve_mixture.fractions[ULTRAMARINE_SLOT],
+        0.0
+    );
 }
 
 #[test]
@@ -41,7 +45,7 @@ fn cleaning_the_brush_behind_a_queued_stroke_leaves_its_dabs_to_the_frames() {
     let mut state = painting_state();
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     state.clean_brush();
-    assert!(state.session.has_queued_dabs());
+    assert!(state.painting.session.has_queued_dabs());
     finish_painting(&mut state, present_one_frame);
     assert!(state.brush_is_clean());
 }
@@ -57,7 +61,7 @@ fn ctrl_click_mixes_a_little_of_the_pigment_into_what_the_brush_holds() {
     let kept = after.pigment[ULTRAMARINE_SLOT] / before.pigment[ULTRAMARINE_SLOT];
     assert!((kept - 1.0).abs() < RESERVE_TOLERANCE, "{kept}");
     assert_eq!(
-        state.session.brush.recipe,
+        state.painting.session.brush.recipe,
         [(ULTRAMARINE_SLOT, 1.0), (WHITE_SLOT, PARTIAL_DIP)]
     );
 }
@@ -82,10 +86,10 @@ fn a_second_stroke_paints_with_what_the_first_left_on_the_brush() {
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let after_first = reserve_volume(&state);
     let samples = row_samples(RAG_ROW_Y);
-    state.begin_stroke(Tool::Brush, samples[0]);
+    state.begin_stroke(EaselId::Painting, Tool::Brush, samples[0]);
     assert_eq!(reserve_volume(&state), after_first);
-    state.add_samples(&samples[1..]);
-    state.release();
+    state.add_samples(EaselId::Painting, &samples[1..]);
+    state.release(EaselId::Painting);
     finish_painting(&mut state, present_one_frame);
     assert!(reserve_volume(&state) < after_first);
 }
@@ -95,11 +99,11 @@ fn eyedropper_on_bare_canvas_changes_nothing() {
     let mut state = painting_state();
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let before = brush_totals(&state);
-    let recipe = state.session.brush.recipe.clone();
+    let recipe = state.painting.session.brush.recipe.clone();
     let (x, y) = BARE_CANVAS_POINT;
-    assert!(!state.pick_colour(x, y));
+    assert!(!state.pick_colour(EaselId::Painting, x, y));
     assert_eq!(brush_totals(&state), before);
-    assert_eq!(state.session.brush.recipe, recipe);
+    assert_eq!(state.painting.session.brush.recipe, recipe);
 }
 
 #[test]
@@ -109,8 +113,8 @@ fn eyedropper_mixes_the_picked_paint_on_the_palette_and_loads_it() {
     paint_stroke(&mut state, Tool::Brush, &samples);
     state.click_colour(ColourRef::Paint(WHITE_SLOT), ColourClick::Load);
     let middle = samples[samples.len() / 2];
-    assert!(state.pick_colour(middle.x as f32, middle.y as f32));
-    let recipe = &state.session.brush.recipe;
+    assert!(state.pick_colour(EaselId::Painting, middle.x as f32, middle.y as f32));
+    let recipe = &state.painting.session.brush.recipe;
     assert_eq!(recipe.len(), 1, "{recipe:?}");
     assert_eq!(recipe[0].0, ULTRAMARINE_SLOT);
     let totals = brush_totals(&state);
@@ -126,10 +130,10 @@ fn picking_the_colour_already_on_the_brush_refreshes_it() {
     paint_stroke(&mut state, Tool::Brush, &samples);
     assert!(reserve_volume(&state) < full);
     let middle = samples[samples.len() / 2];
-    assert!(state.pick_colour(middle.x as f32, middle.y as f32));
+    assert!(state.pick_colour(EaselId::Painting, middle.x as f32, middle.y as f32));
     assert!((reserve_volume(&state) - full).abs() <= full * RESERVE_TOLERANCE);
-    assert_eq!(state.session.brush.recipe.len(), 1);
-    assert_eq!(state.session.brush.recipe[0].0, ULTRAMARINE_SLOT);
+    assert_eq!(state.painting.session.brush.recipe.len(), 1);
+    assert_eq!(state.painting.session.brush.recipe[0].0, ULTRAMARINE_SLOT);
 }
 
 #[test]
@@ -141,7 +145,7 @@ fn eyedropper_with_the_knife_loads_the_knife_and_leaves_the_brush_alone() {
     state.click_colour(ColourRef::Paint(WHITE_SLOT), ColourClick::Load);
     let brush = brush_totals(&state);
     let middle = samples[samples.len() / 2];
-    assert!(state.pick_colour(middle.x as f32, middle.y as f32));
+    assert!(state.pick_colour(EaselId::Painting, middle.x as f32, middle.y as f32));
     let knife = knife_totals(&state);
     assert_eq!(knife.pigment[WHITE_SLOT], 0.0);
     assert!(knife.pigment[ULTRAMARINE_SLOT] > 0.0);
@@ -151,7 +155,7 @@ fn eyedropper_with_the_knife_loads_the_knife_and_leaves_the_brush_alone() {
 #[test]
 fn brush_readout_follows_loading_painting_and_cleaning() {
     let mut state = painting_state();
-    assert!(!state.tip_mixture.is_empty());
+    assert!(!state.painting.tip_mixture.is_empty());
     let loaded = state.reserve_level();
     assert!(loaded > 0.0);
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
@@ -189,11 +193,11 @@ fn a_swatch_click_with_the_knife_loads_the_knife_and_leaves_the_brush_alone() {
     assert_eq!(brush_totals(&state), brush);
     let level = state.knife_level();
     assert!(
-        (level - state.session.brush.load).abs() < KNIFE_LEVEL_TOLERANCE,
+        (level - state.painting.session.brush.load).abs() < KNIFE_LEVEL_TOLERANCE,
         "{level}"
     );
     assert!(!state.knife_is_clean());
-    assert!(state.knife_mixture.fractions[WHITE_SLOT] > 0.0);
+    assert!(state.painting.knife_mixture.fractions[WHITE_SLOT] > 0.0);
 }
 
 #[test]
@@ -208,7 +212,7 @@ fn another_pigment_on_the_knife_cleans_it_first_and_ctrl_click_adds_a_little() {
     assert!(mixed.pigment[WHITE_SLOT] > 0.0);
     assert!(mixed.pigment[WHITE_SLOT] < mixed.pigment[ULTRAMARINE_SLOT]);
     assert_eq!(
-        state.session.brush.recipe,
+        state.painting.session.brush.recipe,
         [(ULTRAMARINE_SLOT, 1.0), (WHITE_SLOT, PARTIAL_DIP)]
     );
 }
@@ -218,12 +222,12 @@ fn cleaning_the_knife_keeps_the_palette_pile_and_the_brush() {
     let mut state = holding_the_knife();
     state.click_colour(ColourRef::Paint(ULTRAMARINE_SLOT), ColourClick::Load);
     let brush = brush_totals(&state);
-    let recipe = state.session.brush.recipe.clone();
+    let recipe = state.painting.session.brush.recipe.clone();
     state.clean_brush();
     assert_eq!(knife_totals(&state).volume, 0.0);
     assert!(state.knife_is_clean());
     assert_eq!(state.knife_level(), 0.0);
-    assert_eq!(state.session.brush.recipe, recipe);
+    assert_eq!(state.painting.session.brush.recipe, recipe);
     assert_eq!(brush_totals(&state), brush);
 }
 
@@ -240,8 +244,8 @@ fn the_brush_read_is_due_in_the_frame_after_the_queue_drains() {
     let mut state = painting_state();
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     state.click_colour(ColourRef::Paint(WHITE_SLOT), ColourClick::Load);
-    assert!(state.session.has_queued_dabs());
-    while state.session.has_queued_dabs() {
+    assert!(state.painting.session.has_queued_dabs());
+    while state.painting.session.has_queued_dabs() {
         present_one_frame(&mut state);
     }
     assert!(state.brush_measure_due());
@@ -257,10 +261,13 @@ fn the_deferred_brush_read_updates_the_readout_when_it_lands() {
     let mut state = painting_state();
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     state.click_colour(ColourRef::Paint(WHITE_SLOT), ColourClick::Load);
-    assert!(state.session.has_queued_dabs());
+    assert!(state.painting.session.has_queued_dabs());
     finish_painting(&mut state, present_one_frame);
-    assert!(state.reserve_mixture.fractions[WHITE_SLOT] > 0.0);
-    assert_eq!(state.reserve_mixture.fractions[ULTRAMARINE_SLOT], 0.0);
+    assert!(state.painting.reserve_mixture.fractions[WHITE_SLOT] > 0.0);
+    assert_eq!(
+        state.painting.reserve_mixture.fractions[ULTRAMARINE_SLOT],
+        0.0
+    );
 }
 
 #[test]

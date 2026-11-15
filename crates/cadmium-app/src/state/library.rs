@@ -12,7 +12,7 @@ const CURRENT_BRUSH_NAME: &str = "Current Brush";
 impl AppState {
     /// The worn brush as a library brush at the current size.
     pub fn worn_brush_spec(&self) -> BrushSpec {
-        let settings = &self.session.brush;
+        let settings = &self.painting.session.brush;
         let size_px = self.brush_diameter_px();
         match self.worn_library_brush().and_then(|i| self.brushes.get(i)) {
             Some(brush) => BrushSpec {
@@ -33,7 +33,7 @@ impl AppState {
         worn_brush(
             self.brushes.all(),
             self.worn_brush_index,
-            &self.session.brush,
+            &self.painting.session.brush,
         )
     }
 

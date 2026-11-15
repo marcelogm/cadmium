@@ -75,12 +75,13 @@ fn painting_thumbnails_leaves_the_painting_and_the_worn_brush_alone() {
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     present_one_frame(&mut state);
     let wet_before = state
+        .painting
         .session
         .canvas
         .read_bytes(&state.gpu, StateTexture::WetVol)
         .unwrap();
     let totals_before = brush_totals(&state);
-    let geometry_before = state.session.brush.geometry;
+    let geometry_before = state.painting.session.brush.geometry;
     let state = Rc::new(RefCell::new(state));
     let mut studio = open_studio(&state).unwrap();
     let mut cache = ThumbnailCache::<Vec<u8>>::default();
@@ -92,9 +93,10 @@ fn painting_thumbnails_leaves_the_painting_and_the_worn_brush_alone() {
     }
     let state = state.borrow();
     assert_eq!(state.worn_library_brush(), Some(3));
-    assert_eq!(state.session.brush.geometry, geometry_before);
+    assert_eq!(state.painting.session.brush.geometry, geometry_before);
     assert_eq!(brush_totals(&state), totals_before);
     let wet_after = state
+        .painting
         .session
         .canvas
         .read_bytes(&state.gpu, StateTexture::WetVol)

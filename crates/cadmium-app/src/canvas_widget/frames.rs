@@ -40,9 +40,9 @@ impl CadmiumCanvas {
             return false;
         }
         self.imp().needs_present.get()
-            || state.session.has_pending_work()
+            || state.painting.session.has_pending_work()
             || state.brush_measure_due()
-            || state.session.bristles_settling(state.now_ms())
+            || state.painting.session.bristles_settling(state.now_ms())
             || !presenter.matches_size(width_px, height_px)
     }
 

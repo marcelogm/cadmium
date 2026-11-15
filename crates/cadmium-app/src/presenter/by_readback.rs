@@ -15,6 +15,7 @@ pub(super) struct ReadbackTarget {
 impl ReadbackTarget {
     fn new(state: &AppState, width: u32, height: u32) -> ReadbackTarget {
         let texture = state
+            .painting
             .session
             .presenter
             .create_target(&state.gpu, width, height);

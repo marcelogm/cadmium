@@ -1,10 +1,11 @@
+use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::palette::{
     CirclePoint, ColourRef, MAX_DARKEN, Recipe, circle_axes, circle_recipe, normalised,
 };
 use cadmium_engine::pigments::MAX_SLOTS;
 
-use super::AppState;
 use super::recipe::{ColourClick, ColourDip, PARTIAL_DIP, plan_colour_load, recipe_from_fractions};
+use super::{AppState, Easel, EaselId};
 
 /// Which face of the palette the side panel shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -16,11 +17,11 @@ pub enum PaletteView {
 
 impl AppState {
     pub fn slot_count(&self) -> usize {
-        self.session.canvas.spec.pigment_slots.len()
+        self.painting.slot_count()
     }
 
     pub fn add_pile(&mut self, id: &str) -> Result<usize, String> {
-        let slot = self.session.add_slot(&self.gpu, id)?;
+        let slot = self.painting.session.add_slot(&self.gpu, id)?;
         self.edits.record();
         self.click_colour(ColourRef::Paint(slot), ColourClick::Load);
         self.wake();
@@ -32,7 +33,7 @@ impl AppState {
         if matches!(colour, ColourRef::Paint(slot) if slot >= self.slot_count()) {
             return;
         }
-        if let Some(recipe) = self.session.palette.recipe_of(colour) {
+        if let Some(recipe) = self.painting.session.palette.recipe_of(colour) {
             self.load_colour(&recipe, click);
         }
     }
@@ -49,8 +50,10 @@ impl AppState {
     /// waits on the GPU once per frame rather than once per event.
     pub fn drag_on_circle(&mut self, turn: f32, radius: f32, click: ColourClick) {
         if let Some(recipe) = self.circle_recipe_at(turn, radius) {
-            self.take_colour(&recipe, click);
-            self.measure_brush_next_frame();
+            self.release(EaselId::Painting);
+            let gpu = self.gpu.clone();
+            self.painting.take_colour(&gpu, &recipe, click);
+            self.painting.measure_brush_next_frame();
             self.wake();
         }
     }
@@ -64,19 +67,14 @@ impl AppState {
             radius,
             darken: self.circle_darken,
         };
-        let axes = circle_axes(&self.session.canvas.spec.pigment_slots);
-        circle_recipe(&self.session.palette, axes, point)
+        let session = &self.painting.session;
+        let axes = circle_axes(&session.canvas.spec.pigment_slots);
+        circle_recipe(&session.palette, axes, point)
     }
 
     /// The selected colour as shares of the painting's paints; `None` while nothing is selected.
     pub fn selected_recipe(&self) -> Option<Recipe> {
-        let usable_slots = self.slot_count().min(MAX_SLOTS);
-        let mut parts = [0.0; MAX_SLOTS];
-        let selected = self.session.brush.recipe.iter();
-        for &(slot, amount) in selected.filter(|(slot, _)| *slot < usable_slots) {
-            parts[slot] += amount.max(0.0);
-        }
-        normalised(&parts)
+        self.painting.selected_recipe()
     }
 
     pub fn circle_darken(&self) -> f32 {
@@ -91,22 +89,45 @@ impl AppState {
     }
 
     fn load_colour(&mut self, colour: &Recipe, click: ColourClick) {
-        self.take_colour(colour, click);
-        self.measure_brush_once_painted();
+        self.release(EaselId::Painting);
+        let gpu = self.gpu.clone();
+        self.painting.load_colour(&gpu, colour, click);
         self.wake();
     }
+}
 
-    fn take_colour(&mut self, colour: &Recipe, click: ColourClick) {
-        self.put_down_stroke_tool();
+impl Easel {
+    pub(super) fn slot_count(&self) -> usize {
+        self.session.canvas.spec.pigment_slots.len()
+    }
+
+    /// The selected colour as shares of the easel's paints; `None` while nothing is selected.
+    pub fn selected_recipe(&self) -> Option<Recipe> {
+        let usable_slots = self.slot_count().min(MAX_SLOTS);
+        let mut parts = [0.0; MAX_SLOTS];
+        let selected = self.session.brush.recipe.iter();
+        for &(slot, amount) in selected.filter(|(slot, _)| *slot < usable_slots) {
+            parts[slot] += amount.max(0.0);
+        }
+        normalised(&parts)
+    }
+
+    pub fn load_colour(&mut self, gpu: &GpuContext, colour: &Recipe, click: ColourClick) {
+        self.take_colour(gpu, colour, click);
+        self.measure_brush_once_painted(gpu);
+    }
+
+    fn take_colour(&mut self, gpu: &GpuContext, colour: &Recipe, click: ColourClick) {
+        self.put_down_stroke_tool(gpu);
         let (recipe, dip) = plan_colour_load(&self.session.brush.recipe, colour, click);
         self.session.brush.recipe = recipe;
         match dip {
-            ColourDip::CleanAndLoad => self.clean_and_load(),
+            ColourDip::CleanAndLoad => self.clean_and_load(gpu),
             ColourDip::AddOnTop(colour) => {
                 let mut added = self.session.brush.clone();
                 added.recipe = recipe_from_fractions(&colour);
                 let mixture = added.reservoir_mixture(self.slot_count());
-                self.dip(&mixture, PARTIAL_DIP);
+                self.dip(gpu, &mixture, PARTIAL_DIP);
             }
         }
     }

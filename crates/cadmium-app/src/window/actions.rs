@@ -4,7 +4,7 @@ use gtk::{gio, glib};
 
 use super::CadmiumWindow;
 use crate::brush_editor;
-use crate::state::DryOutcome;
+use crate::state::{DryOutcome, EaselId};
 use crate::tools::UiTool;
 
 const DRIED_TOAST: &str = "Canvas dried";
@@ -50,7 +50,10 @@ impl CadmiumWindow {
         let Ok(state) = state.try_borrow() else {
             return;
         };
-        let (can_undo, can_redo) = (state.can_undo(), state.can_redo());
+        let (can_undo, can_redo) = (
+            state.can_undo(EaselId::Painting),
+            state.can_redo(EaselId::Painting),
+        );
         drop(state);
         for (name, enabled) in [("undo", can_undo), ("redo", can_redo)] {
             self.enable_action(name, enabled);
@@ -80,12 +83,12 @@ impl CadmiumWindow {
     }
 
     fn undo(&self) {
-        self.state().borrow_mut().undo();
+        self.state().borrow_mut().undo(EaselId::Painting);
         self.after_history_change();
     }
 
     fn redo(&self) {
-        self.state().borrow_mut().redo();
+        self.state().borrow_mut().redo(EaselId::Painting);
         self.after_history_change();
     }
 

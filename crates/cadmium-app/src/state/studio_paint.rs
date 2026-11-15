@@ -15,8 +15,8 @@ impl AppState {
     /// holding only whites, which vanish on a white primer — is shown loaded with the
     /// studio's demo pigment instead, like the rack's thumbnails.
     pub fn studio_paint(&self) -> StudioPaint {
-        let spec = &self.session.canvas.spec;
-        let brush = &self.session.brush;
+        let spec = &self.painting.session.canvas.spec;
+        let brush = &self.painting.session.brush;
         let mut paint = StudioPaint {
             slots: spec.pigment_slots.clone(),
             primer: spec.primer,
@@ -24,7 +24,7 @@ impl AppState {
             recipe: brush.recipe.clone(),
             load: brush.load,
             medium: brush.medium,
-            params: self.session.engine.params().clone(),
+            params: self.painting.session.engine.params().clone(),
         };
         if shows_nothing(&paint) {
             load_demo_pigment(&mut paint);

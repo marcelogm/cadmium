@@ -34,15 +34,15 @@ fn only_render_params_repaint_the_whole_canvas() {
 fn a_render_param_reshades_the_painting() {
     let mut state = painting_state();
     present_one_frame(&mut state);
-    assert!(!state.session.has_pending_work());
+    assert!(!state.painting.session.has_pending_work());
     let render = SimParams::specs()
         .iter()
         .find(|spec| spec.group == ParamGroup::Render)
         .unwrap();
     state.set_param(render.key, render.default);
-    assert!(state.session.has_pending_work());
+    assert!(state.painting.session.has_pending_work());
     present_one_frame(&mut state);
-    assert!(!state.session.has_pending_work());
+    assert!(!state.painting.session.has_pending_work());
     state.reset_params();
-    assert!(state.session.has_pending_work());
+    assert!(state.painting.session.has_pending_work());
 }

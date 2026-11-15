@@ -13,7 +13,7 @@ use self::by_readback::ReadbackTarget;
 use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
-use crate::state::AppState;
+use crate::state::{AppState, EaselId};
 use crate::view::{clamp_zoom, cover_view};
 
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
@@ -45,10 +45,11 @@ impl PresentSource {
     ) {
         match self {
             PresentSource::Painting => {
-                state.encode_frame(encoder);
-                state.session.presenter.encode_present(
+                state.encode_frame(EaselId::Painting, encoder);
+                let session = &mut state.painting.session;
+                session.presenter.encode_present(
                     gpu,
-                    PresentRequest::of_canvas(&state.session.canvas, state.view),
+                    PresentRequest::of_canvas(&session.canvas, state.view),
                     target,
                     encoder,
                 );
@@ -171,7 +172,7 @@ impl FramePresenter {
                 self.mode.unwrap_or(mode).name(),
                 started.elapsed().as_secs_f64() * MILLISECONDS_PER_SECOND,
                 state.pen.samples_last_frame,
-                state.session.last_frame_dabs()
+                state.painting.session.last_frame_dabs()
             );
         }
         texture

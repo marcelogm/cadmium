@@ -106,7 +106,8 @@ fn stylus_down<W: PaintSurfaceWidget>(
         return;
     }
     let state = widget.state();
-    let press = state.borrow().ui_tool.profile().press();
+    let easel = widget.easel();
+    let press = state.borrow().press_for(easel);
     let eraser = is_eraser(&event);
     match down_outcome(press, eraser) {
         DownOutcome::Ignore => return,
@@ -117,7 +118,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         DownOutcome::Press => {}
     }
     let sample = widget_sample(widget, &event, x, y);
-    if !state.borrow_mut().press(sample, eraser) {
+    if !state.borrow_mut().press(easel, sample, eraser) {
         return;
     }
     if widget.claims_strokes() {
@@ -141,7 +142,8 @@ fn stylus_motion<W: PaintSurfaceWidget>(
         return;
     };
     let state = widget.state();
-    if !state.borrow().is_stroking() {
+    let easel = widget.easel();
+    if !state.borrow().easel(easel).is_stroking() {
         if comes_from_a_pen(&event) {
             widget.observe_hover_pen(&widget_sample(widget, &event, x, y));
         }
@@ -161,7 +163,7 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     for sample in &mut samples {
         *sample = tilt_onto_canvas(*sample, rotation);
     }
-    state.borrow_mut().motion(&samples);
+    state.borrow_mut().motion(easel, &samples);
 }
 
 fn stylus_up<W: PaintSurfaceWidget>(widget: &W, contact: &Contact, stylus: &gtk::GestureStylus) {
