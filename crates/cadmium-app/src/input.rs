@@ -2,7 +2,6 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use cadmium_engine::stroke::StrokeSample;
-use cadmium_engine::surface::Surface;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 
@@ -43,7 +42,6 @@ pub trait PaintSurfaceWidget:
     IsA<gtk::Widget> + glib::clone::Downgrade<Weak = glib::WeakRef<Self>>
 {
     fn state(&self) -> SharedState;
-    fn surface(&self) -> Surface;
     fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64);
     /// Clockwise turn of the surface's picture on screen, in radians.
     fn view_rotation(&self) -> f32 {
@@ -67,7 +65,7 @@ pub trait PaintSurfaceWidget:
 }
 
 /// A paint surface the painter navigates: scrolls pan or zoom, pinches zoom, and drags pan,
-/// zoom or turn its view, the same on the canvas and the tray.
+/// zoom or turn its view.
 pub trait NavigableSurface: PaintSurfaceWidget {
     /// Whether the window holds Space down for this surface.
     fn space_held(&self) -> bool;
@@ -146,20 +144,15 @@ enum DownOutcome {
 fn down_outcome(press: Press, eraser: bool) -> DownOutcome {
     match press {
         Press::Pan => DownOutcome::Ignore,
-        Press::Nothing if !eraser => DownOutcome::Ignore,
         Press::PickColour if !eraser => DownOutcome::PickColour,
-        Press::Nothing
-        | Press::PickColour
-        | Press::Stroke(_)
-        | Press::LoadFromPile(_)
-        | Press::Squeeze => DownOutcome::Press,
+        Press::PickColour | Press::Stroke(_) => DownOutcome::Press,
     }
 }
 
 fn release<W: PaintSurfaceWidget>(widget: &W, contact: &Contact) {
     contact.stroking_device.replace(None);
     let state = widget.state();
-    if !state.borrow().contact_on(widget.surface()) {
+    if !state.borrow().is_stroking() {
         return;
     }
     state.borrow_mut().release();

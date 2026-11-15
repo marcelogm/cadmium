@@ -1,6 +1,5 @@
-// Paint moved between a blade and the surface under it, shared by the knife's
-// blade and the mixing knife's face. The including shader declares `dab` and the
-// wet and dry textures.
+// Paint moved between the knife's blade and the surface under it. The including
+// shader declares `dab` and the wet and dry textures.
 
 const QUANTIZE_LIMIT: f32 = 2.0e9;
 const EMPTY_VOLUME_UM: f32 = 1e-4;
@@ -73,8 +72,8 @@ fn held_share(amount: f32, held: f32) -> f32 {
 /// holding `volume`, and takes `pickup_q` of the pixel's own paint up. Stores the
 /// pixel and returns what the cell gains per channel, quantised, for the caller
 /// to add to its deltas: every unit leaving one side reaches the other. WGSL takes
-/// no pointer to a storage buffer as an argument, so each caller gathers the cell's
-/// shares from its own grant buffer and adds the gains to its own deltas.
+/// no pointer to a storage buffer as an argument, so the caller gathers the cell's
+/// shares from its grant buffer and adds the gains to its deltas.
 fn trade(
     pixel: vec2<i32>,
     volume: f32,

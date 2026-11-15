@@ -46,20 +46,6 @@ fn a_moving_tool_ignores_the_pen() {
 }
 
 #[test]
-fn a_tip_that_does_nothing_still_lets_the_eraser_wipe() {
-    assert_eq!(down_outcome(Press::Nothing, false), DownOutcome::Ignore);
-    assert_eq!(down_outcome(Press::Nothing, true), DownOutcome::Press);
-}
-
-#[test]
-fn the_pencil_tip_ignores_the_tray_but_the_eraser_end_wipes_it() {
-    use crate::tools::{Tool, TrayTool, UiTool};
-    let on_tray = TrayTool::Load.press(UiTool::Paint(Tool::Pencil));
-    assert_eq!(down_outcome(on_tray, false), DownOutcome::Ignore);
-    assert_eq!(down_outcome(on_tray, true), DownOutcome::Press);
-}
-
-#[test]
 fn the_eyedropper_picks_with_the_tip() {
     assert_eq!(
         down_outcome(Press::PickColour, false),
@@ -82,9 +68,6 @@ fn painting_tools_press_into_the_painting() {
         Press::Stroke(Tool::Rag),
         Press::Stroke(Tool::Pencil),
         Press::Stroke(Tool::Eyedropper),
-        Press::LoadFromPile(Tool::Brush),
-        Press::LoadFromPile(Tool::Knife),
-        Press::Squeeze,
     ];
     for press in presses {
         assert_eq!(down_outcome(press, false), DownOutcome::Press);

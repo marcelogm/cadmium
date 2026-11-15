@@ -29,21 +29,14 @@ pub(super) fn recipe_for_palette(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PigmentClick {
-    Choose,
-    Mix,
-    CleanAndLoad,
+    Load,
+    MixIn,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PigmentDip {
     CleanAndLoad,
-    DipAgain,
     AddOnTop(usize),
-}
-
-fn is_only_pigment(recipe: &[(usize, f32)], slot: usize) -> bool {
-    let mut present = recipe.iter().filter(|(_, parts)| *parts > 0.0).peekable();
-    present.peek().is_some() && present.all(|(chosen, _)| *chosen == slot)
 }
 
 fn recipe_after_mixing(recipe: &[(usize, f32)], slot: usize) -> Vec<(usize, f32)> {
@@ -66,16 +59,11 @@ pub(super) fn plan_pigment_dip(
     click: PigmentClick,
 ) -> (Vec<(usize, f32)>, PigmentDip) {
     match click {
-        PigmentClick::Mix => (
+        PigmentClick::MixIn => (
             recipe_after_mixing(recipe, slot),
             PigmentDip::AddOnTop(slot),
         ),
-        PigmentClick::Choose if is_only_pigment(recipe, slot) => {
-            (recipe.to_vec(), PigmentDip::DipAgain)
-        }
-        PigmentClick::Choose | PigmentClick::CleanAndLoad => {
-            (vec![(slot, 1.0)], PigmentDip::CleanAndLoad)
-        }
+        PigmentClick::Load => (vec![(slot, 1.0)], PigmentDip::CleanAndLoad),
     }
 }
 

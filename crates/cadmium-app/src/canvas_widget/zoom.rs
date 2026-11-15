@@ -1,5 +1,4 @@
 use cadmium_engine::present::ViewTransform;
-use cadmium_engine::surface::Surface;
 use gtk::gdk;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
@@ -45,12 +44,9 @@ impl CadmiumCanvas {
                 state.session.canvas.spec.height,
             )
         };
-        let viewport = view::above_inset(
-            (
-                f64::from(self.width()) * scale,
-                f64::from(self.height()) * scale,
-            ),
-            f64::from(self.imp().fit_inset.get()) * scale,
+        let viewport = (
+            f64::from(self.width()) * scale,
+            f64::from(self.height()) * scale,
         );
         self.set_view(view::fit_view(spec_size, viewport, FIT_MARGIN * scale));
         update_auto_fit(&self.imp().auto_fit, AutoFit::fitted);
@@ -99,14 +95,6 @@ impl CadmiumCanvas {
         self.rotate_around(x, y, delta);
     }
 
-    /// Keeps fits clear of a bar `inset_px` tall over the canvas's foot (the tray's), and
-    /// refits if the view is still the fitted one.
-    pub fn set_fit_inset(&self, inset_px: i32) {
-        if self.imp().fit_inset.replace(inset_px) != inset_px {
-            self.fit_if_due(self.width() > 0 && self.height() > 0);
-        }
-    }
-
     /// Whether the window holds Space down for the canvas.
     pub(crate) fn space_held(&self) -> bool {
         self.imp().held_keys.space_held()
@@ -146,10 +134,7 @@ impl CadmiumCanvas {
     pub(super) fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        Some(
-            CursorOutline::of_brush(&state, Surface::Painting, to_widget)
-                .turned(state.view.rotation),
-        )
+        Some(CursorOutline::of_brush(&state, to_widget).turned(state.view.rotation))
     }
 
     pub(super) fn provisional_marks(&self) -> Option<([u8; 3], f32, Vec<Mark>)> {

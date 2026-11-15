@@ -3,7 +3,7 @@ pub mod support;
 use cadmium_engine::{
     brush::FULL_RESERVOIR_VOLUME_UM,
     canvas::*,
-    engine::{MAX_TIP_THICKNESS_UM, PaintEngine, TIP_SIZE},
+    engine::{FULL_DIP, MAX_TIP_THICKNESS_UM, PaintEngine, TIP_SIZE},
     gpu::GpuContext,
     pigments::{MAX_SLOTS, Mixture},
     session::PaintSession,
@@ -311,11 +311,15 @@ fn one_brush_readout_matches_reading_tip_reserve_and_knife_apart() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.engine
+        .dip_knife(&gpu, &pure(YELLOW, 40.0), FULL_DIP)
+        .unwrap();
     let readout = without_wgpu_errors(&gpu, || s.read_brush(&gpu).unwrap());
     assert_eq!(readout.tip_mean, s.tip_mean_mixture(&gpu).unwrap());
     assert_eq!(readout.reserve, s.engine.reserve_totals(&gpu).unwrap());
     assert_eq!(readout.knife, s.engine.knife_totals(&gpu).unwrap());
     assert!(readout.reserve.volume > 0.0);
+    assert!(readout.knife.volume > 0.0);
 }
 
 #[test]

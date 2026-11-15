@@ -2,20 +2,16 @@ use std::collections::VecDeque;
 
 use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
-use crate::draw_up::DrawUp;
-use crate::engine::{PaintEngine, PickRequest, Tip, WetOilEngine};
+use crate::engine::{PaintEngine, PickRequest, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::{History, bytes_per_tile_all_textures};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ShadeRequest, ViewMode};
 use crate::stroke::StrokeBuilder;
-use crate::surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH, tray_spec};
-use crate::tube::Tube;
 
 mod brush;
 mod command;
-mod hold;
 mod queue;
 mod removal;
 mod replacement;
@@ -23,7 +19,6 @@ mod settle;
 mod stroke;
 mod walk;
 
-use hold::Hold;
 use queue::Queued;
 use settle::MotionAnchor;
 
@@ -31,22 +26,14 @@ const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
 const HISTORY_PAINTING_COPIES: u64 = 4;
-const HISTORY_TRAY_COPIES: u64 = 1;
 
 struct UndoLimits {
     budget_bytes: u64,
     max_steps: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ClearOutcome {
-    NothingWet,
-    Cleared { undoable: bool },
-}
-
 pub struct PaintSession {
     pub canvas: Canvas,
-    pub tray: Canvas,
     pub engine: WetOilEngine,
     pub renderer: Renderer,
     pub presenter: Presenter,
@@ -58,57 +45,41 @@ pub struct PaintSession {
     queued: VecDeque<Queued>,
     frame_dab_limit: Option<usize>,
     last_frame_dabs: usize,
-    walked_surface: Surface,
-    hold: Option<Hold>,
     motion_anchor: Option<MotionAnchor>,
-    tube: Tube,
-    drawer: DrawUp,
 }
 
 impl PaintSession {
     pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
-        let tray = tray_spec(&spec.pigment_slots);
         let undo = UndoLimits {
             budget_bytes: history_budget(&spec),
             max_steps: HISTORY_MAX_STEPS,
         };
-        let mut session = PaintSession::assemble(gpu, spec, tray, undo)?;
-        session.engine.add_tray_tip(gpu);
-        Ok(session)
+        PaintSession::assemble(gpu, spec, undo)
     }
 
-    /// A session for previews: the same simulation, but no undo history and a
-    /// one-tile tray, so it costs little more than its canvas. It stays without
-    /// undo even if its document is replaced.
+    /// A session for previews: the same simulation, but no undo history, so it costs
+    /// little more than its canvas. It stays without undo even if its document is
+    /// replaced.
     pub fn headless(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
-        let tray = CanvasSpec {
-            width: TILE_SIZE,
-            height: TILE_SIZE,
-            ..tray_spec(&spec.pigment_slots)
-        };
         let undo = UndoLimits {
             budget_bytes: 0,
             max_steps: 0,
         };
-        PaintSession::assemble(gpu, spec, tray, undo)
+        PaintSession::assemble(gpu, spec, undo)
     }
 
     fn assemble(
         gpu: &GpuContext,
         spec: CanvasSpec,
-        tray: CanvasSpec,
         undo: UndoLimits,
     ) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
-        let tray = Canvas::new(gpu, &db, tray)?;
         let canvas = Canvas::new(gpu, &db, spec)?;
         let mut session = PaintSession {
             canvas,
-            tray,
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
-            // After the canvases: the undo atlas shrinks to fit what they leave.
             history: History::new(gpu, undo.budget_bytes, undo.max_steps),
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
@@ -117,28 +88,14 @@ impl PaintSession {
             queued: VecDeque::new(),
             frame_dab_limit: None,
             last_frame_dabs: 0,
-            walked_surface: Surface::Painting,
-            hold: None,
             motion_anchor: None,
-            tube: Tube::new(gpu),
-            drawer: DrawUp::new(gpu),
         };
         session.reload_brush(gpu);
         Ok(session)
     }
 
-    pub fn canvas_of(&self, surface: Surface) -> &Canvas {
-        surface_canvas(surface, &self.canvas, &self.tray)
-    }
-
-    pub fn canvas_of_mut(&mut self, surface: Surface) -> &mut Canvas {
-        surface_canvas(surface, &mut self.canvas, &mut self.tray)
-    }
-
     pub fn add_slot(&mut self, gpu: &GpuContext, id: &str) -> Result<usize, String> {
-        let slot = self.canvas.add_slot(gpu, &self.db, id)?;
-        self.tray.add_slot(gpu, &self.db, id)?;
-        Ok(slot)
+        self.canvas.add_slot(gpu, &self.db, id)
     }
 
     /// Paints what this frame may of the queue, then shades the painting. The encoder must
@@ -150,7 +107,7 @@ impl PaintSession {
         frame_clock_ms: f64,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        self.encode_dabs_or_settle(gpu, Surface::Painting, frame_clock_ms, encoder);
+        self.encode_dabs_or_settle(gpu, frame_clock_ms, encoder);
         self.encode_painting_shade(gpu, encoder);
     }
 
@@ -175,56 +132,19 @@ impl PaintSession {
         );
     }
 
-    pub fn encode_tray_frame(
-        &mut self,
-        gpu: &GpuContext,
-        frame_clock_ms: f64,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        self.encode_dabs_or_settle(gpu, Surface::Tray, frame_clock_ms, encoder);
-        self.renderer.encode_shade(
-            gpu,
-            &mut self.tray,
-            ShadeRequest {
-                params: self.engine.params(),
-                mode: ViewMode::Color,
-            },
-            encoder,
-        );
-    }
-
     pub fn undo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
-        self.history.commit_step();
-        let Some(surface) = self.history.undo_surface() else {
-            return false;
-        };
-        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
-        self.history.undo(gpu, canvas)
+        self.history.undo(gpu, &mut self.canvas)
     }
 
     pub fn redo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
-        let Some(surface) = self.history.redo_surface() else {
-            return false;
-        };
-        let canvas = surface_canvas(surface, &mut self.canvas, &mut self.tray);
-        self.history.redo(gpu, canvas)
+        self.history.redo(gpu, &mut self.canvas)
     }
 
     pub fn pick_colour(
         &mut self,
         gpu: &GpuContext,
-        x: f32,
-        y: f32,
-    ) -> Result<Option<Mixture>, GpuLost> {
-        self.pick_colour_on(gpu, Surface::Painting, x, y)
-    }
-
-    pub fn pick_colour_on(
-        &mut self,
-        gpu: &GpuContext,
-        surface: Surface,
         x: f32,
         y: f32,
     ) -> Result<Option<Mixture>, GpuLost> {
@@ -235,26 +155,9 @@ impl PaintSession {
             radius: PICK_RADIUS_PX,
         };
         self.engine
-            .encode_eyedropper(gpu, self.canvas_of(surface), request, &mut encoder);
+            .encode_eyedropper(gpu, &self.canvas, request, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
-        self.on_tip(Tip::Painting, |session| session.engine.picked_mixture(gpu))
-    }
-
-    /// Runs `work` with `tip` active, then gives the engine back the tip it had, so a tray
-    /// tool's bristles keep settling through a read of the brush.
-    pub(super) fn on_tip<R>(&mut self, tip: Tip, work: impl FnOnce(&mut Self) -> R) -> R {
-        let before = self.engine.active_tip();
-        self.engine.select_tip(tip);
-        let result = work(self);
-        self.engine.select_tip(before);
-        result
-    }
-}
-
-fn surface_canvas<C>(surface: Surface, painting: C, tray: C) -> C {
-    match surface {
-        Surface::Painting => painting,
-        Surface::Tray => tray,
+        self.engine.picked_mixture(gpu)
     }
 }
 
@@ -263,7 +166,9 @@ fn tile_count(width: u32, height: u32) -> u64 {
 }
 
 fn history_budget(spec: &CanvasSpec) -> u64 {
-    let painting = tile_count(spec.width, spec.height) * HISTORY_PAINTING_COPIES;
-    let tray = tile_count(TRAY_WIDTH, TRAY_HEIGHT) * HISTORY_TRAY_COPIES;
-    HISTORY_BUDGET_BYTES.min((painting + tray) * bytes_per_tile_all_textures())
+    HISTORY_BUDGET_BYTES.min(
+        tile_count(spec.width, spec.height)
+            * HISTORY_PAINTING_COPIES
+            * bytes_per_tile_all_textures(),
+    )
 }

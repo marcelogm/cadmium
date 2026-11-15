@@ -1,10 +1,8 @@
 use std::collections::VecDeque;
 
 use crate::brush::BrushSettings;
-use crate::engine::Tip;
 use crate::pigments::Mixture;
 use crate::stroke::Dab;
-use crate::surface::Surface;
 use crate::tool::Holder;
 
 pub(super) enum Queued {
@@ -14,8 +12,6 @@ pub(super) enum Queued {
 }
 
 pub(super) struct QueuedStroke {
-    pub(super) surface: Surface,
-    pub(super) tip: Tip,
     pub(super) brush: BrushSettings,
     pub(super) dabs: VecDeque<Dab>,
     pub(super) begun: bool,
@@ -26,24 +22,11 @@ pub(super) struct QueuedStroke {
 /// was asked for: the brush settings may have moved on by the time it runs.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum BrushChange {
-    ResizeTip {
-        radius_px: f32,
-    },
-    Reload {
-        mixture: Mixture,
-    },
-    RestoreReserve {
-        mixture: Mixture,
-    },
-    Dip {
-        mixture: Mixture,
-        amount: f32,
-    },
-    Clean {
-        holder: Option<Holder>,
-    },
-    /// Cleans the tray's own tip, which only the tray's tools use.
-    CleanTrayTip,
+    ResizeTip { radius_px: f32 },
+    Reload { mixture: Mixture },
+    RestoreReserve { mixture: Mixture },
+    Dip { mixture: Mixture, amount: f32 },
+    Clean { holder: Option<Holder> },
 }
 
 /// A load of the knife, which reads the blade back and writes it from the CPU: it runs
@@ -106,10 +89,8 @@ impl WalkProgress {
 }
 
 impl QueuedStroke {
-    pub(super) fn new(surface: Surface, tip: Tip, brush: BrushSettings) -> QueuedStroke {
+    pub(super) fn new(brush: BrushSettings) -> QueuedStroke {
         QueuedStroke {
-            surface,
-            tip,
             brush,
             dabs: VecDeque::new(),
             begun: false,
@@ -127,9 +108,9 @@ impl QueuedStroke {
 }
 
 impl Queued {
-    pub(super) fn awaits_frames_on(&self, surface: Surface) -> bool {
+    pub(super) fn awaits_frames(&self) -> bool {
         match self {
-            Queued::Stroke(stroke) => stroke.surface == surface && stroke.awaits_frames(),
+            Queued::Stroke(stroke) => stroke.awaits_frames(),
             Queued::Brush(_) | Queued::Knife(_) => true,
         }
     }

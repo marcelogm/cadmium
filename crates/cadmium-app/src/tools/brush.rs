@@ -10,7 +10,7 @@ pub(super) const BRUSH: UiToolProfile = UiToolProfile {
     tooltip: "Brush (1)",
     keys: &[gdk::Key::_1],
     keypad_keys: &[gdk::Key::KP_1],
-    on_painting: Press::Stroke(Tool::Brush),
+    press: Press::Stroke(Tool::Brush),
     controls: VisibleControls {
         pigments: true,
         loaded: true,
@@ -29,7 +29,7 @@ pub(super) const BRUSH: UiToolProfile = UiToolProfile {
 };
 
 pub(super) const BRUSH_WORDING: ToolWording = ToolWording {
-    pigments: "Click loads a clean brush, click again to dip deeper; Ctrl+click mixes in a little",
+    pigments: "Click loads a clean brush; Ctrl+click mixes in a little",
     loaded_title: "On the Brush",
     loaded_tooltip: "Left: mix on the palette · right: brush tip",
     level_tooltip: "Paint in the brush reservoir",

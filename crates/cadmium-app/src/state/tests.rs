@@ -4,8 +4,6 @@ use std::rc::Rc;
 use crate::state::test_support::painting_state;
 use crate::state::{SharedState, stroking_or_busy};
 
-// `clear_tray` stands in for any state change: it wakes the views, and `wake` is private.
-
 #[test]
 fn every_wake_reaches_each_view() {
     let mut state = painting_state();
@@ -17,8 +15,8 @@ fn every_wake_reaches_each_view() {
             true
         }));
     }
-    state.clear_tray();
-    state.clear_tray();
+    state.clean_brush();
+    state.clean_brush();
     assert_eq!(wakes.each_ref().map(|count| count.get()), [2, 2]);
 }
 
@@ -34,10 +32,10 @@ fn the_waker_of_a_view_that_is_gone_is_dropped_on_the_next_wake() {
         !seen_gone.get()
     }));
     gone.set(true);
-    state.clear_tray();
+    state.clean_brush();
     assert_eq!(wakes.get(), 1);
     assert!(state.wakers.is_empty());
-    state.clear_tray();
+    state.clean_brush();
     assert_eq!(wakes.get(), 1);
 }
 
@@ -48,4 +46,11 @@ fn a_missing_or_borrowed_state_counts_as_stroking() {
     assert!(!stroking_or_busy(Some(&state)));
     let _held = state.borrow_mut();
     assert!(stroking_or_busy(Some(&state)));
+}
+
+#[test]
+fn a_new_painting_neither_reloads_nor_cleans_the_brush_between_strokes() {
+    let state = painting_state();
+    assert!(!state.reload_each_stroke);
+    assert!(!state.clean_each_stroke);
 }

@@ -10,15 +10,12 @@ use crate::tools::UiTool;
 
 use super::SmokeConfig;
 use super::brushes::SmokeBrushes;
-use super::tray::{TRAY_MIX, TRAY_TOOL, parse_tray_tool};
 
 pub(super) const EXIT_AFTER_FRAMES: &str = "CADMIUM_SMOKE_EXIT_AFTER_FRAMES";
 pub(super) const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
 pub(super) const DIALOG: &str = "CADMIUM_SMOKE_DIALOG";
 pub(super) const STROKE: &str = "CADMIUM_SMOKE_STROKE";
 pub(super) const PAGE: &str = "CADMIUM_SMOKE_PAGE";
-pub(super) const TRAY: &str = "CADMIUM_SMOKE_TRAY";
-pub(super) const TRAY_PAINT: &str = "CADMIUM_SMOKE_TRAY_PAINT";
 pub(super) const TOOL: &str = "CADMIUM_SMOKE_TOOL";
 pub(super) const SAVE: &str = "CADMIUM_SMOKE_SAVE";
 pub(super) const OPEN: &str = "CADMIUM_SMOKE_OPEN";
@@ -37,7 +34,6 @@ impl SmokeConfig {
         let screenshot = lookup_path(&lookup, SCREENSHOT);
         let dialog = lookup(DIALOG);
         let tool = non_empty(&lookup, TOOL);
-        let tray_tool = non_empty(&lookup, TRAY_TOOL);
         let config = SmokeConfig {
             exit_after_frames: DEFAULT_EXIT_AFTER_FRAMES,
             screenshot,
@@ -45,10 +41,6 @@ impl SmokeConfig {
             tool: None,
             stroke: lookup_flag(&lookup, STROKE),
             page: non_empty(&lookup, PAGE).map(|value| value.to_string_lossy().into_owned()),
-            tray: lookup_flag(&lookup, TRAY),
-            tray_tool: None,
-            tray_mix: lookup_flag(&lookup, TRAY_MIX),
-            tray_paint: lookup_flag(&lookup, TRAY_PAINT),
             save: lookup_path(&lookup, SAVE),
             open: lookup_path(&lookup, OPEN),
             export: lookup_path(&lookup, EXPORT),
@@ -58,7 +50,6 @@ impl SmokeConfig {
         if exit_after_frames.is_none()
             && dialog.is_none()
             && tool.is_none()
-            && tray_tool.is_none()
             && config.requests_nothing_else()
         {
             return None;
@@ -66,7 +57,6 @@ impl SmokeConfig {
         Some(SmokeConfig {
             dialog: dialog.and_then(|value| parse_or_warn(DIALOG, &value)),
             tool: tool.and_then(parse_tool),
-            tray_tool: tray_tool.and_then(parse_tray_tool),
             exit_after_frames: exit_after_frames
                 .and_then(|value| parse_or_warn(EXIT_AFTER_FRAMES, &value))
                 .unwrap_or(DEFAULT_EXIT_AFTER_FRAMES),
@@ -78,9 +68,6 @@ impl SmokeConfig {
         self.screenshot.is_none()
             && !self.stroke
             && self.page.is_none()
-            && !self.tray
-            && !self.tray_mix
-            && !self.tray_paint
             && self.save.is_none()
             && self.open.is_none()
             && self.export.is_none()

@@ -1,6 +1,5 @@
 use super::Buffers;
 use super::dab_record::{DAB_RECORD_SIZE, DAB_RECORD_STRIDE};
-use super::face_load::FaceSettings;
 use super::placement::Placement;
 use crate::canvas::Canvas;
 use crate::compute::uniform_entry;
@@ -12,7 +11,6 @@ use bristle_contact::ContactPass;
 use bristle_step::BristleStepPass;
 use capillary::CapillaryPass;
 use exchange::ExchangePass;
-use face::FacePass;
 use graphite::GraphitePass;
 use refill::RefillPass;
 use spread::{HairContact, SpreadBindGroups, SpreadPass};
@@ -27,8 +25,6 @@ mod capillary;
 pub(super) mod dip;
 pub(super) mod dry;
 mod exchange;
-mod face;
-pub(super) mod face_sum;
 mod graphite;
 pub(super) mod pick;
 mod refill;
@@ -41,8 +37,6 @@ pub(super) struct DabResources<'a> {
     pub(super) canvas: &'a Canvas,
     pub(super) dab_records: &'a wgpu::Buffer,
     pub(super) buffers: &'a Buffers,
-    /// The face's settings, for a batch that works the mixing knife's face.
-    pub(super) face_settings: Option<FaceSettings>,
 }
 
 #[derive(Clone, Copy)]
@@ -70,7 +64,6 @@ pub(super) struct DabPasses {
     refill: RefillPass,
     spread: SpreadPass,
     blade: BladePass,
-    face: FacePass,
     wipe: WipePass,
     graphite: GraphitePass,
 }
@@ -85,7 +78,6 @@ pub(super) struct DabBindGroups {
     wipe: wgpu::BindGroup,
     graphite: wgpu::BindGroup,
     blade: wgpu::BindGroup,
-    face: Option<wgpu::BindGroup>,
     spread: SpreadBindGroups,
 }
 
@@ -102,7 +94,6 @@ impl DabPasses {
             refill,
             spread: SpreadPass::new(gpu),
             blade: BladePass::new(gpu),
-            face: FacePass::new(gpu),
             wipe: WipePass::new(gpu),
             graphite: GraphitePass::new(gpu),
         }
@@ -129,9 +120,6 @@ impl DabPasses {
             wipe: self.wipe.bind_group(resources),
             graphite: self.graphite.bind_group(resources, pencil_lead),
             blade: self.blade.bind_group(resources),
-            face: resources
-                .face_settings
-                .map(|settings| self.face.bind_group(resources, settings)),
             spread: self.spread.bind_groups(
                 resources,
                 HairContact {
@@ -177,19 +165,6 @@ impl DabPasses {
         }
     }
 
-    /// Works the face; a batch whose tool doesn't work it has no face bind group.
-    fn encode_face(
-        &self,
-        bind_groups: &DabBindGroups,
-        pass: &mut wgpu::ComputePass<'_>,
-        dab: PlacedDab<'_>,
-    ) {
-        let Some(face) = &bind_groups.face else {
-            return;
-        };
-        self.face.encode(pass, face, dab);
-    }
-
     fn encode_stage(
         &self,
         stage: DabStage,
@@ -209,7 +184,6 @@ impl DabPasses {
             DabStage::Refill => self.refill.encode(pass, &bind_groups.refill, dab),
             DabStage::Spread => self.spread.encode(pass, &bind_groups.spread, dab),
             DabStage::Blade => self.blade.encode(pass, &bind_groups.blade, dab),
-            DabStage::Face => self.encode_face(bind_groups, pass, dab),
             DabStage::Wipe => self.wipe.encode(pass, &bind_groups.wipe, dab),
             DabStage::Graphite => self.graphite.encode(pass, &bind_groups.graphite, dab),
         }

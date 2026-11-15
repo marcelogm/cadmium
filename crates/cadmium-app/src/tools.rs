@@ -2,19 +2,16 @@ use gtk::gdk;
 
 pub use cadmium_engine::stroke::Tool;
 use panel::{ToolWording, VisibleControls};
-pub use tray_tool::TrayTool;
 
 mod blender;
 mod brush;
 mod eyedropper;
 pub(crate) mod keys;
 pub(crate) mod knife;
-pub(crate) mod mixing_knife;
 mod moving;
 pub(crate) mod panel;
 mod pencil;
 mod rag;
-pub(crate) mod tray_tool;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTool {
@@ -25,12 +22,8 @@ pub enum UiTool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Press {
     Pan,
-    /// The tip does nothing here; the eraser end still wipes.
-    Nothing,
     PickColour,
     Stroke(Tool),
-    LoadFromPile(Tool),
-    Squeeze,
 }
 
 pub(crate) struct UiToolProfile {
@@ -40,10 +33,17 @@ pub(crate) struct UiToolProfile {
     pub(crate) tooltip: &'static str,
     pub(crate) keys: &'static [gdk::Key],
     keypad_keys: &'static [gdk::Key],
-    pub(crate) on_painting: Press,
+    press: Press,
     pub(crate) controls: VisibleControls,
     pub(crate) wording: ToolWording,
     handling: Option<&'static str>,
+}
+
+impl UiToolProfile {
+    /// What a touch does while this tool is chosen.
+    pub(crate) const fn press(&self) -> Press {
+        self.press
+    }
 }
 
 impl Default for UiTool {
@@ -68,7 +68,6 @@ impl UiTool {
             UiTool::Move => &moving::MOVE,
             UiTool::Paint(Tool::Brush) => &brush::BRUSH,
             UiTool::Paint(Tool::Knife) => &knife::KNIFE,
-            UiTool::Paint(Tool::MixingKnife) => &mixing_knife::MIXING_KNIFE,
             UiTool::Paint(Tool::Blender) => &blender::BLENDER,
             UiTool::Paint(Tool::Rag) => &rag::RAG,
             UiTool::Paint(Tool::Pencil) => &pencil::PENCIL,

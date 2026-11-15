@@ -1,13 +1,10 @@
 use cadmium_engine::{
-    canvas::{MAX_CANVAS_SIZE, StateTexture},
+    canvas::MAX_CANVAS_SIZE,
     document::{DocumentError, DocumentSnapshot},
-    gpu::GpuContext,
 };
 
 use crate::entries::{Entries, format_reason, read_entries, set_first_f32};
-use crate::{
-    CURRENT_FORMAT, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir,
-};
+use crate::{CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir};
 
 const FUTURE_FORMAT: u32 = CURRENT_FORMAT + 1;
 const MAX_DENSITY: f32 = 1.0;
@@ -50,6 +47,51 @@ fn future_format_version_is_unsupported() {
     ));
 }
 
+fn unsupported_version_of_a_document_claiming(format: u32) -> Option<u32> {
+    let entries = Entries::blank().edit_manifest(|m| m["format"] = format.into());
+    match read_entries(entries) {
+        Err(DocumentError::UnsupportedVersion(found)) => Some(found),
+        _ => None,
+    }
+}
+
+#[test]
+fn every_format_but_the_current_one_is_unsupported() {
+    for format in [1, 2, 3, 4, 5, 7] {
+        let found = unsupported_version_of_a_document_claiming(format);
+        assert_eq!(found, Some(format), "format {format}");
+    }
+}
+
+#[test]
+fn a_manifest_whose_format_is_missing_or_not_an_integer_is_a_format_error() {
+    let missing = Entries::blank().edit_manifest(|m| {
+        m.as_object_mut().unwrap().remove("format");
+    });
+    let reason = format_reason(read_entries(missing));
+    assert!(reason.contains("manifest.json"), "{reason}");
+    for format in [serde_json::json!("six"), serde_json::json!(6.5)] {
+        let entries = Entries::blank().edit_manifest(|m| m["format"] = format);
+        let reason = format_reason(read_entries(entries));
+        assert!(reason.contains("manifest.json"), "{reason}");
+    }
+}
+
+#[test]
+fn an_entry_the_format_does_not_name_is_ignored() {
+    let entries = Entries::blank().with("tray/wet_vol.zst", b"not a state".to_vec());
+    assert!(read_entries(entries).is_ok());
+}
+
+#[test]
+fn a_document_without_its_graphite_entry_is_a_format_error() {
+    let reason = format_reason(read_entries(Entries::blank().without(GRAPHITE_ENTRY)));
+    assert!(
+        reason.contains(&format!("missing {GRAPHITE_ENTRY}")),
+        "{reason}"
+    );
+}
+
 #[test]
 fn unknown_pigment_in_manifest_is_a_format_error() {
     let entries = Entries::blank().edit_manifest(|m| {
@@ -89,10 +131,11 @@ fn missing_manifest_is_a_format_error() {
 
 #[test]
 fn missing_state_entry_is_a_format_error() {
-    let reason = format_reason(read_entries(
-        Entries::blank().without("state/dry_height.zst"),
-    ));
-    assert!(reason.contains("missing state/dry_height.zst"), "{reason}");
+    let reason = format_reason(read_entries(Entries::blank().without(DRY_RELIEF)));
+    assert!(
+        reason.contains(&format!("missing {DRY_RELIEF}")),
+        "{reason}"
+    );
 }
 
 #[test]
@@ -126,23 +169,9 @@ fn non_finite_or_negative_wet_volume_is_a_format_error() {
 }
 
 #[test]
-fn non_finite_or_negative_dry_height_is_a_format_error() {
-    for value in [f32::NAN, f32::NEG_INFINITY, -0.5] {
-        let entries = Entries::blank().edit_state(FORMAT_1_DRY_HEIGHT, set_first_f32(value));
-        let reason = format_reason(read_entries(entries));
-        assert!(
-            reason.contains(&format!("{FORMAT_1_DRY_HEIGHT} {INVALID_THICKNESS}")),
-            "{reason}"
-        );
-    }
-}
-
-#[test]
 fn a_dry_relief_that_sinks_below_the_bare_canvas_is_a_format_error() {
     for value in [f32::NAN, f32::NEG_INFINITY, -0.5] {
-        let entries = Entries::blank()
-            .in_format_2()
-            .edit_state(DRY_RELIEF, set_first_f32(value));
+        let entries = Entries::blank().edit_state(DRY_RELIEF, set_first_f32(value));
         let reason = format_reason(read_entries(entries));
         assert!(
             reason.contains(&format!("{DRY_RELIEF} {INVALID_THICKNESS}")),
@@ -152,30 +181,9 @@ fn a_dry_relief_that_sinks_below_the_bare_canvas_is_a_format_error() {
 }
 
 #[test]
-fn a_well_formed_format_2_document_reads() {
-    assert!(read_entries(Entries::blank().in_format_2()).is_ok());
-}
-
-#[test]
-fn a_painting_from_before_the_pencil_opens_without_graphite() {
-    let gpu = GpuContext::new().unwrap();
-    let opened = read_entries(Entries::blank())
-        .unwrap()
-        .into_session(&gpu)
-        .unwrap();
-    let graphite = opened
-        .canvas
-        .read_f32(&gpu, StateTexture::Graphite)
-        .unwrap();
-    assert!(graphite.iter().all(|density| *density == 0.0));
-}
-
-#[test]
 fn a_graphite_density_outside_zero_to_one_is_a_format_error() {
     for value in [2.0, -0.5, f32::NAN] {
-        let entries = Entries::blank()
-            .with_graphite()
-            .edit_state(GRAPHITE_ENTRY, set_first_f32(value));
+        let entries = Entries::blank().edit_state(GRAPHITE_ENTRY, set_first_f32(value));
         let reason = format_reason(read_entries(entries));
         assert!(
             reason.contains(&format!(
@@ -189,9 +197,7 @@ fn a_graphite_density_outside_zero_to_one_is_a_format_error() {
 #[test]
 fn graphite_densities_of_exactly_zero_and_one_are_accepted() {
     for value in [0.0, MAX_DENSITY] {
-        let entries = Entries::blank()
-            .with_graphite()
-            .edit_state(GRAPHITE_ENTRY, set_first_f32(value));
+        let entries = Entries::blank().edit_state(GRAPHITE_ENTRY, set_first_f32(value));
         assert!(read_entries(entries).is_ok(), "{value}");
     }
 }

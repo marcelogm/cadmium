@@ -5,7 +5,6 @@ mod entries;
 mod export;
 mod read;
 mod save;
-mod tray;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -15,30 +14,17 @@ use cadmium_engine::{
     gpu::GpuContext,
     session::PaintSession,
     stroke::StrokeSample,
-    surface::Surface,
-    tube::Nozzle,
 };
 
 use crate::support::encode_frame;
 
-const CURRENT_FORMAT: u32 = 5;
+const CURRENT_FORMAT: u32 = 6;
 const SKETCH_DENSITY: f32 = 0.75;
 const BLANK_WIDTH: u32 = 64;
 const BLANK_HEIGHT: u32 = 32;
-const FORMAT_1_DRY_HEIGHT: &str = "state/dry_height.zst";
 const DRY_RELIEF: &str = "state/dry_relief.zst";
 const GRAPHITE_ENTRY: &str = "state/graphite.zst";
 const INVALID_THICKNESS: &str = "holds a negative or non-finite thickness";
-const FORMAT_1_STATE_ENTRIES: [(&str, StateTexture); 8] = [
-    ("state/wet_pig0.zst", StateTexture::WetPig0),
-    ("state/wet_pig1.zst", StateTexture::WetPig1),
-    ("state/wet_vol.zst", StateTexture::WetVol),
-    ("state/dry_refl0.zst", StateTexture::DryRefl0),
-    ("state/dry_refl1.zst", StateTexture::DryRefl1),
-    (FORMAT_1_DRY_HEIGHT, StateTexture::DryHeight),
-    ("state/dry_top_pig0.zst", StateTexture::DryTopPig0),
-    ("state/dry_top_pig1.zst", StateTexture::DryTopPig1),
-];
 
 /// Writes a one-texel pencil sketch on the painting and returns the whole graphite field.
 fn sketch_on_the_painting(gpu: &GpuContext, s: &PaintSession) -> Vec<f32> {
@@ -112,25 +98,4 @@ fn painted_session_with_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64
     let mut s = session_with_ended_stroke(gpu, from, to);
     encode_frame(gpu, &mut s);
     s
-}
-
-fn squeeze_on_the_tray(gpu: &GpuContext, s: &mut PaintSession) {
-    squeeze_on_the_tray_at(gpu, s, [300.0, 300.0]);
-}
-
-fn squeeze_on_the_tray_at(gpu: &GpuContext, s: &mut PaintSession, at: [f32; 2]) {
-    s.begin_hold(gpu, Surface::Tray);
-    s.squeeze(
-        gpu,
-        Nozzle {
-            from: at,
-            to: at,
-            radius: 12.0,
-            slot: 1,
-            pressure: 1.0,
-            seconds: 0.2,
-            still_reach_px: 0.0,
-        },
-    );
-    s.end_hold();
 }

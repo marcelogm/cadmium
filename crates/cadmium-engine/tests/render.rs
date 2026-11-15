@@ -6,12 +6,16 @@ use cadmium_engine::{
 use support::write_png;
 
 fn blank(gpu: &GpuContext) -> Canvas {
+    blank_sized(gpu, 128, 128)
+}
+
+fn blank_sized(gpu: &GpuContext, width: u32, height: u32) -> Canvas {
     Canvas::new(
         gpu,
         &PigmentDb::builtin(),
         CanvasSpec {
-            width: 128,
-            height: 128,
+            width,
+            height,
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["ultramarine_blue".into()],
@@ -147,7 +151,6 @@ fn presenting_the_display_view_directly_matches_presenting_the_canvas() {
     let request = PresentRequest {
         source: canvas.view(StateTexture::Display),
         view: IDENTITY_VIEW,
-        plate: false,
     };
     let via_view = present_to_rgba8(&gpu, &presenter, request, CANVAS_SIZE, CANVAS_SIZE);
     assert_eq!(via_canvas, via_view);
@@ -200,13 +203,12 @@ fn present_solid(gpu: &GpuContext, rgb: [u16; 3]) -> Vec<u8> {
     let request = PresentRequest {
         source: &source,
         view: IDENTITY_VIEW,
-        plate: false,
     };
     present_to_rgba8(gpu, &presenter, request, TARGET_SIZE.0, TARGET_SIZE.1)
 }
 
-fn texel(px: &[u8], x: u32, y: u32) -> [u8; 3] {
-    let i = ((y * TARGET_SIZE.0 + x) * 4) as usize;
+fn texel(px: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
+    let i = ((y * width + x) * 4) as usize;
     [px[i], px[i + 1], px[i + 2]]
 }
 
@@ -215,17 +217,17 @@ fn a_standalone_linear_source_is_encoded_and_surrounded_by_background() {
     let gpu = GpuContext::new().unwrap();
     let px = present_solid(&gpu, [F16_HALF; 3]);
     let expected = (255.0_f32 * (1.055 * 0.5_f32.powf(1.0 / 2.4) - 0.055)).round() as i32;
-    for c in texel(&px, 10, 10) {
+    for c in texel(&px, TARGET_SIZE.0, 10, 10) {
         assert!((c as i32 - expected).abs() <= 1, "{c} vs {expected}");
     }
-    assert_eq!(texel(&px, 80, 40), BACKGROUND_SRGB8);
+    assert_eq!(texel(&px, TARGET_SIZE.0, 80, 40), BACKGROUND_SRGB8);
 }
 
 #[test]
 fn an_out_of_gamut_source_is_compressed_toward_gray_not_clipped() {
     let gpu = GpuContext::new().unwrap();
     let px = present_solid(&gpu, [F16_NEG_TENTH, F16_HALF, F16_HALF]);
-    let [r, g, b] = texel(&px, 10, 10);
+    let [r, g, b] = texel(&px, TARGET_SIZE.0, 10, 10);
     // Clipping alone would leave g = b = 0.5 linear (sRGB 188); compression pulls them in.
     assert!(r <= 1, "red {r}");
     assert!(g.abs_diff(b) <= 1, "{g} {b}");
@@ -278,7 +280,7 @@ fn a_quarter_turn_swings_the_canvas_around_the_view_origin() {
         ..IDENTITY_VIEW
     };
     let px = shade_and_present(&gpu, &mut canvas, turned, TARGET_SIZE.0, TARGET_SIZE.1);
-    assert_eq!(texel(&px, 48, 24), BACKGROUND_SRGB8);
+    assert_eq!(texel(&px, TARGET_SIZE.0, 48, 24), BACKGROUND_SRGB8);
     let shifted_into_view = ViewTransform {
         origin_y: 64.0,
         ..turned
@@ -290,5 +292,51 @@ fn a_quarter_turn_swings_the_canvas_around_the_view_origin() {
         TARGET_SIZE.0,
         TARGET_SIZE.1,
     );
-    assert_ne!(texel(&px, 48, 24), BACKGROUND_SRGB8);
+    assert_ne!(texel(&px, TARGET_SIZE.0, 48, 24), BACKGROUND_SRGB8);
+}
+
+const WIDE_SIZE: (u32, u32) = (256, 128);
+const FLAT_GRID_STEP_PX: usize = 7;
+
+/// Zoomed out by half, the canvas centred in the target with room all around: it covers
+/// x 64..192, y 32..96 of the target.
+const ZOOMED_OUT: ViewTransform = ViewTransform {
+    origin_x: -(WIDE_SIZE.0 as f32) / 2.0,
+    origin_y: -(WIDE_SIZE.1 as f32) / 2.0,
+    zoom: 0.5,
+    rotation: 0.0,
+};
+
+fn wide_blank_shown(gpu: &GpuContext, view: ViewTransform) -> Vec<u8> {
+    let mut canvas = blank_sized(gpu, WIDE_SIZE.0, WIDE_SIZE.1);
+    shade_and_present(gpu, &mut canvas, view, WIDE_SIZE.0, WIDE_SIZE.1)
+}
+
+fn within_one(shown: [u8; 3], expected: [u8; 3]) -> bool {
+    (0..3).all(|channel| shown[channel].abs_diff(expected[channel]) <= 1)
+}
+
+#[test]
+fn an_empty_painting_shows_one_flat_colour() {
+    let gpu = GpuContext::new().unwrap();
+    let px = wide_blank_shown(&gpu, IDENTITY_VIEW);
+    let centre = texel(&px, WIDE_SIZE.0, WIDE_SIZE.0 / 2, WIDE_SIZE.1 / 2);
+    let points = (0..WIDE_SIZE.1).step_by(FLAT_GRID_STEP_PX).flat_map(|y| {
+        (0..WIDE_SIZE.0)
+            .step_by(FLAT_GRID_STEP_PX)
+            .map(move |x| (x, y))
+    });
+    for (x, y) in points {
+        let here = texel(&px, WIDE_SIZE.0, x, y);
+        assert!(within_one(here, centre), "{x},{y}: {here:?} vs {centre:?}");
+    }
+}
+
+#[test]
+fn a_zoomed_out_painting_keeps_its_usual_surround() {
+    let gpu = GpuContext::new().unwrap();
+    let px = wide_blank_shown(&gpu, ZOOMED_OUT);
+    for (x, y) in [(20, 16), (128, 30), (63, 64)] {
+        assert_eq!(texel(&px, WIDE_SIZE.0, x, y), BACKGROUND_SRGB8, "{x},{y}");
+    }
 }

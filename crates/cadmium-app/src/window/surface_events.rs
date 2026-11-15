@@ -10,7 +10,6 @@ use crate::canvas_widget::CadmiumCanvas;
 use crate::dialogs::announce_gpu_lost;
 use crate::lab_panel::LabPanel;
 use crate::state::SharedState;
-use crate::tray_view::TrayView;
 
 const ZOOM_PERCENT: f32 = 100.0;
 const COPY_PRESENTATION_TOAST: &str = "Presenting by copy (dmabuf unavailable)";
@@ -19,7 +18,6 @@ const HISTORY_DISABLED_TOAST: &str = "Undo unavailable: not enough video memory"
 
 impl CadmiumWindow {
     pub(super) fn attach_state(&self, state: SharedState) {
-        state.borrow_mut().set_tray_tool(self.imp().tray_tool.get());
         state.borrow_mut().set_ui_tool(self.tool());
         let canvas = CadmiumCanvas::new(state);
         self.follow_canvas(&canvas);
@@ -28,16 +26,13 @@ impl CadmiumWindow {
         if self.imp().canvas.set(canvas).is_err() {
             unreachable!("the canvas is attached once");
         }
-        let tray = self.attach_tray(state.clone());
         self.attach_brush_panel(state.clone());
         let lab_panel = LabPanel::new(state);
         self.imp().lab_panel_slot.append(lab_panel.widget());
-        self.show_pen_readouts(&lab_panel, &tray);
+        self.show_pen_readouts(&lab_panel);
         self.connect_refresh_panels(Rc::new(move || lab_panel.refresh()));
         self.sync_history_actions();
         self.announce_if_history_disabled();
-        self.restore_tray_sheet();
-        self.sync_load_toggle();
     }
 
     fn follow_canvas(&self, canvas: &CadmiumCanvas) {
@@ -82,7 +77,7 @@ impl CadmiumWindow {
         self.connect_refresh_panels(Rc::new(move || brush_panel.refresh()));
     }
 
-    fn show_pen_readouts(&self, lab_panel: &Rc<LabPanel>, tray: &TrayView) {
+    fn show_pen_readouts(&self, lab_panel: &Rc<LabPanel>) {
         let canvas = self.canvas();
         let pen_panel = Rc::downgrade(lab_panel);
         let show_pen: Rc<dyn Fn()> = Rc::new(move || show_pen_of(&pen_panel));
@@ -91,47 +86,7 @@ impl CadmiumWindow {
             show_pen,
             move |_| show_pen()
         ));
-        canvas.connect_pen_observed(glib::clone!(
-            #[strong]
-            show_pen,
-            move |_| show_pen()
-        ));
-        tray.connect_presented(glib::clone!(
-            #[strong]
-            show_pen,
-            move |_| show_pen()
-        ));
-        tray.connect_pen_observed(move |_| show_pen());
-    }
-
-    fn attach_tray(&self, state: SharedState) -> TrayView {
-        let tray = TrayView::new(state);
-        tray.connect_presentation_fallback(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_| window.announce_copy_presentation()
-        ));
-        tray.connect_colour_picked(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_, found_paint| window.after_colour_pick(found_paint)
-        ));
-        tray.connect_released(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_| window.after_contact()
-        ));
-        // The deferred brush read can land on a tray frame.
-        tray.connect_presented(glib::clone!(
-            #[weak(rename_to = window)]
-            self,
-            move |_| window.refresh_if_brush_measured()
-        ));
-        self.imp().tray_slot.append(&tray);
-        if self.imp().tray.set(tray.clone()).is_err() {
-            unreachable!("the tray is attached once");
-        }
-        tray
+        canvas.connect_pen_observed(move |_| show_pen());
     }
 
     pub(crate) fn announce_copy_presentation(&self) {

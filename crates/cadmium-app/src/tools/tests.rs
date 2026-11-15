@@ -39,14 +39,6 @@ fn every_toggle_tooltip_names_the_tool_and_its_first_key() {
 }
 
 #[test]
-fn the_tube_is_not_a_painting_tool() {
-    assert_eq!(UiTool::from_name("tube"), None);
-    for tool in UiTool::ALL {
-        assert_ne!(tool.profile().on_painting, Press::Squeeze, "{tool:?}");
-    }
-}
-
-#[test]
 fn unknown_toggle_name_is_not_a_tool() {
     assert_eq!(UiTool::from_name("spray"), None);
 }
@@ -67,38 +59,21 @@ fn app_starts_with_the_brush() {
 }
 
 #[test]
-fn no_painting_tool_loads_on_the_painting() {
-    for tool in UiTool::ALL {
-        assert!(
-            !matches!(tool.profile().on_painting, Press::LoadFromPile(_)),
-            "{tool:?}"
-        );
-    }
-}
-
-#[test]
-fn a_paint_tool_strokes_as_itself() {
-    for tool in UiTool::ALL {
-        if let Press::Stroke(pressed) = tool.profile().on_painting {
-            assert_eq!(UiTool::Paint(pressed), tool);
-        }
-    }
-}
-
-#[test]
-fn the_mixing_knife_is_no_header_tool_and_does_nothing_on_the_painting() {
-    let mixing_knife = UiTool::Paint(Tool::MixingKnife);
-    assert!(!UiTool::ALL.contains(&mixing_knife));
-    assert_eq!(UiTool::from_name(mixing_knife.name()), None);
-    let profile = mixing_knife.profile();
-    assert!(profile.keys.is_empty() && profile.keypad_keys.is_empty());
-    assert_eq!(profile.on_painting, Press::Nothing);
-}
-
-#[test]
-fn the_pencil_strokes_on_the_painting_and_ignores_the_tray() {
-    let pencil = UiTool::Paint(Tool::Pencil);
-    assert_eq!(pencil.profile().on_painting, Press::Stroke(Tool::Pencil));
-    assert_eq!(TrayTool::Load.press(pencil), Press::Nothing);
-    assert!(!TrayTool::Load.is_enabled(pencil));
+fn every_tool_presses_one_way() {
+    let presses: Vec<_> = UiTool::ALL
+        .into_iter()
+        .map(|tool| tool.profile().press())
+        .collect();
+    assert_eq!(
+        presses,
+        [
+            Press::Pan,
+            Press::Stroke(Tool::Pencil),
+            Press::Stroke(Tool::Brush),
+            Press::Stroke(Tool::Knife),
+            Press::Stroke(Tool::Blender),
+            Press::Stroke(Tool::Rag),
+            Press::PickColour,
+        ]
+    );
 }

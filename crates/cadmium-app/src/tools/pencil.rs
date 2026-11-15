@@ -11,7 +11,7 @@ pub(super) const PENCIL: UiToolProfile = UiToolProfile {
     tooltip: "Pencil (7 or P): sketches in graphite; the rag or the eraser end rubs it out until paint dries over it",
     keys: &[gdk::Key::_7, gdk::Key::p],
     keypad_keys: &[gdk::Key::KP_7],
-    on_painting: Press::Stroke(Tool::Pencil),
+    press: Press::Stroke(Tool::Pencil),
     controls: VisibleControls {
         size: true,
         hardness: true,

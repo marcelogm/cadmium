@@ -1,5 +1,3 @@
-use cadmium_engine::surface::Surface;
-
 use cadmium_engine::render::ViewMode;
 
 use super::{AppState, ProvisionalTrail};
@@ -16,17 +14,6 @@ impl AppState {
         self.after_frame();
     }
 
-    pub fn encode_tray_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.prepare_frame();
-        self.advance_hold_by_clock();
-        let now_ms = self.now_ms();
-        self.pacing.begin_frame(&self.gpu, encoder);
-        self.session.encode_tray_frame(&self.gpu, now_ms, encoder);
-        self.pacing
-            .end_frame(encoder, self.session.last_frame_dabs());
-        self.after_frame();
-    }
-
     pub fn frame_submitted(&self) {
         self.pacing.frame_submitted();
     }
@@ -37,7 +24,7 @@ impl AppState {
     }
 
     fn capture_provisional(&mut self) {
-        let pending = self.session.queued_dabs_on(Surface::Painting);
+        let pending = self.session.queued_dabs();
         let shown_in_colour = self.session.view_mode == ViewMode::Color;
         let colour = self
             .provisional

@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use super::{BRUSH, BRUSH_EDITOR, BrushStep, NEW_BRUSH, SHEET_STROKE};
-use crate::smoke::config::{SCREENSHOT, TRAY};
+use crate::smoke::config::{PAGE, SCREENSHOT};
 use crate::smoke::steps::SmokeStep;
 use crate::smoke::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig};
 
@@ -27,11 +27,11 @@ fn brush_editor_alone_starts_a_smoke_run_that_opens_it() {
 }
 
 #[test]
-fn brush_editor_opens_after_the_tray_and_before_the_screenshot() {
+fn brush_editor_opens_after_the_page_and_before_the_screenshot() {
     let config = SmokeConfig::from_lookup(lookup(&[
         (SCREENSHOT, "/tmp/shot.png"),
         (BRUSH_EDITOR, "60"),
-        (TRAY, "1"),
+        (PAGE, "lab"),
         (BRUSH, "Round · Synthetic"),
     ]))
     .unwrap();
@@ -39,7 +39,7 @@ fn brush_editor_opens_after_the_tray_and_before_the_screenshot() {
         config.steps(),
         [
             SmokeStep::Brush(BrushStep::Pick("Round · Synthetic".to_string())),
-            SmokeStep::ShowTray,
+            SmokeStep::ShowPage("lab".to_string()),
             SmokeStep::Brush(BrushStep::Editor(60)),
             SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
             SmokeStep::Quit,

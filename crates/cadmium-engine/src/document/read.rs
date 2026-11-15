@@ -6,16 +6,14 @@ use crate::canvas::{CanvasSpec, StateTexture};
 use crate::gpu::TexelRows;
 use crate::pigments::PigmentDb;
 use crate::spectral::BANDS;
-use crate::surface::{legacy_tray_spec, tray_spec};
 
 use super::relief::dry_height_over_weave;
 use super::{
-    ABSOLUTE_DRY_HEIGHT_FORMAT, DENSITY_BYTES, DocumentError, DocumentSnapshot, FORMAT_VERSION,
-    MANIFEST_ENTRY, MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES,
-    THICKNESS_UNITS, TRAY_FORMAT, TRAY_PREFIX, TraySnapshot, state_entry,
+    DENSITY_BYTES, DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY,
+    MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES, THICKNESS_UNITS,
+    state_entry,
 };
 
-const OLDEST_READABLE_FORMAT: u32 = ABSOLUTE_DRY_HEIGHT_FORMAT;
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
 
 #[derive(serde::Deserialize)]
@@ -26,32 +24,15 @@ struct FormatProbe {
 impl DocumentSnapshot {
     pub fn read(path: &Path) -> Result<DocumentSnapshot, DocumentError> {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
-        let (format, spec) = read_manifest(&mut archive)?;
-        let states = read_states(&mut archive, format, PAINTING_PREFIX, &spec)?;
-        let tray = read_tray(&mut archive, format, &spec)?;
-        Ok(DocumentSnapshot { spec, states, tray })
+        let spec = read_manifest(&mut archive)?;
+        let states = read_states(&mut archive, PAINTING_PREFIX, &spec)?;
+        Ok(DocumentSnapshot { spec, states })
     }
-}
-
-fn read_tray<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
-    format: u32,
-    spec: &CanvasSpec,
-) -> Result<Option<TraySnapshot>, DocumentError> {
-    let tray_spec = match format {
-        ..TRAY_FORMAT => return Ok(None),
-        TRAY_FORMAT => legacy_tray_spec(&spec.pigment_slots),
-        _ => tray_spec(&spec.pigment_slots),
-    };
-    Ok(Some(TraySnapshot {
-        states: read_states(archive, format, TRAY_PREFIX, &tray_spec)?,
-        spec: tray_spec,
-    }))
 }
 
 fn read_manifest<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-) -> Result<(u32, CanvasSpec), DocumentError> {
+) -> Result<CanvasSpec, DocumentError> {
     let mut bytes = Vec::new();
     entry(archive, MANIFEST_ENTRY)?
         .take(MAX_MANIFEST_BYTES + 1)
@@ -62,7 +43,7 @@ fn read_manifest<R: Read + std::io::Seek>(
         )));
     }
     let probe: FormatProbe = serde_json::from_slice(&bytes).map_err(manifest_error)?;
-    if !(OLDEST_READABLE_FORMAT..=FORMAT_VERSION).contains(&probe.format) {
+    if probe.format != FORMAT_VERSION {
         return Err(DocumentError::UnsupportedVersion(probe.format));
     }
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(manifest_error)?;
@@ -89,12 +70,11 @@ fn read_manifest<R: Read + std::io::Seek>(
         .spec
         .validate(&PigmentDb::builtin())
         .map_err(DocumentError::Format)?;
-    Ok((manifest.format, manifest.spec))
+    Ok(manifest.spec)
 }
 
 fn read_states<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-    format: u32,
     prefix: &str,
     spec: &CanvasSpec,
 ) -> Result<Vec<StateBytes>, DocumentError> {
@@ -104,35 +84,19 @@ fn read_states<R: Read + std::io::Seek>(
             Ok(StateBytes {
                 which: *which,
                 rows: TexelRows::unpadded(spec.width * which.bytes_per_texel(), spec.height),
-                bytes: read_optional_state(archive, format, prefix, spec, *which)?,
+                bytes: read_state(archive, prefix, spec, *which)?,
             })
         })
         .collect()
 }
 
-/// A painting from before the pencil has no graphite entry: it reads as an empty sketch.
-fn read_optional_state<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
-    format: u32,
-    prefix: &str,
-    spec: &CanvasSpec,
-    which: StateTexture,
-) -> Result<Vec<u8>, DocumentError> {
-    let name = state_entry(prefix, which, format);
-    if which == StateTexture::Graphite && archive.index_for_name(&name).is_none() {
-        return Ok(vec![0; state_size(spec, which)]);
-    }
-    read_state(archive, format, prefix, spec, which)
-}
-
 fn read_state<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-    format: u32,
     prefix: &str,
     spec: &CanvasSpec,
     which: StateTexture,
 ) -> Result<Vec<u8>, DocumentError> {
-    let name = state_entry(prefix, which, format);
+    let name = state_entry(prefix, which);
     let expected = state_size(spec, which);
     let entry = entry(archive, &name)?;
     let corrupt = |error: std::io::Error| DocumentError::Format(format!("{name}: {error}"));
@@ -148,7 +112,7 @@ fn read_state<R: Read + std::io::Seek>(
             raw.len()
         )));
     }
-    let raw = if which == StateTexture::DryHeight && format > ABSOLUTE_DRY_HEIGHT_FORMAT {
+    let raw = if which == StateTexture::DryHeight {
         dry_height_over_weave(spec, &raw)
     } else {
         raw

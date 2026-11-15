@@ -6,8 +6,8 @@ use gtk::{gdk, glib};
 
 use super::nav_drag::{NavButton, picks_colour};
 use super::samples::{
-    comes_from_a_pen, event_sample, has_tilt, is_eraser, is_primary_contact, motion_samples,
-    pen_buttons_of, tilt_onto_canvas,
+    comes_from_a_pen, event_sample, is_eraser, is_primary_contact, motion_samples, pen_buttons_of,
+    tilt_onto_canvas,
 };
 use super::{
     Contact, DownOutcome, PaintSurfaceWidget, down_outcome, release, side_button_may_act,
@@ -86,24 +86,7 @@ fn widget_sample<W: PaintSurfaceWidget>(
         |x, y| widget.surface_point(x, y),
         &pressure_curve(widget),
     );
-    tilt_onto_canvas(untilted_lean(widget, event, sample), widget.view_rotation())
-}
-
-/// `sample` leaning as the tool on the widget's surface wants when `event`'s device
-/// reports no tilt, as a mouse doesn't.
-fn untilted_lean<W: PaintSurfaceWidget>(
-    widget: &W,
-    event: &gdk::Event,
-    sample: StrokeSample,
-) -> StrokeSample {
-    if has_tilt(event) {
-        return sample;
-    }
-    StrokeSample {
-        tilt_x_deg: widget.state().borrow().untilted_tilt_deg(widget.surface()),
-        tilt_y_deg: 0.0,
-        ..sample
-    }
+    tilt_onto_canvas(sample, widget.view_rotation())
 }
 
 fn stylus_down<W: PaintSurfaceWidget>(
@@ -123,7 +106,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         return;
     }
     let state = widget.state();
-    let press = state.borrow().press_for(widget.surface());
+    let press = state.borrow().ui_tool.profile().press();
     let eraser = is_eraser(&event);
     match down_outcome(press, eraser) {
         DownOutcome::Ignore => return,
@@ -134,7 +117,7 @@ fn stylus_down<W: PaintSurfaceWidget>(
         DownOutcome::Press => {}
     }
     let sample = widget_sample(widget, &event, x, y);
-    if !state.borrow_mut().press(widget.surface(), sample, eraser) {
+    if !state.borrow_mut().press(sample, eraser) {
         return;
     }
     if widget.claims_strokes() {
@@ -158,7 +141,7 @@ fn stylus_motion<W: PaintSurfaceWidget>(
         return;
     };
     let state = widget.state();
-    if !state.borrow().contact_on(widget.surface()) {
+    if !state.borrow().is_stroking() {
         if comes_from_a_pen(&event) {
             widget.observe_hover_pen(&widget_sample(widget, &event, x, y));
         }
@@ -176,7 +159,7 @@ fn stylus_motion<W: PaintSurfaceWidget>(
     );
     let rotation = widget.view_rotation();
     for sample in &mut samples {
-        *sample = tilt_onto_canvas(untilted_lean(widget, &event, *sample), rotation);
+        *sample = tilt_onto_canvas(*sample, rotation);
     }
     state.borrow_mut().motion(&samples);
 }

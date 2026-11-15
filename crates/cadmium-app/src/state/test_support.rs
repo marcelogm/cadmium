@@ -4,12 +4,11 @@ use std::rc::Rc;
 use cadmium_engine::canvas::{CanvasSpec, PaintTotals, StateTexture};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::stroke::{StrokeSample, Tool};
-use cadmium_engine::surface::Surface;
 
 use super::AppState;
 use super::clock::Clock;
 use crate::presets::starting_canvas_spec;
-use crate::tools::{TrayTool, UiTool};
+use crate::tools::UiTool;
 
 const TEST_CANVAS: (u32, u32) = (512, 256);
 
@@ -127,33 +126,6 @@ pub(super) fn sample_at(x: f64, y: f64, pressure: f32) -> StrokeSample {
         tilt_y_deg: 0.0,
         time_ms: 0,
     }
-}
-
-pub(super) fn present_one_tray_frame(state: &mut AppState) {
-    let gpu = state.gpu.clone();
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    state.encode_tray_frame(&mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-}
-
-pub(super) fn squeeze_blob_on_tray(state: &mut AppState, slot: usize) {
-    let (tray_tool, focus) = (state.tray_tool, state.focus);
-    state.set_tray_tool(TrayTool::Tube);
-    state.set_tube_slot(slot);
-    state.press(Surface::Tray, sample_at(300.0, 300.0, 1.0), false);
-    state.advance_hold(1.0);
-    state.release();
-    state.tray_tool = tray_tool;
-    state.focus = focus;
-}
-
-pub(super) fn settle_both_surfaces(state: &mut AppState) {
-    present_one_frame(state);
-    present_one_tray_frame(state);
-    assert!(!state.session.has_pending_work());
-    assert!(!state.session.tray_has_pending_work());
 }
 
 #[derive(Clone)]

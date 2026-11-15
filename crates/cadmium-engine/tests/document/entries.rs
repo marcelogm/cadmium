@@ -3,17 +3,25 @@ use std::path::Path;
 
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, StateTexture, Weave},
-    document::{DocumentError, DocumentSnapshot},
+    document::{self, DocumentError, DocumentSnapshot},
+    gpu::GpuContext,
     pigments::PigmentDb,
-    surface::{LEGACY_TRAY_HEIGHT, LEGACY_TRAY_WIDTH, TRAY_HEIGHT, TRAY_WIDTH},
 };
 
-use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, DRY_RELIEF, FORMAT_1_DRY_HEIGHT, FORMAT_1_STATE_ENTRIES,
-    GRAPHITE_ENTRY, TempDir,
-};
+use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
-const TRAY_PREFIX: &str = "tray/";
+/// The entry names of format 6, spelled out so that renaming one changes a test.
+pub(super) const STATE_ENTRIES: [(&str, StateTexture); 9] = [
+    ("state/wet_pig0.zst", StateTexture::WetPig0),
+    ("state/wet_pig1.zst", StateTexture::WetPig1),
+    ("state/wet_vol.zst", StateTexture::WetVol),
+    ("state/dry_refl0.zst", StateTexture::DryRefl0),
+    ("state/dry_refl1.zst", StateTexture::DryRefl1),
+    (DRY_RELIEF, StateTexture::DryHeight),
+    ("state/dry_top_pig0.zst", StateTexture::DryTopPig0),
+    ("state/dry_top_pig1.zst", StateTexture::DryTopPig1),
+    (GRAPHITE_ENTRY, StateTexture::Graphite),
+];
 
 pub(super) struct Entries(pub(super) Vec<(String, Vec<u8>)>);
 
@@ -27,7 +35,7 @@ impl Entries {
             pigment_slots: vec!["titanium_white".into()],
         };
         let manifest = serde_json::json!({
-            "format": 1,
+            "format": CURRENT_FORMAT,
             "pigment_db": PigmentDb::VERSION,
             "spec": spec,
             "bands": 8,
@@ -37,7 +45,7 @@ impl Entries {
             "manifest.json".to_string(),
             serde_json::to_vec(&manifest).unwrap(),
         )];
-        for (name, which) in FORMAT_1_STATE_ENTRIES {
+        for (name, which) in STATE_ENTRIES {
             let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * which.bytes_per_texel()) as usize];
             entries.push((
                 name.to_string(),
@@ -45,6 +53,23 @@ impl Entries {
             ));
         }
         Entries(entries)
+    }
+
+    pub(super) fn saved(path: &Path) -> Entries {
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+        let entries = (0..archive.len())
+            .map(|index| {
+                let mut entry = archive.by_index(index).unwrap();
+                let mut bytes = Vec::new();
+                entry.read_to_end(&mut bytes).unwrap();
+                (entry.name().to_string(), bytes)
+            })
+            .collect();
+        Entries(entries)
+    }
+
+    pub(super) fn names(&self) -> Vec<String> {
+        self.0.iter().map(|(name, _)| name.clone()).collect()
     }
 
     fn bytes(&mut self, name: &str) -> &mut Vec<u8> {
@@ -64,17 +89,6 @@ impl Entries {
         self
     }
 
-    /// Adds a graphite entry, all zero, which `edit_state` can then change.
-    pub(super) fn with_graphite(mut self) -> Entries {
-        let texel = StateTexture::Graphite.bytes_per_texel();
-        let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * texel) as usize];
-        self.0.push((
-            GRAPHITE_ENTRY.to_string(),
-            zstd::encode_all(raw.as_slice(), 3).unwrap(),
-        ));
-        self
-    }
-
     pub(super) fn edit_state(mut self, name: &str, edit: impl FnOnce(&mut Vec<u8>)) -> Entries {
         let bytes = self.bytes(name);
         let mut raw = zstd::decode_all(bytes.as_slice()).unwrap();
@@ -83,64 +97,8 @@ impl Entries {
         self
     }
 
-    pub(super) fn in_format_2(mut self) -> Entries {
-        for (entry, _) in self
-            .0
-            .iter_mut()
-            .filter(|(entry, _)| entry == FORMAT_1_DRY_HEIGHT)
-        {
-            *entry = DRY_RELIEF.to_string();
-        }
-        self.edit_manifest(|m| m["format"] = 2.into())
-    }
-
-    pub(super) fn saved(path: &Path) -> Entries {
-        let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
-        let entries = (0..archive.len())
-            .map(|index| {
-                let mut entry = archive.by_index(index).unwrap();
-                let mut bytes = Vec::new();
-                entry.read_to_end(&mut bytes).unwrap();
-                (entry.name().to_string(), bytes)
-            })
-            .collect();
-        Entries(entries)
-    }
-
-    pub(super) fn saved_as_format_2(path: &Path) -> Entries {
-        Entries::saved(path)
-            .without_tray()
-            .edit_manifest(|m| m["format"] = 2.into())
-    }
-
-    /// The saved entries as format 3 wrote them: the tray cut down to the 768×512 one it had,
-    /// keeping the middle of the current tray.
-    pub(super) fn saved_as_format_3(path: &Path) -> Entries {
-        let mut entries = Entries::saved(path);
-        for (name, bytes) in entries
-            .0
-            .iter_mut()
-            .filter(|(name, _)| name.starts_with(TRAY_PREFIX))
-        {
-            let raw = zstd::decode_all(bytes.as_slice()).unwrap();
-            let cut = middle_of_tray(&raw, name);
-            *bytes = zstd::encode_all(cut.as_slice(), 3).unwrap();
-        }
-        entries.edit_manifest(|m| m["format"] = 3.into())
-    }
-
-    pub(super) fn manifest(&self) -> serde_json::Value {
-        let bytes = &self
-            .0
-            .iter()
-            .find(|(name, _)| name == "manifest.json")
-            .unwrap()
-            .1;
-        serde_json::from_slice(bytes).unwrap()
-    }
-
-    fn without_tray(mut self) -> Entries {
-        self.0.retain(|(entry, _)| !entry.starts_with(TRAY_PREFIX));
+    pub(super) fn with(mut self, name: &str, bytes: Vec<u8>) -> Entries {
+        self.0.push((name.to_string(), bytes));
         self
     }
 
@@ -161,22 +119,6 @@ impl Entries {
     }
 }
 
-fn middle_of_tray(raw: &[u8], name: &str) -> Vec<u8> {
-    let (width, height) = (TRAY_WIDTH as usize, TRAY_HEIGHT as usize);
-    let texels = width * height;
-    assert_eq!(raw.len() % texels, 0, "{name}");
-    let texel = raw.len() / texels;
-    let (old_w, old_h) = (LEGACY_TRAY_WIDTH as usize, LEGACY_TRAY_HEIGHT as usize);
-    let x0 = (width - old_w) / 2;
-    let y0 = (height - old_h) / 2;
-    let mut cut = Vec::with_capacity(old_w * old_h * texel);
-    for y in y0..y0 + old_h {
-        let start = (y * width + x0) * texel;
-        cut.extend_from_slice(&raw[start..start + old_w * texel]);
-    }
-    cut
-}
-
 pub(super) fn read_entries(entries: Entries) -> Result<DocumentSnapshot, DocumentError> {
     let dir = TempDir::new("read");
     let path = dir.file("painting.cadmium");
@@ -194,4 +136,20 @@ pub(super) fn format_reason(result: Result<DocumentSnapshot, DocumentError>) -> 
 
 pub(super) fn set_first_f32(value: f32) -> impl FnOnce(&mut Vec<u8>) {
     move |raw| raw[..4].copy_from_slice(&value.to_le_bytes())
+}
+
+#[test]
+fn a_saved_painting_holds_its_manifest_and_the_painting_state_only() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("entries");
+    let mut session = crate::painted_session(&gpu);
+    document::save(&gpu, &mut session, &dir.file("p.cadmium")).unwrap();
+    let names = Entries::saved(&dir.file("p.cadmium")).names();
+    assert!(names.iter().any(|name| name == "manifest.json"));
+    assert!(names.iter().any(|name| name == GRAPHITE_ENTRY));
+    assert!(
+        names
+            .iter()
+            .all(|name| name == "manifest.json" || name.starts_with("state/"))
+    );
 }

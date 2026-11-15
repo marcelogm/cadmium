@@ -9,8 +9,8 @@ use crate::spectral::BANDS;
 
 use super::relief::dry_relief;
 use super::{
-    DocumentError, DocumentSnapshot, MANIFEST_ENTRY, Manifest, PAINTING_PREFIX, StateBytes,
-    THICKNESS_UNITS, TRAY_PREFIX, state_entry,
+    DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY, Manifest, PAINTING_PREFIX,
+    StateBytes, THICKNESS_UNITS, state_entry,
 };
 
 const ZSTD_LEVEL: i32 = 3;
@@ -18,9 +18,8 @@ const PARTIAL_SUFFIX: &str = ".part";
 
 impl DocumentSnapshot {
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
-        let format = self.file_format();
         let manifest = Manifest {
-            format,
+            format: FORMAT_VERSION,
             pigment_db: PigmentDb::VERSION,
             spec: self.spec.clone(),
             bands: BANDS,
@@ -28,28 +27,18 @@ impl DocumentSnapshot {
         };
         let manifest = serde_json::to_vec_pretty(&manifest)
             .map_err(|error| DocumentError::Format(error.to_string()))?;
-        write_replacing(path, |file| self.write_archive(file, format, &manifest))
+        write_replacing(path, |file| self.write_archive(file, &manifest))
     }
 
     fn write_archive(
         &self,
         file: &mut BufWriter<File>,
-        format: u32,
         manifest: &[u8],
     ) -> Result<(), DocumentError> {
         let mut archive = zip::ZipWriter::new(file);
         archive.start_file(MANIFEST_ENTRY, stored_entry())?;
         archive.write_all(manifest)?;
-        write_states(
-            &mut archive,
-            format,
-            PAINTING_PREFIX,
-            &self.spec,
-            &self.states,
-        )?;
-        if let Some(tray) = &self.tray {
-            write_states(&mut archive, format, TRAY_PREFIX, &tray.spec, &tray.states)?;
-        }
+        write_states(&mut archive, PAINTING_PREFIX, &self.spec, &self.states)?;
         archive.finish()?;
         Ok(())
     }
@@ -61,13 +50,12 @@ fn stored_entry() -> zip::write::SimpleFileOptions {
 
 fn write_states<W: Write + std::io::Seek>(
     archive: &mut zip::ZipWriter<W>,
-    format: u32,
     prefix: &str,
     spec: &CanvasSpec,
     states: &[StateBytes],
 ) -> Result<(), DocumentError> {
     for state in states {
-        let name = state_entry(prefix, state.which, format);
+        let name = state_entry(prefix, state.which);
         if state.rows.row_bytes != spec.width * state.which.bytes_per_texel()
             || state.rows.rows != spec.height
         {

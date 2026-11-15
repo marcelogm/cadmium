@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::canvas::{Canvas, Primer, StateTexture};
+use crate::canvas::{Canvas, StateTexture};
 use crate::compute::{AutoLayoutStage, buffer_binding};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_mapped, staging_buffer};
 
@@ -27,9 +27,6 @@ pub struct ViewTransform {
 pub struct PresentRequest<'a> {
     pub source: &'a wgpu::TextureView,
     pub view: ViewTransform,
-    /// Frame the source as the tray's glass plate: a lit edge, a soft shadow and a darker
-    /// ground around it, instead of the painting's surround.
-    pub plate: bool,
 }
 
 impl<'a> PresentRequest<'a> {
@@ -37,7 +34,6 @@ impl<'a> PresentRequest<'a> {
         PresentRequest {
             source: canvas.view(StateTexture::Display),
             view,
-            plate: canvas.spec.primer == Primer::Tray,
         }
     }
 }
@@ -55,18 +51,16 @@ struct PresentParams {
     origin: [f32; 2],
     zoom: f32,
     rotation: f32,
-    plate: u32,
-    padding: [u32; 3],
+    padding: [u32; 4],
 }
 
 impl PresentParams {
-    fn new(view: ViewTransform, plate: bool) -> Self {
+    fn new(view: ViewTransform) -> Self {
         PresentParams {
             origin: [view.origin_x, view.origin_y],
             zoom: view.zoom,
             rotation: view.rotation,
-            plate: u32::from(plate),
-            padding: [0; 3],
+            padding: [0; 4],
         }
     }
 }
@@ -116,12 +110,8 @@ impl Presenter {
         target: &wgpu::Texture,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let PresentRequest {
-            source,
-            view,
-            plate,
-        } = request;
-        let params = PresentParams::new(view, plate);
+        let PresentRequest { source, view } = request;
+        let params = PresentParams::new(view);
         let params_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {

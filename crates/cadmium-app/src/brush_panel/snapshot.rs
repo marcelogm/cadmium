@@ -6,7 +6,8 @@ use cadmium_engine::tool::Holder;
 use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
 use crate::state::AppState;
 use crate::thumbnails::ThumbnailKey;
-use crate::tools::panel::PanelTool;
+use crate::tools::Tool;
+use crate::tools::panel::{ToolPanel, panel_tool};
 
 pub(super) struct PigmentChoice {
     pub(super) id: &'static str,
@@ -16,16 +17,13 @@ pub(super) struct PigmentChoice {
 }
 
 pub(super) struct Snapshot {
-    pub(super) tool: PanelTool,
-    pub(super) tube_slot: usize,
+    pub(super) tool: Tool,
     pub(super) slots: Vec<String>,
     pub(super) slot_names: Vec<&'static str>,
     pub(super) slot_colours: Vec<[u8; 3]>,
     pub(super) tooltips: Vec<String>,
     pub(super) addable: Vec<PigmentChoice>,
     pub(super) recipe: Vec<(usize, f32)>,
-    /// What the held paint is made of, to name it.
-    pub(super) held_recipe: Vec<(usize, f32)>,
     pub(super) held_is_clean: bool,
     pub(super) palette_colour: [u8; 3],
     pub(super) held_colour: [u8; 3],
@@ -49,7 +47,7 @@ impl Snapshot {
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
         let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
-        let tool = state.focused_tool();
+        let tool = panel_tool(state.ui_tool, session.brush.tool);
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| mixture_colour(db, &slots, primer, mixture);
         let palette_colour = colour_of(&state.palette_mixture());
@@ -57,22 +55,17 @@ impl Snapshot {
         let worn = state.worn_library_brush();
         Snapshot {
             tool,
-            tube_slot: state.tube_slot,
             slot_names: pigments.iter().map(|pigment| pigment.name).collect(),
             slot_colours: slots.iter().map(|id| db.masstone_srgb8(id)).collect(),
             tooltips: pigment_tooltips(&pigments),
             addable: addable_pigments(db, &slots),
             slots,
             recipe: session.brush.recipe.clone(),
-            held_recipe: match tool.holder() {
-                Some(Holder::Face) => state.mixing_knife_recipe(),
-                _ => session.brush.recipe.clone(),
-            },
             held_is_clean,
             palette_colour,
             held_colour,
             held_level,
-            diameter_px: state.focused_size(),
+            diameter_px: state.brush_diameter_px(),
             pencil_hardness: session.brush.pencil_hardness,
             load: session.brush.load,
             plate_gap: session.engine.params().get(PLATE_GAP_KEY),
@@ -106,23 +99,14 @@ fn mixture_colour(db: &PigmentDb, slots: &[String], primer: [u8; 3], mixture: &M
 
 fn held_paint(
     state: &AppState,
-    tool: PanelTool,
+    tool: Tool,
     colour_of: impl Fn(&Mixture) -> [u8; 3],
 ) -> ([u8; 3], f32, bool) {
-    if state.shows_tray_tip() {
-        let mixture = &state.tray_tip_mixture;
-        return (colour_of(mixture), 0.0, mixture.is_empty());
-    }
     match tool.holder() {
         Some(Holder::Blade) => (
             colour_of(&state.knife_mixture),
             state.knife_level(),
             state.knife_is_clean(),
-        ),
-        Some(Holder::Face) => (
-            colour_of(&state.mixing_knife_mixture()),
-            state.mixing_knife_level(),
-            state.mixing_knife_is_clean(),
         ),
         Some(Holder::Reservoir) | None => (
             colour_of(&state.tip_mixture),

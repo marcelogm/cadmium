@@ -39,7 +39,6 @@ mod swatch;
 mod test_dir;
 mod thumbnails;
 mod tools;
-mod tray_view;
 mod view;
 mod window;
 mod writes;

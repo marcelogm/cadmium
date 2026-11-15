@@ -1,5 +1,5 @@
 use super::*;
-use crate::state::test_support::{painting_state, settle_both_surfaces};
+use crate::state::test_support::{painting_state, present_one_frame};
 
 #[test]
 fn pigment_view_beyond_the_palette_shows_the_last_slot() {
@@ -31,18 +31,18 @@ fn only_render_params_repaint_the_whole_canvas() {
 }
 
 #[test]
-fn a_render_param_reshades_both_surfaces() {
+fn a_render_param_reshades_the_painting() {
     let mut state = painting_state();
-    settle_both_surfaces(&mut state);
-    let render = cadmium_engine::params::SimParams::specs()
+    present_one_frame(&mut state);
+    assert!(!state.session.has_pending_work());
+    let render = SimParams::specs()
         .iter()
-        .find(|spec| spec.group == cadmium_engine::params::ParamGroup::Render)
+        .find(|spec| spec.group == ParamGroup::Render)
         .unwrap();
     state.set_param(render.key, render.default);
     assert!(state.session.has_pending_work());
-    assert!(state.session.tray_has_pending_work());
-    settle_both_surfaces(&mut state);
+    present_one_frame(&mut state);
+    assert!(!state.session.has_pending_work());
     state.reset_params();
     assert!(state.session.has_pending_work());
-    assert!(state.session.tray_has_pending_work());
 }

@@ -12,7 +12,6 @@ use wgpu::util::DeviceExt;
 
 mod bristles;
 mod dab_record;
-mod face_load;
 mod footprint;
 mod knife_load;
 mod pass;
@@ -20,7 +19,6 @@ mod placement;
 mod readout;
 mod reservoir;
 pub(crate) mod shader;
-mod tip;
 
 pub use bristles::{
     BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX, bristle_reach_px,
@@ -28,16 +26,13 @@ pub use bristles::{
 pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use readout::BrushReadout;
-pub use tip::Tip;
 
 pub(crate) use pass::pick::PickRequest;
 
 use bristles::{BristleBuffers, BristleRig, BristleTuning, LayoutRequest, MAX_BRISTLES};
 use dab_record::{upload_dab_records, upload_records};
-use face_load::{FACE_DELTA_BYTES, FACE_LOAD_BYTES, FACE_SUMS_BYTES, FaceSettings};
 use pass::dip::DipPass;
 use pass::dry::DryPass;
-use pass::face_sum::FaceSumPass;
 use pass::pick::PickPass;
 use pass::{DabPasses, DabResources};
 use placement::{FirstRest, PreviousDab, mark_dab_regions};
@@ -162,9 +157,6 @@ struct Buffers {
     tip_sums: wgpu::Buffer,
     blade_load: wgpu::Buffer,
     blade_delta: wgpu::Buffer,
-    face_load: wgpu::Buffer,
-    face_delta: wgpu::Buffer,
-    face_sums: wgpu::Buffer,
     bristles: BristleBuffers,
 }
 
@@ -179,9 +171,6 @@ impl Buffers {
             tip_sums: storage_buffer(gpu, "brush_tip_sums", TIP_SUMS_BYTES),
             blade_load: storage_buffer(gpu, "knife_blade_load", BLADE_LOAD_BYTES),
             blade_delta: storage_buffer(gpu, "knife_blade_delta", BLADE_DELTA_BYTES),
-            face_load: storage_buffer(gpu, "mixing_knife_face_load", FACE_LOAD_BYTES),
-            face_delta: storage_buffer(gpu, "mixing_knife_face_delta", FACE_DELTA_BYTES),
-            face_sums: storage_buffer(gpu, "mixing_knife_face_sums", FACE_SUMS_BYTES),
             bristles: BristleBuffers::new(gpu),
         }
     }
@@ -194,17 +183,11 @@ pub struct WetOilEngine {
     buffers: Buffers,
     first_rest: FirstRest,
     previous_dab: Option<PreviousDab>,
-    /// The strokes this engine has begun, on the painting and the tray alike: a
-    /// running count that seeds what varies from one stroke to the next.
-    strokes_begun: u32,
     bristles: BristleRig,
     dab_passes: DabPasses,
     pick_pass: PickPass,
     dry_pass: DryPass,
     dip_pass: DipPass,
-    face_sum_pass: FaceSumPass,
-    active: Tip,
-    parked: Option<Box<tip::ParkedTip>>,
 }
 
 impl WetOilEngine {
@@ -216,15 +199,11 @@ impl WetOilEngine {
             buffers: Buffers::new(gpu),
             first_rest: FirstRest::new(),
             previous_dab: None,
-            strokes_begun: 0,
             bristles: BristleRig::new(),
             dab_passes: DabPasses::new(gpu),
             pick_pass: PickPass::new(gpu),
             dry_pass: DryPass::new(gpu),
             dip_pass: DipPass::new(gpu),
-            face_sum_pass: FaceSumPass::new(gpu),
-            active: Tip::Painting,
-            parked: None,
         }
     }
 
@@ -291,7 +270,6 @@ impl WetOilEngine {
 
 impl PaintEngine for WetOilEngine {
     fn begin_stroke(&mut self) {
-        self.strokes_begun = self.strokes_begun.wrapping_add(1);
         self.first_rest.begin_stroke();
         self.previous_dab = None;
         self.bristles.begin_stroke();
@@ -322,9 +300,6 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &dab_records,
             buffers: &self.buffers,
-            face_settings: (batch.brush.tool.profile())
-                .works_the_face()
-                .then(|| FaceSettings::of(&self.params, self.strokes_begun)),
         };
         let bind_groups = self.dab_passes.bind_groups(&resources, &pencil_lead);
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -359,7 +334,6 @@ impl PaintEngine for WetOilEngine {
             canvas,
             dab_records: &records,
             buffers: &self.buffers,
-            face_settings: None,
         };
         self.dab_passes.encode_bristles_alone(&resources, encoder);
     }

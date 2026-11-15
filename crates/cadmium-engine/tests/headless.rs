@@ -1,6 +1,6 @@
 pub mod support;
 
-use cadmium_engine::canvas::{Canvas, TILE_SIZE};
+use cadmium_engine::canvas::Canvas;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::Tool;
@@ -21,17 +21,6 @@ fn a_headless_session_paints_without_recording_undo() {
     assert!(!s.history.is_enabled());
     assert_eq!(s.history.slot_capacity(), 0);
     assert!(!s.undo(&gpu));
-}
-
-#[test]
-fn a_headless_session_keeps_only_a_one_tile_tray() {
-    let gpu = GpuContext::new().unwrap();
-    let s = headless(&gpu);
-    assert_eq!(
-        (s.tray.spec.width, s.tray.spec.height),
-        (TILE_SIZE, TILE_SIZE)
-    );
-    assert_eq!(s.canvas.spec.width, 512);
 }
 
 /// Paints a light stroke at `y` with a freshly loaded brush.

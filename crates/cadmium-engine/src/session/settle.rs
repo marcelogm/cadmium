@@ -1,8 +1,7 @@
 use crate::engine::PaintEngine;
 use crate::gpu::GpuContext;
-use crate::surface::Surface;
 
-use super::{PaintSession, surface_canvas};
+use super::PaintSession;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct MotionAnchor {
@@ -32,18 +31,8 @@ impl MotionAnchor {
 
 impl PaintSession {
     pub fn bristles_settling(&self, frame_clock_ms: f64) -> bool {
-        self.bristles_settling_on(Surface::Painting, frame_clock_ms)
-    }
-
-    pub fn tray_bristles_settling(&self, frame_clock_ms: f64) -> bool {
-        self.bristles_settling_on(Surface::Tray, frame_clock_ms)
-    }
-
-    fn bristles_settling_on(&self, surface: Surface, frame_clock_ms: f64) -> bool {
-        self.walked_surface == surface
-            && self
-                .stroke_time_at(frame_clock_ms)
-                .is_some_and(|stroke_time_ms| self.engine.bristles_settling(stroke_time_ms))
+        self.stroke_time_at(frame_clock_ms)
+            .is_some_and(|stroke_time_ms| self.engine.bristles_settling(stroke_time_ms))
     }
 
     fn stroke_time_at(&self, frame_clock_ms: f64) -> Option<f32> {
@@ -54,7 +43,6 @@ impl PaintSession {
     pub(super) fn encode_dabs_or_settle(
         &mut self,
         gpu: &GpuContext,
-        surface: Surface,
         frame_clock_ms: f64,
         encoder: &mut wgpu::CommandEncoder,
     ) {
@@ -65,13 +53,12 @@ impl PaintSession {
         };
         anchor.bind_to(frame_clock_ms);
         let stroke_time_ms = anchor.stroke_time_at(frame_clock_ms);
-        if work_queued || self.walked_surface != surface {
+        if work_queued {
             return;
         }
         if self.engine.bristles_settling(stroke_time_ms) {
-            let canvas = surface_canvas(surface, &self.canvas, &self.tray);
             self.engine
-                .settle_bristles(gpu, canvas, stroke_time_ms, encoder);
+                .settle_bristles(gpu, &self.canvas, stroke_time_ms, encoder);
         }
     }
 }

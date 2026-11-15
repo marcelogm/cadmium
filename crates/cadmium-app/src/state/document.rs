@@ -63,9 +63,6 @@ impl AppState {
         if brush.recipe.is_empty() {
             brush.recipe = starting_recipe(palette);
         }
-        if self.tube_slot >= palette.len() {
-            self.tube_slot = 0;
-        }
         self.reload_brush();
         match file {
             Ok(file) => {

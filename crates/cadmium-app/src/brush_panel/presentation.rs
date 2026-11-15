@@ -1,12 +1,12 @@
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
 use cadmium_engine::params::{ParamSpec, SimParams};
-use cadmium_engine::tool::Holder;
 use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
 use crate::sliders::format_param;
 use crate::state::PigmentClick;
-use crate::tools::panel::{CLEAN_LABEL, PanelTool};
+use crate::tools::Tool;
+use crate::tools::panel::{CLEAN_LABEL, ToolPanel};
 
 const PERCENT: f64 = 100.0;
 const MIN_LISTED_SHARE: f32 = 0.01;
@@ -23,47 +23,14 @@ const MIDDLE_GRADE: usize = PENCIL_GRADES.len() / 2;
 /// What a rack row calls a head or hair that matches no factory one.
 const CUSTOM_PART: &str = "Custom";
 
-pub(super) fn tool_hint(tool: PanelTool) -> &'static str {
+pub(super) fn tool_hint(tool: Tool) -> &'static str {
     tool.handling().unwrap_or(EYEDROPPER_HINT)
 }
 
-/// The loaded swatch's colour and its right half's: the palette's mix beside the
-/// held paint, or the face's paint alone, since the face never loads from the palette.
-pub(super) fn loaded_swatch_colours(
-    tool: PanelTool,
-    palette: [u8; 3],
-    held: [u8; 3],
-) -> ([u8; 3], Option<[u8; 3]>) {
-    if tool.holder() == Some(Holder::Face) {
-        (held, None)
-    } else {
-        (palette, Some(held))
-    }
-}
-
-pub(super) fn pile_is_highlighted(
-    tool: PanelTool,
-    slot: usize,
-    tube_slot: usize,
-    recipe: &[(usize, f32)],
-) -> bool {
-    match tool {
-        PanelTool::Tube => slot == tube_slot,
-        PanelTool::Paint(_) => recipe
-            .iter()
-            .any(|(chosen, parts)| *chosen == slot && *parts > 0.0),
-    }
-}
-
-pub(super) fn tool_group_description<'a>(
-    tool: PanelTool,
-    slot_names: &[&'a str],
-    tube_slot: usize,
-) -> Option<&'a str> {
-    match tool {
-        PanelTool::Tube => slot_names.get(tube_slot).copied(),
-        PanelTool::Paint(_) => None,
-    }
+pub(super) fn pile_is_highlighted(slot: usize, recipe: &[(usize, f32)]) -> bool {
+    recipe
+        .iter()
+        .any(|(chosen, parts)| *chosen == slot && *parts > 0.0)
 }
 
 pub(super) fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String {
@@ -114,11 +81,9 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
 
 pub(super) fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-        PigmentClick::Mix
-    } else if modifiers.contains(gdk::ModifierType::SHIFT_MASK) {
-        PigmentClick::CleanAndLoad
+        PigmentClick::MixIn
     } else {
-        PigmentClick::Choose
+        PigmentClick::Load
     }
 }
 

@@ -3,14 +3,13 @@ use super::{
     BLADE_COVERAGE_MARGIN_PX, BLADE_SPILL_BAND_PX, MAX_TIP_RADIUS, MIN_DAB_RADIUS, WetOilEngine,
 };
 use crate::brush::BrushSettings;
-use crate::stroke::{Dab, PenAngles, StrokeSample, Tool, pen_angles};
+use crate::stroke::{Dab, PenAngles, StrokeSample, pen_angles};
 
 const UPRIGHT_TILT_RAD: f32 = 5.0 * std::f32::consts::PI / 180.0;
 const LEANING_TILT_RAD: f32 = 20.0 * std::f32::consts::PI / 180.0;
 const UPRIGHT_ORIENTATION: f32 = std::f32::consts::FRAC_PI_2;
 const KNIFE_MIN_HALF_WIDTH_PX: f32 = 1.5;
 const KNIFE_HALF_WIDTH_RATIO: f32 = 0.12;
-const MIXING_KNIFE_HALF_WIDTH_RATIO: f32 = 0.35;
 const ELLIPSE_TILT_ELONGATION: f32 = 1.5;
 const BRISTLE_BOUND_MARGIN_PX: f32 = 2.0;
 /// How far a blade turns per pixel its centre travels, as a share of the turn that would
@@ -56,7 +55,7 @@ impl Footprint {
         let radius = blade_half_length(brush);
         Footprint {
             radius,
-            elongation: blade_half_width(brush.tool, radius) / radius,
+            elongation: knife_half_width(radius) / radius,
             orientation: orientation.unwrap_or(dab.direction),
             rectangular: true,
             lateral_reach: BLADE_SPILL_BAND_PX + BLADE_COVERAGE_MARGIN_PX,
@@ -166,15 +165,6 @@ pub(super) fn turned_blade(
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
-}
-
-/// Half the blade's width along the stroke: the painting knife is a thin edge,
-/// the mixing knife lays a broad face on the paint.
-fn blade_half_width(tool: Tool, radius: f32) -> f32 {
-    if tool == Tool::MixingKnife {
-        return MIXING_KNIFE_HALF_WIDTH_RATIO * radius;
-    }
-    knife_half_width(radius)
 }
 
 fn knife_half_width(radius: f32) -> f32 {

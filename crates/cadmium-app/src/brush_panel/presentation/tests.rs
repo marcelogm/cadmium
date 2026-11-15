@@ -1,6 +1,6 @@
 use super::*;
 use crate::tools::knife::KNIFE_HANDLING;
-use crate::tools::mixing_knife::MIXING_KNIFE_HANDLING;
+use crate::tools::panel::panel_tool;
 use crate::tools::{Tool, UiTool};
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
 
@@ -25,11 +25,11 @@ fn empty_recipe_reads_as_a_clean_brush() {
 
 #[test]
 fn brush_shows_every_control_and_eyedropper_only_the_hint() {
-    let brush = PanelTool::Paint(Tool::Brush).controls();
+    let brush = Tool::Brush.controls();
     assert!(brush.pigments && brush.loaded && brush.size && brush.load && brush.medium);
     assert!(brush.shape && brush.stroke_loading && brush.clean && !brush.hint);
     assert!(!brush.plate_gap);
-    let eyedropper = PanelTool::Paint(Tool::Eyedropper).controls();
+    let eyedropper = Tool::Eyedropper.controls();
     assert!(eyedropper.hint);
     assert!(!eyedropper.pigments && !eyedropper.loaded && !eyedropper.size);
     assert!(!eyedropper.load && !eyedropper.medium && !eyedropper.plate_gap);
@@ -39,36 +39,16 @@ fn brush_shows_every_control_and_eyedropper_only_the_hint() {
 
 #[test]
 fn knife_loads_from_the_palette_and_sets_its_plate_but_has_no_medium_or_shape() {
-    let knife = PanelTool::Paint(Tool::Knife).controls();
+    let knife = Tool::Knife.controls();
     assert!(knife.pigments && knife.loaded && knife.size && knife.load);
     assert!(knife.plate_gap && knife.stroke_loading && knife.clean && knife.hint);
     assert!(!knife.medium && !knife.shape);
 }
 
 #[test]
-fn mixing_knife_shows_what_its_face_carries_but_loads_no_pigment() {
-    let shown = PanelTool::Paint(Tool::MixingKnife).controls();
-    assert!(shown.loaded && shown.size && shown.clean && shown.hint);
-    assert!(!shown.pigments && !shown.load && !shown.medium);
-    assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
-}
-
-#[test]
-fn mixing_knife_panel_speaks_of_the_mixing_knife_and_how_to_hold_it() {
-    let wording = PanelTool::Paint(Tool::MixingKnife).wording();
-    assert_eq!(wording.loaded_title, "On the Mixing Knife");
-    assert_eq!(wording.clean_button, "Clean Mixing Knife");
-    assert_eq!(wording.size_subtitle, Some("Blade length"));
-    assert_eq!(
-        tool_hint(PanelTool::Paint(Tool::MixingKnife)),
-        MIXING_KNIFE_HANDLING
-    );
-}
-
-#[test]
 fn the_rag_and_the_pencil_show_only_the_size() {
     for tool in [Tool::Rag, Tool::Pencil] {
-        let shown = PanelTool::Paint(tool).controls();
+        let shown = tool.controls();
         assert!(shown.size, "{tool:?}");
         assert!(!shown.pigments && !shown.loaded && !shown.load && !shown.medium);
         assert!(!shown.plate_gap && !shown.shape && !shown.stroke_loading);
@@ -79,11 +59,10 @@ fn the_rag_and_the_pencil_show_only_the_size() {
 #[test]
 fn only_the_pencil_shows_its_hardness() {
     for tool in UiTool::ALL {
-        let panel = PanelTool::of_painting(tool, Tool::Brush);
+        let panel = panel_tool(tool, Tool::Brush);
         let pencil = tool == UiTool::Paint(Tool::Pencil);
         assert_eq!(panel.controls().hardness, pencil, "{tool:?}");
     }
-    assert!(!PanelTool::Tube.controls().hardness);
 }
 
 #[test]
@@ -98,93 +77,46 @@ fn hardness_reads_as_pencil_grades_from_b_to_h() {
 
 #[test]
 fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
-    let knife = PanelTool::Paint(Tool::Knife).wording();
+    let knife = Tool::Knife.wording();
     assert_eq!(knife.clean_button, "Clean Knife");
     assert_eq!(knife.loaded_title, "On the Knife");
     assert_eq!(knife.size_title, "Size");
-    assert_eq!(tool_hint(PanelTool::Paint(Tool::Knife)), KNIFE_HANDLING);
-    assert_eq!(
-        PanelTool::Paint(Tool::Brush).wording().clean_button,
-        "Clean Brush"
-    );
-    assert_eq!(
-        tool_hint(PanelTool::Paint(Tool::Eyedropper)),
-        EYEDROPPER_HINT
-    );
+    assert_eq!(tool_hint(Tool::Knife), KNIFE_HANDLING);
+    assert_eq!(Tool::Brush.wording().clean_button, "Clean Brush");
+    assert_eq!(tool_hint(Tool::Eyedropper), EYEDROPPER_HINT);
 }
 
 #[test]
-fn the_tube_shows_only_pigments_and_nozzle_size() {
-    let tube = PanelTool::Tube.controls();
-    assert!(tube.pigments && tube.size && tube.tool_group());
-    assert!(!tube.loaded && !tube.load && !tube.medium && !tube.plate_gap);
-    assert!(!tube.shape && !tube.stroke_loading && !tube.clean && !tube.hint);
-}
-
-#[test]
-fn the_tube_names_its_size_nozzle_without_a_subtitle() {
-    let tube = PanelTool::Tube.wording();
-    assert_eq!(tube.size_title, "Nozzle");
-    assert_eq!(tube.size_subtitle, None);
-}
-
-#[test]
-fn the_tube_asks_for_a_pile_to_squeeze() {
-    assert_eq!(PanelTool::Tube.wording().pigments, "Click to pick the tube");
+fn a_pile_is_highlighted_while_the_recipe_has_some_of_it() {
+    let recipe = [(0, 1.0), (2, 0.5), (3, 0.0)];
+    assert!(pile_is_highlighted(2, &recipe));
+    assert!(!pile_is_highlighted(1, &recipe));
+    assert!(!pile_is_highlighted(3, &recipe));
 }
 
 #[test]
 fn moving_keeps_the_panel_of_the_tool_in_hand() {
-    assert_eq!(
-        PanelTool::of_painting(UiTool::Move, Tool::Knife),
-        PanelTool::Paint(Tool::Knife)
-    );
-    assert_eq!(
-        PanelTool::of_painting(UiTool::Paint(Tool::Rag), Tool::Brush),
-        PanelTool::Paint(Tool::Rag)
-    );
+    assert_eq!(panel_tool(UiTool::Move, Tool::Knife), Tool::Knife);
+    assert_eq!(panel_tool(UiTool::Paint(Tool::Rag), Tool::Brush), Tool::Rag);
 }
 
 #[test]
-fn the_tube_highlights_its_own_pile_not_the_recipe() {
-    let recipe = [(0, 1.0), (2, 0.5)];
-    assert!(pile_is_highlighted(PanelTool::Tube, 1, 1, &recipe));
-    assert!(!pile_is_highlighted(PanelTool::Tube, 0, 1, &recipe));
-    let brush = PanelTool::Paint(Tool::Brush);
-    assert!(pile_is_highlighted(brush, 2, 1, &recipe));
-    assert!(!pile_is_highlighted(brush, 1, 1, &recipe));
-}
-
-#[test]
-fn the_tube_group_names_the_chosen_pigment() {
-    let names = ["White", "Blue"];
-    assert_eq!(
-        tool_group_description(PanelTool::Tube, &names, 1),
-        Some("Blue")
-    );
-    assert_eq!(
-        tool_group_description(PanelTool::Paint(Tool::Brush), &names, 1),
-        None
-    );
-}
-
-#[test]
-fn modifiers_choose_how_a_swatch_click_loads_the_brush() {
+fn a_swatch_click_loads_the_brush_and_ctrl_mixes_the_pigment_in() {
     assert_eq!(
         pigment_click(gdk::ModifierType::empty()),
-        PigmentClick::Choose
-    );
-    assert_eq!(
-        pigment_click(gdk::ModifierType::CONTROL_MASK),
-        PigmentClick::Mix
+        PigmentClick::Load
     );
     assert_eq!(
         pigment_click(gdk::ModifierType::SHIFT_MASK),
-        PigmentClick::CleanAndLoad
+        PigmentClick::Load
+    );
+    assert_eq!(
+        pigment_click(gdk::ModifierType::CONTROL_MASK),
+        PigmentClick::MixIn
     );
     assert_eq!(
         pigment_click(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK),
-        PigmentClick::Mix
+        PigmentClick::MixIn
     );
 }
 
@@ -257,21 +189,4 @@ fn a_row_carries_the_brush_shape_for_its_tip_icon() {
     let entry = rack_entry(&user_brush(HeadSpec::FAN, HairSpec::SQUIRREL), true);
     assert_eq!(entry.head, HeadSpec::FAN);
     assert_eq!(entry.hair, HairSpec::SQUIRREL);
-}
-
-#[test]
-fn the_mixing_knife_swatch_shows_only_its_face() {
-    let (palette, held) = ([10, 20, 30], [200, 100, 0]);
-    assert_eq!(
-        loaded_swatch_colours(PanelTool::Paint(Tool::MixingKnife), palette, held),
-        (held, None)
-    );
-    for tool in [Tool::Brush, Tool::Knife] {
-        assert_eq!(
-            loaded_swatch_colours(PanelTool::Paint(tool), palette, held),
-            (palette, Some(held))
-        );
-    }
-    let wording = PanelTool::Paint(Tool::MixingKnife).wording();
-    assert!(!wording.loaded_tooltip.contains("palette"));
 }

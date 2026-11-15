@@ -1,8 +1,7 @@
 use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
 use cadmium_engine::canvas::PaintTotals;
-use cadmium_engine::engine::{BrushReadout, FULL_DIP, Tip};
+use cadmium_engine::engine::{BrushReadout, FULL_DIP};
 use cadmium_engine::pigments::Mixture;
-use cadmium_engine::surface::Surface;
 
 use super::recipe::{
     PARTIAL_DIP, PigmentClick, PigmentDip, plan_pigment_dip, recipe_from_fractions,
@@ -89,14 +88,9 @@ impl AppState {
         self.measure_brush_once_painted();
     }
 
-    /// Cleans the tool the side panel describes.
     pub fn clean_brush(&mut self) {
         self.put_down_stroke_tool();
-        if self.shows_tray_tip() {
-            self.session.clean_tray_tip(&self.gpu);
-        } else {
-            self.clean_focused();
-        }
+        self.session.clean_brush(&self.gpu);
         self.measure_brush_once_painted();
         self.wake();
     }
@@ -107,10 +101,6 @@ impl AppState {
         self.session.brush.recipe = recipe;
         match dip {
             PigmentDip::CleanAndLoad => self.clean_and_load(),
-            PigmentDip::DipAgain => {
-                let mixture = self.palette_mixture();
-                self.dip(&mixture, FULL_DIP);
-            }
             PigmentDip::AddOnTop(slot) => {
                 let mut single = self.session.brush.clone();
                 single.recipe = vec![(slot, 1.0)];
@@ -122,17 +112,14 @@ impl AppState {
         self.wake();
     }
 
-    pub fn pick_colour_on(&mut self, surface: Surface, x: f32, y: f32) -> bool {
+    pub fn pick_colour(&mut self, x: f32, y: f32) -> bool {
         self.put_down_stroke_tool();
-        let Ok(Some(picked)) = self.session.pick_colour_on(&self.gpu, surface, x, y) else {
+        let Ok(Some(picked)) = self.session.pick_colour(&self.gpu, x, y) else {
             self.wake();
             return false;
         };
         self.session.brush.recipe = recipe_from_fractions(&picked.fractions);
-        self.session.reload_brush(&self.gpu);
-        if self.holds_knife() {
-            self.clean_and_load();
-        }
+        self.clean_and_load();
         self.measure_brush();
         self.wake();
         true
@@ -168,13 +155,6 @@ impl AppState {
         self.reserve_mixture = mean_mixture(&readout.reserve);
         self.knife_mixture = mean_mixture(&readout.knife);
         self.knife_volume = readout.knife.volume as f32;
-        self.note_face(&readout);
-        if self.focus == Surface::Tray {
-            match self.session.read_tip(&self.gpu, Tip::Tray) {
-                Ok(tray) => self.tray_tip_mixture = tray.tip_mean,
-                Err(_) => self.wake(),
-            }
-        }
         Some(readout)
     }
 }

@@ -5,7 +5,7 @@ use gtk::{gdk, gio, glib};
 use super::CadmiumWindow;
 use crate::LOG_DOMAIN;
 use crate::tools::UiTool;
-use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS, is_number_row_digit};
+use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS, digit_pick, is_number_row_digit};
 
 impl CadmiumWindow {
     pub(super) fn fill_tool_group(&self) {
@@ -33,7 +33,6 @@ impl CadmiumWindow {
         };
         action.set_state(&name.to_variant());
         self.imp().tool.set(tool);
-        self.sync_load_toggle();
         if let Some(canvas) = self.imp().canvas.get() {
             canvas.state().borrow_mut().set_ui_tool(tool);
             self.refresh_panels();
@@ -81,6 +80,58 @@ impl CadmiumWindow {
             controller.add_shortcut(shortcut);
         }
         self.add_controller(controller);
+    }
+
+    /// Number-row keys pick tools by the physical key: AZERTY's unshifted `&` is its 1,
+    /// which no keyval trigger gets right, so the key is read on both levels. Keypad keys and
+    /// letters go through the shortcut triggers instead.
+    pub(super) fn setup_digit_keys(&self) {
+        let keys = gtk::EventControllerKey::new();
+        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+        keys.connect_key_pressed(glib::clone!(
+            #[weak(rename_to = window)]
+            self,
+            #[upgrade_or]
+            glib::Propagation::Proceed,
+            move |keys, _, keycode, modifiers| window.digit_key_pressed(keys, keycode, modifiers)
+        ));
+        self.add_controller(keys);
+    }
+
+    fn digit_key_pressed(
+        &self,
+        keys: &gtk::EventControllerKey,
+        keycode: u32,
+        modifiers: gdk::ModifierType,
+    ) -> glib::Propagation {
+        if !self.window_keys_are_free() {
+            return glib::Propagation::Proceed;
+        }
+        let display = WidgetExt::display(self);
+        let level = |state| {
+            display
+                .translate_key(keycode, state, keys.group() as i32)
+                .map(|(key, ..)| key)
+        };
+        let pick = digit_pick(
+            level(gdk::ModifierType::empty()),
+            level(gdk::ModifierType::SHIFT_MASK),
+            modifiers,
+        );
+        match pick {
+            None => glib::Propagation::Proceed,
+            Some(tool) => {
+                self.pick_painting_tool(tool);
+                glib::Propagation::Stop
+            }
+        }
+    }
+
+    fn pick_painting_tool(&self, tool: UiTool) {
+        let name = tool.name().to_variant();
+        if let Err(error) = WidgetExt::activate_action(self, "win.tool", Some(&name)) {
+            glib::g_warning!(LOG_DOMAIN, "couldn't pick {tool:?}: {error}");
+        }
     }
 }
 

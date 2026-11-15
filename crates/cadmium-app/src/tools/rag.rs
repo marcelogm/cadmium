@@ -11,7 +11,7 @@ pub(super) const RAG: UiToolProfile = UiToolProfile {
     tooltip: "Rag (4 or R)",
     keys: &[gdk::Key::_4, gdk::Key::r],
     keypad_keys: &[gdk::Key::KP_4],
-    on_painting: Press::Stroke(Tool::Rag),
+    press: Press::Stroke(Tool::Rag),
     controls: VisibleControls {
         size: true,
         ..NO_CONTROLS

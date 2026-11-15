@@ -1,9 +1,9 @@
 use cadmium_engine::brush::{BrushSpec, DEFAULT_PENCIL_HARDNESS};
-use cadmium_engine::surface::Surface;
 use gtk::glib;
 
 use super::AppState;
 use crate::LOG_DOMAIN;
+use crate::settings::SettingsStore;
 use crate::tools::UiTool;
 
 impl AppState {
@@ -14,6 +14,16 @@ impl AppState {
     pub(super) fn put_down_stroke_tool(&mut self) {
         self.release();
         self.session.brush.tool = self.resting_tool;
+    }
+
+    /// Takes on `store`'s settings, the pencil's hardness with them.
+    pub fn use_settings(&mut self, store: SettingsStore) {
+        self.settings = store;
+        self.session.brush.pencil_hardness = self.settings.get().pencil_hardness;
+    }
+
+    pub fn brush_diameter_px(&self) -> f32 {
+        self.session.brush.geometry.max_diameter_px
     }
 
     pub fn set_brush_size(&mut self, diameter_px: f32) {
@@ -68,7 +78,6 @@ impl AppState {
             );
             return;
         }
-        self.focus = Surface::Painting;
         self.ui_tool = tool;
         let UiTool::Paint(paint_tool) = tool else {
             return;

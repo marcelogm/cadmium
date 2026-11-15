@@ -1,6 +1,6 @@
 use gtk::gdk;
 
-use super::{TrayTool, UiTool};
+use super::UiTool;
 
 #[cfg(test)]
 mod tests;
@@ -58,14 +58,6 @@ pub(crate) fn is_number_row_digit(key: gdk::Key) -> bool {
     (gdk::Key::_0..=gdk::Key::_9).contains(&key)
 }
 
-/// What a number-row press picks: a digit picks the painting's tool, Shift and a digit the
-/// tray's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DigitPick {
-    Painting(UiTool),
-    Tray(TrayTool),
-}
-
 const SHORTCUT_MODIFIERS: gdk::ModifierType = gdk::ModifierType::SHIFT_MASK
     .union(gdk::ModifierType::CONTROL_MASK)
     .union(gdk::ModifierType::ALT_MASK)
@@ -73,30 +65,23 @@ const SHORTCUT_MODIFIERS: gdk::ModifierType = gdk::ModifierType::SHIFT_MASK
     .union(gdk::ModifierType::HYPER_MASK)
     .union(gdk::ModifierType::META_MASK);
 
-/// The pick for a press on the key giving `unshifted` alone and `shifted` with Shift. The
-/// physical key decides: its digit may sit on either level (`1`/`!` on US, `&`/`1` on
-/// AZERTY), so Shift is read from `modifiers`, not from which level the digit is on.
+/// The painting's tool for a press on the key giving `unshifted` alone and `shifted` with
+/// Shift. The physical key decides: its digit may sit on either level (`1`/`!` on US, `&`/`1`
+/// on AZERTY). Any shortcut modifier held, Shift included, picks nothing.
 pub(crate) fn digit_pick(
     unshifted: Option<gdk::Key>,
     shifted: Option<gdk::Key>,
     modifiers: gdk::ModifierType,
-) -> Option<DigitPick> {
+) -> Option<UiTool> {
+    if !(modifiers & SHORTCUT_MODIFIERS).is_empty() {
+        return None;
+    }
     let digit = [unshifted, shifted]
         .into_iter()
         .flatten()
         .find(|&key| is_number_row_digit(key))?;
-    let modifiers = modifiers & SHORTCUT_MODIFIERS;
-    if modifiers.is_empty() {
-        TOOL_KEYS
-            .into_iter()
-            .find(|&(key, _)| key == digit)
-            .map(|(_, tool)| DigitPick::Painting(tool))
-    } else if modifiers == gdk::ModifierType::SHIFT_MASK {
-        TrayTool::ALL
-            .into_iter()
-            .find(|tool| tool.key() == digit)
-            .map(DigitPick::Tray)
-    } else {
-        None
-    }
+    TOOL_KEYS
+        .into_iter()
+        .find(|&(key, _)| key == digit)
+        .map(|(_, tool)| tool)
 }

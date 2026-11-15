@@ -1,21 +1,12 @@
 pub mod support;
 
 use cadmium_engine::{
-    canvas::*,
-    engine::PaintEngine,
-    gpu::GpuContext,
-    history::History,
-    pigments::PigmentDb,
+    canvas::*, engine::PaintEngine, gpu::GpuContext, history::History, pigments::PigmentDb,
     session::PaintSession,
-    surface::{Surface, TRAY_HEIGHT, TRAY_WIDTH},
 };
 use support::{frame, line, session, spec, stroke, without_wgpu_errors};
 
 const TILE_BYTES_ALL_TEXTURES: u64 = 64 * 64 * (6 * 8 + 3 * 4);
-
-fn tray_tiles() -> u32 {
-    TRAY_WIDTH.div_ceil(TILE_SIZE) * TRAY_HEIGHT.div_ceil(TILE_SIZE)
-}
 
 fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
     StateTexture::PAINT_STATE
@@ -26,7 +17,7 @@ fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
 
 fn save_step(gpu: &GpuContext, history: &mut History, canvas: &Canvas, tiles: &[TileCoord]) {
     without_wgpu_errors(gpu, || {
-        history.begin_step(Surface::Painting);
+        history.begin_step();
         let mut e = gpu.device.create_command_encoder(&Default::default());
         history.encode_save_tiles(gpu, canvas, tiles, &mut e);
         gpu.queue.submit([e.finish()]);
@@ -157,7 +148,7 @@ fn saving_the_same_tile_twice_in_a_step_keeps_the_first_copy() {
     let mut canvas = Canvas::new(&gpu, &PigmentDb::builtin(), spec(512, 256)).unwrap();
     let mut history = History::new(&gpu, TILE_BYTES_ALL_TEXTURES, 100);
     without_wgpu_errors(&gpu, || {
-        history.begin_step(Surface::Painting);
+        history.begin_step();
         let mut e = gpu.device.create_command_encoder(&Default::default());
         history.encode_save_tiles(&gpu, &canvas, &tiles(1), &mut e);
         history.encode_save_tiles(&gpu, &canvas, &tiles(1), &mut e);
@@ -288,15 +279,11 @@ fn redoing_a_stroke_marks_its_tiles_wet() {
 }
 
 #[test]
-fn a_small_canvas_keeps_a_few_copies_of_itself_and_one_of_the_tray_for_undo() {
-    const CANVAS_COPIES: u32 = 4;
+fn a_small_canvas_keeps_four_copies_of_itself_for_undo() {
     let gpu = GpuContext::new().unwrap();
     let s = session(&gpu);
     let tiles = 512u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
-    assert_eq!(
-        s.history.slot_capacity(),
-        tiles * CANVAS_COPIES + tray_tiles()
-    );
+    assert_eq!(s.history.slot_capacity(), tiles * 4);
 }
 
 #[test]
@@ -332,5 +319,5 @@ fn assert_a_blank_canvas_with_an_empty_history(
     assert!(!s.history.can_undo());
     assert!(!s.history.can_redo());
     let tiles = 1024u32.div_ceil(TILE_SIZE) * 256u32.div_ceil(TILE_SIZE);
-    assert_eq!(s.history.slot_capacity(), tiles * 4 + tray_tiles());
+    assert_eq!(s.history.slot_capacity(), tiles * 4);
 }

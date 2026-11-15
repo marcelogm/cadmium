@@ -37,8 +37,6 @@ struct Link {
     size: (u32, u32),
 }
 
-// `pub`, as `TrayView` is: `type Type` in `imp` must not name a more private type. The
-// `view` module is private, so it is still out of reach outside the editor.
 glib::wrapper! {
     pub struct TestSheetView(ObjectSubclass<imp::TestSheetView>)
         @extends gtk::Widget,
