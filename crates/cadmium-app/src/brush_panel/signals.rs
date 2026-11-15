@@ -6,7 +6,7 @@ use gtk::glib;
 use super::BrushPanel;
 use super::presentation::{PLATE_GAP_KEY, circle_click, palette_view_named, slider_to_size};
 use crate::LOG_DOMAIN;
-use crate::colour_wheel::PickedPoint;
+use crate::colour_wheel::{PickedPoint, WheelPick};
 
 impl BrushPanel {
     pub(super) fn connect_controls(self: &Rc<Self>) {
@@ -95,7 +95,10 @@ impl BrushPanel {
         let Some(click) = circle_click(point.pick, point.modifiers) else {
             return;
         };
-        self.change_brush(|state| state.click_circle(point.turn, point.radius, click));
+        self.change_brush(|state| match point.pick {
+            WheelPick::Press => state.click_circle(point.turn, point.radius, click),
+            WheelPick::Drag => state.drag_on_circle(point.turn, point.radius, click),
+        });
     }
 
     fn change_palette_view(self: &Rc<Self>, toggles: &adw::ToggleGroup) {

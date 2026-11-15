@@ -1,6 +1,9 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use super::*;
 use crate::state::test_support::{
-    ULTRAMARINE_SLOT, brush_totals, knife_totals, painting_state, sample_at,
+    ULTRAMARINE_SLOT, brush_totals, knife_totals, painting_state, present_one_frame, sample_at,
 };
 use crate::tools::UiTool;
 use cadmium_engine::palette::paint_recipe;
@@ -73,11 +76,58 @@ fn ctrl_clicking_the_circle_with_a_clean_tool_loads_the_mix() {
 #[test]
 fn clicking_an_empty_circle_changes_nothing() {
     let mut state = painting_state();
-    state.click_colour(ColourRef::Paint(0), ColourClick::Load);
+    let mut spec = state.session.canvas.spec.clone();
+    spec.pigment_slots = vec!["titanium_white".to_string(), "ivory_black".to_string()];
+    state.start_painting(spec).unwrap();
+    assert!(state.session.palette.circle.is_empty());
+    state.press(sample_at(280.0, 100.0, 1.0), false);
+    assert!(state.is_stroking());
+    let recipe = state.session.brush.recipe.clone();
     let before = brush_totals(&state);
-    state.session.palette.circle.clear();
     state.click_circle(0.25, 1.0, ColourClick::Load);
+    assert!(state.is_stroking());
+    assert_eq!(state.session.brush.recipe, recipe);
     assert_eq!(brush_totals(&state), before);
+}
+
+#[test]
+fn a_darken_that_is_not_a_number_leaves_a_circle_click_without_effect() {
+    let mut state = painting_state();
+    state.session.palette.circle = vec![ColourRef::Paint(YELLOW_SLOT)];
+    state.circle_darken = f32::NAN;
+    let recipe = state.session.brush.recipe.clone();
+    let before = brush_totals(&state);
+    state.click_circle(0.0, 1.0, ColourClick::Load);
+    assert_eq!(state.session.brush.recipe, recipe);
+    assert_eq!(brush_totals(&state), before);
+}
+
+#[test]
+fn a_drag_on_the_circle_reads_the_brush_in_the_next_frame_as_a_click_at_its_end_would() {
+    let points = [(0.1, 0.9), (0.4, 0.6), (0.7, 0.8)];
+    let mut dragged = painting_state();
+    let unread_tip = dragged.tip_mixture;
+    let woken = Rc::new(Cell::new(false));
+    let heard = woken.clone();
+    dragged.add_waker(Rc::new(move || {
+        heard.set(true);
+        true
+    }));
+    for (turn, radius) in points {
+        dragged.drag_on_circle(turn, radius, ColourClick::Load);
+    }
+    assert!(woken.get());
+    assert!(dragged.brush_measure_due());
+    assert_eq!(dragged.tip_mixture, unread_tip);
+    present_one_frame(&mut dragged);
+    assert!(dragged.take_brush_measured());
+    let mut clicked = painting_state();
+    let (turn, radius) = points[points.len() - 1];
+    clicked.click_circle(turn, radius, ColourClick::Load);
+    assert_eq!(dragged.session.brush.recipe, clicked.session.brush.recipe);
+    assert_eq!(dragged.tip_mixture, clicked.tip_mixture);
+    assert_eq!(dragged.reserve_level(), clicked.reserve_level());
+    assert_eq!(dragged.reserve_mixture, clicked.reserve_mixture);
 }
 
 #[test]
@@ -159,11 +209,11 @@ fn clicking_a_colour_lifts_a_stroke_that_is_still_down() {
 fn darkening_is_kept_within_its_range() {
     let mut state = painting_state();
     state.set_circle_darken(3.0);
-    assert_eq!(state.circle_darken, MAX_DARKEN);
+    assert_eq!(state.circle_darken(), MAX_DARKEN);
     state.set_circle_darken(f32::NAN);
-    assert_eq!(state.circle_darken, MAX_DARKEN);
+    assert_eq!(state.circle_darken(), MAX_DARKEN);
     state.set_circle_darken(-1.0);
-    assert_eq!(state.circle_darken, 0.0);
+    assert_eq!(state.circle_darken(), 0.0);
 }
 
 #[test]
@@ -182,10 +232,10 @@ fn the_selected_recipe_is_the_selected_colour_summing_to_one() {
 }
 
 #[test]
-fn a_painting_starts_on_the_colours_view_with_nothing_darkened() {
+fn the_app_opens_on_the_colours_view_with_nothing_darkened() {
     let state = painting_state();
     assert_eq!(state.palette_view, PaletteView::Colours);
-    assert_eq!(state.circle_darken, 0.0);
+    assert_eq!(state.circle_darken(), 0.0);
 }
 
 #[test]

@@ -84,7 +84,7 @@ pub struct AppState {
     pub view: ViewTransform,
     pub ui_tool: UiTool,
     pub palette_view: PaletteView,
-    pub circle_darken: f32,
+    circle_darken: f32,
     edits: EditCounter,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,

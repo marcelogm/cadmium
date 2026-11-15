@@ -40,8 +40,24 @@ impl AppState {
     /// Loads the tool from a point of the colour circle, darkened by `circle_darken`; an empty
     /// circle and a point that is not a number are ignored.
     pub fn click_circle(&mut self, turn: f32, radius: f32, click: ColourClick) {
+        if let Some(recipe) = self.circle_recipe_at(turn, radius) {
+            self.load_colour(&recipe, click);
+        }
+    }
+
+    /// As `click_circle`, but reads the brush in the next frame, so a burst of drag events
+    /// waits on the GPU once per frame rather than once per event.
+    pub fn drag_on_circle(&mut self, turn: f32, radius: f32, click: ColourClick) {
+        if let Some(recipe) = self.circle_recipe_at(turn, radius) {
+            self.take_colour(&recipe, click);
+            self.measure_brush_next_frame();
+            self.wake();
+        }
+    }
+
+    fn circle_recipe_at(&self, turn: f32, radius: f32) -> Option<Recipe> {
         if !turn.is_finite() || !radius.is_finite() {
-            return;
+            return None;
         }
         let point = CirclePoint {
             turn,
@@ -49,9 +65,7 @@ impl AppState {
             darken: self.circle_darken,
         };
         let axes = circle_axes(&self.session.canvas.spec.pigment_slots);
-        if let Some(recipe) = circle_recipe(&self.session.palette, axes, point) {
-            self.load_colour(&recipe, click);
-        }
+        circle_recipe(&self.session.palette, axes, point)
     }
 
     /// The selected colour as shares of the painting's paints; `None` while nothing is selected.
@@ -65,6 +79,10 @@ impl AppState {
         normalised(&parts)
     }
 
+    pub fn circle_darken(&self) -> f32 {
+        self.circle_darken
+    }
+
     /// Keeps the darkening within `0..=MAX_DARKEN`; a value that is not a number is ignored.
     pub fn set_circle_darken(&mut self, darken: f32) {
         if darken.is_finite() {
@@ -73,6 +91,12 @@ impl AppState {
     }
 
     fn load_colour(&mut self, colour: &Recipe, click: ColourClick) {
+        self.take_colour(colour, click);
+        self.measure_brush_once_painted();
+        self.wake();
+    }
+
+    fn take_colour(&mut self, colour: &Recipe, click: ColourClick) {
         self.put_down_stroke_tool();
         let (recipe, dip) = plan_colour_load(&self.session.brush.recipe, colour, click);
         self.session.brush.recipe = recipe;
@@ -85,8 +109,6 @@ impl AppState {
                 self.dip(&mixture, PARTIAL_DIP);
             }
         }
-        self.measure_brush_once_painted();
-        self.wake();
     }
 }
 

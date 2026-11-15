@@ -159,7 +159,8 @@ pub(super) fn colour_click(modifiers: gdk::ModifierType) -> ColourClick {
 }
 
 /// What a pick on the colour wheel does: the pointer loads the colour under it, press or drag;
-/// with Ctrl the press mixes a little in once and the drag that follows adds nothing.
+/// with Ctrl held at the press, the press mixes a little in once and the drag that follows adds
+/// nothing, even once Ctrl is let go: `modifiers` are those of the press.
 pub(super) fn circle_click(pick: WheelPick, modifiers: gdk::ModifierType) -> Option<ColourClick> {
     match (colour_click(modifiers), pick) {
         (ColourClick::MixIn, WheelPick::Drag) => None,

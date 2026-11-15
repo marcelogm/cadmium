@@ -110,6 +110,11 @@ impl AppState {
         }
     }
 
+    /// Leaves the brush read to the next frame, once the dabs queued ahead are painted.
+    pub(super) fn measure_brush_next_frame(&mut self) {
+        self.pacing.brush_measure_waits = true;
+    }
+
     /// Whether a deferred brush read is due on the next frame.
     pub fn brush_measure_due(&self) -> bool {
         self.pacing.brush_measure_waits && !self.session.has_queued_dabs()

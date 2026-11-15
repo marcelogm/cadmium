@@ -38,9 +38,9 @@ impl PaletteSnapshot {
             my_colours: palette.my_colours.iter().map(colour_of).collect(),
             highlighted: highlighted_colour(palette, state.selected_recipe().as_ref()),
             view: state.palette_view,
-            circle_darken: state.circle_darken,
+            circle_darken: state.circle_darken(),
             can_darken: circle_axes(slots).black.is_some(),
-            wheel_key: WheelKey::of(palette, slots, state.circle_darken),
+            wheel_key: WheelKey::of(palette, slots, state.circle_darken()),
         }
     }
 }

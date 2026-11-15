@@ -2,7 +2,7 @@
 //!
 //! The picture is a coarse grid Cairo scales up, so redrawing it while a slider moves is cheap.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::f64::consts::TAU;
 use std::rc::Rc;
 
@@ -39,6 +39,7 @@ pub(crate) struct PickedPoint {
     pub(crate) turn: f32,
     pub(crate) radius: f32,
     pub(crate) pick: WheelPick,
+    /// The modifiers held at the press that started the gesture, wherever that press fell.
     pub(crate) modifiers: gdk::ModifierType,
 }
 
@@ -108,17 +109,24 @@ fn side_px(width: i32, height: i32) -> f64 {
 
 fn attach_drag(area: &gtk::DrawingArea, picked: &Rc<RefCell<Option<Picked>>>) {
     let gesture = gtk::GestureDrag::new();
+    let latched = Rc::new(Cell::new(gdk::ModifierType::empty()));
     gesture.connect_drag_begin(glib::clone!(
         #[strong]
         picked,
-        move |gesture, x, y| pick(gesture, &picked, WheelPick::Press, (x, y))
+        #[strong]
+        latched,
+        move |gesture, x, y| {
+            latched.set(gesture.current_event_state());
+            pick(gesture, &picked, WheelPick::Press, latched.get(), (x, y));
+        }
     ));
     gesture.connect_drag_update(glib::clone!(
         #[strong]
         picked,
         move |gesture, dx, dy| {
             if let Some((x, y)) = gesture.start_point() {
-                pick(gesture, &picked, WheelPick::Drag, (x + dx, y + dy));
+                let point = (x + dx, y + dy);
+                pick(gesture, &picked, WheelPick::Drag, latched.get(), point);
             }
         }
     ));
@@ -129,6 +137,7 @@ fn pick(
     gesture: &gtk::GestureDrag,
     picked: &RefCell<Option<Picked>>,
     pick: WheelPick,
+    modifiers: gdk::ModifierType,
     (x, y): (f64, f64),
 ) {
     let Some(area) = gesture.widget() else {
@@ -144,7 +153,7 @@ fn pick(
             turn,
             radius,
             pick,
-            modifiers: gesture.current_event_state(),
+            modifiers,
         });
     }
 }
