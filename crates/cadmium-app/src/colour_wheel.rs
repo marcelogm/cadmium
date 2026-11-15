@@ -15,8 +15,8 @@ mod geometry;
 mod image;
 
 use geometry::{rim_centre, turn_and_radius_at};
-use image::WHEEL_CELLS;
 use image::WheelImage;
+use image::{ARGB32_STRIDE, WHEEL_CELLS};
 pub(crate) use image::{WheelPaint, wheel_image};
 
 const NEUTRAL_GREY: f64 = 225.0 / 255.0;
@@ -151,11 +151,15 @@ fn pick(
 
 fn surface_of(image: &WheelImage) -> Option<cairo::ImageSurface> {
     let cells = i32::try_from(WHEEL_CELLS).ok()?;
-    let stride = cairo::Format::ARgb32
-        .stride_for_width(u32::try_from(WHEEL_CELLS).ok()?)
-        .ok()?;
-    let data = image.argb32(usize::try_from(stride).ok()?);
-    cairo::ImageSurface::create_for_data(data, cairo::Format::ARgb32, cells, cells, stride).ok()
+    let stride = i32::try_from(ARGB32_STRIDE).ok()?;
+    cairo::ImageSurface::create_for_data(
+        image.argb32(),
+        cairo::Format::ARgb32,
+        cells,
+        cells,
+        stride,
+    )
+    .ok()
 }
 
 fn draw(shown: &Shown, context: &cairo::Context, side_px: f64) {
@@ -186,6 +190,7 @@ fn paint_cells(context: &cairo::Context, surface: &cairo::ImageSurface, side_px:
         context.scale(scale, scale);
         context.set_source_surface(surface, 0.0, 0.0)?;
         context.source().set_filter(cairo::Filter::Bilinear);
+        context.source().set_extend(cairo::Extend::Pad);
         context.paint()
     });
     if let Err(error) = painted.and_then(|()| context.restore()) {

@@ -78,21 +78,25 @@ fn an_empty_circle_draws_no_cell() {
     assert!(image.rim.is_empty());
 }
 
-#[test]
-fn the_cairo_pixels_are_opaque_colour_inside_the_disc_and_transparent_outside() {
-    let mut cells = vec![None; WHEEL_CELLS * WHEEL_CELLS];
-    cells[WHEEL_CELLS + 2] = Some([0x11, 0x22, 0x33]);
-    let image = WheelImage { cells, rim: vec![] };
-    let stride = WHEEL_CELLS * 4 + 8;
-    let bytes = image.argb32(stride);
-    assert_eq!(bytes.len(), stride * WHEEL_CELLS);
-    let pixel = |column: usize, row: usize| {
-        let at = row * stride + column * 4;
+fn argb32_pixels(image: &WheelImage) -> impl Fn(usize, usize) -> u32 + use<> {
+    let bytes = image.argb32();
+    assert_eq!(bytes.len(), ARGB32_STRIDE * WHEEL_CELLS);
+    move |column, row| {
+        let at = row * ARGB32_STRIDE + column * 4;
         u32::from_ne_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
-    };
-    assert_eq!(pixel(2, 1), 0xFF11_2233);
-    assert_eq!(pixel(1, 2), 0);
-    assert_eq!(bytes.iter().filter(|byte| **byte != 0).count(), 4);
+    }
+}
+
+#[test]
+fn the_cairo_pixels_are_opaque_colour_where_a_cell_has_one_and_transparent_far_from_any() {
+    let mut cells = vec![None; WHEEL_CELLS * WHEEL_CELLS];
+    cells[5 * WHEEL_CELLS + 7] = Some([0x11, 0x22, 0x33]);
+    let image = WheelImage { cells, rim: vec![] };
+    let pixel = argb32_pixels(&image);
+    assert_eq!(pixel(7, 5), 0xFF11_2233);
+    assert_eq!(pixel(10, 5), 0);
+    assert_eq!(pixel(7, 8), 0);
+    assert_eq!(pixel(0, 0), 0);
     assert!(image.has_colour());
     assert!(
         !WheelImage {
@@ -101,6 +105,79 @@ fn the_cairo_pixels_are_opaque_colour_inside_the_disc_and_transparent_outside() 
         }
         .has_colour()
     );
+}
+
+#[test]
+fn the_cells_beside_a_coloured_one_are_painted_its_colour_two_cells_deep() {
+    let mut cells = vec![None; WHEEL_CELLS * WHEEL_CELLS];
+    cells[5 * WHEEL_CELLS + 7] = Some([0x11, 0x22, 0x33]);
+    let image = WheelImage { cells, rim: vec![] };
+    let pixel = argb32_pixels(&image);
+    for (column, row) in [(8, 5), (9, 5), (5, 5), (7, 3), (7, 7), (9, 7), (5, 3)] {
+        assert_eq!(pixel(column, row), 0xFF11_2233, "({column}, {row})");
+    }
+    assert!(image.cells[5 * WHEEL_CELLS + 8].is_none());
+}
+
+#[test]
+fn a_colour_at_the_side_of_the_grid_does_not_reach_the_other_side() {
+    let mut cells = vec![None; WHEEL_CELLS * WHEEL_CELLS];
+    cells[5 * WHEEL_CELLS] = Some([0x11, 0x22, 0x33]);
+    let pixel = argb32_pixels(&WheelImage { cells, rim: vec![] });
+    assert_eq!(pixel(1, 4), 0xFF11_2233);
+    for row in 3..8 {
+        assert_eq!(pixel(WHEEL_CELLS - 1, row), 0, "row {row}");
+    }
+}
+
+#[test]
+fn a_cell_between_two_colours_is_painted_their_mean() {
+    let mut cells = vec![None; WHEEL_CELLS * WHEEL_CELLS];
+    cells[5 * WHEEL_CELLS + 6] = Some([100, 0, 20]);
+    cells[5 * WHEEL_CELLS + 8] = Some([200, 50, 20]);
+    let pixel = argb32_pixels(&WheelImage { cells, rim: vec![] });
+    assert_eq!(pixel(7, 5), 0xFF96_1914);
+}
+
+#[test]
+fn a_wheel_with_no_cell_has_no_painted_pixel() {
+    let image = WheelImage {
+        cells: vec![None; WHEEL_CELLS * WHEEL_CELLS],
+        rim: vec![],
+    };
+    assert!(image.argb32().iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn a_disc_of_cells_is_painted_past_its_edge_but_not_to_the_corners_of_the_grid() {
+    let db = PigmentDb::builtin();
+    let slots = vec!["ultramarine_blue".to_string()];
+    let palette = Palette {
+        my_colours: vec![],
+        circle: vec![ColourRef::Paint(0)],
+    };
+    let image = wheel_image(&WheelPaint {
+        db: &db,
+        slots: &slots,
+        palette: &palette,
+        axes: circle_axes(&slots),
+        darken: 0.0,
+    });
+    let pixel = argb32_pixels(&image);
+    let centre = WHEEL_CELLS as f64 / 2.0;
+    for (column, row) in
+        (0..WHEEL_CELLS).flat_map(|row| (0..WHEEL_CELLS).map(move |column| (column, row)))
+    {
+        let reach = (column as f64 + 0.5 - centre).hypot(row as f64 + 0.5 - centre);
+        let cell = image.cells[row * WHEEL_CELLS + column];
+        assert_eq!(cell.is_some(), reach <= centre, "({column}, {row})");
+        if reach <= centre + 1.5 {
+            assert_eq!(pixel(column, row) >> 24, 0xFF, "({column}, {row})");
+        }
+        if reach > centre + 3.0 {
+            assert_eq!(pixel(column, row), 0, "({column}, {row})");
+        }
+    }
 }
 
 #[test]
