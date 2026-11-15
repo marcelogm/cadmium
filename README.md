@@ -25,6 +25,9 @@ each pigment is an absorption and scattering spectrum (Kubelka-Munk), simulated 
 - Brush, palette knife, blender, rag and a graphite pencil for the underdrawing, shaped by pen
   pressure and tilt
 - Twelve pigments, up to eight per painting, on linen, cotton or smooth canvas
+- A palette in the side panel: the painting's paints, My Colours and a colour circle; the
+  Palette dialog adds a mixing sheet, saved with the painting
+- A margin around the painting to paint on and wipe the brush on; Clear Margin cleans it
 - Paintings save wet, so you can pick up where you left off; export to PNG
 - A Lab panel to look inside the simulation: height, wetness, pigment amounts, every parameter
 
