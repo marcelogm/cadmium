@@ -1,10 +1,11 @@
 use cadmium_engine::canvas::primer_srgb8;
 use cadmium_engine::engine::PaintEngine;
+use cadmium_engine::palette::{ColourRef, circle_axes};
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 use cadmium_engine::tool::Holder;
 
-use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
-use crate::state::AppState;
+use super::presentation::{PLATE_GAP_KEY, RackEntry, WheelKey, highlighted_colour, rack_entry};
+use crate::state::{AppState, PaletteView};
 use crate::thumbnails::ThumbnailKey;
 use crate::tools::Tool;
 use crate::tools::panel::{ToolPanel, panel_tool};
@@ -16,6 +17,34 @@ pub(super) struct PigmentChoice {
     pub(super) colour: [u8; 3],
 }
 
+/// The palette group: the pinned colours, the colour in use, the face on show and the wheel.
+pub(super) struct PaletteSnapshot {
+    pub(super) my_colours: Vec<[u8; 3]>,
+    pub(super) highlighted: Option<ColourRef>,
+    pub(super) view: PaletteView,
+    pub(super) circle_darken: f32,
+    /// Whether the painting has the black that darkening adds.
+    pub(super) can_darken: bool,
+    pub(super) wheel_key: WheelKey,
+}
+
+impl PaletteSnapshot {
+    fn of(state: &AppState) -> PaletteSnapshot {
+        let session = &state.session;
+        let slots = &session.canvas.spec.pigment_slots;
+        let palette = &session.palette;
+        let colour_of = |recipe| mixture_srgb8(&session.db, slots, recipe);
+        PaletteSnapshot {
+            my_colours: palette.my_colours.iter().map(colour_of).collect(),
+            highlighted: highlighted_colour(palette, state.selected_recipe().as_ref()),
+            view: state.palette_view,
+            circle_darken: state.circle_darken(),
+            can_darken: circle_axes(slots).black.is_some(),
+            wheel_key: WheelKey::of(palette, slots, state.circle_darken()),
+        }
+    }
+}
+
 pub(super) struct Snapshot {
     pub(super) tool: Tool,
     pub(super) slots: Vec<String>,
@@ -23,6 +52,7 @@ pub(super) struct Snapshot {
     pub(super) slot_colours: Vec<[u8; 3]>,
     pub(super) tooltips: Vec<String>,
     pub(super) addable: Vec<PigmentChoice>,
+    pub(super) palette: PaletteSnapshot,
     pub(super) recipe: Vec<(usize, f32)>,
     pub(super) held_is_clean: bool,
     pub(super) palette_colour: [u8; 3],
@@ -59,6 +89,7 @@ impl Snapshot {
             slot_colours: slots.iter().map(|id| db.masstone_srgb8(id)).collect(),
             tooltips: pigment_tooltips(&pigments),
             addable: addable_pigments(db, &slots),
+            palette: PaletteSnapshot::of(state),
             slots,
             recipe: session.brush.recipe.clone(),
             held_is_clean,

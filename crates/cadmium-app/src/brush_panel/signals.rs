@@ -4,8 +4,9 @@ use adw::prelude::*;
 use gtk::glib;
 
 use super::BrushPanel;
-use super::presentation::{PLATE_GAP_KEY, slider_to_size};
+use super::presentation::{PLATE_GAP_KEY, circle_click, palette_view_named, slider_to_size};
 use crate::LOG_DOMAIN;
+use crate::colour_wheel::{PickedPoint, WheelPick};
 
 impl BrushPanel {
     pub(super) fn connect_controls(self: &Rc<Self>) {
@@ -31,6 +32,7 @@ impl BrushPanel {
             with_panel(&panel, |panel| panel.change_medium(scale))
         });
         self.connect_rack();
+        self.connect_palette();
         let panel = Rc::downgrade(self);
         group.reload_row.connect_active_notify(move |row| {
             with_panel(&panel, |panel| panel.change_reload_each_stroke(row))
@@ -69,6 +71,50 @@ impl BrushPanel {
     fn change_medium(self: &Rc<Self>, scale: &gtk::Scale) {
         let medium = scale.value() as f32;
         self.change_brush(|state| state.set_medium(medium));
+    }
+
+    fn connect_palette(self: &Rc<Self>) {
+        let palette = &self.palette;
+        let panel = Rc::downgrade(self);
+        palette
+            .view_toggles
+            .connect_active_name_notify(move |toggles| {
+                with_panel(&panel, |panel| panel.change_palette_view(toggles))
+            });
+        let panel = Rc::downgrade(self);
+        palette.darken.connect_value_changed(move |scale| {
+            with_panel(&panel, |panel| panel.change_darken(scale))
+        });
+        let panel = Rc::downgrade(self);
+        palette
+            .wheel
+            .connect_picked(move |point| with_panel(&panel, |panel| panel.pick_on_circle(point)));
+    }
+
+    fn pick_on_circle(self: &Rc<Self>, point: PickedPoint) {
+        let Some(click) = circle_click(point.pick, point.modifiers) else {
+            return;
+        };
+        self.change_brush(|state| match point.pick {
+            WheelPick::Press => state.click_circle(point.turn, point.radius, click),
+            WheelPick::Drag => state.drag_on_circle(point.turn, point.radius, click),
+        });
+    }
+
+    fn change_palette_view(self: &Rc<Self>, toggles: &adw::ToggleGroup) {
+        let Some(view) = toggles
+            .active_name()
+            .as_deref()
+            .and_then(palette_view_named)
+        else {
+            return;
+        };
+        self.change_brush(|state| state.palette_view = view);
+    }
+
+    fn change_darken(self: &Rc<Self>, scale: &gtk::Scale) {
+        let darken = scale.value() as f32;
+        self.change_brush(|state| state.set_circle_darken(darken));
     }
 
     fn connect_rack(self: &Rc<Self>) {
@@ -118,7 +164,7 @@ fn refresh_if_alive(panel: &Weak<BrushPanel>) {
     }
 }
 
-fn with_panel(panel: &Weak<BrushPanel>, action: impl FnOnce(&Rc<BrushPanel>)) {
+pub(super) fn with_panel(panel: &Weak<BrushPanel>, action: impl FnOnce(&Rc<BrushPanel>)) {
     if let Some(panel) = panel.upgrade()
         && !panel.syncing.get()
     {

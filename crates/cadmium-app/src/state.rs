@@ -17,10 +17,11 @@ use crate::writes::EditCounter;
 use clock::{Clock, SystemClock};
 pub use history::DryOutcome;
 use pacing::FramePacing;
+pub use palette::PaletteView;
 pub use pen::PenReadout;
 use provisional::Provisional;
 pub use provisional::{Mark, ProvisionalTrail};
-pub use recipe::PigmentClick;
+pub use recipe::ColourClick;
 
 mod clock;
 mod dip;
@@ -32,8 +33,8 @@ mod history;
 mod lab;
 mod library;
 mod pacing;
+mod palette;
 mod pen;
-mod pigments;
 mod provisional;
 mod recipe;
 mod studio_paint;
@@ -82,6 +83,8 @@ pub struct AppState {
     worn_brush_index: Option<usize>,
     pub view: ViewTransform,
     pub ui_tool: UiTool,
+    pub palette_view: PaletteView,
+    circle_darken: f32,
     edits: EditCounter,
     pub file: Option<PathBuf>,
     pub pen: PenReadout,
@@ -114,6 +117,8 @@ impl AppState {
             worn_brush_index: None,
             view: UNMOVED_VIEW,
             ui_tool: UiTool::default(),
+            palette_view: PaletteView::default(),
+            circle_darken: 0.0,
             edits: EditCounter::default(),
             file: None,
             pen: PenReadout::default(),

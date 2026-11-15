@@ -1,4 +1,5 @@
 use super::*;
+use cadmium_engine::palette::paint_recipe;
 
 #[test]
 fn recipe_follows_its_pigments_into_the_new_palette() {
@@ -10,45 +11,58 @@ fn recipe_follows_its_pigments_into_the_new_palette() {
     );
 }
 
+fn one_hot(slot: usize) -> Recipe {
+    paint_recipe(slot)
+}
+
 #[test]
-fn clicking_the_only_pigment_again_cleans_and_reloads_it() {
+fn loading_a_colour_replaces_whatever_was_selected() {
+    let mut colour = [0.0; MAX_SLOTS];
+    colour[1] = 0.75;
+    colour[3] = 0.25;
     assert_eq!(
-        plan_pigment_dip(&[(2, 1.0)], 2, PigmentClick::Load),
-        (vec![(2, 1.0)], PigmentDip::CleanAndLoad)
+        plan_colour_load(&[(0, 1.0)], &colour, ColourClick::Load),
+        (vec![(1, 0.75), (3, 0.25)], ColourDip::CleanAndLoad)
     );
 }
 
 #[test]
-fn clicking_another_pigment_leaves_only_that_one() {
+fn loading_the_colour_already_selected_cleans_and_reloads_it() {
     assert_eq!(
-        plan_pigment_dip(&[(0, 0.7), (1, 0.3)], 4, PigmentClick::Load),
-        (vec![(4, 1.0)], PigmentDip::CleanAndLoad)
+        plan_colour_load(&[(2, 1.0)], &one_hot(2), ColourClick::Load),
+        (vec![(2, 1.0)], ColourDip::CleanAndLoad)
     );
 }
 
 #[test]
-fn clicking_a_pigment_of_the_mix_leaves_only_that_one() {
+fn mixing_a_colour_in_adds_a_quarter_of_it_on_top() {
     assert_eq!(
-        plan_pigment_dip(&[(0, 2.0), (3, 1.0)], 3, PigmentClick::Load),
-        (vec![(3, 1.0)], PigmentDip::CleanAndLoad)
-    );
-}
-
-#[test]
-fn ctrl_click_adds_a_quarter_of_the_pile_of_that_pigment() {
-    assert_eq!(
-        plan_pigment_dip(&[(0, 1.0)], 3, PigmentClick::MixIn),
-        (vec![(0, 1.0), (3, 0.25)], PigmentDip::AddOnTop(3))
+        plan_colour_load(&[(0, 1.0)], &one_hot(1), ColourClick::MixIn),
+        (vec![(0, 1.0), (1, 0.25)], ColourDip::AddOnTop(one_hot(1)))
     );
     assert_eq!(
-        recipe_after_mixing(&[(0, 2.0), (3, 2.0)], 3),
+        plan_colour_load(&[(0, 2.0), (3, 2.0)], &one_hot(3), ColourClick::MixIn).0,
         [(0, 2.0), (3, 3.0)]
     );
 }
 
 #[test]
-fn ctrl_click_on_an_empty_palette_starts_a_pile() {
-    assert_eq!(recipe_after_mixing(&[], 2), [(2, 1.0)]);
+fn mixing_a_blend_in_adds_each_of_its_paints_in_slot_order() {
+    let mut colour = [0.0; MAX_SLOTS];
+    colour[1] = 0.5;
+    colour[5] = 0.5;
+    assert_eq!(
+        plan_colour_load(&[(5, 2.0), (3, 2.0)], &colour, ColourClick::MixIn).0,
+        [(5, 2.5), (3, 2.0), (1, 0.5)]
+    );
+}
+
+#[test]
+fn mixing_into_a_clean_tool_loads_the_colour() {
+    assert_eq!(
+        plan_colour_load(&[], &one_hot(2), ColourClick::MixIn),
+        (vec![(2, 1.0)], ColourDip::CleanAndLoad)
+    );
 }
 
 #[test]

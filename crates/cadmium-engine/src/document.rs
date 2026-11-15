@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
+use crate::palette::Palette;
 use crate::session::PaintSession;
 
 mod export;
@@ -13,7 +14,7 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 6;
+const FORMAT_VERSION: u32 = 7;
 const PAINTING_PREFIX: &str = "";
 const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
@@ -100,6 +101,7 @@ struct Manifest {
     spec: CanvasSpec,
     bands: usize,
     units: String,
+    palette: Palette,
 }
 
 struct StateBytes {
@@ -120,6 +122,7 @@ impl StateBytes {
 
 pub struct DocumentSnapshot {
     spec: CanvasSpec,
+    palette: Palette,
     states: Vec<StateBytes>,
 }
 
@@ -132,6 +135,7 @@ impl DocumentSnapshot {
         let states = capture_canvas(gpu, &session.canvas)?;
         Ok(DocumentSnapshot {
             spec: session.canvas.spec.clone(),
+            palette: session.palette.clone(),
             states,
         })
     }
@@ -153,6 +157,7 @@ impl DocumentSnapshot {
     }
 
     fn upload(self, gpu: &GpuContext, session: &mut PaintSession) {
+        session.palette = self.palette;
         upload_states(gpu, &mut session.canvas, self.states);
     }
 }

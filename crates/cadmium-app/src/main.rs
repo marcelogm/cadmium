@@ -7,6 +7,7 @@ mod brush_files;
 mod brush_library;
 mod brush_panel;
 mod canvas_widget;
+mod colour_wheel;
 mod cursor_outline;
 mod dialogs;
 #[cfg_attr(not(target_os = "linux"), path = "dmabuf_off.rs")]

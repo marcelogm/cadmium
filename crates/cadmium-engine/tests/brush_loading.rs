@@ -7,6 +7,7 @@ use cadmium_engine::{
     gpu::GpuContext,
     pigments::{MAX_SLOTS, Mixture},
     session::PaintSession,
+    stroke::Tool,
 };
 use support::{session, stroke, without_wgpu_errors};
 
@@ -343,4 +344,31 @@ fn a_freshly_loaded_brush_holds_its_load_share_of_the_full_reserve() {
     let level =
         s.engine.reserve_totals(&gpu).unwrap().volume as f32 / s.engine.full_reserve_volume();
     assert!((level - s.brush.load).abs() < FRACTION_TOLERANCE, "{level}");
+}
+
+#[test]
+fn cleaning_and_loading_the_knife_leaves_only_the_chosen_paint_on_it() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.brush.tool = Tool::Knife;
+    s.brush.recipe = vec![(YELLOW, 1.0)];
+    s.clean_and_load(&gpu).unwrap();
+    s.brush.recipe = vec![(BLUE, 1.0)];
+    s.clean_and_load(&gpu).unwrap();
+    let knife = s.engine.knife_totals(&gpu).unwrap();
+    assert!(knife.pigment[BLUE] > 0.0);
+    assert_eq!(knife.pigment[YELLOW], 0.0);
+}
+
+#[test]
+fn cleaning_and_loading_with_the_pencil_in_hand_loads_the_brush_and_no_knife() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    s.brush.tool = Tool::Pencil;
+    s.brush.recipe = vec![(YELLOW, 1.0)];
+    s.clean_and_load(&gpu).unwrap();
+    let brush = s.engine.brush_totals(&gpu).unwrap();
+    assert!(brush.pigment[YELLOW] > 0.0);
+    assert_eq!(brush.pigment[BLUE], 0.0);
+    assert_eq!(s.engine.knife_totals(&gpu).unwrap().volume, 0.0);
 }

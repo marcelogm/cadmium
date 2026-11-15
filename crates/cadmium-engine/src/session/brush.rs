@@ -1,4 +1,4 @@
-use crate::engine::{BrushOutline, BrushReadout};
+use crate::engine::{BrushOutline, BrushReadout, FULL_DIP};
 use crate::gpu::{GpuContext, GpuLost};
 use crate::pigments::Mixture;
 use crate::stroke::StrokeSample;
@@ -26,6 +26,21 @@ impl PaintSession {
         self.resize_tip();
         let mixture = self.recipe_mixture();
         self.change_brush(gpu, BrushChange::Reload { mixture });
+    }
+
+    /// Leaves the tool in hand holding the palette's mixture alone: the knife when it is in
+    /// hand, the brush's reservoir for every other tool.
+    pub fn clean_and_load(&mut self, gpu: &GpuContext) -> Result<(), GpuLost> {
+        if !self.holds_knife() {
+            self.reload_brush(gpu);
+            return Ok(());
+        }
+        self.clean_brush(gpu);
+        let mixture = self.recipe_mixture();
+        if mixture.is_empty() {
+            return Ok(());
+        }
+        self.dip(gpu, &mixture, FULL_DIP)
     }
 
     pub fn dip(&mut self, gpu: &GpuContext, mixture: &Mixture, amount: f32) -> Result<(), GpuLost> {
