@@ -2,7 +2,7 @@ use cadmium_engine::{
     canvas::CanvasSpec,
     document::{self, DocumentSnapshot},
     gpu::GpuContext,
-    palette::{ColourRef, Palette, default_circle, paint_recipe},
+    palette::{ColourRef, MAX_MY_COLOURS, Palette, default_circle, paint_recipe},
     session::PaintSession,
 };
 
@@ -46,6 +46,23 @@ fn a_palette_pointing_outside_the_painting_is_a_format_error() {
     });
     let reason = format_reason(read_entries(entries));
     assert!(reason.contains("palette"), "{reason}");
+}
+
+#[test]
+fn a_painting_with_more_pinned_colours_than_the_limit_is_a_format_error() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("crowded-palette");
+    let path = dir.file("p.cadmium");
+    document::save(&gpu, &mut painted_session(&gpu), &path).unwrap();
+    let entries = Entries::saved(&path).edit_manifest(|manifest| {
+        manifest["palette"]["my_colours"] =
+            serde_json::json!(vec![paint_recipe(0); MAX_MY_COLOURS + 1]);
+    });
+    let reason = format_reason(read_entries(entries));
+    assert_eq!(
+        reason,
+        "palette: palette holds 65 pinned colours, the limit is 64"
+    );
 }
 
 #[test]

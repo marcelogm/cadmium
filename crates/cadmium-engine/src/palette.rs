@@ -14,6 +14,7 @@ pub type Recipe = [f32; MAX_SLOTS];
 pub const WHITE_IDS: [&str; 2] = ["titanium_white", "zinc_white"];
 pub const BLACK_ID: &str = "ivory_black";
 pub const MAX_DARKEN: f32 = 0.8;
+pub const MAX_MY_COLOURS: usize = 64;
 
 const NORMALISED_TOLERANCE: f32 = 1e-3;
 
@@ -44,8 +45,12 @@ impl Palette {
         }
     }
 
-    /// Stores the recipe normalised and returns its index; `None` for a recipe `normalised` refuses.
+    /// Stores the recipe normalised and returns its index; `None` for a recipe `normalised`
+    /// refuses or when the palette already holds `MAX_MY_COLOURS`.
     pub fn pin(&mut self, recipe: Recipe) -> Option<usize> {
+        if self.my_colours.len() >= MAX_MY_COLOURS {
+            return None;
+        }
         self.my_colours.push(normalised(&recipe)?);
         Some(self.my_colours.len() - 1)
     }
@@ -84,12 +89,31 @@ impl Palette {
 
     /// Checks the palette against a painting of `slot_count` paints; the error says what is wrong.
     pub fn validate(&self, slot_count: usize) -> Result<(), String> {
+        self.validate_sizes(slot_count)?;
         (0..self.circle.len())
             .try_for_each(|position| self.validate_circle(position, slot_count))?;
         self.my_colours
             .iter()
             .enumerate()
             .try_for_each(|(index, recipe)| validate_recipe(index, recipe, slot_count))
+    }
+
+    /// A circle holds no colour twice, so one longer than the colours there are needs no search.
+    fn validate_sizes(&self, slot_count: usize) -> Result<(), String> {
+        let pinned = self.my_colours.len();
+        if pinned > MAX_MY_COLOURS {
+            return Err(format!(
+                "palette holds {pinned} pinned colours, the limit is {MAX_MY_COLOURS}"
+            ));
+        }
+        if self.circle.len() > slot_count + pinned {
+            return Err(format!(
+                "circle holds {} colours, the painting and the palette have {}",
+                self.circle.len(),
+                slot_count + pinned
+            ));
+        }
+        Ok(())
     }
 
     fn validate_circle(&self, position: usize, slot_count: usize) -> Result<(), String> {
@@ -103,10 +127,17 @@ impl Palette {
                 self.my_colours.len()
             )),
             _ if self.circle[..position].contains(&colour) => {
-                Err(format!("circle holds {colour:?} twice"))
+                Err(format!("circle holds {} twice", in_words(colour)))
             }
             _ => Ok(()),
         }
+    }
+}
+
+fn in_words(colour: ColourRef) -> String {
+    match colour {
+        ColourRef::Paint(slot) => format!("paint {slot}"),
+        ColourRef::Mine(index) => format!("my colour {index}"),
     }
 }
 

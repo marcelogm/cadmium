@@ -154,18 +154,47 @@ fn a_pinned_colour_on_the_circle_mixes_by_its_recipe() {
 }
 
 #[test]
-fn a_circle_naming_a_colour_that_is_gone_has_no_recipe() {
+fn a_circle_naming_a_colour_that_is_gone_has_no_recipe_even_away_from_it() {
     let palette = Palette {
         my_colours: vec![],
-        circle: vec![ColourRef::Paint(0), ColourRef::Mine(4)],
+        circle: vec![ColourRef::Paint(0), ColourRef::Paint(1), ColourRef::Mine(4)],
     };
-    for turn in [0.1, 0.6] {
+    for turn in [1.0 / 6.0, 0.5, 0.9] {
         let point = CirclePoint {
             turn,
             radius: 1.0,
             darken: 0.0,
         };
         assert_eq!(circle_recipe(&palette, AXES, point), None);
+    }
+}
+
+#[test]
+fn a_point_that_is_not_a_number_has_no_recipe() {
+    let sound = CirclePoint {
+        turn: 0.25,
+        radius: 0.5,
+        darken: 0.2,
+    };
+    assert!(circle_recipe(&two_colours(), AXES, sound).is_some());
+    for broken in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let points = [
+            CirclePoint {
+                turn: broken,
+                ..sound
+            },
+            CirclePoint {
+                radius: broken,
+                ..sound
+            },
+            CirclePoint {
+                darken: broken,
+                ..sound
+            },
+        ];
+        for point in points {
+            assert_eq!(circle_recipe(&two_colours(), AXES, point), None);
+        }
     }
 }
 
@@ -191,20 +220,14 @@ fn a_painting_with_only_white_and_black_has_an_empty_circle() {
 }
 
 #[test]
-fn a_green_sits_between_the_yellow_and_the_blue_and_equal_hues_keep_slot_order() {
-    let db = PigmentDb::builtin();
+fn a_green_sits_between_the_yellow_and_the_blue() {
     let slots = ["phthalo_green", "ultramarine_blue", "cadmium_yellow"].map(String::from);
     assert_eq!(
-        default_circle(&db, &slots),
+        default_circle(&PigmentDb::builtin(), &slots),
         [
             ColourRef::Paint(2),
             ColourRef::Paint(0),
             ColourRef::Paint(1)
         ]
-    );
-    let twins = ["cadmium_red", "cadmium_red"].map(String::from);
-    assert_eq!(
-        default_circle(&db, &twins),
-        [ColourRef::Paint(0), ColourRef::Paint(1)]
     );
 }

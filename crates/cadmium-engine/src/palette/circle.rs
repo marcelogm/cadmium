@@ -34,17 +34,21 @@ pub fn default_circle(db: &PigmentDb, slots: &[String]) -> Vec<ColourRef> {
         .filter(|(_, id)| !WHITE_IDS.contains(&id.as_str()) && *id != BLACK_ID)
         .map(|(slot, id)| (hue_deg(db.masstone_srgb8(id)), slot))
         .collect();
-    coloured.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    coloured.sort_by(|a, b| a.0.total_cmp(&b.0));
     coloured
         .into_iter()
         .map(|(_, slot)| ColourRef::Paint(slot))
         .collect()
 }
 
-/// The mixture at a point of the circle; `None` for an empty circle or one naming a colour that is gone.
+/// The mixture at a point of the circle; `None` for an empty circle, one naming a colour that is
+/// gone, or a point with a coordinate that is not a finite number.
 pub fn circle_recipe(palette: &Palette, axes: CircleAxes, point: CirclePoint) -> Option<Recipe> {
     let len = palette.circle.len();
-    if len == 0 {
+    let finite = [point.turn, point.radius, point.darken]
+        .iter()
+        .all(|coordinate| coordinate.is_finite());
+    if len == 0 || !finite {
         return None;
     }
     let recipes: Vec<Recipe> = palette

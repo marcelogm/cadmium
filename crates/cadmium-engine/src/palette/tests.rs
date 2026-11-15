@@ -121,12 +121,16 @@ fn unpinning_a_colour_that_is_not_there_changes_nothing() {
 
 #[test]
 fn a_colour_inserted_past_the_end_of_the_circle_lands_last() {
-    let mut palette = three_paints();
+    let mut palette = Palette {
+        my_colours: vec![paint_recipe(0)],
+        circle: vec![ColourRef::Paint(0), ColourRef::Paint(1)],
+    };
     palette.insert_in_circle(9, ColourRef::Mine(0));
-    assert_eq!(palette.circle[3], ColourRef::Mine(0));
-    palette.insert_in_circle(1, ColourRef::Paint(4));
-    assert_eq!(palette.circle[1], ColourRef::Paint(4));
-    assert_eq!(palette.circle.len(), 5);
+    assert_eq!(palette.circle[2], ColourRef::Mine(0));
+    palette.insert_in_circle(1, ColourRef::Paint(2));
+    assert_eq!(palette.circle[1], ColourRef::Paint(2));
+    assert_eq!(palette.circle.len(), 4);
+    assert!(palette.validate(3).is_ok());
 }
 
 #[test]
@@ -211,5 +215,60 @@ fn an_invalid_palette_says_what_is_wrong() {
     assert_eq!(
         one_past_the_last.validate(3).unwrap_err(),
         "circle names paint 3, the painting has 3"
+    );
+}
+
+#[test]
+fn a_full_list_of_pinned_colours_takes_no_more() {
+    let mut palette = Palette::default();
+    for _ in 0..MAX_MY_COLOURS {
+        assert!(palette.pin(paint_recipe(0)).is_some());
+    }
+    assert_eq!(palette.pin(paint_recipe(0)), None);
+    assert_eq!(palette.my_colours.len(), MAX_MY_COLOURS);
+    assert!(palette.validate(1).is_ok());
+}
+
+#[test]
+fn a_palette_with_more_pinned_colours_than_the_limit_is_invalid() {
+    let palette = Palette {
+        my_colours: vec![paint_recipe(0); MAX_MY_COLOURS + 1],
+        circle: vec![],
+    };
+    assert_eq!(
+        palette.validate(1).unwrap_err(),
+        "palette holds 65 pinned colours, the limit is 64"
+    );
+}
+
+#[test]
+fn a_circle_longer_than_the_colours_it_can_name_is_refused_before_looking_for_repeats() {
+    let palette = Palette {
+        my_colours: vec![paint_recipe(0)],
+        circle: vec![ColourRef::Paint(0); 4],
+    };
+    assert_eq!(
+        palette.validate(2).unwrap_err(),
+        "circle holds 4 colours, the painting and the palette have 3"
+    );
+}
+
+#[test]
+fn a_colour_twice_on_the_circle_is_named_in_words() {
+    let palette = Palette {
+        my_colours: vec![paint_recipe(0)],
+        circle: vec![ColourRef::Mine(0), ColourRef::Paint(1), ColourRef::Mine(0)],
+    };
+    assert_eq!(
+        palette.validate(2).unwrap_err(),
+        "circle holds my colour 0 twice"
+    );
+    let palette = Palette {
+        my_colours: vec![],
+        circle: vec![ColourRef::Paint(1), ColourRef::Paint(1)],
+    };
+    assert_eq!(
+        palette.validate(4).unwrap_err(),
+        "circle holds paint 1 twice"
     );
 }
