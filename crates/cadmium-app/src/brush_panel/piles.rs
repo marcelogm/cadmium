@@ -5,7 +5,7 @@ use cadmium_engine::pigments::MAX_SLOTS;
 use gtk::{gdk, glib};
 
 use super::BrushPanel;
-use super::presentation::pigment_click;
+use super::presentation::colour_click;
 use super::snapshot::{PigmentChoice, Snapshot};
 use crate::swatch::{Swatch, SwatchShape};
 
@@ -114,7 +114,7 @@ fn addable_row(choice: &PigmentChoice) -> gtk::ListBoxRow {
 }
 
 fn click_pile_with_current_modifiers(panel: &Weak<BrushPanel>, slot: usize, button: &gtk::Button) {
-    let click = pigment_click(current_modifiers(button));
+    let click = colour_click(current_modifiers(button));
     if let Some(panel) = panel.upgrade() {
         panel.click_pile(slot, click);
     }

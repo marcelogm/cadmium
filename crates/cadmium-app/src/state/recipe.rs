@@ -1,3 +1,4 @@
+use cadmium_engine::palette::Recipe;
 use cadmium_engine::pigments::MAX_SLOTS;
 
 const NEGLIGIBLE_PICKED_FRACTION: f32 = 1e-3;
@@ -27,44 +28,46 @@ pub(super) fn recipe_for_palette(
         .collect()
 }
 
+/// What a click on a colour asks for: the colour alone, or a little of it on top of what is held.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PigmentClick {
+pub enum ColourClick {
     Load,
     MixIn,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum PigmentDip {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum ColourDip {
     CleanAndLoad,
-    AddOnTop(usize),
+    AddOnTop(Recipe),
 }
 
-fn recipe_after_mixing(recipe: &[(usize, f32)], slot: usize) -> Vec<(usize, f32)> {
-    let total: f32 = recipe.iter().map(|(_, parts)| parts.max(0.0)).sum();
-    if total <= 0.0 {
-        return vec![(slot, 1.0)];
-    }
-    let added = PARTIAL_DIP * total;
-    let mut recipe = recipe.to_vec();
+fn selected_total(selected: &[(usize, f32)]) -> f32 {
+    selected.iter().map(|(_, parts)| parts.max(0.0)).sum()
+}
+
+fn add_parts(recipe: &mut Vec<(usize, f32)>, slot: usize, added: f32) {
     match recipe.iter_mut().find(|(chosen, _)| *chosen == slot) {
         Some((_, parts)) => *parts += added,
         None => recipe.push((slot, added)),
     }
-    recipe
 }
 
-pub(super) fn plan_pigment_dip(
-    recipe: &[(usize, f32)],
-    slot: usize,
-    click: PigmentClick,
-) -> (Vec<(usize, f32)>, PigmentDip) {
-    match click {
-        PigmentClick::MixIn => (
-            recipe_after_mixing(recipe, slot),
-            PigmentDip::AddOnTop(slot),
-        ),
-        PigmentClick::Load => (vec![(slot, 1.0)], PigmentDip::CleanAndLoad),
+/// The selection a click on `colour` leaves and how the tool takes the paint: mixing in adds
+/// `PARTIAL_DIP` of what is selected, and loads the colour when nothing is.
+pub(super) fn plan_colour_load(
+    selected: &[(usize, f32)],
+    colour: &Recipe,
+    click: ColourClick,
+) -> (Vec<(usize, f32)>, ColourDip) {
+    let total = selected_total(selected);
+    if click == ColourClick::Load || total <= 0.0 {
+        return (recipe_from_fractions(colour), ColourDip::CleanAndLoad);
     }
+    let mut recipe = selected.to_vec();
+    for (slot, share) in recipe_from_fractions(colour) {
+        add_parts(&mut recipe, slot, share * PARTIAL_DIP * total);
+    }
+    (recipe, ColourDip::AddOnTop(*colour))
 }
 
 #[cfg(test)]

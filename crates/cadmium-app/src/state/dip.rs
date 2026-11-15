@@ -1,11 +1,9 @@
 use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
 use cadmium_engine::canvas::PaintTotals;
-use cadmium_engine::engine::{BrushReadout, FULL_DIP};
+use cadmium_engine::engine::BrushReadout;
 use cadmium_engine::pigments::Mixture;
 
-use super::recipe::{
-    PARTIAL_DIP, PigmentClick, PigmentDip, plan_pigment_dip, recipe_from_fractions,
-};
+use super::recipe::recipe_from_fractions;
 use super::{AppState, EMPTY_MIXTURE};
 
 pub(super) fn fill_level(volume: f32, capacity: f32) -> f32 {
@@ -55,18 +53,12 @@ impl AppState {
     }
 
     pub(super) fn clean_and_load(&mut self) {
-        if !self.holds_knife() {
-            self.session.reload_brush(&self.gpu);
-            return;
-        }
-        self.session.clean_brush(&self.gpu);
-        let mixture = self.palette_mixture();
-        if !mixture.is_empty() {
-            self.dip(&mixture, FULL_DIP);
+        if self.session.clean_and_load(&self.gpu).is_err() {
+            self.wake();
         }
     }
 
-    fn dip(&mut self, mixture: &Mixture, amount: f32) {
+    pub(super) fn dip(&mut self, mixture: &Mixture, amount: f32) {
         if self.session.dip(&self.gpu, mixture, amount).is_err() {
             self.wake();
         }
@@ -91,23 +83,6 @@ impl AppState {
     pub fn clean_brush(&mut self) {
         self.put_down_stroke_tool();
         self.session.clean_brush(&self.gpu);
-        self.measure_brush_once_painted();
-        self.wake();
-    }
-
-    pub fn choose_pigment(&mut self, slot: usize, click: PigmentClick) {
-        self.put_down_stroke_tool();
-        let (recipe, dip) = plan_pigment_dip(&self.session.brush.recipe, slot, click);
-        self.session.brush.recipe = recipe;
-        match dip {
-            PigmentDip::CleanAndLoad => self.clean_and_load(),
-            PigmentDip::AddOnTop(slot) => {
-                let mut single = self.session.brush.clone();
-                single.recipe = vec![(slot, 1.0)];
-                let mixture = single.reservoir_mixture(self.slot_count());
-                self.dip(&mixture, PARTIAL_DIP);
-            }
-        }
         self.measure_brush_once_painted();
         self.wake();
     }

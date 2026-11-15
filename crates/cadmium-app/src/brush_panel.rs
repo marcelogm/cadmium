@@ -2,12 +2,13 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
+use cadmium_engine::palette::ColourRef;
 use cadmium_studio::BrushStudio;
 use gtk::glib;
 
 use crate::LOG_DOMAIN;
 use crate::side_panel::panel_root;
-use crate::state::{AppState, PigmentClick, SharedState};
+use crate::state::{AppState, ColourClick, SharedState};
 use crate::swatch::Swatch;
 use crate::thumbnails::{ThumbnailCache, ThumbnailKey};
 use crate::tools::Tool;
@@ -254,8 +255,8 @@ impl BrushPanel {
         self.after_brush_change();
     }
 
-    fn click_pile(self: &Rc<Self>, slot: usize, click: PigmentClick) {
-        self.change_brush(|state| state.click_pile(slot, click));
+    fn click_pile(self: &Rc<Self>, slot: usize, click: ColourClick) {
+        self.change_brush(|state| state.click_colour(ColourRef::Paint(slot), click));
     }
 
     fn add_pile(self: &Rc<Self>, id: &str) {

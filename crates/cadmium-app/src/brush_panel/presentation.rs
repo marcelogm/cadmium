@@ -4,7 +4,7 @@ use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
 use crate::sliders::format_param;
-use crate::state::PigmentClick;
+use crate::state::ColourClick;
 use crate::tools::Tool;
 use crate::tools::panel::{CLEAN_LABEL, ToolPanel};
 
@@ -79,11 +79,11 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
     )
 }
 
-pub(super) fn pigment_click(modifiers: gdk::ModifierType) -> PigmentClick {
+pub(super) fn colour_click(modifiers: gdk::ModifierType) -> ColourClick {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-        PigmentClick::MixIn
+        ColourClick::MixIn
     } else {
-        PigmentClick::Load
+        ColourClick::Load
     }
 }
 
