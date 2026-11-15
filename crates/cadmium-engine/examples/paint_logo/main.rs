@@ -266,9 +266,12 @@ fn main() {
     paint_bonds(&mut painter);
     paint_atoms(&mut painter);
 
+    let slots = &painter.session.canvas.spec.pigment_slots;
+    let mut sheet = PaintSession::for_sheet(&painter.gpu, slots).expect("sheet");
     save(
         &painter.gpu,
         &mut painter.session,
+        &mut sheet,
         &out.join("logo.cadmium"),
     )
     .expect("save");

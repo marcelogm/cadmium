@@ -58,7 +58,7 @@ fn unsupported_version_of_a_document_claiming(format: u32) -> Option<u32> {
 
 #[test]
 fn every_format_but_the_current_one_is_unsupported() {
-    for format in [1, 2, 3, 4, 5, 6, 8] {
+    for format in [1, 2, 3, 4, 5, 6, 7, 9] {
         let found = unsupported_version_of_a_document_claiming(format);
         assert_eq!(found, Some(format), "format {format}");
     }

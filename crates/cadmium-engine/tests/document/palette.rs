@@ -1,26 +1,21 @@
 use cadmium_engine::{
     canvas::CanvasSpec,
-    document::{self, DocumentSnapshot},
+    document::DocumentSnapshot,
     gpu::GpuContext,
     palette::{ColourRef, MAX_MY_COLOURS, Palette, default_circle, paint_recipe},
     session::PaintSession,
 };
 
 use crate::entries::{Entries, format_reason, read_entries};
-use crate::{TempDir, painted_session, painted_spec};
+use crate::{TempDir, blank_sheet, open_painting, painted_session, painted_spec, save_painting};
 
 #[test]
 fn a_painting_reopens_with_its_pinned_colours_and_its_circle() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("palette");
     let (mut s, saved) = edited_palette(&gpu);
-    document::save(&gpu, &mut s, &dir.file("p.cadmium")).unwrap();
-    assert_eq!(
-        document::open(&gpu, &dir.file("p.cadmium"))
-            .unwrap()
-            .palette,
-        saved
-    );
+    save_painting(&gpu, &mut s, &dir.file("p.cadmium"));
+    assert_eq!(open_painting(&gpu, &dir.file("p.cadmium")).palette, saved);
 }
 
 #[test]
@@ -40,7 +35,7 @@ fn a_palette_pointing_outside_the_painting_is_a_format_error() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("bad-palette");
     let path = dir.file("p.cadmium");
-    document::save(&gpu, &mut painted_session(&gpu), &path).unwrap();
+    save_painting(&gpu, &mut painted_session(&gpu), &path);
     let entries = Entries::saved(&path).edit_manifest(|manifest| {
         manifest["palette"]["circle"] = serde_json::json!([{ "Paint": 7 }]);
     });
@@ -53,7 +48,7 @@ fn a_painting_with_more_pinned_colours_than_the_limit_is_a_format_error() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("crowded-palette");
     let path = dir.file("p.cadmium");
-    document::save(&gpu, &mut painted_session(&gpu), &path).unwrap();
+    save_painting(&gpu, &mut painted_session(&gpu), &path);
     let entries = Entries::saved(&path).edit_manifest(|manifest| {
         manifest["palette"]["my_colours"] =
             serde_json::json!(vec![paint_recipe(0); MAX_MY_COLOURS + 1]);
@@ -70,7 +65,7 @@ fn a_painting_without_a_palette_is_a_format_error() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("no-palette");
     let path = dir.file("p.cadmium");
-    document::save(&gpu, &mut painted_session(&gpu), &path).unwrap();
+    save_painting(&gpu, &mut painted_session(&gpu), &path);
     let entries = Entries::saved(&path).edit_manifest(|manifest| {
         manifest.as_object_mut().unwrap().remove("palette");
     });
@@ -90,9 +85,13 @@ fn edited_palette(gpu: &GpuContext) -> (PaintSession, Palette) {
 fn a_snapshot_restored_into_a_running_session_brings_its_palette() {
     let gpu = GpuContext::new().unwrap();
     let (mut saved, palette) = edited_palette(&gpu);
-    let snapshot = DocumentSnapshot::capture(&gpu, &mut saved).unwrap();
+    let mut saved_sheet = blank_sheet(&gpu, &saved);
+    let snapshot = DocumentSnapshot::capture(&gpu, &mut saved, &mut saved_sheet).unwrap();
     let mut running = painted_session(&gpu);
-    snapshot.restore_into(&gpu, &mut running).unwrap();
+    let mut running_sheet = blank_sheet(&gpu, &running);
+    snapshot
+        .restore_into(&gpu, &mut running, &mut running_sheet)
+        .unwrap();
     assert_eq!(running.palette, palette);
 }
 

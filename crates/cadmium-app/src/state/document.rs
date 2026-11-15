@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use cadmium_engine::canvas::{CanvasError, CanvasSpec};
 use cadmium_engine::document::{DocumentSnapshot, ExportedImage};
 use cadmium_engine::gpu::GpuLost;
+use cadmium_engine::session::PaintSession;
 
 use super::recipe::recipe_for_palette;
 use super::{AppState, EaselId};
@@ -25,13 +26,18 @@ impl AppState {
     ) -> Result<(), CanvasError> {
         self.release(EaselId::Painting);
         let old_palette = self.painting.session.canvas.spec.pigment_slots.clone();
-        let restored = snapshot.restore_into(&self.gpu, &mut self.painting.session);
+        let slots = &self.painting.session.canvas.spec.pigment_slots;
+        let restored = PaintSession::for_sheet(&self.gpu, slots).and_then(|mut sheet| {
+            snapshot.restore_into(&self.gpu, &mut self.painting.session, &mut sheet)
+        });
         self.adopt_document(&old_palette, restored.map(|()| Some(path)));
         restored
     }
 
     pub fn capture_document(&mut self) -> Result<DocumentSnapshot, GpuLost> {
-        DocumentSnapshot::capture(&self.gpu, &mut self.painting.session)
+        let slots = &self.painting.session.canvas.spec.pigment_slots;
+        let mut sheet = PaintSession::for_sheet(&self.gpu, slots).map_err(|_| GpuLost)?;
+        DocumentSnapshot::capture(&self.gpu, &mut self.painting.session, &mut sheet)
     }
 
     pub fn render_export(&mut self) -> Result<ExportedImage, GpuLost> {

@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 
 use crate::canvas::{CanvasSpec, StateTexture};
 use crate::pigments::PigmentDb;
+use crate::sheet::sheet_spec;
 use crate::spectral::BANDS;
 
 use super::relief::dry_relief;
 use super::{
     DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY, Manifest, PAINTING_PREFIX,
-    StateBytes, THICKNESS_UNITS, state_entry,
+    SHEET_PREFIX, StateBytes, THICKNESS_UNITS, state_entry,
 };
 
 const ZSTD_LEVEL: i32 = 3;
@@ -40,6 +41,8 @@ impl DocumentSnapshot {
         archive.start_file(MANIFEST_ENTRY, stored_entry())?;
         archive.write_all(manifest)?;
         write_states(&mut archive, PAINTING_PREFIX, &self.spec, &self.states)?;
+        let sheet = sheet_spec(&self.spec.pigment_slots);
+        write_states(&mut archive, SHEET_PREFIX, &sheet, &self.sheet_states)?;
         archive.finish()?;
         Ok(())
     }
