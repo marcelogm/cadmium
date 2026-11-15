@@ -165,6 +165,13 @@ fn painting_texels(s: &PaintSession, snapshot: &[Vec<u8>]) -> Vec<Vec<u8>> {
     texels_where(s, snapshot, false)
 }
 
+fn cut_by_the_edge() -> TileCoord {
+    TileCoord {
+        x: (MARGIN_PX + 299) / TILE_SIZE,
+        y: (MARGIN_PX + 100) / TILE_SIZE,
+    }
+}
+
 fn paint_out_across_the_right_edge(gpu: &GpuContext, s: &mut PaintSession) -> Vec<Vec<u8>> {
     let margin = f64::from(MARGIN_PX);
     load(gpu, s, BLUE);
@@ -178,10 +185,7 @@ fn clearing_the_margin_resets_it_and_leaves_every_texel_of_the_painting_alone() 
     let gpu = GpuContext::new().unwrap();
     let mut s = painting_session(&gpu, 300, 200);
     let blank = state_snapshot(&gpu, &s);
-    let cut_by_the_edge = TileCoord {
-        x: (MARGIN_PX + 299) / TILE_SIZE,
-        y: (MARGIN_PX + 100) / TILE_SIZE,
-    };
+    let cut_by_the_edge = cut_by_the_edge();
     let painted = paint_out_across_the_right_edge(&gpu, &mut s);
     let outcome = without_wgpu_errors(&gpu, || s.clear_margin(&gpu));
     assert_eq!(outcome, ClearOutcome::Cleared { undoable: true });
@@ -247,4 +251,21 @@ fn there_is_nothing_to_clear_on_a_clean_margin_or_without_one() {
     let mut without = support::session(&gpu);
     stroke(&gpu, &mut without, 128.0, 40.0, 470.0);
     assert_eq!(without.clear_margin(&gpu), ClearOutcome::NothingToClear);
+}
+
+#[test]
+fn redoing_a_margin_clear_leaves_the_margin_dry_and_the_edge_of_the_painting_wet() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    let wholly_in_margin = TileCoord { x: 3, y: 1 };
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, margin_row(), 40.0, 400.0);
+    paint_out_across_the_right_edge(&gpu, &mut s);
+    assert!(s.canvas.wet_tiles.contains(wholly_in_margin));
+    s.clear_margin(&gpu);
+    assert!(s.undo(&gpu));
+    assert!(s.canvas.wet_tiles.contains(wholly_in_margin));
+    assert!(s.redo(&gpu));
+    assert!(!s.canvas.wet_tiles.contains(wholly_in_margin));
+    assert!(s.canvas.wet_tiles.contains(cut_by_the_edge()));
 }
