@@ -187,7 +187,8 @@ fn pigment_chips(db: &PigmentDb) -> (gtk::FlowBox, Vec<(&'static str, gtk::Toggl
 }
 
 fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow) {
-    let format = PaintingFormat::matching(initial.width, initial.height);
+    let painting = initial.painting_rect();
+    let format = PaintingFormat::matching(painting.width, painting.height);
     let format_row = combo_row(
         "Format",
         PaintingFormat::ALL.map(PaintingFormat::label),
@@ -203,8 +204,8 @@ fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow
     };
     (
         format_row,
-        side_row("Width", initial.width),
-        side_row("Height", initial.height),
+        side_row("Width", painting.width),
+        side_row("Height", painting.height),
     )
 }
 

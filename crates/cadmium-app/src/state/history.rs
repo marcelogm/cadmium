@@ -1,4 +1,5 @@
 use cadmium_engine::gpu::GpuContext;
+use cadmium_engine::session::ClearOutcome;
 
 use super::{AppState, Easel, EaselId};
 
@@ -49,6 +50,17 @@ impl AppState {
         self.edits.record();
         self.wake();
         DryOutcome::Dried { undoable }
+    }
+
+    /// Clears the margin around the painting of wet paint, dry paint and graphite.
+    pub fn clear_margin(&mut self) -> ClearOutcome {
+        self.release(EaselId::Painting);
+        let outcome = self.painting.session.clear_margin(&self.gpu);
+        if matches!(outcome, ClearOutcome::Cleared { .. }) {
+            self.edits.record();
+        }
+        self.wake();
+        outcome
     }
 
     pub fn undo(&mut self, id: EaselId) -> bool {

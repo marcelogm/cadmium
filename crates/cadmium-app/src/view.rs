@@ -1,6 +1,8 @@
 use std::f64::consts::{PI, TAU};
 
+use cadmium_engine::canvas::PaintingRect;
 use cadmium_engine::present::ViewTransform;
+use cadmium_engine::sheet::{SHEET_HEIGHT_PX, SHEET_WIDTH_PX};
 
 pub const MIN_ZOOM: f32 = 0.05;
 pub const MAX_ZOOM: f32 = 16.0;
@@ -13,15 +15,42 @@ pub fn clamp_zoom(zoom: f32) -> f32 {
     }
 }
 
-pub fn fit_view(canvas_size: (u32, u32), viewport_px: (f64, f64), margin_px: f64) -> ViewTransform {
-    let (canvas_width, canvas_height) = (f64::from(canvas_size.0), f64::from(canvas_size.1));
+/// Of the margin around a painting, the share "Fit" keeps in view on each side is
+/// `1 / FITTED_MARGIN_DIVISOR`.
+const FITTED_MARGIN_DIVISOR: u32 = 2;
+
+/// The whole mixing sheet, which has no margin.
+pub const MIXING_SHEET: PaintingRect = PaintingRect {
+    x: 0,
+    y: 0,
+    width: SHEET_WIDTH_PX,
+    height: SHEET_HEIGHT_PX,
+};
+
+/// What "Fit" frames: `painting` grown by part of its margin on every side.
+pub fn fitted_rect(painting: PaintingRect, margin_px: u32) -> PaintingRect {
+    let border_px = margin_px / FITTED_MARGIN_DIVISOR;
+    PaintingRect {
+        x: painting.x.saturating_sub(border_px),
+        y: painting.y.saturating_sub(border_px),
+        width: painting.width + 2 * border_px,
+        height: painting.height + 2 * border_px,
+    }
+}
+
+/// The upright view that fits `painting` in the viewport, centred, with `margin_px` of
+/// screen around it on the tight axis.
+pub fn fit_view(painting: PaintingRect, viewport_px: (f64, f64), margin_px: f64) -> ViewTransform {
+    let (width, height) = (f64::from(painting.width), f64::from(painting.height));
+    let centre_x = f64::from(painting.x) + width / 2.0;
+    let centre_y = f64::from(painting.y) + height / 2.0;
     let usable_width = (viewport_px.0 - 2.0 * margin_px).max(1.0);
     let usable_height = (viewport_px.1 - 2.0 * margin_px).max(1.0);
-    let zoom = clamp_zoom((usable_width / canvas_width).min(usable_height / canvas_height) as f32);
+    let zoom = clamp_zoom((usable_width / width).min(usable_height / height) as f32);
     let zoom_f64 = f64::from(zoom);
     ViewTransform {
-        origin_x: (canvas_width / 2.0 - viewport_px.0 / 2.0 / zoom_f64) as f32,
-        origin_y: (canvas_height / 2.0 - viewport_px.1 / 2.0 / zoom_f64) as f32,
+        origin_x: (centre_x - viewport_px.0 / 2.0 / zoom_f64) as f32,
+        origin_y: (centre_y - viewport_px.1 / 2.0 / zoom_f64) as f32,
         zoom,
         rotation: 0.0,
     }

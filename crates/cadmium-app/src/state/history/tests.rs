@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use cadmium_engine::canvas::MARGIN_PX;
+use cadmium_engine::session::ClearOutcome;
 use cadmium_engine::stroke::Tool;
 
 use super::*;
@@ -47,6 +49,29 @@ fn the_painting_is_not_dried_under_the_palette_dialog() {
     assert_eq!(state.dry(), DryOutcome::PaletteOpen);
     state.end_palette_edit();
     assert_eq!(state.dry(), DryOutcome::Dried { undoable: true });
+}
+
+#[test]
+fn clearing_the_margin_is_an_edit_that_undo_takes_back() {
+    let mut state = painting_state();
+    assert_eq!(state.clear_margin(), ClearOutcome::NothingToClear);
+    assert!(!state.has_unsaved_edits());
+    state.click_colour(ColourRef::Paint(0), ColourClick::Load);
+    stroke(
+        &mut state,
+        Tool::Brush,
+        &row_samples(f64::from(MARGIN_PX) / 2.0),
+    );
+    let mark = state.edit_mark();
+    state.saved_to(PathBuf::from("margin.cadmium"), mark);
+    assert_eq!(
+        state.clear_margin(),
+        ClearOutcome::Cleared { undoable: true }
+    );
+    assert!(state.has_unsaved_edits());
+    assert_eq!(wet_volume(&state), 0.0);
+    assert!(state.undo(EaselId::Painting));
+    assert!(wet_volume(&state) > 0.0);
 }
 
 #[test]

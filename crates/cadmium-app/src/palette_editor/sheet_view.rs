@@ -17,7 +17,7 @@ use crate::input::{PaintSurfaceWidget, attach_stylus};
 use crate::presenter::{FramePresenter, PresentSource};
 use crate::state::{EaselId, SharedState};
 use crate::surface_scale::{SurfaceScaleWatch, device_scale, viewport_px};
-use crate::view::{fit_view, viewport_to_canvas};
+use crate::view::{MIXING_SHEET, fit_view, viewport_to_canvas};
 
 const SHEET_CURSOR: &str = "crosshair";
 const SHEET_FRAME_CLASS: &str = "card";
@@ -84,7 +84,7 @@ impl SheetView {
     fn fitted_view(&self) -> ViewTransform {
         let (width_px, height_px) = viewport_px(self);
         let viewport = (f64::from(width_px), f64::from(height_px));
-        fit_view((SHEET_WIDTH_PX, SHEET_HEIGHT_PX), viewport, 0.0)
+        fit_view(MIXING_SHEET, viewport, 0.0)
     }
 
     fn cursor_outline(&self) -> Option<CursorOutline> {

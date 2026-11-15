@@ -2,7 +2,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
+use cadmium_engine::canvas::{CanvasSpec, PaintingRequest, Primer, Weave};
 use cadmium_engine::pigments::PigmentDb;
 use gtk::glib;
 
@@ -75,7 +75,7 @@ impl NewPaintingDialog {
         let widgets = self.widgets();
         widgets.width_row.update();
         widgets.height_row.update();
-        CanvasSpec {
+        CanvasSpec::for_painting(PaintingRequest {
             width: widgets.width_row.value() as u32,
             height: widgets.height_row.value() as u32,
             primer: PRIMERS
@@ -85,8 +85,7 @@ impl NewPaintingDialog {
                 .get(widgets.weave_row.selected() as usize)
                 .map_or(Weave::Linen, |(weave, _)| *weave),
             pigment_slots: self.with_selection(PigmentSelection::slots),
-            margin_px: 0,
-        }
+        })
     }
 
     fn widgets(&self) -> &Widgets {

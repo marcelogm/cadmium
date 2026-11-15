@@ -209,6 +209,10 @@
         <attribute name="label">Edit Palette…</attribute>
         <attribute name="action">win.edit-palette</attribute>
       </item>
+      <item>
+        <attribute name="label">Clear Margin</attribute>
+        <attribute name="action">win.clear-margin</attribute>
+      </item>
     </section>
     <section>
       <item>
