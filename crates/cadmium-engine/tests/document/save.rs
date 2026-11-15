@@ -279,15 +279,42 @@ fn a_snapshot_restored_into_a_running_session_replaces_its_painting() {
     }
 }
 
+/// The wet volume on the painting, leaving out the margin around it.
+fn painting_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
+    let spec = &s.canvas.spec;
+    s.canvas
+        .read_f32(gpu, StateTexture::WetVol)
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| {
+            let index = *index as u32;
+            !spec.is_in_margin(index % spec.width, index / spec.width)
+        })
+        .map(|(_, volume)| f64::from(*volume))
+        .sum()
+}
+
 #[test]
 fn a_reopened_painting_keeps_its_dirty_margin_and_can_still_clear_it() {
     let gpu = GpuContext::new().unwrap();
     let dir = TempDir::new("margin");
     let mut painting = painting_session(&gpu, 300, 200);
     let mut sheet = PaintSession::for_sheet(&gpu, &painting.canvas.spec.pigment_slots).unwrap();
+    let margin = f64::from(MARGIN_PX);
     load(&gpu, &mut painting, 0);
-    stroke(&gpu, &mut painting, f64::from(MARGIN_PX) / 2.0, 40.0, 400.0);
+    stroke(&gpu, &mut painting, margin / 2.0, 40.0, 400.0);
+    load(&gpu, &mut painting, 0);
+    stroke(
+        &gpu,
+        &mut painting,
+        margin + 100.0,
+        margin + 20.0,
+        margin + 280.0,
+    );
     let saved = painting.canvas.wet_totals(&gpu).unwrap();
+    let on_the_painting = painting_wet_volume(&gpu, &painting);
+    assert!(on_the_painting > 0.0 && on_the_painting < saved.volume);
     document::save(&gpu, &mut painting, &mut sheet, &dir.file("margin.cadmium")).unwrap();
     let mut opened = document::open(&gpu, &dir.file("margin.cadmium")).unwrap();
     assert_eq!(opened.painting.canvas.spec, painting.canvas.spec);
@@ -296,5 +323,7 @@ fn a_reopened_painting_keeps_its_dirty_margin_and_can_still_clear_it() {
         opened.painting.clear_margin(&gpu),
         ClearOutcome::Cleared { .. }
     ));
-    assert_eq!(opened.painting.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
+    let left = opened.painting.canvas.wet_totals(&gpu).unwrap().volume;
+    assert_eq!(painting_wet_volume(&gpu, &opened.painting), on_the_painting);
+    assert!((left - on_the_painting).abs() <= on_the_painting * 1e-6);
 }

@@ -11,12 +11,11 @@ use crate::spectral::BANDS;
 use super::relief::dry_height_over_weave;
 use super::{
     DENSITY_BYTES, DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY,
-    MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, SHEET_PREFIX, StateBytes, THICKNESS_BYTES,
-    THICKNESS_UNITS, state_entry,
+    MAX_GRAPHITE_DENSITY, Manifest, OLDEST_READABLE_FORMAT, PAINTING_PREFIX, SHEET_PREFIX,
+    StateBytes, THICKNESS_BYTES, THICKNESS_UNITS, state_entry,
 };
 
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
-const OLDEST_READABLE_FORMAT: u32 = 9;
 
 #[derive(serde::Deserialize)]
 struct FormatProbe {

@@ -16,6 +16,7 @@ mod write;
 pub use export::ExportedImage;
 
 const FORMAT_VERSION: u32 = 9;
+const OLDEST_READABLE_FORMAT: u32 = 9;
 const PAINTING_PREFIX: &str = "";
 const SHEET_PREFIX: &str = "sheet/";
 const DRY_RELIEF_NAME: &str = "dry_relief";
@@ -41,7 +42,7 @@ impl fmt::Display for DocumentError {
             DocumentError::Format(reason) => write!(f, "not a valid Cadmium painting: {reason}"),
             DocumentError::UnsupportedVersion(version) => write!(
                 f,
-                "painting uses file format {version}, this version of Cadmium reads only format {FORMAT_VERSION}"
+                "painting uses file format {version}, which this version of Cadmium cannot read"
             ),
             DocumentError::GpuLost => write!(f, "{GpuLost}"),
             DocumentError::OutOfVideoMemory => write!(f, "{}", CanvasError::OutOfVideoMemory),
