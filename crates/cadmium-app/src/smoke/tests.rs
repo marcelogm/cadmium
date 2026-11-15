@@ -5,11 +5,13 @@ use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
     PRESENT_MODE, SAVE, SCREENSHOT, STROKE, TOOL,
 };
+use super::palette::PALETTE;
 use super::steps::{
     STROKE_PRESSURE_END, STROKE_PRESSURE_START, STROKE_SAMPLES, SmokeDialog, SmokeStep,
     smoke_stroke,
 };
 use super::*;
+use crate::state::PaletteMode;
 
 pub(super) fn lookup<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
     move |name| {
@@ -273,4 +275,27 @@ fn brush_delete_zero_and_empty_brush_values_do_nothing() {
         (BRUSH_IMPORT, ""),
     ]));
     assert_eq!(config, None);
+}
+
+#[test]
+fn the_palette_dialog_opens_in_the_asked_mode_before_the_screenshot() {
+    let config = SmokeConfig::from_lookup(lookup(&[
+        (PALETTE, "mixing"),
+        (SCREENSHOT, "/tmp/shot.png"),
+    ]))
+    .unwrap();
+    assert_eq!(
+        config.steps(),
+        [
+            SmokeStep::EditPalette(PaletteMode::Mixing),
+            SmokeStep::Screenshot(PathBuf::from("/tmp/shot.png")),
+            SmokeStep::Quit,
+        ]
+    );
+}
+
+#[test]
+fn an_unknown_palette_mode_opens_no_dialog() {
+    let config = SmokeConfig::from_lookup(lookup(&[(PALETTE, "wheel")])).unwrap();
+    assert_eq!(config.steps(), [SmokeStep::Quit]);
 }

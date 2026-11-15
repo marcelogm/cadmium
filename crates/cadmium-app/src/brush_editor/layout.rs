@@ -3,7 +3,7 @@
 
 use adw::prelude::*;
 
-const DIALOG_SIZE: [i32; 2] = [1240, 840];
+pub(crate) const DIALOG_SIZE: [i32; 2] = [1240, 840];
 /// The drawing column's width, its margins included: 312 for the schematic and examples.
 const DRAWING_WIDTH: i32 = 340;
 const CONTROLS_WIDTH: i32 = 360;

@@ -228,7 +228,7 @@ fn add_chosen_pile(
     }
 }
 
-fn current_modifiers(widget: &impl IsA<gtk::Widget>) -> gdk::ModifierType {
+pub(crate) fn current_modifiers(widget: &impl IsA<gtk::Widget>) -> gdk::ModifierType {
     widget
         .display()
         .default_seat()

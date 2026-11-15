@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::PresentRequest;
+use cadmium_engine::sheet::{SHEET_HEIGHT_PX, SHEET_WIDTH_PX};
 use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -14,7 +15,7 @@ use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
 use crate::state::{AppState, EaselId};
-use crate::view::{clamp_zoom, cover_view};
+use crate::view::{clamp_zoom, cover_view, fit_view};
 
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
 const DEBUG_ENABLED: &str = "1";
@@ -33,6 +34,8 @@ pub enum PresentSource {
     Painting,
     /// The brush editor's test sheet, its canvas covering the target.
     TestSheet(SheetLink),
+    /// The Palette dialog's mixing sheet, its canvas fitted whole in the target.
+    Sheet,
 }
 
 impl PresentSource {
@@ -57,8 +60,28 @@ impl PresentSource {
             PresentSource::TestSheet(sheet) => {
                 encode_test_sheet(sheet, state.now_ms(), gpu, target, encoder);
             }
+            PresentSource::Sheet => encode_mixing_sheet(state, gpu, target, encoder),
         }
     }
+}
+
+/// Paints the mixing sheet and presents it whole, fitted in `target`.
+fn encode_mixing_sheet(
+    state: &mut AppState,
+    gpu: &GpuContext,
+    target: &wgpu::Texture,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    state.encode_frame(EaselId::Sheet, encoder);
+    let viewport = (f64::from(target.width()), f64::from(target.height()));
+    let view = fit_view((SHEET_WIDTH_PX, SHEET_HEIGHT_PX), viewport, 0.0);
+    let session = &mut state.sheet.session;
+    session.presenter.encode_present(
+        gpu,
+        PresentRequest::of_canvas(&session.canvas, view),
+        target,
+        encoder,
+    );
 }
 
 /// Paints and presents the test sheet at `clock_ms`, its canvas covering `target`;

@@ -8,12 +8,12 @@ use cadmium_engine::stroke::StrokeSample;
 use gtk::{glib, graphene, gsk};
 
 use crate::LOG_DOMAIN;
-use crate::state::EaselId;
+use crate::state::{EaselId, PaletteMode};
 use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
 use super::brushes::BrushStep;
-use super::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig, editor};
+use super::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig, editor, palette};
 
 const TOOL_ACTION: &str = "win.tool";
 const STROKE_PIGMENT: &str = "ultramarine_blue";
@@ -78,6 +78,7 @@ pub(super) enum SmokeStep {
     Export(PathBuf),
     Brush(BrushStep),
     ShowPage(String),
+    EditPalette(PaletteMode),
     Screenshot(PathBuf),
     Quit,
 }
@@ -91,7 +92,10 @@ impl SmokeStep {
         window: &CadmiumWindow,
     ) -> bool {
         match self {
-            SmokeStep::ChooseTool(_) | SmokeStep::OpenDialog(_) | SmokeStep::ShowPage(_) => true,
+            SmokeStep::ChooseTool(_)
+            | SmokeStep::OpenDialog(_)
+            | SmokeStep::ShowPage(_)
+            | SmokeStep::EditPalette(_) => true,
             SmokeStep::Brush(step) => step.is_ready(window),
             SmokeStep::Save(_) | SmokeStep::Open(_) | SmokeStep::Export(_) => true,
             SmokeStep::PaintStroke => window.canvas().presented_frames() > 0,
@@ -99,6 +103,7 @@ impl SmokeStep {
                 frame >= earliest_end_frame
                     && !window.thumbnails_pending()
                     && editor::ready_for_screenshot(window, expects_editor)
+                    && palette::sheet_at_rest(window)
             }
             SmokeStep::Quit => frame >= earliest_end_frame,
         }
@@ -126,6 +131,7 @@ impl SmokeStep {
             }
             SmokeStep::Brush(step) => step.run(window),
             SmokeStep::ShowPage(name) => window.show_sidebar_page(name),
+            SmokeStep::EditPalette(mode) => palette::open(window, *mode),
             SmokeStep::Screenshot(path) => match save_screenshot(window, path) {
                 Err(ScreenshotError::NotRenderedYet) if frames_late < SCREENSHOT_RETRY_FRAMES => {
                     return false;
@@ -145,7 +151,7 @@ impl SmokeStep {
 
 impl SmokeConfig {
     /// The steps in the order they run: tool, dialog, brush import, brush pick, stroke, save,
-    /// open, export, brush export, brush delete, page, brush editor,
+    /// open, export, brush export, brush delete, page, Palette dialog, brush editor,
     /// sheet stroke, screenshot, quit.
     /// The brush folder (`CADMIUM_SMOKE_BRUSH_DIR`) is not a step: the library is loaded from
     /// it at start-up.
@@ -162,6 +168,7 @@ impl SmokeConfig {
         steps.extend(self.export.clone().map(SmokeStep::Export));
         steps.extend(self.brushes.after_files());
         steps.extend(self.page.clone().map(SmokeStep::ShowPage));
+        steps.extend(self.palette.map(SmokeStep::EditPalette));
         steps.extend(self.brushes.editor_steps());
         steps.extend(self.screenshot.clone().map(SmokeStep::Screenshot));
         steps.push(SmokeStep::Quit);
@@ -170,11 +177,13 @@ impl SmokeConfig {
 }
 
 impl SmokeStep {
-    /// Whether this step opens the brush editor, which the screenshot must then show.
+    /// Whether this step opens an editor (the brush editor or the Palette dialog), which the
+    /// screenshot must then show.
     pub(super) fn opens_editor(&self) -> bool {
         matches!(
             self,
             SmokeStep::Brush(BrushStep::Editor(_) | BrushStep::NewBrushEditor(_))
+                | SmokeStep::EditPalette(_)
         )
     }
 

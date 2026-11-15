@@ -6,12 +6,14 @@ use gtk::glib;
 
 use crate::dmabuf::ModifierPolicy;
 use crate::dmabuf_selftest::{DmabufSelftest, SelftestProgress};
+use crate::state::PaletteMode;
 use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
 mod brushes;
 mod config;
 mod editor;
+mod palette;
 mod steps;
 #[cfg(test)]
 mod tests;
@@ -27,6 +29,7 @@ pub struct SmokeConfig {
     screenshot: Option<PathBuf>,
     dialog: Option<SmokeDialog>,
     tool: Option<UiTool>,
+    palette: Option<PaletteMode>,
     stroke: bool,
     page: Option<String>,
     save: Option<PathBuf>,

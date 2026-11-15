@@ -40,7 +40,7 @@ pub(super) fn tool_hint(tool: Tool) -> &'static str {
 }
 
 /// The paint or pinned colour the selected colour is; a paint comes before a pinned colour.
-pub(super) fn highlighted_colour(
+pub(crate) fn highlighted_colour(
     palette: &Palette,
     selected: Option<&Recipe>,
 ) -> Option<ColourRef> {
@@ -82,14 +82,14 @@ pub(super) fn circle_shows(tool: Tool, view: PaletteView) -> bool {
 
 /// Everything the picture of the wheel is made from.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct WheelKey {
-    pub(super) palette: Palette,
-    pub(super) slots: Vec<String>,
-    pub(super) darken_bits: u32,
+pub(crate) struct WheelKey {
+    pub(crate) palette: Palette,
+    pub(crate) slots: Vec<String>,
+    pub(crate) darken_bits: u32,
 }
 
 impl WheelKey {
-    pub(super) fn of(palette: &Palette, slots: &[String], darken: f32) -> WheelKey {
+    pub(crate) fn of(palette: &Palette, slots: &[String], darken: f32) -> WheelKey {
         WheelKey {
             palette: palette.clone(),
             slots: slots.to_vec(),
@@ -100,7 +100,7 @@ impl WheelKey {
 
 /// Whether the wheel must be mixed again: only while it shows, and only when what it was last
 /// mixed from is not what it would be mixed from now.
-pub(super) fn wheel_is_stale(shows: bool, drawn: Option<&WheelKey>, wanted: &WheelKey) -> bool {
+pub(crate) fn wheel_is_stale(shows: bool, drawn: Option<&WheelKey>, wanted: &WheelKey) -> bool {
     shows && drawn != Some(wanted)
 }
 
@@ -150,7 +150,7 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
     )
 }
 
-pub(super) fn colour_click(modifiers: gdk::ModifierType) -> ColourClick {
+pub(crate) fn colour_click(modifiers: gdk::ModifierType) -> ColourClick {
     if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
         ColourClick::MixIn
     } else {

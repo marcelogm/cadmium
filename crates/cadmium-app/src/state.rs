@@ -17,7 +17,7 @@ pub use easel::{Easel, EaselId};
 pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use palette::PaletteView;
-pub use palette_edit::PaletteEdit;
+pub use palette_edit::{PaletteEdit, PaletteMode};
 pub use pen::PenReadout;
 use provisional::Provisional;
 pub use provisional::{Mark, ProvisionalTrail};

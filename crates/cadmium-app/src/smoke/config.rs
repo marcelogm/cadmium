@@ -10,6 +10,7 @@ use crate::tools::UiTool;
 
 use super::SmokeConfig;
 use super::brushes::SmokeBrushes;
+use super::palette::{PALETTE, parse_mode};
 
 pub(super) const EXIT_AFTER_FRAMES: &str = "CADMIUM_SMOKE_EXIT_AFTER_FRAMES";
 pub(super) const SCREENSHOT: &str = "CADMIUM_SMOKE_SCREENSHOT";
@@ -34,11 +35,13 @@ impl SmokeConfig {
         let screenshot = lookup_path(&lookup, SCREENSHOT);
         let dialog = lookup(DIALOG);
         let tool = non_empty(&lookup, TOOL);
+        let palette = non_empty(&lookup, PALETTE);
         let config = SmokeConfig {
             exit_after_frames: DEFAULT_EXIT_AFTER_FRAMES,
             screenshot,
             dialog: None,
             tool: None,
+            palette: None,
             stroke: lookup_flag(&lookup, STROKE),
             page: non_empty(&lookup, PAGE).map(|value| value.to_string_lossy().into_owned()),
             save: lookup_path(&lookup, SAVE),
@@ -50,6 +53,7 @@ impl SmokeConfig {
         if exit_after_frames.is_none()
             && dialog.is_none()
             && tool.is_none()
+            && palette.is_none()
             && config.requests_nothing_else()
         {
             return None;
@@ -57,6 +61,7 @@ impl SmokeConfig {
         Some(SmokeConfig {
             dialog: dialog.and_then(|value| parse_or_warn(DIALOG, &value)),
             tool: tool.and_then(parse_tool),
+            palette: palette.and_then(parse_mode),
             exit_after_frames: exit_after_frames
                 .and_then(|value| parse_or_warn(EXIT_AFTER_FRAMES, &value))
                 .unwrap_or(DEFAULT_EXIT_AFTER_FRAMES),

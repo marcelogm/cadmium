@@ -101,6 +101,11 @@ fn attach_stylus_sharing<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact
     widget.add_controller(hover_controller(widget, contact));
 }
 
+/// Lets the pen paint on `widget`, which does not navigate.
+pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) {
+    attach_stylus_sharing(widget, &Rc::new(Contact::default()));
+}
+
 /// Lets the pen paint on `surface` and the painter navigate its view.
 pub fn attach<W: NavigableSurface>(surface: &W) {
     let contact = Rc::new(Contact::default());
