@@ -1,16 +1,28 @@
 use adw::prelude::*;
+use cadmium_engine::palette::MAX_DARKEN;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
 use super::presentation::{
-    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, hardness_grade, plate_gap_spec,
+    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, PALETTE_VIEWS, SIZE_STEP, hardness_grade,
+    palette_view_name, plate_gap_spec,
 };
+use crate::colour_wheel::ColourWheel;
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::tools::panel::ToolPanel;
 
+const PALETTE_TITLE: &str = "Palette";
+const PAINTS_TITLE: &str = "Paints";
+const MY_COLOURS_TITLE: &str = "My Colours";
+const DARKEN_TITLE: &str = "Darken";
+const DARKEN_TOOLTIP: &str = "Adds black to every colour of the circle";
+const PALETTE_SPACING: i32 = 12;
+const PALETTE_CARD_MARGIN: i32 = 10;
+const PALETTE_CARD_SPACING: i32 = 8;
+const WHEEL_SIZE_PX: i32 = 230;
+const DARKEN_SPACING: i32 = 12;
 const PIGMENT_SPACING: u32 = 4;
-const PIGMENT_BOX_MARGIN: i32 = 10;
 const PIGMENTS_PER_LINE: u32 = MAX_SLOTS as u32;
 const MIN_PIGMENTS_PER_LINE: u32 = 4;
 const LOADED_SWATCH_SIZE: (i32, i32) = (140, 20);
@@ -27,9 +39,15 @@ const HARDNESS_MARKS: [f32; 3] = [0.0, 0.5, 1.0];
 const RELOAD_EACH_STROKE: &str = "Reload Every Stroke";
 const CLEAN_EACH_STROKE: &str = "Clean Every Stroke";
 
-pub(super) struct PigmentsGroup {
+pub(super) struct PaletteGroup {
     pub(super) group: adw::PreferencesGroup,
-    pub(super) flow: gtk::FlowBox,
+    pub(super) view_toggles: adw::ToggleGroup,
+    pub(super) stack: gtk::Stack,
+    pub(super) paints: gtk::FlowBox,
+    pub(super) my_colours_title: gtk::Label,
+    pub(super) my_colours: gtk::FlowBox,
+    pub(super) wheel: ColourWheel,
+    pub(super) darken: gtk::Scale,
 }
 
 pub(super) struct ToolGroup {
@@ -46,27 +64,107 @@ pub(super) struct ToolGroup {
     pub(super) clean_each_row: adw::SwitchRow,
 }
 
-pub(super) fn pigments_group() -> PigmentsGroup {
-    let flow = gtk::FlowBox::builder()
+pub(super) fn palette_group() -> PaletteGroup {
+    let view_toggles = adw::ToggleGroup::builder().build();
+    let stack = gtk::Stack::builder().vhomogeneous(false).build();
+    let paints = colour_grid();
+    let my_colours_title = grid_title(MY_COLOURS_TITLE);
+    let my_colours = colour_grid();
+    let colours = palette_card(&[
+        grid_title(PAINTS_TITLE).upcast_ref(),
+        paints.upcast_ref(),
+        my_colours_title.upcast_ref(),
+        my_colours.upcast_ref(),
+    ]);
+    let wheel = ColourWheel::new(WHEEL_SIZE_PX);
+    let (darken_line, darken) = darken_line();
+    let circle = palette_card(&[wheel.widget().upcast_ref(), darken_line.upcast_ref()]);
+    for ((view, label), page) in PALETTE_VIEWS.into_iter().zip([colours, circle]) {
+        let name = palette_view_name(view);
+        view_toggles.add(adw::Toggle::builder().name(name).label(label).build());
+        stack.add_named(&page, Some(name));
+    }
+    PaletteGroup {
+        group: palette_preferences_group(&view_toggles, &stack),
+        view_toggles,
+        stack,
+        paints,
+        my_colours_title,
+        my_colours,
+        wheel,
+        darken,
+    }
+}
+
+fn palette_preferences_group(
+    view_toggles: &adw::ToggleGroup,
+    stack: &gtk::Stack,
+) -> adw::PreferencesGroup {
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(PALETTE_SPACING)
+        .build();
+    content.append(view_toggles);
+    content.append(stack);
+    let group = adw::PreferencesGroup::builder()
+        .title(PALETTE_TITLE)
+        .description(Tool::Brush.wording().pigments)
+        .build();
+    group.add(&content);
+    group
+}
+
+fn palette_card(children: &[&gtk::Widget]) -> gtk::Box {
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(PALETTE_CARD_SPACING)
+        .margin_top(PALETTE_CARD_MARGIN)
+        .margin_bottom(PALETTE_CARD_MARGIN)
+        .margin_start(PALETTE_CARD_MARGIN)
+        .margin_end(PALETTE_CARD_MARGIN)
+        .hexpand(true)
+        .build();
+    for child in children {
+        content.append(*child);
+    }
+    let card = gtk::Box::builder().css_classes(["card"]).build();
+    card.append(&content);
+    card
+}
+
+fn colour_grid() -> gtk::FlowBox {
+    gtk::FlowBox::builder()
         .selection_mode(gtk::SelectionMode::None)
         .homogeneous(true)
         .max_children_per_line(PIGMENTS_PER_LINE)
         .min_children_per_line(MIN_PIGMENTS_PER_LINE)
         .row_spacing(PIGMENT_SPACING)
         .column_spacing(PIGMENT_SPACING)
-        .margin_top(PIGMENT_BOX_MARGIN)
-        .margin_bottom(PIGMENT_BOX_MARGIN)
-        .margin_start(PIGMENT_BOX_MARGIN)
-        .margin_end(PIGMENT_BOX_MARGIN)
+        .build()
+}
+
+fn grid_title(title: &str) -> gtk::Label {
+    gtk::Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .css_classes(["caption-heading", "dim-label"])
+        .build()
+}
+
+fn darken_line() -> (gtk::Box, gtk::Scale) {
+    let adjustment =
+        gtk::Adjustment::new(0.0, 0.0, f64::from(MAX_DARKEN), UNIT_STEP, UNIT_PAGE, 0.0);
+    let darken = gtk::Scale::builder()
+        .adjustment(&adjustment)
+        .draw_value(false)
+        .hexpand(true)
+        .tooltip_text(DARKEN_TOOLTIP)
         .build();
-    let pigment_card = gtk::Box::builder().css_classes(["card"]).build();
-    pigment_card.append(&flow);
-    let group = adw::PreferencesGroup::builder()
-        .title("Pigments")
-        .description(Tool::Brush.wording().pigments)
-        .build();
-    group.add(&pigment_card);
-    PigmentsGroup { group, flow }
+    darken.update_property(&[gtk::accessible::Property::Label(DARKEN_TITLE)]);
+    let line = gtk::Box::builder().spacing(DARKEN_SPACING).build();
+    line.append(&gtk::Label::new(Some(DARKEN_TITLE)));
+    line.append(&darken);
+    (line, darken)
 }
 
 pub(super) fn tool_group() -> ToolGroup {

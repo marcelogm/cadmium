@@ -6,33 +6,33 @@ use cadmium_engine::pigments::{PigmentDb, mixture_srgb8};
 use super::geometry::turn_and_radius_at;
 
 /// The wheel is mixed once per cell of a `WHEEL_CELLS` × `WHEEL_CELLS` grid, not per pixel.
-pub const WHEEL_CELLS: usize = 96;
+pub(super) const WHEEL_CELLS: usize = 96;
 
 const ARGB32_BYTES: usize = 4;
 const OPAQUE: u32 = 0xFF00_0000;
 
-pub struct WheelPaint<'a> {
-    pub db: &'a PigmentDb,
-    pub slots: &'a [String],
-    pub palette: &'a Palette,
-    pub axes: CircleAxes,
-    pub darken: f32,
+pub(crate) struct WheelPaint<'a> {
+    pub(crate) db: &'a PigmentDb,
+    pub(crate) slots: &'a [String],
+    pub(crate) palette: &'a Palette,
+    pub(crate) axes: CircleAxes,
+    pub(crate) darken: f32,
 }
 
 /// `cells` in row order, `None` outside the disc; `rim` is the circle's colours in order.
 #[derive(Clone, Debug, PartialEq)]
-pub struct WheelImage {
-    pub cells: Vec<Option<[u8; 3]>>,
-    pub rim: Vec<[u8; 3]>,
+pub(crate) struct WheelImage {
+    pub(crate) cells: Vec<Option<[u8; 3]>>,
+    pub(crate) rim: Vec<[u8; 3]>,
 }
 
 impl WheelImage {
-    pub fn has_colour(&self) -> bool {
+    pub(crate) fn has_colour(&self) -> bool {
         self.cells.iter().any(Option::is_some)
     }
 
     /// The grid as Cairo's ARGB32 rows of `stride` bytes; a cell with no colour is transparent.
-    pub fn argb32(&self, stride: usize) -> Vec<u8> {
+    pub(crate) fn argb32(&self, stride: usize) -> Vec<u8> {
         let mut bytes = vec![0; stride * WHEEL_CELLS];
         let rows = bytes.chunks_exact_mut(stride);
         for (row, cells) in rows.zip(self.cells.as_chunks::<WHEEL_CELLS>().0) {
@@ -49,7 +49,7 @@ fn write_argb32_row(row: &mut [u8], cells: &[Option<[u8; 3]>; WHEEL_CELLS]) {
 }
 
 /// An empty circle, or one naming a colour that is gone, draws no cell and no rim.
-pub fn wheel_image(paint: &WheelPaint<'_>) -> WheelImage {
+pub(crate) fn wheel_image(paint: &WheelPaint<'_>) -> WheelImage {
     let cells = (0..WHEEL_CELLS * WHEEL_CELLS)
         .map(|index| cell_colour(paint, index % WHEEL_CELLS, index / WHEEL_CELLS))
         .collect();

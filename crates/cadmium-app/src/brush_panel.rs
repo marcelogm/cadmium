@@ -9,24 +9,24 @@ use gtk::glib;
 use crate::LOG_DOMAIN;
 use crate::side_panel::panel_root;
 use crate::state::{AppState, ColourClick, SharedState};
-use crate::swatch::Swatch;
 use crate::thumbnails::{ThumbnailCache, ThumbnailKey};
 use crate::tools::Tool;
 use crate::tools::panel::ToolPanel;
 use crate::window::CadmiumWindow;
 
 mod build;
-mod piles;
+mod palette;
 mod presentation;
 mod rack;
 mod signals;
 mod snapshot;
 mod thumbnail_job;
 
-use build::{PigmentsGroup, ToolGroup};
+use build::{PaletteGroup, ToolGroup};
+use palette::ShownPalette;
 use presentation::{
-    RackEntry, describe_recipe, hardness_grade, percent_text, pile_is_highlighted, plate_gap_text,
-    size_to_slider, slider_needs_sync, tool_hint,
+    RackEntry, describe_recipe, hardness_grade, percent_text, plate_gap_text, size_to_slider,
+    slider_needs_sync, tool_hint,
 };
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
@@ -35,13 +35,12 @@ pub struct BrushPanel {
     root: gtk::Box,
     state: SharedState,
     window: glib::WeakRef<CadmiumWindow>,
-    pigments: PigmentsGroup,
+    palette: PaletteGroup,
     tool_group: ToolGroup,
     rack: rack::Rack,
     clean_button: gtk::Button,
     hint: gtk::Label,
-    pigment_swatches: RefCell<Vec<Swatch>>,
-    shown_slots: RefCell<Option<Vec<String>>>,
+    shown_palette: ShownPalette,
     shown_brushes: RefCell<Option<ShownBrushes>>,
     syncing: Cell<bool>,
     thumbnails: RefCell<ThumbnailCache>,
@@ -55,12 +54,12 @@ type ShownBrushes = (Vec<RackEntry>, Vec<ThumbnailKey>);
 impl BrushPanel {
     pub fn new(window: &CadmiumWindow, state: SharedState) -> Rc<BrushPanel> {
         let root = panel_root();
-        let pigments = build::pigments_group();
+        let palette = build::palette_group();
         let tool_group = build::tool_group();
         let rack = rack::rack();
         let clean_button = build::clean_button();
         let hint = build::hint_label();
-        root.append(&pigments.group);
+        root.append(&palette.group);
         root.append(&rack.group);
         root.append(&tool_group.group);
         root.append(&clean_button);
@@ -69,13 +68,12 @@ impl BrushPanel {
             root,
             state,
             window: window.downgrade(),
-            pigments,
+            palette,
             tool_group,
             rack,
             clean_button,
             hint,
-            pigment_swatches: RefCell::new(Vec::new()),
-            shown_slots: RefCell::new(None),
+            shown_palette: ShownPalette::default(),
             shown_brushes: RefCell::new(None),
             syncing: Cell::new(false),
             thumbnails: RefCell::new(ThumbnailCache::default()),
@@ -96,22 +94,13 @@ impl BrushPanel {
         self.release_studio_while_editing();
         let snapshot = Snapshot::of(&self.state.borrow());
         self.syncing.set(true);
-        if self.shown_slots.borrow().as_ref() != Some(&snapshot.slots) {
-            self.rebuild_pigments(&snapshot);
-        }
-        self.highlight_piles(&snapshot);
+        self.show_palette(&snapshot);
         self.show_held_paint(&snapshot);
         self.show_sliders(&snapshot);
         self.show_rack(&snapshot);
         self.show_stroke_options(&snapshot);
         self.show_controls_for(snapshot.tool);
         self.syncing.set(false);
-    }
-
-    fn highlight_piles(&self, snapshot: &Snapshot) {
-        for (slot, swatch) in self.pigment_swatches.borrow().iter().enumerate() {
-            swatch.set_selected(pile_is_highlighted(slot, &snapshot.recipe));
-        }
     }
 
     fn show_held_paint(&self, snapshot: &Snapshot) {
@@ -205,7 +194,7 @@ impl BrushPanel {
     fn show_wording_for(&self, tool: Tool) {
         let wording = tool.wording();
         let group = &self.tool_group;
-        self.pigments.group.set_description(Some(wording.pigments));
+        self.palette.group.set_description(Some(wording.pigments));
         group.loaded_row.set_title(wording.loaded_title);
         group
             .loaded_swatch
@@ -234,7 +223,7 @@ impl BrushPanel {
     fn show_visible_controls_for(&self, tool: Tool) {
         let shown = tool.controls();
         let group = &self.tool_group;
-        self.pigments.group.set_visible(shown.pigments);
+        self.palette.group.set_visible(shown.pigments);
         group.group.set_visible(shown.tool_group());
         group.group.set_title(tool.label());
         group.loaded_row.set_visible(shown.loaded);
@@ -255,8 +244,8 @@ impl BrushPanel {
         self.after_brush_change();
     }
 
-    fn click_pile(self: &Rc<Self>, slot: usize, click: ColourClick) {
-        self.change_brush(|state| state.click_colour(ColourRef::Paint(slot), click));
+    fn click_colour(self: &Rc<Self>, colour: ColourRef, click: ColourClick) {
+        self.change_brush(|state| state.click_colour(colour, click));
     }
 
     fn add_pile(self: &Rc<Self>, id: &str) {

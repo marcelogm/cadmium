@@ -16,7 +16,8 @@ mod image;
 
 use geometry::{rim_centre, turn_and_radius_at};
 use image::WHEEL_CELLS;
-pub use image::{WheelImage, WheelPaint, wheel_image};
+use image::WheelImage;
+pub(crate) use image::{WheelPaint, wheel_image};
 
 const NEUTRAL_GREY: f64 = 225.0 / 255.0;
 const CHANNEL_MAX: f64 = 255.0;
@@ -25,7 +26,23 @@ const RIM_DOT_RING_WIDTH_PX: f64 = 1.5;
 const RIM_DOT_SHADE_WIDTH_PX: f64 = 1.0;
 const RIM_DOT_SHADE_ALPHA: f64 = 0.35;
 
-type Picked = Rc<dyn Fn(f32, f32, gdk::ModifierType)>;
+/// Whether a pick is the press that starts a gesture on the wheel or the pointer moving after it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WheelPick {
+    Press,
+    Drag,
+}
+
+/// A point of the wheel, as its listener hears it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PickedPoint {
+    pub(crate) turn: f32,
+    pub(crate) radius: f32,
+    pub(crate) pick: WheelPick,
+    pub(crate) modifiers: gdk::ModifierType,
+}
+
+type Picked = Rc<dyn Fn(PickedPoint)>;
 
 #[derive(Default)]
 struct Shown {
@@ -42,14 +59,14 @@ impl Shown {
     }
 }
 
-pub struct ColourWheel {
+pub(crate) struct ColourWheel {
     area: gtk::DrawingArea,
     shown: Rc<RefCell<Shown>>,
     picked: Rc<RefCell<Option<Picked>>>,
 }
 
 impl ColourWheel {
-    pub fn new(size_px: i32) -> ColourWheel {
+    pub(crate) fn new(size_px: i32) -> ColourWheel {
         let area = gtk::DrawingArea::builder()
             .content_width(size_px)
             .content_height(size_px)
@@ -70,17 +87,17 @@ impl ColourWheel {
         }
     }
 
-    pub fn widget(&self) -> &gtk::DrawingArea {
+    pub(crate) fn widget(&self) -> &gtk::DrawingArea {
         &self.area
     }
 
-    pub fn show(&self, image: WheelImage) {
+    pub(crate) fn show(&self, image: WheelImage) {
         self.shown.replace(Shown::of(image));
         self.area.queue_draw();
     }
 
-    /// `picked` hears the turn and radius of every press and drag inside the disc.
-    pub fn connect_picked(&self, picked: impl Fn(f32, f32, gdk::ModifierType) + 'static) {
+    /// `picked` hears every press and every drag inside the disc.
+    pub(crate) fn connect_picked(&self, picked: impl Fn(PickedPoint) + 'static) {
         self.picked.replace(Some(Rc::new(picked)));
     }
 }
@@ -94,21 +111,26 @@ fn attach_drag(area: &gtk::DrawingArea, picked: &Rc<RefCell<Option<Picked>>>) {
     gesture.connect_drag_begin(glib::clone!(
         #[strong]
         picked,
-        move |gesture, x, y| pick(gesture, &picked, (x, y))
+        move |gesture, x, y| pick(gesture, &picked, WheelPick::Press, (x, y))
     ));
     gesture.connect_drag_update(glib::clone!(
         #[strong]
         picked,
         move |gesture, dx, dy| {
             if let Some((x, y)) = gesture.start_point() {
-                pick(gesture, &picked, (x + dx, y + dy));
+                pick(gesture, &picked, WheelPick::Drag, (x + dx, y + dy));
             }
         }
     ));
     area.add_controller(gesture);
 }
 
-fn pick(gesture: &gtk::GestureDrag, picked: &RefCell<Option<Picked>>, (x, y): (f64, f64)) {
+fn pick(
+    gesture: &gtk::GestureDrag,
+    picked: &RefCell<Option<Picked>>,
+    pick: WheelPick,
+    (x, y): (f64, f64),
+) {
     let Some(area) = gesture.widget() else {
         return;
     };
@@ -118,7 +140,12 @@ fn pick(gesture: &gtk::GestureDrag, picked: &RefCell<Option<Picked>>, (x, y): (f
     };
     let listener = picked.borrow().clone();
     if let Some(listener) = listener {
-        listener(turn, radius, gesture.current_event_state());
+        listener(PickedPoint {
+            turn,
+            radius,
+            pick,
+            modifiers: gesture.current_event_state(),
+        });
     }
 }
 
