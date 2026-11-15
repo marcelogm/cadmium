@@ -6,7 +6,7 @@ use crate::engine::{DabBatch, PaintEngine, WetOilEngine};
 use crate::gpu::{GpuContext, new_encoder};
 use crate::stroke::Dab;
 
-use super::queue::{Queued, WalkProgress, WalkStep, next_step};
+use super::queue::{Queued, SweptDab, WalkProgress, WalkStep, next_step};
 use super::{MotionAnchor, PaintSession};
 
 impl PaintSession {
@@ -104,18 +104,13 @@ impl PaintSession {
         let Some(Queued::Stroke(stroke)) = self.queued.front_mut() else {
             return;
         };
-        let batch: Vec<Dab> = stroke.dabs.drain(..count).collect();
-        let Some(latest) = batch.last() else {
+        let swept = stroke.take_dabs(count);
+        let Some(latest) = swept.last() else {
             return;
         };
-        self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.time_ms));
-        let swept_from = stroke.last_painted_dab.replace(*latest);
-        let stroke_dabs = StrokeDabs {
-            brush: &stroke.brush,
-            swept_from,
-            dabs: &batch,
-        };
-        let touched = tiles_touched_by(&self.engine, &self.canvas, stroke_dabs);
+        self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.dab.time_ms));
+        let batch: Vec<Dab> = swept.iter().map(|swept| swept.dab).collect();
+        let touched = tiles_touched_by(&self.engine, &self.canvas, &stroke.brush, &swept);
         self.history
             .encode_save_tiles(gpu, &self.canvas, &touched, encoder);
         if stroke.brush.tool.profile().changes_held_paint() && self.history.awaits_held_paint() {
@@ -131,23 +126,17 @@ impl PaintSession {
     }
 }
 
-struct StrokeDabs<'a> {
-    brush: &'a BrushSettings,
-    /// The stroke's dab before these, already painted.
-    swept_from: Option<Dab>,
-    dabs: &'a [Dab],
-}
-
-fn tiles_touched_by(engine: &WetOilEngine, canvas: &Canvas, stroke: StrokeDabs) -> Vec<TileCoord> {
+fn tiles_touched_by(
+    engine: &WetOilEngine,
+    canvas: &Canvas,
+    brush: &BrushSettings,
+    dabs: &[SweptDab],
+) -> Vec<TileCoord> {
     let width = canvas.spec.width;
     let height = canvas.spec.height;
-    let dabs_before =
-        std::iter::once(stroke.swept_from).chain(stroke.dabs.iter().copied().map(Some));
-    let touched: BTreeSet<TileCoord> = stroke
-        .dabs
+    let touched: BTreeSet<TileCoord> = dabs
         .iter()
-        .zip(dabs_before)
-        .filter_map(|(dab, before)| engine.dab_bounds(canvas, stroke.brush, dab, before.as_ref()))
+        .filter_map(|swept| engine.dab_bounds(canvas, brush, &swept.dab, swept.swept_from.as_ref()))
         .flat_map(|bounds| tiles_in_rect(width, height, bounds))
         .collect();
     touched.into_iter().collect()

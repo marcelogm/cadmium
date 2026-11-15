@@ -1,7 +1,7 @@
 pub mod support;
 
 use cadmium_engine::{
-    canvas::PaintTotals,
+    canvas::{PaintTotals, StateTexture},
     engine::FULL_DIP,
     gpu::GpuContext,
     pigments::{MAX_SLOTS, Mixture},
@@ -20,6 +20,7 @@ const DABS_PER_FRAME: usize = 3;
 const FRAMES_TO_DRAIN: usize = 10_000;
 const UPPER_ROW: f64 = 64.0;
 const LOWER_ROW: f64 = 192.0;
+const NARROW_DIAMETER_PX: f32 = 24.0;
 
 fn blue_of(volume_um: f32) -> Mixture {
     let mut fractions = [0.0; MAX_SLOTS];
@@ -41,6 +42,18 @@ fn held(gpu: &GpuContext, s: &PaintSession) -> (Vec<f32>, PaintTotals, PaintTota
         s.engine.brush_totals(gpu).unwrap(),
         s.engine.knife_totals(gpu).unwrap(),
     )
+}
+
+fn snapshot(gpu: &GpuContext, s: &PaintSession) -> Vec<Vec<u8>> {
+    StateTexture::PAINT_STATE
+        .iter()
+        .map(|texture| s.canvas.read_bytes(gpu, *texture).unwrap())
+        .collect()
+}
+
+fn narrow_the_tip(s: &mut PaintSession) {
+    s.brush.geometry.max_diameter_px = NARROW_DIAMETER_PX;
+    s.resize_tip();
 }
 
 fn queue_stroke(s: &mut PaintSession, row: f64) {
@@ -200,6 +213,50 @@ fn a_brush_loaded_after_a_stroke_keeps_that_load_when_the_stroke_is_undone() {
 }
 
 #[test]
+fn a_brush_loaded_after_an_undo_keeps_that_load_when_the_stroke_is_redone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let painted = snapshot(&gpu, &s);
+    assert!(s.undo(&gpu));
+    load(&gpu, &mut s, YELLOW);
+    let loaded = held(&gpu, &s);
+    assert!(without_wgpu_errors(&gpu, || s.redo(&gpu)));
+    assert!(snapshot(&gpu, &s) == painted);
+    assert!(held(&gpu, &s) == loaded);
+}
+
+#[test]
+fn a_tip_resized_after_an_undo_stays_as_it_is_when_the_stroke_is_redone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    let painted = snapshot(&gpu, &s);
+    assert!(s.undo(&gpu));
+    narrow_the_tip(&mut s);
+    let resized = held(&gpu, &s);
+    assert!(without_wgpu_errors(&gpu, || s.redo(&gpu)));
+    assert!(snapshot(&gpu, &s) == painted);
+    assert!(held(&gpu, &s) == resized);
+}
+
+#[test]
+fn a_tip_resized_after_a_stroke_stays_as_it_is_when_the_stroke_is_undone() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    let blank = snapshot(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    narrow_the_tip(&mut s);
+    let resized = held(&gpu, &s);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(snapshot(&gpu, &s) == blank);
+    assert!(held(&gpu, &s) == resized);
+}
+
+#[test]
 fn a_load_queued_behind_a_stroke_survives_undoing_that_stroke() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -250,6 +307,22 @@ fn undoing_a_knife_stroke_gives_the_knife_back_its_load() {
     );
     assert!(held(&gpu, &s) != before);
     s.undo(&gpu);
+    assert!(held(&gpu, &s) == before);
+}
+
+#[test]
+fn undoing_a_blender_stroke_gives_the_blender_back_what_it_held() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = session(&gpu);
+    load(&gpu, &mut s, BLUE);
+    stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
+    s.brush.tool = Tool::Blender;
+    let before = held(&gpu, &s);
+    let wet = snapshot(&gpu, &s);
+    stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
+    assert!(held(&gpu, &s) != before);
+    assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
+    assert!(snapshot(&gpu, &s) == wet);
     assert!(held(&gpu, &s) == before);
 }
 

@@ -182,3 +182,6 @@ impl WetOilEngine {
         });
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -20,6 +20,12 @@ pub(super) struct QueuedStroke {
     pub(super) ended: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct SweptDab {
+    pub(super) dab: Dab,
+    pub(super) swept_from: Option<Dab>,
+}
+
 /// A change to the brush encoded on the GPU, with everything it depends on read when it
 /// was asked for: the brush settings may have moved on by the time it runs.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -99,6 +105,18 @@ impl QueuedStroke {
             begun: false,
             ended: false,
         }
+    }
+
+    /// Takes the next `count` dabs to paint, each with the dab it sweeps from: the one
+    /// painted before it in this stroke, which the stroke's first dab does not have.
+    pub(super) fn take_dabs(&mut self, count: usize) -> Vec<SweptDab> {
+        self.dabs
+            .drain(..count)
+            .map(|dab| SweptDab {
+                dab,
+                swept_from: self.last_painted_dab.replace(dab),
+            })
+            .collect()
     }
 
     fn is_drawing_idle(&self) -> bool {
