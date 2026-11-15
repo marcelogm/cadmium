@@ -102,9 +102,10 @@ fn a_margin_that_is_not_whole_tiles_or_leaves_no_painting_is_invalid() {
     let mut spec = CanvasSpec::for_painting(painting_request(200, 200));
     spec.margin_px = 100;
     assert!(spec.validate(&db).is_err());
-    spec.margin_px = 192;
-    spec.width = 384;
-    assert!(spec.validate(&db).is_err());
+    spec.margin_px = MARGIN_PX;
+    spec.width = 2 * MARGIN_PX - 1;
+    let reason = spec.validate(&db).unwrap_err();
+    assert!(reason.contains("leaves no painting"), "{reason}");
 }
 
 #[test]
@@ -128,9 +129,25 @@ fn a_margin_too_wide_to_double_is_refused_without_overflowing() {
     let mut spec = CanvasSpec::for_painting(painting_request(200, 200));
     spec.margin_px = 1 << 31;
     let reason = spec.validate(&PigmentDb::builtin()).unwrap_err();
-    assert!(reason.contains("leaves no painting"), "{reason}");
+    assert!(reason.contains("margin of"), "{reason}");
     assert_eq!(
         (spec.painting_rect().width, spec.painting_rect().height),
         (0, 0)
     );
+}
+
+#[test]
+fn a_margin_other_than_none_or_the_painting_margin_is_invalid() {
+    let db = PigmentDb::builtin();
+    let mut spec = CanvasSpec::for_painting(painting_request(200, 200));
+    spec.margin_px = 1 << 20;
+    spec.width = (1 << 21) + 1;
+    spec.height = (1 << 21) + 1;
+    let reason = spec.validate(&db).unwrap_err();
+    assert!(reason.contains("margin of 1048576 px"), "{reason}");
+    let mut wider = CanvasSpec::for_painting(painting_request(200, 200));
+    wider.margin_px = 2 * MARGIN_PX;
+    wider.width += 2 * MARGIN_PX;
+    wider.height += 2 * MARGIN_PX;
+    assert!(wider.validate(&db).is_err());
 }

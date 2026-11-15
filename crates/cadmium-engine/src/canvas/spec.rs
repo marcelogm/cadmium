@@ -162,9 +162,9 @@ impl CanvasSpec {
     }
 
     fn validate_size(&self) -> Result<(), String> {
-        if !self.margin_px.is_multiple_of(TILE_SIZE) {
+        if ![0, MARGIN_PX].contains(&self.margin_px) {
             return Err(format!(
-                "margin of {} px is not a whole number of {TILE_SIZE} px tiles",
+                "margin of {} px is neither none nor the {MARGIN_PX} px margin",
                 self.margin_px
             ));
         }

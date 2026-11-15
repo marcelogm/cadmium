@@ -127,6 +127,17 @@ fn oversized_canvas_in_manifest_is_a_format_error() {
 }
 
 #[test]
+fn oversized_margin_in_manifest_is_a_format_error() {
+    let entries = Entries::blank().edit_manifest(|m| {
+        m["spec"]["margin_px"] = (1u32 << 20).into();
+        m["spec"]["width"] = ((1u32 << 21) + 1).into();
+        m["spec"]["height"] = ((1u32 << 21) + 1).into();
+    });
+    let reason = format_reason(read_entries(entries));
+    assert!(reason.contains("margin of"), "{reason}");
+}
+
+#[test]
 fn oversized_manifest_is_a_format_error() {
     let entries = Entries::blank().edit_manifest(|m| {
         m["padding"] = "x".repeat(MAX_MANIFEST_BYTES).into();
