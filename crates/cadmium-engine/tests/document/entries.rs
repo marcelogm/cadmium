@@ -10,7 +10,8 @@ use cadmium_engine::{
 
 use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
-/// The entry names of format 8 for the painting (the sheet's add `sheet/` in front), spelled out so that renaming one changes a test.
+/// The entry names of format 8 for the painting (the sheet's add `sheet/` in front),
+/// spelled out so that renaming one changes a test.
 pub(super) const STATE_ENTRIES: [(&str, StateTexture); 9] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),
     ("state/wet_pig1.zst", StateTexture::WetPig1),

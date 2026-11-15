@@ -27,12 +27,13 @@ impl DocumentSnapshot {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
         let Manifest { spec, palette, .. } = read_manifest(&mut archive)?;
         let states = read_states(&mut archive, PAINTING_PREFIX, &spec)?;
-        let sheet = sheet_spec(&spec.pigment_slots);
-        let sheet_states = read_states(&mut archive, SHEET_PREFIX, &sheet)?;
+        let sheet_spec = sheet_spec(&spec.pigment_slots);
+        let sheet_states = read_states(&mut archive, SHEET_PREFIX, &sheet_spec)?;
         Ok(DocumentSnapshot {
             spec,
             palette,
             states,
+            sheet_spec,
             sheet_states,
         })
     }

@@ -1,13 +1,13 @@
 use cadmium_engine::{
     canvas::StateTexture,
-    document::{self, DocumentSnapshot},
+    document::{self, DocumentError, DocumentSnapshot},
     gpu::GpuContext,
     session::PaintSession,
 };
 
 use crate::entries::{Entries, format_reason, read_entries};
 use crate::support::{session, stroke};
-use crate::{TempDir, blank_sheet, painted_session, save_painting};
+use crate::{TempDir, blank_sheet, painted_session, sample, save_painting};
 
 const SHEET_WET_VOLUME: &str = "sheet/state/wet_vol.zst";
 const SHEET_GRAPHITE: &str = "sheet/state/graphite.zst";
@@ -95,4 +95,41 @@ fn a_snapshot_restored_into_running_sessions_replaces_the_sheet_too() {
         state_bytes(&gpu, &saved_sheet)
     );
     assert!(!running_sheet.history.can_undo());
+}
+
+#[test]
+fn saving_right_after_a_stroke_on_the_sheet_ends_keeps_the_stroke() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("unflushed-sheet");
+    let path = dir.file("p.cadmium");
+    let mut painting = painted_session(&gpu);
+    let mut sheet = blank_sheet(&gpu, &painting);
+    sheet.brush.recipe = vec![(0, 1.0)];
+    sheet.reload_brush(&gpu);
+    sheet.begin_stroke(sample(60.0, 200.0, 0));
+    sheet.add_samples(&[sample(600.0, 220.0, 200)]);
+    sheet.end_stroke();
+    document::save(&gpu, &mut painting, &mut sheet, &path).unwrap();
+    let opened = document::open(&gpu, &path).unwrap();
+    let volume = opened
+        .sheet
+        .canvas
+        .read_f32(&gpu, StateTexture::WetVol)
+        .unwrap();
+    assert!(volume.iter().any(|&v| v > 0.0));
+}
+
+#[test]
+fn a_sheet_that_is_not_the_paintings_is_refused_and_nothing_is_written() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("foreign-sheet");
+    let path = dir.file("p.cadmium");
+    let mut painting = painted_session(&gpu);
+    let mut foreign = PaintSession::for_sheet(&gpu, &["titanium_white".to_string()]).unwrap();
+    let result = document::save(&gpu, &mut painting, &mut foreign, &path);
+    let Err(DocumentError::Format(reason)) = result else {
+        panic!("expected a format error, got {result:?}");
+    };
+    assert!(reason.contains("mixing sheet"), "{reason}");
+    assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 0);
 }

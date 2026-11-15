@@ -126,6 +126,7 @@ pub struct DocumentSnapshot {
     spec: CanvasSpec,
     palette: Palette,
     states: Vec<StateBytes>,
+    sheet_spec: CanvasSpec,
     sheet_states: Vec<StateBytes>,
 }
 
@@ -146,6 +147,7 @@ impl DocumentSnapshot {
             spec: painting.canvas.spec.clone(),
             palette: painting.palette.clone(),
             states: capture_canvas(gpu, &painting.canvas)?,
+            sheet_spec: sheet.canvas.spec.clone(),
             sheet_states: capture_canvas(gpu, &sheet.canvas)?,
         })
     }
@@ -163,8 +165,8 @@ impl DocumentSnapshot {
         painting: &mut PaintSession,
         sheet: &mut PaintSession,
     ) -> Result<(), CanvasError> {
-        painting.replace_document(gpu, self.spec.clone())?;
         sheet.replace_document(gpu, sheet_spec(&self.spec.pigment_slots))?;
+        painting.replace_document(gpu, self.spec.clone())?;
         self.upload(gpu, painting, sheet);
         Ok(())
     }

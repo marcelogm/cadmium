@@ -65,11 +65,9 @@ fn every_format_but_the_current_one_is_unsupported() {
 }
 
 #[test]
-fn a_painting_of_the_format_before_the_palette_is_unsupported_rather_than_malformed() {
-    let entries = Entries::blank().edit_manifest(|m| {
-        m["format"] = PREVIOUS_FORMAT.into();
-        m.as_object_mut().unwrap().remove("palette");
-    });
+fn a_painting_of_the_format_before_the_sheet_is_unsupported_rather_than_malformed() {
+    let mut entries = Entries::blank().edit_manifest(|m| m["format"] = PREVIOUS_FORMAT.into());
+    entries.0.retain(|(name, _)| !name.starts_with("sheet/"));
     assert!(matches!(
         read_entries(entries),
         Err(DocumentError::UnsupportedVersion(PREVIOUS_FORMAT))
