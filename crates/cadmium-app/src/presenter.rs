@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::PresentRequest;
+use cadmium_engine::sheet::SHEET_RECT;
 use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -14,7 +15,7 @@ use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
 use crate::state::{AppState, EaselId};
-use crate::view::{MIXING_SHEET, clamp_zoom, cover_view, fit_view};
+use crate::view::{clamp_zoom, cover_view, fit_view};
 
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
 const DEBUG_ENABLED: &str = "1";
@@ -73,7 +74,7 @@ fn encode_mixing_sheet(
 ) {
     state.encode_frame(EaselId::Sheet, encoder);
     let viewport = (f64::from(target.width()), f64::from(target.height()));
-    let view = fit_view(MIXING_SHEET, viewport, 0.0);
+    let view = fit_view(SHEET_RECT, viewport, 0.0);
     let session = &mut state.sheet.session;
     session.presenter.encode_present(
         gpu,

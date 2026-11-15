@@ -63,8 +63,8 @@ impl AppState {
         let outcome = self.painting.session.clear_margin(&self.gpu);
         if matches!(outcome, ClearOutcome::Cleared { .. }) {
             self.edits.record();
+            self.wake();
         }
-        self.wake();
         outcome
     }
 

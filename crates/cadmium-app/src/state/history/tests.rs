@@ -52,10 +52,16 @@ fn the_painting_is_not_dried_under_the_palette_dialog() {
 }
 
 #[test]
-fn clearing_the_margin_is_an_edit_that_undo_takes_back() {
+fn clearing_an_untouched_margin_is_not_an_edit() {
     let mut state = painting_state();
     assert_eq!(state.clear_margin(), ClearOutcome::NothingToClear);
     assert!(!state.has_unsaved_edits());
+    assert!(!state.can_undo(EaselId::Painting));
+}
+
+#[test]
+fn clearing_the_margin_is_an_edit_that_undo_takes_back() {
+    let mut state = painting_state();
     state.click_colour(ColourRef::Paint(0), ColourClick::Load);
     stroke(
         &mut state,

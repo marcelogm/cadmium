@@ -8,6 +8,13 @@ fn close(a: (f64, f64), b: (f64, f64)) -> bool {
     (a.0 - b.0).abs() < TOLERANCE && (a.1 - b.1).abs() < TOLERANCE
 }
 
+const PAINTING_IN_A_MARGIN: PaintingRect = PaintingRect {
+    x: 128,
+    y: 128,
+    width: 1000,
+    height: 500,
+};
+
 fn whole(width: u32, height: u32) -> PaintingRect {
     PaintingRect {
         x: 0,
@@ -19,13 +26,7 @@ fn whole(width: u32, height: u32) -> PaintingRect {
 
 #[test]
 fn fitting_frames_the_painting_and_lets_the_margin_fall_outside() {
-    let painting = PaintingRect {
-        x: 128,
-        y: 128,
-        width: 1000,
-        height: 500,
-    };
-    let view = fit_view(painting, (1000.0, 500.0), 0.0);
+    let view = fit_view(PAINTING_IN_A_MARGIN, (1000.0, 500.0), 0.0);
     assert!((view.zoom - 1.0).abs() < 1e-6);
     assert!(close(viewport_to_canvas(view, 0.0, 0.0), (128.0, 128.0)));
     assert!(close(
@@ -36,14 +37,8 @@ fn fitting_frames_the_painting_and_lets_the_margin_fall_outside() {
 
 #[test]
 fn a_fitted_painting_shows_half_its_margin_on_every_side() {
-    let painting = PaintingRect {
-        x: 128,
-        y: 128,
-        width: 1000,
-        height: 500,
-    };
     assert_eq!(
-        fitted_rect(painting, 128),
+        fitted_rect(PAINTING_IN_A_MARGIN, 128),
         PaintingRect {
             x: 64,
             y: 64,

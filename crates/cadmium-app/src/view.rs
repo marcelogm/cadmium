@@ -2,7 +2,6 @@ use std::f64::consts::{PI, TAU};
 
 use cadmium_engine::canvas::PaintingRect;
 use cadmium_engine::present::ViewTransform;
-use cadmium_engine::sheet::{SHEET_HEIGHT_PX, SHEET_WIDTH_PX};
 
 pub const MIN_ZOOM: f32 = 0.05;
 pub const MAX_ZOOM: f32 = 16.0;
@@ -15,17 +14,8 @@ pub fn clamp_zoom(zoom: f32) -> f32 {
     }
 }
 
-/// Of the margin around a painting, the share "Fit" keeps in view on each side is
-/// `1 / FITTED_MARGIN_DIVISOR`.
+/// The fraction (1/n) of the margin that Fit keeps in view on each side.
 const FITTED_MARGIN_DIVISOR: u32 = 2;
-
-/// The whole mixing sheet, which has no margin.
-pub const MIXING_SHEET: PaintingRect = PaintingRect {
-    x: 0,
-    y: 0,
-    width: SHEET_WIDTH_PX,
-    height: SHEET_HEIGHT_PX,
-};
 
 /// What "Fit" frames: `painting` grown by part of its margin on every side.
 pub fn fitted_rect(painting: PaintingRect, margin_px: u32) -> PaintingRect {
