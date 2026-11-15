@@ -72,3 +72,37 @@ fn redoing_a_stroke_shows_the_brush_as_drained_as_after_it() {
     assert!(state.redo(EaselId::Painting));
     assert_eq!(state.reserve_level(), drained);
 }
+
+fn saved_after_a_stroke() -> AppState {
+    let mut state = painting_state();
+    paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    let mark = state.edit_mark();
+    state.saved_to(PathBuf::from("history.cadmium"), mark);
+    state
+}
+
+#[test]
+fn undoing_on_a_saved_painting_leaves_unsaved_edits() {
+    let mut state = saved_after_a_stroke();
+    assert!(state.undo(EaselId::Painting));
+    assert!(state.has_unsaved_edits());
+}
+
+#[test]
+fn redoing_on_a_saved_painting_leaves_unsaved_edits() {
+    let mut state = saved_after_a_stroke();
+    assert!(state.undo(EaselId::Painting));
+    let mark = state.edit_mark();
+    state.saved_to(PathBuf::from("history.cadmium"), mark);
+    assert!(state.redo(EaselId::Painting));
+    assert!(state.has_unsaved_edits());
+}
+
+#[test]
+fn undoing_with_nothing_to_undo_leaves_a_saved_painting_saved() {
+    let mut state = painting_state();
+    let mark = state.edit_mark();
+    state.saved_to(PathBuf::from("history.cadmium"), mark);
+    assert!(!state.undo(EaselId::Painting));
+    assert!(!state.has_unsaved_edits());
+}

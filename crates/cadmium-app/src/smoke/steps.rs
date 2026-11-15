@@ -8,12 +8,12 @@ use cadmium_engine::stroke::StrokeSample;
 use gtk::{glib, graphene, gsk};
 
 use crate::LOG_DOMAIN;
+use crate::state::EaselId;
 use crate::tools::UiTool;
 use crate::window::CadmiumWindow;
 
 use super::brushes::BrushStep;
 use super::{SETTLE_FRAMES_AFTER_FILE_WORK, SmokeConfig, editor};
-use crate::state::EaselId;
 
 const TOOL_ACTION: &str = "win.tool";
 const STROKE_PIGMENT: &str = "ultramarine_blue";
