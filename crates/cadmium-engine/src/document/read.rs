@@ -16,6 +16,7 @@ use super::{
 };
 
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
+const OLDEST_READABLE_FORMAT: u32 = 9;
 
 #[derive(serde::Deserialize)]
 struct FormatProbe {
@@ -52,7 +53,7 @@ fn read_manifest<R: Read + std::io::Seek>(
         )));
     }
     let probe: FormatProbe = serde_json::from_slice(&bytes).map_err(manifest_error)?;
-    if probe.format != FORMAT_VERSION {
+    if !(OLDEST_READABLE_FORMAT..=FORMAT_VERSION).contains(&probe.format) {
         return Err(DocumentError::UnsupportedVersion(probe.format));
     }
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(manifest_error)?;

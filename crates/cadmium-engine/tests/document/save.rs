@@ -1,14 +1,16 @@
 use std::io::Read;
 
 use cadmium_engine::{
-    canvas::{CanvasSpec, DirtyTiles, Primer, StateTexture, TILE_SIZE, TileCoord, Weave},
-    document::DocumentSnapshot,
+    canvas::{
+        CanvasSpec, DirtyTiles, MARGIN_PX, Primer, StateTexture, TILE_SIZE, TileCoord, Weave,
+    },
+    document::{self, DocumentSnapshot},
     gpu::GpuContext,
-    session::PaintSession,
+    session::{ClearOutcome, PaintSession},
 };
 
 use crate::entries::STATE_ENTRIES;
-use crate::support::session;
+use crate::support::{load, painting_session, session, stroke};
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, TempDir, blank_sheet, open_painting,
     painted_session, painted_session_with_stroke, painted_spec, sample, save_painting,
@@ -275,4 +277,24 @@ fn a_snapshot_restored_into_a_running_session_replaces_its_painting() {
             "{t:?}"
         );
     }
+}
+
+#[test]
+fn a_reopened_painting_keeps_its_dirty_margin_and_can_still_clear_it() {
+    let gpu = GpuContext::new().unwrap();
+    let dir = TempDir::new("margin");
+    let mut painting = painting_session(&gpu, 300, 200);
+    let mut sheet = PaintSession::for_sheet(&gpu, &painting.canvas.spec.pigment_slots).unwrap();
+    load(&gpu, &mut painting, 0);
+    stroke(&gpu, &mut painting, f64::from(MARGIN_PX) / 2.0, 40.0, 400.0);
+    let saved = painting.canvas.wet_totals(&gpu).unwrap();
+    document::save(&gpu, &mut painting, &mut sheet, &dir.file("margin.cadmium")).unwrap();
+    let mut opened = document::open(&gpu, &dir.file("margin.cadmium")).unwrap();
+    assert_eq!(opened.painting.canvas.spec, painting.canvas.spec);
+    assert_eq!(opened.painting.canvas.wet_totals(&gpu).unwrap(), saved);
+    assert!(matches!(
+        opened.painting.clear_margin(&gpu),
+        ClearOutcome::Cleared { .. }
+    ));
+    assert_eq!(opened.painting.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
 }

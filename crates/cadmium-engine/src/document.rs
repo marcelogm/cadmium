@@ -15,7 +15,7 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 8;
+const FORMAT_VERSION: u32 = 9;
 const PAINTING_PREFIX: &str = "";
 const SHEET_PREFIX: &str = "sheet/";
 const DRY_RELIEF_NAME: &str = "dry_relief";

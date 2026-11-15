@@ -1,11 +1,12 @@
 use cadmium_engine::{
-    canvas::{CanvasSpec, Primer, StateTexture, Weave},
-    document,
+    canvas::{CanvasSpec, MARGIN_PX, Primer, StateTexture, Weave},
+    document::{self, ExportedImage},
     gpu::GpuContext,
     render::ViewMode,
     session::PaintSession,
 };
 
+use crate::support::{load, painting_session, stroke};
 use crate::{TempDir, painted_session};
 
 #[test]
@@ -57,4 +58,29 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
         s.canvas.read_bytes(&gpu, StateTexture::Display).unwrap(),
         height_display
     );
+}
+
+#[test]
+fn the_exported_picture_is_the_painting_without_its_margin() {
+    let gpu = GpuContext::new().unwrap();
+    let mut clean = painting_session(&gpu, 300, 200);
+    let mut dirty = painting_session(&gpu, 300, 200);
+    load(&gpu, &mut dirty, 0);
+    stroke(&gpu, &mut dirty, f64::from(MARGIN_PX) / 2.0, 40.0, 400.0);
+    let clean = ExportedImage::render(&gpu, &mut clean).unwrap();
+    let dirty = ExportedImage::render(&gpu, &mut dirty).unwrap();
+    assert_eq!((dirty.width, dirty.height), (300, 200));
+    assert!(dirty.rgba == clean.rgba);
+}
+
+#[test]
+fn paint_on_the_painting_is_exported_where_it_was_laid() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = painting_session(&gpu, 300, 200);
+    let margin = f64::from(MARGIN_PX);
+    load(&gpu, &mut s, 0);
+    stroke(&gpu, &mut s, margin + 100.0, margin + 20.0, margin + 280.0);
+    let image = ExportedImage::render(&gpu, &mut s).unwrap();
+    let pixel = |x: u32, y: u32| &image.rgba[((y * image.width + x) * 4) as usize..][..3];
+    assert_ne!(pixel(150, 100), pixel(150, 10));
 }
