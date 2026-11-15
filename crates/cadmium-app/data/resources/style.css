@@ -20,3 +20,11 @@ button.pigment-swatch {
 row.locked-control {
   opacity: 0.6;
 }
+
+.circle-marker {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 9999px;
+  background-color: var(--accent-bg-color);
+  box-shadow: 0 0 0 1.5px var(--window-bg-color);
+}

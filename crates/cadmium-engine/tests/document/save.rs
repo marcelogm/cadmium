@@ -2,7 +2,7 @@ use std::io::Read;
 
 use cadmium_engine::{
     canvas::{CanvasSpec, DirtyTiles, Primer, StateTexture, TILE_SIZE, TileCoord, Weave},
-    document::{self, DocumentSnapshot},
+    document::DocumentSnapshot,
     gpu::GpuContext,
     session::PaintSession,
 };
@@ -10,9 +10,9 @@ use cadmium_engine::{
 use crate::entries::STATE_ENTRIES;
 use crate::support::session;
 use crate::{
-    BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, TempDir, painted_session,
-    painted_session_with_stroke, painted_spec, sample, session_with_ended_stroke,
-    sketch_on_the_painting,
+    BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, TempDir, blank_sheet, open_painting,
+    painted_session, painted_session_with_stroke, painted_spec, sample, save_painting,
+    session_with_ended_stroke, sketch_on_the_painting,
 };
 
 const LARGE_WIDTH: u32 = 2048;
@@ -25,8 +25,8 @@ fn save_then_open_restores_every_state_texture() {
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("round-trip");
     let path = dir.file("t.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let opened = open_painting(&gpu, &path);
     assert_eq!(opened.canvas.spec, s.canvas.spec);
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
@@ -53,8 +53,8 @@ fn a_canvas_whose_rows_need_padding_survives_save_and_open() {
     s.end_stroke();
     let dir = TempDir::new("unaligned");
     let path = dir.file("t.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let opened = open_painting(&gpu, &path);
     assert!(s.canvas.wet_totals(&gpu).unwrap().volume > 0.0);
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
@@ -72,8 +72,8 @@ fn saving_keeps_the_graphite_sketch() {
     let sketch = sketch_on_the_painting(&gpu, &s);
     let dir = TempDir::new("graphite");
     let path = dir.file("graphite.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let opened = open_painting(&gpu, &path);
     let reopened = opened
         .canvas
         .read_f32(&gpu, StateTexture::Graphite)
@@ -93,8 +93,8 @@ fn a_dried_stroke_survives_save_and_open_bit_for_bit() {
     let mut s = dried_session(&gpu);
     let dir = TempDir::new("dried");
     let path = dir.file("dried.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let opened = open_painting(&gpu, &path);
     for t in StateTexture::PAINT_STATE {
         assert_eq!(
             opened.canvas.read_bytes(&gpu, t).unwrap(),
@@ -123,11 +123,11 @@ fn a_large_painting_with_one_stroke_saves_without_its_weave() {
     s.end_stroke();
     let dir = TempDir::new("large");
     let path = dir.file("large.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
     let size = std::fs::metadata(&path).unwrap().len();
     eprintln!("a {LARGE_WIDTH}×{LARGE_HEIGHT} painting with one stroke saves in {size} bytes");
     assert!(size <= MAX_ONE_STROKE_PAINTING_BYTES, "{size}");
-    let opened = document::open(&gpu, &path).unwrap();
+    let opened = open_painting(&gpu, &path);
     assert_eq!(
         opened
             .canvas
@@ -143,8 +143,8 @@ fn saving_right_after_a_stroke_ends_keeps_the_stroke() {
     let mut s = session_with_ended_stroke(&gpu, (20.0, 60.0), (230.0, 70.0));
     let dir = TempDir::new("unflushed");
     let path = dir.file("t.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let opened = open_painting(&gpu, &path);
     let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     assert!(volume.iter().any(|&v| v > 0.0));
     assert!(s.history.can_undo());
@@ -156,8 +156,8 @@ fn opened_document_marks_every_tile_dirty_and_only_painted_tiles_wet() {
     let mut s = painted_session_with_stroke(&gpu, (20.0, 20.0), (40.0, 30.0));
     let dir = TempDir::new("wet");
     let path = dir.file("wet.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let opened = open_painting(&gpu, &path);
     let mut full = DirtyTiles::new(256, 128);
     full.mark_all();
     assert_eq!(opened.canvas.dirty.tiles(), full.tiles());
@@ -182,12 +182,12 @@ fn a_snapshot_read_off_the_main_thread_becomes_a_session() {
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("worker");
     let path = dir.file("t.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
     let snapshot = std::thread::spawn(move || DocumentSnapshot::read(&path))
         .join()
         .unwrap()
         .unwrap();
-    let opened = snapshot.into_session(&gpu).unwrap();
+    let opened = snapshot.into_sessions(&gpu).unwrap().painting;
     assert_eq!(
         opened
             .canvas
@@ -203,8 +203,8 @@ fn drying_an_opened_document_clears_its_wet_layer() {
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("dry");
     let path = dir.file("dry.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
-    let mut opened = document::open(&gpu, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
+    let mut opened = open_painting(&gpu, &path);
     opened.dry(&gpu);
     let volume = opened.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
     assert!(volume.iter().all(|&v| v == 0.0));
@@ -216,7 +216,7 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
     let mut s = painted_session(&gpu);
     let dir = TempDir::new("stored");
     let path = dir.file("stored.cadmium");
-    document::save(&gpu, &mut s, &path).unwrap();
+    save_painting(&gpu, &mut s, &path);
     let mut archive = zip::ZipArchive::new(std::fs::File::open(&path).unwrap()).unwrap();
     let mut names = Vec::new();
     for index in 0..archive.len() {
@@ -224,8 +224,11 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
         assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
         names.push(entry.name().to_string());
     }
-    let mut expected: Vec<&str> = STATE_ENTRIES.iter().map(|(name, _)| *name).collect();
-    expected.push("manifest.json");
+    let mut expected: Vec<String> = STATE_ENTRIES
+        .iter()
+        .flat_map(|(name, _)| [name.to_string(), format!("sheet/{name}")])
+        .collect();
+    expected.push("manifest.json".to_string());
     names.sort();
     expected.sort();
     assert_eq!(names, expected);
@@ -247,7 +250,8 @@ fn saved_entries_are_stored_uncompressed_in_the_zip() {
 fn a_snapshot_restored_into_a_running_session_replaces_its_painting() {
     let gpu = GpuContext::new().unwrap();
     let mut saved = painted_session(&gpu);
-    let snapshot = DocumentSnapshot::capture(&gpu, &mut saved).unwrap();
+    let mut saved_sheet = blank_sheet(&gpu, &saved);
+    let snapshot = DocumentSnapshot::capture(&gpu, &mut saved, &mut saved_sheet).unwrap();
     let mut running = PaintSession::new(
         &gpu,
         CanvasSpec {
@@ -257,7 +261,10 @@ fn a_snapshot_restored_into_a_running_session_replaces_its_painting() {
         },
     )
     .unwrap();
-    snapshot.restore_into(&gpu, &mut running).unwrap();
+    let mut running_sheet = blank_sheet(&gpu, &running);
+    snapshot
+        .restore_into(&gpu, &mut running, &mut running_sheet)
+        .unwrap();
     assert_eq!(running.canvas.spec, saved.canvas.spec);
     assert!(!running.canvas.wet_tiles.is_empty());
     for t in StateTexture::PAINT_STATE {

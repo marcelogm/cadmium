@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::PresentRequest;
+use cadmium_engine::sheet::{SHEET_HEIGHT_PX, SHEET_WIDTH_PX};
 use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -13,8 +14,8 @@ use self::by_readback::ReadbackTarget;
 use self::mode::{PresentMode, choose_mode, describe_modifier, mode_reason};
 use crate::LOG_DOMAIN;
 use crate::dmabuf::{DmabufError, DmabufPool, ModifierPolicy};
-use crate::state::AppState;
-use crate::view::{clamp_zoom, cover_view};
+use crate::state::{AppState, EaselId};
+use crate::view::{clamp_zoom, cover_view, fit_view};
 
 const DEBUG_VARIABLE: &str = "CADMIUM_DEBUG";
 const DEBUG_ENABLED: &str = "1";
@@ -33,6 +34,8 @@ pub enum PresentSource {
     Painting,
     /// The brush editor's test sheet, its canvas covering the target.
     TestSheet(SheetLink),
+    /// The Palette dialog's mixing sheet, its canvas fitted whole in the target.
+    Sheet,
 }
 
 impl PresentSource {
@@ -45,10 +48,11 @@ impl PresentSource {
     ) {
         match self {
             PresentSource::Painting => {
-                state.encode_frame(encoder);
-                state.session.presenter.encode_present(
+                state.encode_frame(EaselId::Painting, encoder);
+                let session = &mut state.painting.session;
+                session.presenter.encode_present(
                     gpu,
-                    PresentRequest::of_canvas(&state.session.canvas, state.view),
+                    PresentRequest::of_canvas(&session.canvas, state.view),
                     target,
                     encoder,
                 );
@@ -56,8 +60,28 @@ impl PresentSource {
             PresentSource::TestSheet(sheet) => {
                 encode_test_sheet(sheet, state.now_ms(), gpu, target, encoder);
             }
+            PresentSource::Sheet => encode_mixing_sheet(state, gpu, target, encoder),
         }
     }
+}
+
+/// Paints the mixing sheet and presents it whole, fitted in `target`.
+fn encode_mixing_sheet(
+    state: &mut AppState,
+    gpu: &GpuContext,
+    target: &wgpu::Texture,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    state.encode_frame(EaselId::Sheet, encoder);
+    let viewport = (f64::from(target.width()), f64::from(target.height()));
+    let view = fit_view((SHEET_WIDTH_PX, SHEET_HEIGHT_PX), viewport, 0.0);
+    let session = &mut state.sheet.session;
+    session.presenter.encode_present(
+        gpu,
+        PresentRequest::of_canvas(&session.canvas, view),
+        target,
+        encoder,
+    );
 }
 
 /// Paints and presents the test sheet at `clock_ms`, its canvas covering `target`;
@@ -75,6 +99,17 @@ fn encode_test_sheet(
     let mut sheet = sheet.borrow_mut();
     let view = cover_view(sheet.size(), (target.width(), target.height()));
     sheet.encode_present(gpu, SheetFrame { clock_ms, view }, target, encoder);
+}
+
+impl PresentSource {
+    /// The easel whose frames this source presents; the test sheet, which is no easel, counts
+    /// as the painting.
+    fn easel(&self) -> EaselId {
+        match self {
+            PresentSource::Sheet => EaselId::Sheet,
+            PresentSource::Painting | PresentSource::TestSheet(_) => EaselId::Painting,
+        }
+    }
 }
 
 pub struct FramePresenter {
@@ -171,7 +206,7 @@ impl FramePresenter {
                 self.mode.unwrap_or(mode).name(),
                 started.elapsed().as_secs_f64() * MILLISECONDS_PER_SECOND,
                 state.pen.samples_last_frame,
-                state.session.last_frame_dabs()
+                state.easel(self.source.easel()).session.last_frame_dabs()
             );
         }
         texture

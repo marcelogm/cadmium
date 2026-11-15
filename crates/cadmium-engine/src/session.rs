@@ -11,6 +11,7 @@ use crate::palette::Palette;
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ShadeRequest, ViewMode};
+use crate::sheet::{SHEET_HELD_PAINT_BUDGET_BYTES, sheet_spec};
 use crate::stroke::StrokeBuilder;
 
 mod brush;
@@ -29,6 +30,12 @@ const PICK_RADIUS_PX: f32 = 4.0;
 const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
 const HISTORY_PAINTING_COPIES: u64 = 4;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClearOutcome {
+    NothingWet,
+    Cleared { undoable: bool },
+}
 
 pub struct PaintSession {
     pub canvas: Canvas,
@@ -67,6 +74,24 @@ impl PaintSession {
             held_paint_budget_bytes: 0,
         };
         PaintSession::assemble(gpu, spec, undo)
+    }
+
+    /// A painting's mixing sheet: undoable, with the painting's paints, and a clean tool
+    /// with no colour chosen.
+    pub fn for_sheet(
+        gpu: &GpuContext,
+        pigment_slots: &[String],
+    ) -> Result<PaintSession, CanvasError> {
+        let spec = sheet_spec(pigment_slots);
+        let undo = HistoryLimits {
+            tile_budget_bytes: history_budget(&spec),
+            max_steps: HISTORY_MAX_STEPS,
+            held_paint_budget_bytes: SHEET_HELD_PAINT_BUDGET_BYTES,
+        };
+        let mut session = PaintSession::assemble(gpu, spec, undo)?;
+        session.brush.recipe = Vec::new();
+        session.clean_brush(gpu);
+        Ok(session)
     }
 
     fn assemble(

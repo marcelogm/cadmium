@@ -25,7 +25,7 @@ pub(super) struct Snapshot {
 
 impl Snapshot {
     pub(super) fn of(state: &AppState, controls: &[ParamControl]) -> Snapshot {
-        let session = &state.session;
+        let session = &state.painting.session;
         let slots = session.canvas.spec.pigment_slots.clone();
         let infos = slot_infos(&session.db, &slots);
         let params = session.engine.params();

@@ -206,6 +206,12 @@
     </section>
     <section>
       <item>
+        <attribute name="label">Edit Palette…</attribute>
+        <attribute name="action">win.edit-palette</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
         <attribute name="label">Preferences</attribute>
         <attribute name="action">win.preferences</attribute>
       </item>

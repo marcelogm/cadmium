@@ -6,12 +6,14 @@ mod export;
 mod palette;
 mod read;
 mod save;
+mod sheet;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, StateTexture, Weave},
+    document,
     gpu::GpuContext,
     session::PaintSession,
     stroke::StrokeSample,
@@ -19,7 +21,7 @@ use cadmium_engine::{
 
 use crate::support::encode_frame;
 
-const CURRENT_FORMAT: u32 = 7;
+const CURRENT_FORMAT: u32 = 8;
 const SKETCH_DENSITY: f32 = 0.75;
 const BLANK_WIDTH: u32 = 64;
 const BLANK_HEIGHT: u32 = 32;
@@ -99,4 +101,17 @@ fn painted_session_with_stroke(gpu: &GpuContext, from: (f64, f64), to: (f64, f64
     let mut s = session_with_ended_stroke(gpu, from, to);
     encode_frame(gpu, &mut s);
     s
+}
+
+fn blank_sheet(gpu: &GpuContext, painting: &PaintSession) -> PaintSession {
+    PaintSession::for_sheet(gpu, &painting.canvas.spec.pigment_slots).unwrap()
+}
+
+fn save_painting(gpu: &GpuContext, painting: &mut PaintSession, path: &Path) {
+    let mut sheet = blank_sheet(gpu, painting);
+    document::save(gpu, painting, &mut sheet, path).unwrap();
+}
+
+fn open_painting(gpu: &GpuContext, path: &Path) -> PaintSession {
+    document::open(gpu, path).unwrap().painting
 }

@@ -1,4 +1,5 @@
 use crate::state::AppState;
+use crate::state::EaselId;
 use crate::state::provisional::{PROVISIONAL_OPACITY, TRAIL_DELAY_MS};
 use crate::state::test_support::{
     PAINT_ROW_Y, RAG_ROW_Y, ScriptedClock, finish_painting, paint_stroke, painting_state,
@@ -15,7 +16,7 @@ const PACED_FRAMES: usize = 6;
 
 fn frames_until_settled(state: &mut AppState, clock: &ScriptedClock) -> u32 {
     let mut frames = 0;
-    while state.session.bristles_settling(state.now_ms()) {
+    while state.painting.session.bristles_settling(state.now_ms()) {
         clock.advance(FRAME_INTERVAL_MS);
         present_one_frame(state);
         frames += 1;
@@ -31,30 +32,33 @@ fn a_stroke_still_queued_when_the_eraser_comes_down_is_painted_with_its_own_brus
     stroke(&mut state, Tool::Rag, &row_samples(RAG_ROW_Y));
     present_one_frame(&mut state);
     assert!(wet_volume(&state) > 0.0);
-    assert_eq!(state.session.brush.tool, Tool::Brush);
+    assert_eq!(state.painting.session.brush.tool, Tool::Brush);
 }
 
 #[test]
 fn an_eraser_stroke_puts_the_rag_down_after_the_frame() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    state.press(sample_at(300.0, 100.0, 0.9), true);
-    state.motion(&[sample_at(340.0, 100.0, 0.9)]);
-    assert_eq!(state.session.brush.tool, Tool::Rag);
-    state.release();
+    state.press(EaselId::Painting, sample_at(300.0, 100.0, 0.9), true);
+    state.motion(EaselId::Painting, &[sample_at(340.0, 100.0, 0.9)]);
+    assert_eq!(state.painting.session.brush.tool, Tool::Rag);
+    state.release(EaselId::Painting);
     present_one_frame(&mut state);
-    assert_eq!(state.session.brush.tool, Tool::Brush);
+    assert_eq!(state.painting.session.brush.tool, Tool::Brush);
 }
 
 #[test]
 fn frames_report_the_pen_samples_they_drew() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Blender));
-    state.press(sample_at(300.0, 100.0, 0.9), false);
-    state.motion(&[sample_at(320.0, 100.0, 0.9), sample_at(340.0, 100.0, 0.9)]);
+    state.press(EaselId::Painting, sample_at(300.0, 100.0, 0.9), false);
+    state.motion(
+        EaselId::Painting,
+        &[sample_at(320.0, 100.0, 0.9), sample_at(340.0, 100.0, 0.9)],
+    );
     present_one_frame(&mut state);
     assert_eq!(state.pen.samples_last_frame, 3);
-    state.release();
+    state.release(EaselId::Painting);
 }
 
 #[test]
@@ -63,7 +67,7 @@ fn frames_keep_coming_while_the_bristles_settle_after_a_stroke() {
     let mut state = scripted_painting_state(&clock);
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     present_one_frame(&mut state);
-    assert!(!state.session.has_pending_work());
+    assert!(!state.painting.session.has_pending_work());
     let settle_frames = f64::from(BRISTLE_SETTLE_MS) / FRAME_INTERVAL_MS;
     let frames = f64::from(frames_until_settled(&mut state, &clock));
     assert!(
@@ -83,7 +87,7 @@ fn a_rag_stroke_after_the_brush_asks_for_no_settling_frames() {
     stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     stroke(&mut state, Tool::Rag, &row_samples(RAG_ROW_Y));
     finish_painting(&mut state, present_one_frame);
-    assert!(!state.session.bristles_settling(state.now_ms()));
+    assert!(!state.painting.session.bristles_settling(state.now_ms()));
 }
 
 #[test]
@@ -111,11 +115,11 @@ fn pacing_learns_what_a_dab_costs_from_the_gpu_time_of_the_frames_that_painted_t
 fn the_trail_of_a_stroke_still_queued_stays_hidden_on_its_first_frames() {
     let clock = ScriptedClock::starting_at(CLOCK_START_MS);
     let mut state = scripted_painting_state(&clock);
-    state.begin_stroke(Tool::Brush, row_samples(PAINT_ROW_Y)[0]);
+    state.begin_stroke(EaselId::Painting, Tool::Brush, row_samples(PAINT_ROW_Y)[0]);
     let long_row: Vec<_> = (0..40)
         .map(|step| sample_at(100.0 + f64::from(step) * 8.0, PAINT_ROW_Y, 1.0))
         .collect();
-    state.add_samples(&long_row);
+    state.add_samples(EaselId::Painting, &long_row);
     present_one_frame(&mut state);
     clock.advance(FRAME_INTERVAL_MS);
     present_one_frame(&mut state);
@@ -129,7 +133,7 @@ fn the_trail_of_a_stroke_still_queued_stays_hidden_on_its_first_frames() {
 fn the_trail_of_a_stroke_that_stays_queued_fades_in() {
     let clock = ScriptedClock::starting_at(CLOCK_START_MS);
     let mut state = scripted_painting_state(&clock);
-    state.begin_stroke(Tool::Brush, row_samples(PAINT_ROW_Y)[0]);
+    state.begin_stroke(EaselId::Painting, Tool::Brush, row_samples(PAINT_ROW_Y)[0]);
     let frames = ((TRAIL_DELAY_MS + 20.0) / FRAME_INTERVAL_MS).ceil() as usize + 1;
     for frame in 0..frames {
         let row: Vec<_> = (0..40)
@@ -138,7 +142,7 @@ fn the_trail_of_a_stroke_that_stays_queued_fades_in() {
                 sample_at(x, PAINT_ROW_Y, 1.0)
             })
             .collect();
-        state.add_samples(&row);
+        state.add_samples(EaselId::Painting, &row);
         present_one_frame(&mut state);
         clock.advance(FRAME_INTERVAL_MS);
     }

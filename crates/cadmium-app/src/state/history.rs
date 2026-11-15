@@ -1,56 +1,88 @@
-use super::AppState;
+use cadmium_engine::gpu::GpuContext;
+
+use super::{AppState, Easel, EaselId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DryOutcome {
     NothingWet,
-    Dried { undoable: bool },
+    /// The Palette dialog is up over the painting: nothing is dried.
+    PaletteOpen,
+    Dried {
+        undoable: bool,
+    },
+}
+
+impl Easel {
+    pub fn undo(&mut self, gpu: &GpuContext) -> bool {
+        self.release(gpu);
+        let undone = self.session.undo(gpu);
+        if undone {
+            self.measure_brush(gpu);
+        }
+        undone
+    }
+
+    pub fn redo(&mut self, gpu: &GpuContext) -> bool {
+        self.release(gpu);
+        let redone = self.session.redo(gpu);
+        if redone {
+            self.measure_brush(gpu);
+        }
+        redone
+    }
 }
 
 impl AppState {
+    /// Dries the painting's wet paint; not while the Palette dialog hides the painting, where
+    /// the drying could be neither seen nor undone.
     pub fn dry(&mut self) -> DryOutcome {
-        self.release();
-        self.session.flush(&self.gpu);
-        if self.session.canvas.wet_tiles.is_empty() {
+        if self.is_editing_palette() {
+            return DryOutcome::PaletteOpen;
+        }
+        self.release(EaselId::Painting);
+        let session = &mut self.painting.session;
+        session.flush(&self.gpu);
+        if session.canvas.wet_tiles.is_empty() {
             return DryOutcome::NothingWet;
         }
-        let undoable = self.session.dry(&self.gpu);
+        let undoable = session.dry(&self.gpu);
         self.edits.record();
         self.wake();
         DryOutcome::Dried { undoable }
     }
 
-    pub fn undo(&mut self) -> bool {
-        self.release();
-        let undone = self.session.undo(&self.gpu);
-        if undone {
+    pub fn undo(&mut self, id: EaselId) -> bool {
+        self.release(id);
+        let gpu = self.gpu.clone();
+        let undone = self.easel_mut(id).undo(&gpu);
+        self.after_history_step(undone)
+    }
+
+    pub fn redo(&mut self, id: EaselId) -> bool {
+        self.release(id);
+        let gpu = self.gpu.clone();
+        let redone = self.easel_mut(id).redo(&gpu);
+        self.after_history_step(redone)
+    }
+
+    fn after_history_step(&mut self, stepped: bool) -> bool {
+        if stepped {
             self.edits.record();
-            self.measure_brush();
         }
         self.wake();
-        undone
+        stepped
     }
 
-    pub fn redo(&mut self) -> bool {
-        self.release();
-        let redone = self.session.redo(&self.gpu);
-        if redone {
-            self.edits.record();
-            self.measure_brush();
-        }
-        self.wake();
-        redone
+    pub fn can_undo(&self, id: EaselId) -> bool {
+        self.easel(id).session.history.can_undo()
     }
 
-    pub fn can_undo(&self) -> bool {
-        self.session.history.can_undo()
-    }
-
-    pub fn can_redo(&self) -> bool {
-        self.session.history.can_redo()
+    pub fn can_redo(&self, id: EaselId) -> bool {
+        self.easel(id).session.history.can_redo()
     }
 
     pub fn history_is_enabled(&self) -> bool {
-        self.session.history.is_enabled()
+        self.painting.session.history.is_enabled()
     }
 }
 

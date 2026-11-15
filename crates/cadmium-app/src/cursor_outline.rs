@@ -2,7 +2,7 @@ use cadmium_engine::stroke::StrokeSample;
 use gtk::prelude::*;
 use gtk::{gdk, graphene, gsk};
 
-use crate::state::AppState;
+use crate::state::{AppState, EaselId};
 use crate::tools::Press;
 
 const OUTLINE_WIDTH: f32 = 1.0;
@@ -24,9 +24,10 @@ impl CursorOutline {
         }
     }
 
-    pub(crate) fn of_brush(state: &AppState, to_widget: f32) -> CursorOutline {
-        let mut brush = state.session.brush.clone();
-        if let Press::Stroke(tool) = state.ui_tool.profile().press() {
+    pub(crate) fn of_brush(state: &AppState, id: EaselId, to_widget: f32) -> CursorOutline {
+        let session = &state.easel(id).session;
+        let mut brush = session.brush.clone();
+        if let Press::Stroke(tool) = state.press_for(id) {
             brush.tool = tool;
         }
         let pen = StrokeSample {
@@ -38,7 +39,7 @@ impl CursorOutline {
             time_ms: 0,
         };
         let canvas_radius = brush.geometry.max_diameter_px / 2.0;
-        let (semi_axes, rotation_deg) = match state.session.engine.brush_outline(&brush, &pen) {
+        let (semi_axes, rotation_deg) = match session.engine.brush_outline(&brush, &pen) {
             Some(outline) => (outline.semi_axes, outline.orientation.to_degrees()),
             None => ([canvas_radius; 2], 0.0),
         };

@@ -3,14 +3,15 @@ use std::path::Path;
 
 use cadmium_engine::{
     canvas::{CanvasSpec, Primer, StateTexture, Weave},
-    document::{self, DocumentError, DocumentSnapshot},
-    gpu::GpuContext,
+    document::{DocumentError, DocumentSnapshot},
     pigments::PigmentDb,
+    sheet::{SHEET_HEIGHT_PX, SHEET_WIDTH_PX},
 };
 
 use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
-/// The entry names of format 7, spelled out so that renaming one changes a test.
+/// The entry names of format 8 for the painting (the sheet's add `sheet/` in front),
+/// spelled out so that renaming one changes a test.
 pub(super) const STATE_ENTRIES: [(&str, StateTexture); 9] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),
     ("state/wet_pig1.zst", StateTexture::WetPig1),
@@ -47,10 +48,10 @@ impl Entries {
             serde_json::to_vec(&manifest).unwrap(),
         )];
         for (name, which) in STATE_ENTRIES {
-            let raw = vec![0u8; (BLANK_WIDTH * BLANK_HEIGHT * which.bytes_per_texel()) as usize];
+            entries.push((name.to_string(), zeroed(BLANK_WIDTH, BLANK_HEIGHT, which)));
             entries.push((
-                name.to_string(),
-                zstd::encode_all(raw.as_slice(), 3).unwrap(),
+                format!("sheet/{name}"),
+                zeroed(SHEET_WIDTH_PX, SHEET_HEIGHT_PX, which),
             ));
         }
         Entries(entries)
@@ -120,6 +121,11 @@ impl Entries {
     }
 }
 
+fn zeroed(width: u32, height: u32, which: StateTexture) -> Vec<u8> {
+    let raw = vec![0u8; (width * height * which.bytes_per_texel()) as usize];
+    zstd::encode_all(raw.as_slice(), 3).unwrap()
+}
+
 pub(super) fn read_entries(entries: Entries) -> Result<DocumentSnapshot, DocumentError> {
     let dir = TempDir::new("read");
     let path = dir.file("painting.cadmium");
@@ -137,20 +143,4 @@ pub(super) fn format_reason(result: Result<DocumentSnapshot, DocumentError>) -> 
 
 pub(super) fn set_first_f32(value: f32) -> impl FnOnce(&mut Vec<u8>) {
     move |raw| raw[..4].copy_from_slice(&value.to_le_bytes())
-}
-
-#[test]
-fn a_saved_painting_holds_its_manifest_and_the_painting_state_only() {
-    let gpu = GpuContext::new().unwrap();
-    let dir = TempDir::new("entries");
-    let mut session = crate::painted_session(&gpu);
-    document::save(&gpu, &mut session, &dir.file("p.cadmium")).unwrap();
-    let names = Entries::saved(&dir.file("p.cadmium")).names();
-    assert!(names.iter().any(|name| name == "manifest.json"));
-    assert!(names.iter().any(|name| name == GRAPHITE_ENTRY));
-    assert!(
-        names
-            .iter()
-            .all(|name| name == "manifest.json" || name.starts_with("state/"))
-    );
 }

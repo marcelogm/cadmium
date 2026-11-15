@@ -1,11 +1,10 @@
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec};
-use cadmium_engine::palette::{ColourRef, Palette, Recipe, paint_recipe};
 use cadmium_engine::params::{ParamSpec, SimParams};
-use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_studio::{hair_name, head_name};
 use gtk::gdk;
 
 use crate::colour_wheel::WheelPick;
+use crate::palette_colours::colour_click;
 use crate::sliders::format_param;
 use crate::state::{ColourClick, PaletteView};
 use crate::tools::Tool;
@@ -25,8 +24,6 @@ const PENCIL_GRADES: [&str; 9] = ["8B", "6B", "4B", "2B", "HB", "2H", "4H", "6H"
 const MIDDLE_GRADE: usize = PENCIL_GRADES.len() / 2;
 /// What a rack row calls a head or hair that matches no factory one.
 const CUSTOM_PART: &str = "Custom";
-/// How far apart, per paint, two recipes may be and still be the same colour.
-const SAME_COLOUR_TOLERANCE: f32 = 1e-3;
 const COLOURS_VIEW: &str = "colours";
 const CIRCLE_VIEW: &str = "circle";
 /// The faces of the palette and the label of the toggle of each, in toggle order.
@@ -37,29 +34,6 @@ pub(super) const PALETTE_VIEWS: [(PaletteView, &str); 2] = [
 
 pub(super) fn tool_hint(tool: Tool) -> &'static str {
     tool.handling().unwrap_or(EYEDROPPER_HINT)
-}
-
-/// The paint or pinned colour the selected colour is; a paint comes before a pinned colour.
-pub(super) fn highlighted_colour(
-    palette: &Palette,
-    selected: Option<&Recipe>,
-) -> Option<ColourRef> {
-    let selected = selected?;
-    let paint = (0..MAX_SLOTS).find(|slot| is_same_colour(&paint_recipe(*slot), selected));
-    let pinned = &palette.my_colours;
-    let mine = || {
-        pinned
-            .iter()
-            .position(|mine| is_same_colour(mine, selected))
-    };
-    paint
-        .map(ColourRef::Paint)
-        .or_else(|| mine().map(ColourRef::Mine))
-}
-
-fn is_same_colour(one: &Recipe, other: &Recipe) -> bool {
-    let mut shares = one.iter().zip(other);
-    shares.all(|(one, other)| (one - other).abs() <= SAME_COLOUR_TOLERANCE)
 }
 
 /// The name of the toggle and of the stack page of a face of the palette.
@@ -78,30 +52,6 @@ pub(super) fn palette_view_named(name: &str) -> Option<PaletteView> {
 /// Whether the wheel is on show: the palette is, and it shows its circle.
 pub(super) fn circle_shows(tool: Tool, view: PaletteView) -> bool {
     tool.controls().pigments && view == PaletteView::Circle
-}
-
-/// Everything the picture of the wheel is made from.
-#[derive(Clone, Debug, PartialEq)]
-pub(super) struct WheelKey {
-    pub(super) palette: Palette,
-    pub(super) slots: Vec<String>,
-    pub(super) darken_bits: u32,
-}
-
-impl WheelKey {
-    pub(super) fn of(palette: &Palette, slots: &[String], darken: f32) -> WheelKey {
-        WheelKey {
-            palette: palette.clone(),
-            slots: slots.to_vec(),
-            darken_bits: darken.to_bits(),
-        }
-    }
-}
-
-/// Whether the wheel must be mixed again: only while it shows, and only when what it was last
-/// mixed from is not what it would be mixed from now.
-pub(super) fn wheel_is_stale(shows: bool, drawn: Option<&WheelKey>, wanted: &WheelKey) -> bool {
-    shows && drawn != Some(wanted)
 }
 
 pub(super) fn describe_recipe(names: &[&str], recipe: &[(usize, f32)]) -> String {
@@ -148,14 +98,6 @@ pub(super) fn plate_gap_text(gap_um: f32) -> String {
         "{} {PLATE_GAP_UNIT}",
         format_param(plate_gap_spec(), gap_um)
     )
-}
-
-pub(super) fn colour_click(modifiers: gdk::ModifierType) -> ColourClick {
-    if modifiers.contains(gdk::ModifierType::CONTROL_MASK) {
-        ColourClick::MixIn
-    } else {
-        ColourClick::Load
-    }
 }
 
 /// What a pick on the colour wheel does: the pointer loads the colour under it, press or drag;

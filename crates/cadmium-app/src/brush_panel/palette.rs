@@ -2,17 +2,15 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
-use cadmium_engine::palette::{ColourRef, circle_axes};
+use cadmium_engine::palette::ColourRef;
 use cadmium_engine::pigments::MAX_SLOTS;
-use gtk::{gdk, glib};
+use gtk::glib;
 
 use super::BrushPanel;
-use super::presentation::{
-    WheelKey, circle_shows, colour_click, palette_view_name, wheel_is_stale,
-};
+use super::presentation::{circle_shows, palette_view_name};
 use super::signals::with_panel;
 use super::snapshot::{PigmentChoice, Snapshot};
-use crate::colour_wheel::{WheelPaint, wheel_image};
+use crate::palette_colours::{colour_click, current_modifiers};
 use crate::swatch::{Swatch, SwatchShape};
 
 const PIGMENT_SWATCH_SIZE: i32 = 26;
@@ -28,7 +26,6 @@ pub(super) struct ShownPalette {
     slots: RefCell<Option<Vec<String>>>,
     my_colour_swatches: RefCell<Vec<Swatch>>,
     my_colours: RefCell<Option<Vec<[u8; 3]>>>,
-    wheel: RefCell<Option<WheelKey>>,
 }
 
 impl BrushPanel {
@@ -118,21 +115,10 @@ impl BrushPanel {
 
     /// Mixes the wheel again only while it shows and what it is mixed from changed.
     fn show_wheel(&self, snapshot: &Snapshot) {
-        let wanted = &snapshot.palette.wheel_key;
         let shows = circle_shows(snapshot.tool, snapshot.palette.view);
-        if !wheel_is_stale(shows, self.shown_palette.wheel.borrow().as_ref(), wanted) {
-            return;
-        }
         let state = self.state.borrow();
-        let image = wheel_image(&WheelPaint {
-            db: &state.session.db,
-            slots: &wanted.slots,
-            palette: &wanted.palette,
-            axes: circle_axes(&wanted.slots),
-            darken: f32::from_bits(wanted.darken_bits),
-        });
-        self.palette.wheel.show(image);
-        self.shown_palette.wheel.replace(Some(wanted.clone()));
+        let db = &state.painting.session.db;
+        (self.palette.wheel).show_if_stale(shows, &snapshot.palette.wheel_key, db);
     }
 
     fn colour_button(
@@ -226,13 +212,4 @@ fn add_chosen_pile(
     if let Some(panel) = panel.upgrade() {
         panel.add_pile(&id);
     }
-}
-
-fn current_modifiers(widget: &impl IsA<gtk::Widget>) -> gdk::ModifierType {
-    widget
-        .display()
-        .default_seat()
-        .and_then(|seat| seat.keyboard())
-        .map(|keyboard| keyboard.modifier_state())
-        .unwrap_or_else(gdk::ModifierType::empty)
 }

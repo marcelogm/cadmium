@@ -51,6 +51,6 @@ fn a_missing_or_borrowed_state_counts_as_stroking() {
 #[test]
 fn a_new_painting_neither_reloads_nor_cleans_the_brush_between_strokes() {
     let state = painting_state();
-    assert!(!state.reload_each_stroke);
-    assert!(!state.clean_each_stroke);
+    assert!(!state.painting.reload_each_stroke);
+    assert!(!state.painting.clean_each_stroke);
 }

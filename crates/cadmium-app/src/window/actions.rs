@@ -4,7 +4,8 @@ use gtk::{gio, glib};
 
 use super::CadmiumWindow;
 use crate::brush_editor;
-use crate::state::DryOutcome;
+use crate::palette_editor;
+use crate::state::{AppState, DryOutcome, EaselId};
 use crate::tools::UiTool;
 
 const DRIED_TOAST: &str = "Canvas dried";
@@ -31,6 +32,7 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("export", CadmiumWindow::export),
     ("new-brush", CadmiumWindow::new_brush),
     ("edit-brush", CadmiumWindow::edit_brush),
+    ("edit-palette", CadmiumWindow::edit_palette),
     ("import-brush", CadmiumWindow::import_brush),
     ("export-brush", CadmiumWindow::export_brush),
     ("delete-brush", CadmiumWindow::delete_brush),
@@ -45,12 +47,16 @@ impl CadmiumWindow {
         self.set_brush_deletable(false);
     }
 
-    pub(super) fn sync_history_actions(&self) {
+    /// Enables undo and redo by the history of the easel they go to; with none, neither.
+    pub(crate) fn sync_history_actions(&self) {
         let state = self.state();
         let Ok(state) = state.try_borrow() else {
             return;
         };
-        let (can_undo, can_redo) = (state.can_undo(), state.can_redo());
+        let (can_undo, can_redo) = match state.history_easel() {
+            Some(id) => (state.can_undo(id), state.can_redo(id)),
+            None => (false, false),
+        };
         drop(state);
         for (name, enabled) in [("undo", can_undo), ("redo", can_redo)] {
             self.enable_action(name, enabled);
@@ -80,12 +86,20 @@ impl CadmiumWindow {
     }
 
     fn undo(&self) {
-        self.state().borrow_mut().undo();
-        self.after_history_change();
+        self.step_history(AppState::undo);
     }
 
     fn redo(&self) {
-        self.state().borrow_mut().redo();
+        self.step_history(AppState::redo);
+    }
+
+    /// Undoes or redoes on the easel the history goes to; with none, does nothing.
+    fn step_history(&self, step: fn(&mut AppState, EaselId) -> bool) {
+        let state = self.state();
+        let Some(id) = state.borrow().history_easel() else {
+            return;
+        };
+        step(&mut state.borrow_mut(), id);
         self.after_history_change();
     }
 
@@ -95,6 +109,10 @@ impl CadmiumWindow {
 
     fn edit_brush(&self) {
         brush_editor::open(self);
+    }
+
+    fn edit_palette(&self) {
+        palette_editor::open(self);
     }
 
     fn zoom_in(&self) {

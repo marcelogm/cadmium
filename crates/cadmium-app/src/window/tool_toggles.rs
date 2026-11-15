@@ -4,8 +4,8 @@ use gtk::{gdk, gio, glib};
 
 use super::CadmiumWindow;
 use crate::LOG_DOMAIN;
-use crate::tools::UiTool;
-use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS, digit_pick, is_number_row_digit};
+use crate::tools::keys::{KEYPAD_TOOL_KEYS, TOOL_KEYS, is_number_row_digit, pressed_tool};
+use crate::tools::{UiTool, tool_toggle};
 
 impl CadmiumWindow {
     pub(super) fn fill_tool_group(&self) {
@@ -107,18 +107,7 @@ impl CadmiumWindow {
         if !self.window_keys_are_free() {
             return glib::Propagation::Proceed;
         }
-        let display = WidgetExt::display(self);
-        let level = |state| {
-            display
-                .translate_key(keycode, state, keys.group() as i32)
-                .map(|(key, ..)| key)
-        };
-        let pick = digit_pick(
-            level(gdk::ModifierType::empty()),
-            level(gdk::ModifierType::SHIFT_MASK),
-            modifiers,
-        );
-        match pick {
+        match pressed_tool(keys, keycode, modifiers) {
             None => glib::Propagation::Proceed,
             Some(tool) => {
                 self.pick_painting_tool(tool);
@@ -133,13 +122,4 @@ impl CadmiumWindow {
             glib::g_warning!(LOG_DOMAIN, "couldn't pick {tool:?}: {error}");
         }
     }
-}
-
-fn tool_toggle(tool: UiTool) -> adw::Toggle {
-    let profile = tool.profile();
-    adw::Toggle::builder()
-        .name(tool.name())
-        .icon_name(profile.icon)
-        .tooltip(profile.tooltip)
-        .build()
 }

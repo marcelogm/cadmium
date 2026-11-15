@@ -1,17 +1,28 @@
 use cadmium_engine::render::ViewMode;
 
-use super::{AppState, ProvisionalTrail};
+use super::{AppState, EaselId, ProvisionalTrail};
 
 impl AppState {
-    pub fn encode_frame(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.prepare_frame();
+    pub fn encode_frame(&mut self, id: EaselId, encoder: &mut wgpu::CommandEncoder) {
+        let gpu = self.gpu.clone();
+        let allowance = self.pacing.allowance(&gpu);
         let now_ms = self.now_ms();
-        self.pacing.begin_frame(&self.gpu, encoder);
-        self.session.encode_frame(&self.gpu, now_ms, encoder);
-        self.pacing
-            .end_frame(encoder, self.session.last_frame_dabs());
-        self.capture_provisional();
-        self.after_frame();
+        let easel = self.easel_mut(id);
+        easel.session.limit_dabs_per_frame(Some(allowance));
+        let measuring = easel.brush_measure_due();
+        self.pacing.begin_frame(&gpu, encoder);
+        let easel = self.easel_mut(id);
+        easel.encode_frame(&gpu, now_ms, encoder);
+        let measure_failed = measuring && !easel.brush_measured;
+        let dabs = easel.session.last_frame_dabs();
+        self.pacing.end_frame(encoder, dabs);
+        if id == EaselId::Painting {
+            self.capture_provisional();
+        }
+        self.pen.samples_last_frame = std::mem::take(&mut self.samples_since_frame);
+        if measure_failed {
+            self.wake();
+        }
     }
 
     pub fn frame_submitted(&self) {
@@ -24,8 +35,9 @@ impl AppState {
     }
 
     fn capture_provisional(&mut self) {
-        let pending = self.session.queued_dabs();
-        let shown_in_colour = self.session.view_mode == ViewMode::Color;
+        let session = &self.painting.session;
+        let pending = session.queued_dabs();
+        let shown_in_colour = session.view_mode == ViewMode::Color;
         let colour = self
             .provisional
             .colour
@@ -36,22 +48,6 @@ impl AppState {
             .advance(self.now_ms(), colour.is_some());
         self.provisional.presented =
             colour.map(|colour| ProvisionalTrail::of(colour, &pending, self.view).faded(opacity));
-    }
-
-    fn prepare_frame(&mut self) {
-        if self.pacing.brush_measure_waits && !self.session.has_queued_dabs() {
-            self.pacing.brush_measure_waits = false;
-            self.pacing.brush_measured = self.measure_brush().is_some();
-        }
-        let allowance = self.pacing.allowance(&self.gpu);
-        self.session.limit_dabs_per_frame(Some(allowance));
-    }
-
-    fn after_frame(&mut self) {
-        if !self.is_stroking() {
-            self.session.brush.tool = self.resting_tool;
-        }
-        self.pen.samples_last_frame = std::mem::take(&mut self.samples_since_frame);
     }
 
     pub fn gpu_is_lost(&self) -> bool {

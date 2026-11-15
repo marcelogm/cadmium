@@ -91,7 +91,12 @@ impl CadmiumWindow {
         glib::spawn_future_local(save_chosen_painting(self.downgrade(), dialog));
     }
 
+    /// Asks for a painting to open; not while a dialog is up, which may be showing the
+    /// painting open now.
     pub fn open(&self) {
+        if self.visible_dialog().is_some() {
+            return;
+        }
         let file = self.state().borrow().file.clone();
         let dialog = file_dialog(OPEN_TITLE, &painting_filter(), file.as_deref());
         glib::spawn_future_local(open_chosen_painting(self.downgrade(), dialog));

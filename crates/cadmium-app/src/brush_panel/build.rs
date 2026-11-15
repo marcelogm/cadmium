@@ -16,6 +16,7 @@ const PALETTE_TITLE: &str = "Palette";
 const PAINTS_TITLE: &str = "Paints";
 const MY_COLOURS_TITLE: &str = "My Colours";
 const DARKEN_TITLE: &str = "Darken";
+const EDIT_PALETTE_LABEL: &str = "Edit Palette…";
 const DARKEN_TOOLTIP: &str = "Adds black to every colour of the circle";
 const PALETTE_SPACING: i32 = 12;
 const PALETTE_CARD_MARGIN: i32 = 10;
@@ -106,12 +107,22 @@ fn palette_preferences_group(
         .build();
     content.append(view_toggles);
     content.append(stack);
+    content.append(&edit_palette_button());
     let group = adw::PreferencesGroup::builder()
         .title(PALETTE_TITLE)
         .description(Tool::Brush.wording().pigments)
         .build();
     group.add(&content);
     group
+}
+
+fn edit_palette_button() -> gtk::Button {
+    gtk::Button::builder()
+        .label(EDIT_PALETTE_LABEL)
+        .action_name("win.edit-palette")
+        .halign(gtk::Align::Center)
+        .css_classes(["pill"])
+        .build()
 }
 
 fn palette_card(children: &[&gtk::Widget]) -> gtk::Box {

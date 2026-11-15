@@ -6,8 +6,8 @@ use gtk::subclass::prelude::*;
 use super::CadmiumCanvas;
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::run_handlers;
-use crate::state::Mark;
 use crate::state::stroking_or_busy;
+use crate::state::{EaselId, Mark};
 use crate::surface_scale::{device_scale, widget_centre};
 use crate::view::auto_fit::{AutoFit, update_auto_fit};
 use crate::view::{self, ViewStep};
@@ -40,8 +40,8 @@ impl CadmiumCanvas {
             let state = self.state();
             let state = state.borrow();
             (
-                state.session.canvas.spec.width,
-                state.session.canvas.spec.height,
+                state.painting.session.canvas.spec.width,
+                state.painting.session.canvas.spec.height,
             )
         };
         let viewport = (
@@ -134,7 +134,10 @@ impl CadmiumCanvas {
     pub(super) fn cursor_outline(&self) -> Option<CursorOutline> {
         let state = self.imp().state.get()?.try_borrow().ok()?;
         let to_widget = state.view.zoom / self.device_scale() as f32;
-        Some(CursorOutline::of_brush(&state, to_widget).turned(state.view.rotation))
+        Some(
+            CursorOutline::of_brush(&state, EaselId::Painting, to_widget)
+                .turned(state.view.rotation),
+        )
     }
 
     pub(super) fn provisional_marks(&self) -> Option<([u8; 3], f32, Vec<Mark>)> {

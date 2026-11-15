@@ -50,6 +50,7 @@ fn begin_nav<W: NavigableSurface>(
     start: (f64, f64),
 ) {
     let state = surface.state();
+    let easel = surface.easel();
     let (press, settings) = {
         let state = state.borrow();
         let press = NavPress {
@@ -59,8 +60,8 @@ fn begin_nav<W: NavigableSurface>(
                 .is_some_and(|event| comes_from_a_pen(&event)),
             // The pointer event's own modifier state is current; key events' is one step behind.
             held: held_mode(surface.space_held(), drag.current_event_state()),
-            tool_pans: state.ui_tool.profile().press() == Press::Pan,
-            stroking: state.is_stroking(),
+            tool_pans: state.press_for(easel) == Press::Pan,
+            stroking: state.easel(easel).is_stroking(),
             pen_buttons: pen_buttons_of(surface),
         };
         (press, state.settings.get())

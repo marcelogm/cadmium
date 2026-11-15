@@ -1,4 +1,5 @@
 use super::*;
+use crate::state::EaselId;
 use crate::state::test_support::{
     PAINT_ROW_Y, finish_painting, paint_stroke, painting_state, present_one_frame, row_samples,
     sample_at, wet_volume,
@@ -6,8 +7,8 @@ use crate::state::test_support::{
 use crate::tools::UiTool;
 
 fn wipe_the_painted_row(state: &mut AppState) {
-    state.motion(&[sample_at(290.0, PAINT_ROW_Y, 1.0)]);
-    state.release();
+    state.motion(EaselId::Painting, &[sample_at(290.0, PAINT_ROW_Y, 1.0)]);
+    state.release(EaselId::Painting);
     finish_painting(state, present_one_frame);
 }
 
@@ -17,7 +18,7 @@ fn the_eraser_wipes_with_the_rag() {
     paint_stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
     let before = wet_volume(&state);
     state.set_ui_tool(UiTool::Paint(Tool::Brush));
-    assert!(state.press(sample_at(100.0, PAINT_ROW_Y, 1.0), true));
+    assert!(state.press(EaselId::Painting, sample_at(100.0, PAINT_ROW_Y, 1.0), true));
     wipe_the_painted_row(&mut state);
     assert!(wet_volume(&state) < before);
 }
@@ -28,7 +29,7 @@ fn the_move_tool_and_the_eyedropper_tip_do_not_touch_down() {
         let mut state = painting_state();
         state.set_ui_tool(tool);
         assert!(
-            !state.press(sample_at(100.0, 100.0, 0.8), false),
+            !state.press(EaselId::Painting, sample_at(100.0, 100.0, 0.8), false),
             "{tool:?}"
         );
         assert!(!state.is_stroking());
@@ -39,9 +40,9 @@ fn the_move_tool_and_the_eyedropper_tip_do_not_touch_down() {
 fn the_pencil_starts_a_pencil_stroke() {
     let mut state = painting_state();
     state.set_ui_tool(UiTool::Paint(Tool::Pencil));
-    assert!(state.press(sample_at(100.0, 100.0, 1.0), false));
+    assert!(state.press(EaselId::Painting, sample_at(100.0, 100.0, 1.0), false));
     assert!(state.is_stroking());
-    assert_eq!(state.session.brush.tool, Tool::Pencil);
+    assert_eq!(state.painting.session.brush.tool, Tool::Pencil);
 }
 
 #[test]
@@ -49,7 +50,10 @@ fn the_eraser_end_wipes_whatever_the_tool() {
     for tool in [Tool::Brush, Tool::Pencil, Tool::Eyedropper] {
         let mut state = painting_state();
         state.set_ui_tool(UiTool::Paint(tool));
-        assert!(state.press(sample_at(100.0, 100.0, 0.8), true), "{tool:?}");
-        assert_eq!(state.session.brush.tool, Tool::Rag, "{tool:?}");
+        assert!(
+            state.press(EaselId::Painting, sample_at(100.0, 100.0, 0.8), true),
+            "{tool:?}"
+        );
+        assert_eq!(state.painting.session.brush.tool, Tool::Rag, "{tool:?}");
     }
 }

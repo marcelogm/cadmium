@@ -99,3 +99,22 @@ fn only_the_number_row_digits_are_number_row_digits() {
         assert!(!is_number_row_digit(key), "{key:?}");
     }
 }
+
+#[test]
+fn a_letter_or_a_keypad_digit_picks_its_tool_and_the_number_row_is_left_to_digit_pick() {
+    let none = gdk::ModifierType::empty();
+    assert_eq!(
+        plain_key_pick(gdk::Key::p, none),
+        Some(UiTool::Paint(Tool::Pencil))
+    );
+    assert_eq!(
+        plain_key_pick(gdk::Key::KP_1, none),
+        Some(UiTool::Paint(Tool::Brush))
+    );
+    assert_eq!(plain_key_pick(gdk::Key::_1, none), None);
+    assert_eq!(
+        plain_key_pick(gdk::Key::p, gdk::ModifierType::CONTROL_MASK),
+        None
+    );
+    assert_eq!(plain_key_pick(gdk::Key::q, none), None);
+}

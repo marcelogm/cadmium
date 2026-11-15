@@ -1,6 +1,7 @@
+use crate::canvas::StateTexture;
 use crate::gpu::{GpuContext, new_encoder};
 
-use super::PaintSession;
+use super::{ClearOutcome, PaintSession};
 
 const DRY_TILES_PER_SUBMIT: usize = 64;
 
@@ -18,5 +19,25 @@ impl PaintSession {
             gpu.queue.submit([encoder.finish()]);
         }
         self.history.commit_step()
+    }
+
+    pub fn clear_wet(&mut self, gpu: &GpuContext) -> ClearOutcome {
+        self.settle_pending_step(gpu);
+        let tiles = self.canvas.wet_tiles.take();
+        if tiles.is_empty() {
+            return ClearOutcome::NothingWet;
+        }
+        self.history.begin_removal_step(tiles.len());
+        let mut encoder = new_encoder(gpu, "clear_wet");
+        self.history
+            .encode_save_tiles(gpu, &self.canvas, &tiles, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        let texels = (self.canvas.spec.width * self.canvas.spec.height) as usize;
+        self.canvas
+            .write_f32(gpu, StateTexture::WetVol, &vec![0.0; texels]);
+        self.canvas.dirty.mark_all();
+        ClearOutcome::Cleared {
+            undoable: self.history.commit_step(),
+        }
     }
 }

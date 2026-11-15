@@ -5,13 +5,14 @@ use std::path::Path;
 use crate::canvas::{CanvasSpec, StateTexture};
 use crate::gpu::TexelRows;
 use crate::pigments::PigmentDb;
+use crate::sheet::sheet_spec;
 use crate::spectral::BANDS;
 
 use super::relief::dry_height_over_weave;
 use super::{
     DENSITY_BYTES, DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY,
-    MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, StateBytes, THICKNESS_BYTES, THICKNESS_UNITS,
-    state_entry,
+    MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, SHEET_PREFIX, StateBytes, THICKNESS_BYTES,
+    THICKNESS_UNITS, state_entry,
 };
 
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
@@ -26,10 +27,14 @@ impl DocumentSnapshot {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
         let Manifest { spec, palette, .. } = read_manifest(&mut archive)?;
         let states = read_states(&mut archive, PAINTING_PREFIX, &spec)?;
+        let sheet_spec = sheet_spec(&spec.pigment_slots);
+        let sheet_states = read_states(&mut archive, SHEET_PREFIX, &sheet_spec)?;
         Ok(DocumentSnapshot {
             spec,
             palette,
             states,
+            sheet_spec,
+            sheet_states,
         })
     }
 }

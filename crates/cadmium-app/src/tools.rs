@@ -63,6 +63,15 @@ impl UiTool {
         UiTool::Paint(Tool::Eyedropper),
     ];
 
+    /// The tools the mixing sheet offers: the painting's paint tools, without the pencil.
+    pub const SHEET: [UiTool; 5] = [
+        UiTool::Paint(Tool::Brush),
+        UiTool::Paint(Tool::Knife),
+        UiTool::Paint(Tool::Blender),
+        UiTool::Paint(Tool::Rag),
+        UiTool::Paint(Tool::Eyedropper),
+    ];
+
     pub(crate) const fn profile(self) -> &'static UiToolProfile {
         match self {
             UiTool::Move => &moving::MOVE,
@@ -90,6 +99,16 @@ impl UiTool {
     pub fn handling(self) -> Option<&'static str> {
         self.profile().handling
     }
+}
+
+/// The toggle that picks `tool` in a tool bar: its icon and tooltip, named by the tool.
+pub(crate) fn tool_toggle(tool: UiTool) -> adw::Toggle {
+    let profile = tool.profile();
+    adw::Toggle::builder()
+        .name(tool.name())
+        .icon_name(profile.icon)
+        .tooltip(profile.tooltip)
+        .build()
 }
 
 #[cfg(test)]

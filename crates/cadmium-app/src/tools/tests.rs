@@ -77,3 +77,9 @@ fn every_tool_presses_one_way() {
         ]
     );
 }
+
+#[test]
+fn the_sheet_offers_the_paint_tools_and_no_pencil() {
+    let names: Vec<_> = UiTool::SHEET.into_iter().map(UiTool::name).collect();
+    assert_eq!(names, ["brush", "knife", "blender", "rag", "eyedropper"]);
+}

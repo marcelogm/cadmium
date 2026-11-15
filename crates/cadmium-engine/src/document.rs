@@ -6,6 +6,7 @@ use crate::canvas::{Canvas, CanvasError, CanvasSpec, StateTexture, TILE_SIZE};
 use crate::gpu::{GpuContext, GpuLost, TexelRows, new_encoder, read_all_mapped, staging_buffer};
 use crate::palette::Palette;
 use crate::session::PaintSession;
+use crate::sheet::sheet_spec;
 
 mod export;
 mod read;
@@ -14,8 +15,9 @@ mod write;
 
 pub use export::ExportedImage;
 
-const FORMAT_VERSION: u32 = 7;
+const FORMAT_VERSION: u32 = 8;
 const PAINTING_PREFIX: &str = "";
+const SHEET_PREFIX: &str = "sheet/";
 const DRY_RELIEF_NAME: &str = "dry_relief";
 const THICKNESS_UNITS: &str = "um";
 const MANIFEST_ENTRY: &str = "manifest.json";
@@ -124,41 +126,55 @@ pub struct DocumentSnapshot {
     spec: CanvasSpec,
     palette: Palette,
     states: Vec<StateBytes>,
+    sheet_spec: CanvasSpec,
+    sheet_states: Vec<StateBytes>,
+}
+
+pub struct OpenedPainting {
+    pub painting: PaintSession,
+    pub sheet: PaintSession,
 }
 
 impl DocumentSnapshot {
     pub fn capture(
         gpu: &GpuContext,
-        session: &mut PaintSession,
+        painting: &mut PaintSession,
+        sheet: &mut PaintSession,
     ) -> Result<DocumentSnapshot, GpuLost> {
-        session.flush(gpu);
-        let states = capture_canvas(gpu, &session.canvas)?;
+        painting.flush(gpu);
+        sheet.flush(gpu);
         Ok(DocumentSnapshot {
-            spec: session.canvas.spec.clone(),
-            palette: session.palette.clone(),
-            states,
+            spec: painting.canvas.spec.clone(),
+            palette: painting.palette.clone(),
+            states: capture_canvas(gpu, &painting.canvas)?,
+            sheet_spec: sheet.canvas.spec.clone(),
+            sheet_states: capture_canvas(gpu, &sheet.canvas)?,
         })
     }
 
-    pub fn into_session(self, gpu: &GpuContext) -> Result<PaintSession, CanvasError> {
-        let mut session = PaintSession::new(gpu, self.spec.clone())?;
-        self.upload(gpu, &mut session);
-        Ok(session)
+    pub fn into_sessions(self, gpu: &GpuContext) -> Result<OpenedPainting, CanvasError> {
+        let mut painting = PaintSession::new(gpu, self.spec.clone())?;
+        let mut sheet = PaintSession::for_sheet(gpu, &self.spec.pigment_slots)?;
+        self.upload(gpu, &mut painting, &mut sheet);
+        Ok(OpenedPainting { painting, sheet })
     }
 
     pub fn restore_into(
         self,
         gpu: &GpuContext,
-        session: &mut PaintSession,
+        painting: &mut PaintSession,
+        sheet: &mut PaintSession,
     ) -> Result<(), CanvasError> {
-        session.replace_document(gpu, self.spec.clone())?;
-        self.upload(gpu, session);
+        sheet.replace_document(gpu, sheet_spec(&self.spec.pigment_slots))?;
+        painting.replace_document(gpu, self.spec.clone())?;
+        self.upload(gpu, painting, sheet);
         Ok(())
     }
 
-    fn upload(self, gpu: &GpuContext, session: &mut PaintSession) {
-        session.palette = self.palette;
-        upload_states(gpu, &mut session.canvas, self.states);
+    fn upload(self, gpu: &GpuContext, painting: &mut PaintSession, sheet: &mut PaintSession) {
+        painting.palette = self.palette;
+        upload_states(gpu, &mut painting.canvas, self.states);
+        upload_states(gpu, &mut sheet.canvas, self.sheet_states);
     }
 }
 
@@ -204,14 +220,15 @@ fn upload_states(gpu: &GpuContext, canvas: &mut Canvas, states: Vec<StateBytes>)
 
 pub fn save(
     gpu: &GpuContext,
-    session: &mut PaintSession,
+    painting: &mut PaintSession,
+    sheet: &mut PaintSession,
     path: &Path,
 ) -> Result<(), DocumentError> {
-    DocumentSnapshot::capture(gpu, session)?.write(path)
+    DocumentSnapshot::capture(gpu, painting, sheet)?.write(path)
 }
 
-pub fn open(gpu: &GpuContext, path: &Path) -> Result<PaintSession, DocumentError> {
-    Ok(DocumentSnapshot::read(path)?.into_session(gpu)?)
+pub fn open(gpu: &GpuContext, path: &Path) -> Result<OpenedPainting, DocumentError> {
+    Ok(DocumentSnapshot::read(path)?.into_sessions(gpu)?)
 }
 
 pub fn export_png(

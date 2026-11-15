@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 
 use crate::canvas::{CanvasSpec, StateTexture};
 use crate::pigments::PigmentDb;
+use crate::sheet::sheet_spec;
 use crate::spectral::BANDS;
 
 use super::relief::dry_relief;
 use super::{
     DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY, Manifest, PAINTING_PREFIX,
-    StateBytes, THICKNESS_UNITS, state_entry,
+    SHEET_PREFIX, StateBytes, THICKNESS_UNITS, state_entry,
 };
 
 const ZSTD_LEVEL: i32 = 3;
@@ -18,6 +19,7 @@ const PARTIAL_SUFFIX: &str = ".part";
 
 impl DocumentSnapshot {
     pub fn write(&self, path: &Path) -> Result<(), DocumentError> {
+        self.check_sheet()?;
         let manifest = Manifest {
             format: FORMAT_VERSION,
             pigment_db: PigmentDb::VERSION,
@@ -40,8 +42,29 @@ impl DocumentSnapshot {
         archive.start_file(MANIFEST_ENTRY, stored_entry())?;
         archive.write_all(manifest)?;
         write_states(&mut archive, PAINTING_PREFIX, &self.spec, &self.states)?;
+        write_states(
+            &mut archive,
+            SHEET_PREFIX,
+            &self.sheet_spec,
+            &self.sheet_states,
+        )?;
         archive.finish()?;
         Ok(())
+    }
+}
+
+impl DocumentSnapshot {
+    fn check_sheet(&self) -> Result<(), DocumentError> {
+        if self.sheet_spec == sheet_spec(&self.spec.pigment_slots) {
+            return Ok(());
+        }
+        Err(DocumentError::Format(format!(
+            "the mixing sheet ({}×{}, paints {:?}) is not the sheet of the painting (paints {:?})",
+            self.sheet_spec.width,
+            self.sheet_spec.height,
+            self.sheet_spec.pigment_slots,
+            self.spec.pigment_slots
+        )))
     }
 }
 

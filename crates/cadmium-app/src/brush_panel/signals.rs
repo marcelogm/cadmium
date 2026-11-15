@@ -149,12 +149,12 @@ impl BrushPanel {
 
     fn change_reload_each_stroke(self: &Rc<Self>, row: &adw::SwitchRow) {
         let active = row.is_active();
-        self.change_brush(|state| state.reload_each_stroke = active);
+        self.change_brush(|state| state.painting.reload_each_stroke = active);
     }
 
     fn change_clean_each_stroke(self: &Rc<Self>, row: &adw::SwitchRow) {
         let active = row.is_active();
-        self.change_brush(|state| state.clean_each_stroke = active);
+        self.change_brush(|state| state.painting.clean_each_stroke = active);
     }
 }
 

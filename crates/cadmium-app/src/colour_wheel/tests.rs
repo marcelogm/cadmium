@@ -1,3 +1,4 @@
+use super::geometry::turn_and_radius_at;
 use super::*;
 
 const SIDE_PX: i32 = 192;
@@ -17,11 +18,15 @@ fn disc_of(colour: [u8; 3]) -> Vec<Option<[u8; 3]>> {
 }
 
 fn drawn(shown: &Shown) -> impl Fn(i32, i32) -> u32 + use<> {
+    drawn_as(shown, false)
+}
+
+fn drawn_as(shown: &Shown, editable: bool) -> impl Fn(i32, i32) -> u32 + use<> {
     let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, SIDE_PX, SIDE_PX)
         .expect("a cairo surface");
     {
         let context = cairo::Context::new(&surface).expect("a cairo context");
-        draw(shown, &context, f64::from(SIDE_PX));
+        draw(shown, &context, f64::from(SIDE_PX), editable);
     }
     let stride = surface.stride();
     let bytes = surface.data().expect("the surface's pixels").to_vec();
@@ -143,4 +148,18 @@ fn the_rim_is_the_colour_of_its_cells_and_not_a_blend_with_the_disc_under_them()
             "{edge:#x} at ({x}, {y})"
         );
     }
+}
+
+#[test]
+fn an_editable_wheel_draws_its_rim_dots_bigger() {
+    let shown = Shown::of(WheelImage {
+        cells: vec![None; WHEEL_CELLS * WHEEL_CELLS],
+        rim: vec![DOT],
+    });
+    let (x, y) = rim_centre(0, 1, f64::from(SIDE_PX));
+    let beside_the_dot = (x as i32 + 6, y as i32);
+    let plain = drawn_as(&shown, false);
+    let editable = drawn_as(&shown, true);
+    assert_ne!(plain(beside_the_dot.0, beside_the_dot.1), 0xFF0A_141E);
+    assert_eq!(editable(beside_the_dot.0, beside_the_dot.1), 0xFF0A_141E);
 }

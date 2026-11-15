@@ -8,7 +8,7 @@ use gtk::{gdk, glib};
 use self::nav_drag::{NavButton, NavDrag};
 use self::navigation::{nav_gesture, pinch_gesture, scroll_controller};
 use self::stylus::{eyedropper_click, hover_controller, stylus_gesture};
-use crate::state::SharedState;
+use crate::state::{EaselId, SharedState};
 use crate::tools::Press;
 use crate::view::ViewStep;
 
@@ -42,6 +42,8 @@ pub trait PaintSurfaceWidget:
     IsA<gtk::Widget> + glib::clone::Downgrade<Weak = glib::WeakRef<Self>>
 {
     fn state(&self) -> SharedState;
+    /// The easel this widget paints on.
+    fn easel(&self) -> EaselId;
     fn surface_point(&self, widget_x: f64, widget_y: f64) -> (f64, f64);
     /// Clockwise turn of the surface's picture on screen, in radians.
     fn view_rotation(&self) -> f32 {
@@ -99,6 +101,11 @@ fn attach_stylus_sharing<W: PaintSurfaceWidget>(widget: &W, contact: &Rc<Contact
     widget.add_controller(hover_controller(widget, contact));
 }
 
+/// Lets the pen paint on `widget`, which does not navigate.
+pub fn attach_stylus<W: PaintSurfaceWidget>(widget: &W) {
+    attach_stylus_sharing(widget, &Rc::new(Contact::default()));
+}
+
 /// Lets the pen paint on `surface` and the painter navigate its view.
 pub fn attach<W: NavigableSurface>(surface: &W) {
     let contact = Rc::new(Contact::default());
@@ -152,10 +159,11 @@ fn down_outcome(press: Press, eraser: bool) -> DownOutcome {
 fn release<W: PaintSurfaceWidget>(widget: &W, contact: &Contact) {
     contact.stroking_device.replace(None);
     let state = widget.state();
-    if !state.borrow().is_stroking() {
+    let easel = widget.easel();
+    if !state.borrow().easel(easel).is_stroking() {
         return;
     }
-    state.borrow_mut().release();
+    state.borrow_mut().release(easel);
     widget.contact_released();
 }
 

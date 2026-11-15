@@ -19,7 +19,10 @@ impl CadmiumWindow {
         let dialog = {
             let state = self.state();
             let state = state.borrow();
-            NewPaintingDialog::new(&state.session.db, &state.session.canvas.spec)
+            NewPaintingDialog::new(
+                &state.painting.session.db,
+                &state.painting.session.canvas.spec,
+            )
         };
         dialog.connect_create(glib::clone!(
             #[weak(rename_to = window)]

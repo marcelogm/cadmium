@@ -4,7 +4,9 @@ use cadmium_engine::palette::{ColourRef, circle_axes};
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 use cadmium_engine::tool::Holder;
 
-use super::presentation::{PLATE_GAP_KEY, RackEntry, WheelKey, highlighted_colour, rack_entry};
+use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
+use crate::colour_wheel::WheelKey;
+use crate::palette_colours::{highlighted_colour, pigment_tooltip};
 use crate::state::{AppState, PaletteView};
 use crate::thumbnails::ThumbnailKey;
 use crate::tools::Tool;
@@ -30,7 +32,7 @@ pub(super) struct PaletteSnapshot {
 
 impl PaletteSnapshot {
     fn of(state: &AppState) -> PaletteSnapshot {
-        let session = &state.session;
+        let session = &state.painting.session;
         let slots = &session.canvas.spec.pigment_slots;
         let palette = &session.palette;
         let colour_of = |recipe| mixture_srgb8(&session.db, slots, recipe);
@@ -73,11 +75,11 @@ pub(super) struct Snapshot {
 
 impl Snapshot {
     pub(super) fn of(state: &AppState) -> Snapshot {
-        let session = &state.session;
+        let session = &state.painting.session;
         let db = &session.db;
         let slots = session.canvas.spec.pigment_slots.clone();
         let pigments: Vec<_> = slots.iter().filter_map(|id| db.get(id)).collect();
-        let tool = panel_tool(state.ui_tool, session.brush.tool);
+        let tool = panel_tool(state.painting.ui_tool, session.brush.tool);
         let primer = primer_srgb8(db, session.canvas.spec.primer);
         let colour_of = |mixture: &Mixture| mixture_colour(db, &slots, primer, mixture);
         let palette_colour = colour_of(&state.palette_mixture());
@@ -105,8 +107,8 @@ impl Snapshot {
             brush_keys: state.brushes.all().map(ThumbnailKey::of).collect(),
             brush_index: worn,
             brush_is_user: worn.is_some_and(|index| state.brushes.is_user(index)),
-            reload_each_stroke: state.reload_each_stroke,
-            clean_each_stroke: state.clean_each_stroke,
+            reload_each_stroke: state.painting.reload_each_stroke,
+            clean_each_stroke: state.painting.clean_each_stroke,
         }
     }
 }
@@ -135,12 +137,12 @@ fn held_paint(
 ) -> ([u8; 3], f32, bool) {
     match tool.holder() {
         Some(Holder::Blade) => (
-            colour_of(&state.knife_mixture),
+            colour_of(&state.painting.knife_mixture),
             state.knife_level(),
             state.knife_is_clean(),
         ),
         Some(Holder::Reservoir) | None => (
-            colour_of(&state.tip_mixture),
+            colour_of(&state.painting.tip_mixture),
             state.reserve_level(),
             state.brush_is_clean(),
         ),
@@ -150,7 +152,7 @@ fn held_paint(
 fn pigment_tooltips(pigments: &[&Pigment]) -> Vec<String> {
     pigments
         .iter()
-        .map(|pigment| format!("{} ({})", pigment.name, pigment.colour_index))
+        .map(|pigment| pigment_tooltip(pigment))
         .collect()
 }
 

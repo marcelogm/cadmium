@@ -1,4 +1,5 @@
 use gtk::gdk;
+use gtk::prelude::*;
 
 use super::UiTool;
 
@@ -84,4 +85,38 @@ pub(crate) fn digit_pick(
         .into_iter()
         .find(|&(key, _)| key == digit)
         .map(|(_, tool)| tool)
+}
+
+/// The tool of a letter or keypad key pressed without a shortcut modifier; `None` for the
+/// number row, which [`digit_pick`] reads by the physical key, and for any other key.
+pub(crate) fn plain_key_pick(key: gdk::Key, modifiers: gdk::ModifierType) -> Option<UiTool> {
+    if !(modifiers & SHORTCUT_MODIFIERS).is_empty() || is_number_row_digit(key) {
+        return None;
+    }
+    let key = key.to_lower();
+    TOOL_KEYS
+        .into_iter()
+        .chain(KEYPAD_TOOL_KEYS)
+        .find(|&(bound, _)| bound == key)
+        .map(|(_, tool)| tool)
+}
+
+/// The painting's tool for the number-row key `keycode` pressed under `keys`, read on both
+/// keyboard levels as [`digit_pick`] wants it.
+pub(crate) fn pressed_tool(
+    keys: &gtk::EventControllerKey,
+    keycode: u32,
+    modifiers: gdk::ModifierType,
+) -> Option<UiTool> {
+    let display = keys.widget()?.display();
+    let level = |state| {
+        display
+            .translate_key(keycode, state, keys.group() as i32)
+            .map(|(key, ..)| key)
+    };
+    digit_pick(
+        level(gdk::ModifierType::empty()),
+        level(gdk::ModifierType::SHIFT_MASK),
+        modifiers,
+    )
 }

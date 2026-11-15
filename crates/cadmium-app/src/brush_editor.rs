@@ -34,6 +34,7 @@ mod wiring;
 use brush_group::BrushGroup;
 use draft::{Draft, Origin};
 use examples::{ExampleJob, Examples};
+pub(crate) use layout::DIALOG_SIZE;
 use listening::Listening;
 use parts::PartGroups;
 use schematic::Subject;
