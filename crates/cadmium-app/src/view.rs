@@ -28,14 +28,14 @@ pub fn fitted_rect(painting: PaintingRect, margin_px: u32) -> PaintingRect {
     }
 }
 
-/// The upright view that fits `painting` in the viewport, centred, with `margin_px` of
+/// The upright view that fits `framed` in the viewport, centred, with `padding_px` of
 /// screen around it on the tight axis.
-pub fn fit_view(painting: PaintingRect, viewport_px: (f64, f64), margin_px: f64) -> ViewTransform {
-    let (width, height) = (f64::from(painting.width), f64::from(painting.height));
-    let centre_x = f64::from(painting.x) + width / 2.0;
-    let centre_y = f64::from(painting.y) + height / 2.0;
-    let usable_width = (viewport_px.0 - 2.0 * margin_px).max(1.0);
-    let usable_height = (viewport_px.1 - 2.0 * margin_px).max(1.0);
+pub fn fit_view(framed: PaintingRect, viewport_px: (f64, f64), padding_px: f64) -> ViewTransform {
+    let (width, height) = (f64::from(framed.width), f64::from(framed.height));
+    let centre_x = f64::from(framed.x) + width / 2.0;
+    let centre_y = f64::from(framed.y) + height / 2.0;
+    let usable_width = (viewport_px.0 - 2.0 * padding_px).max(1.0);
+    let usable_height = (viewport_px.1 - 2.0 * padding_px).max(1.0);
     let zoom = clamp_zoom((usable_width / width).min(usable_height / height) as f32);
     let zoom_f64 = f64::from(zoom);
     ViewTransform {

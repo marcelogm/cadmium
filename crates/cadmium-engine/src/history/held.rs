@@ -64,7 +64,7 @@ impl Step {
     }
 
     fn awaits_held_paint(&self) -> bool {
-        self.leaves_dry.is_empty() && self.complete && !self.held_asked
+        !self.dries_tiles() && self.complete && !self.held_asked
     }
 
     fn forget_held_outside(&mut self, load_epoch: u64) {

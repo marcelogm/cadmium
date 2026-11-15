@@ -79,7 +79,8 @@ pub struct Canvas {
     pub dirty: DirtyTiles,
     pub possibly_dirty: DirtyTiles,
     pub wet_tiles: DirtyTiles,
-    /// The tiles changed since the canvas was made or its margin last cleared.
+    /// The tiles that may hold paint or graphite on the margin since it was last cleared;
+    /// every tile once a painting is reopened.
     pub margin_touched: DirtyTiles,
     changes: TileChanges,
     surfaces: Vec<StateSurface>,

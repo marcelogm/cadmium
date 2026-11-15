@@ -57,6 +57,12 @@ impl Step {
         }
     }
 
+    /// Whether the step takes wet paint off tiles, as Dry and the clears do; a stroke's
+    /// step never does.
+    fn dries_tiles(&self) -> bool {
+        !self.leaves_dry.is_empty()
+    }
+
     fn slots(&self) -> impl Iterator<Item = Slot> + '_ {
         self.tiles
             .iter()
@@ -280,9 +286,7 @@ impl History {
             held.encode_redo(engine, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
-        if !step.leaves_dry.is_empty() {
-            forget_wet(canvas, &step.leaves_dry);
-        }
+        forget_wet(canvas, &step.leaves_dry);
         self.undo_steps.push_back(step);
         self.trim_to_max_steps();
         true
