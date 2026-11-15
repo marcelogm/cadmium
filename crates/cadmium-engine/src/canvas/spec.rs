@@ -10,6 +10,8 @@ pub const MARGIN_PX: u32 = 128;
 /// The margin's own neutral grey ground, the same in every band.
 pub const MARGIN_REFLECTANCE: f32 = 0.42;
 
+const _: () = assert!(MARGIN_PX.is_multiple_of(TILE_SIZE));
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Primer {
     WhiteGesso,
@@ -59,8 +61,8 @@ pub struct PaintingRequest {
 impl CanvasSpec {
     pub fn for_painting(request: PaintingRequest) -> CanvasSpec {
         CanvasSpec {
-            width: request.width + 2 * MARGIN_PX,
-            height: request.height + 2 * MARGIN_PX,
+            width: request.width.saturating_add(2 * MARGIN_PX),
+            height: request.height.saturating_add(2 * MARGIN_PX),
             primer: request.primer,
             weave: request.weave,
             pigment_slots: request.pigment_slots,
@@ -72,8 +74,8 @@ impl CanvasSpec {
         PaintingRect {
             x: self.margin_px,
             y: self.margin_px,
-            width: self.width.saturating_sub(2 * self.margin_px),
-            height: self.height.saturating_sub(2 * self.margin_px),
+            width: self.inner_side(self.width).unwrap_or(0),
+            height: self.inner_side(self.height).unwrap_or(0),
         }
     }
 
@@ -97,9 +99,13 @@ impl CanvasSpec {
             .iter()
             .try_for_each(|id| validate_slot(db, &mut seen, id))
     }
-}
 
-impl CanvasSpec {
+    fn inner_side(&self, side: u32) -> Option<u32> {
+        self.margin_px
+            .checked_mul(2)
+            .and_then(|margins| side.checked_sub(margins))
+    }
+
     fn validate_size(&self) -> Result<(), String> {
         if !self.margin_px.is_multiple_of(TILE_SIZE) {
             return Err(format!(
@@ -107,22 +113,21 @@ impl CanvasSpec {
                 self.margin_px
             ));
         }
-        let both_margins = self.margin_px.checked_mul(2);
-        let inside = |side: u32| both_margins.and_then(|margins| side.checked_sub(margins));
-        let (width, height) = (inside(self.width), inside(self.height));
+        let (Some(width), Some(height)) =
+            (self.inner_side(self.width), self.inner_side(self.height))
+        else {
+            return Err(format!(
+                "a margin of {} px leaves no painting inside a {}×{} canvas",
+                self.margin_px, self.width, self.height
+            ));
+        };
         let allowed = 1..=MAX_PAINTING_SIZE;
-        match (width, height) {
-            (Some(width), Some(height))
-                if allowed.contains(&width) && allowed.contains(&height) =>
-            {
-                Ok(())
-            }
-            _ => Err(format!(
-                "painting size {}×{} is outside 1..={MAX_PAINTING_SIZE}",
-                width.unwrap_or(0),
-                height.unwrap_or(0)
-            )),
+        if !allowed.contains(&width) || !allowed.contains(&height) {
+            return Err(format!(
+                "painting size {width}×{height} is outside 1..={MAX_PAINTING_SIZE}"
+            ));
         }
+        Ok(())
     }
 }
 

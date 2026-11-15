@@ -30,6 +30,8 @@ struct InitParams {
     painting_size: [u32; 2],
 }
 
+const _: () = assert!(std::mem::size_of::<InitParams>() == 80);
+
 pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
     let white = db
         .get(PRIMER_WHITE_ID)

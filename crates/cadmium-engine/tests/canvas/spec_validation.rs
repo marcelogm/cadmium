@@ -1,6 +1,7 @@
 use cadmium_engine::{canvas::*, pigments::PigmentDb};
 
 use crate::spec;
+use crate::support::painting_request;
 
 fn validated(edit: impl FnOnce(&mut CanvasSpec)) -> Result<(), String> {
     let mut s = spec(Primer::WhiteGesso, Weave::Linen);
@@ -57,19 +58,9 @@ fn spec_survives_a_json_roundtrip() {
     assert_eq!(serde_json::from_str::<CanvasSpec>(&json).unwrap(), original);
 }
 
-fn request(width: u32, height: u32) -> PaintingRequest {
-    PaintingRequest {
-        width,
-        height,
-        primer: Primer::WhiteGesso,
-        weave: Weave::Linen,
-        pigment_slots: vec!["titanium_white".into()],
-    }
-}
-
 #[test]
 fn a_painting_sits_inside_a_margin_on_every_side() {
-    let spec = CanvasSpec::for_painting(request(1000, 700));
+    let spec = CanvasSpec::for_painting(painting_request(1000, 700));
     assert_eq!(
         (spec.width, spec.height, spec.margin_px),
         (1000 + 2 * MARGIN_PX, 700 + 2 * MARGIN_PX, MARGIN_PX)
@@ -94,12 +85,12 @@ fn a_painting_sits_inside_a_margin_on_every_side() {
 fn the_largest_painting_is_still_valid_and_a_larger_one_is_not() {
     let db = PigmentDb::builtin();
     assert!(
-        CanvasSpec::for_painting(request(MAX_PAINTING_SIZE, MAX_PAINTING_SIZE))
+        CanvasSpec::for_painting(painting_request(MAX_PAINTING_SIZE, MAX_PAINTING_SIZE))
             .validate(&db)
             .is_ok()
     );
     assert!(
-        CanvasSpec::for_painting(request(MAX_PAINTING_SIZE + 1, 100))
+        CanvasSpec::for_painting(painting_request(MAX_PAINTING_SIZE + 1, 100))
             .validate(&db)
             .is_err()
     );
@@ -108,7 +99,7 @@ fn the_largest_painting_is_still_valid_and_a_larger_one_is_not() {
 #[test]
 fn a_margin_that_is_not_whole_tiles_or_leaves_no_painting_is_invalid() {
     let db = PigmentDb::builtin();
-    let mut spec = CanvasSpec::for_painting(request(200, 200));
+    let mut spec = CanvasSpec::for_painting(painting_request(200, 200));
     spec.margin_px = 100;
     assert!(spec.validate(&db).is_err());
     spec.margin_px = 192;
@@ -129,5 +120,17 @@ fn a_spec_saved_without_a_margin_has_none() {
             width: 64,
             height: 64
         }
+    );
+}
+
+#[test]
+fn a_margin_too_wide_to_double_is_refused_without_overflowing() {
+    let mut spec = CanvasSpec::for_painting(painting_request(200, 200));
+    spec.margin_px = 1 << 31;
+    let reason = spec.validate(&PigmentDb::builtin()).unwrap_err();
+    assert!(reason.contains("leaves no painting"), "{reason}");
+    assert_eq!(
+        (spec.painting_rect().width, spec.painting_rect().height),
+        (0, 0)
     );
 }

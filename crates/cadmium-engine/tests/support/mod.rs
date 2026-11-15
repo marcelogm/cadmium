@@ -58,7 +58,7 @@ pub fn painting_session(gpu: &GpuContext, width: u32, height: u32) -> PaintSessi
 
 pub fn load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
     s.brush.recipe = vec![(slot, 1.0)];
-    s.reload_brush(gpu);
+    without_wgpu_errors(gpu, || s.reload_brush(gpu));
     s.flush(gpu);
 }
 
