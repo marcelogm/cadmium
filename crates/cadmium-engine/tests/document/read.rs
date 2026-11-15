@@ -7,6 +7,7 @@ use crate::entries::{Entries, format_reason, read_entries, set_first_f32};
 use crate::{CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, INVALID_THICKNESS, TempDir};
 
 const FUTURE_FORMAT: u32 = CURRENT_FORMAT + 1;
+const PREVIOUS_FORMAT: u32 = CURRENT_FORMAT - 1;
 const MAX_DENSITY: f32 = 1.0;
 const MAX_MANIFEST_BYTES: usize = 1 << 20;
 
@@ -57,10 +58,22 @@ fn unsupported_version_of_a_document_claiming(format: u32) -> Option<u32> {
 
 #[test]
 fn every_format_but_the_current_one_is_unsupported() {
-    for format in [1, 2, 3, 4, 5, 7] {
+    for format in [1, 2, 3, 4, 5, 6, 8] {
         let found = unsupported_version_of_a_document_claiming(format);
         assert_eq!(found, Some(format), "format {format}");
     }
+}
+
+#[test]
+fn a_painting_of_the_format_before_the_palette_is_unsupported_rather_than_malformed() {
+    let entries = Entries::blank().edit_manifest(|m| {
+        m["format"] = PREVIOUS_FORMAT.into();
+        m.as_object_mut().unwrap().remove("palette");
+    });
+    assert!(matches!(
+        read_entries(entries),
+        Err(DocumentError::UnsupportedVersion(PREVIOUS_FORMAT))
+    ));
 }
 
 #[test]

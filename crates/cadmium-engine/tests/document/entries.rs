@@ -10,7 +10,7 @@ use cadmium_engine::{
 
 use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
-/// The entry names of format 6, spelled out so that renaming one changes a test.
+/// The entry names of format 7, spelled out so that renaming one changes a test.
 pub(super) const STATE_ENTRIES: [(&str, StateTexture); 9] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),
     ("state/wet_pig1.zst", StateTexture::WetPig1),
@@ -40,6 +40,7 @@ impl Entries {
             "spec": spec,
             "bands": 8,
             "units": "um",
+            "palette": { "my_colours": [], "circle": [] },
         });
         let mut entries = vec![(
             "manifest.json".to_string(),

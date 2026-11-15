@@ -7,6 +7,7 @@ use crate::gpu::{GpuContext, GpuLost, new_encoder};
 use crate::history::{
     HELD_PAINT_HISTORY_BUDGET_BYTES, History, HistoryLimits, bytes_per_tile_all_textures,
 };
+use crate::palette::Palette;
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ShadeRequest, ViewMode};
@@ -38,6 +39,7 @@ pub struct PaintSession {
     pub brush: BrushSettings,
     pub view_mode: ViewMode,
     pub db: PigmentDb,
+    pub palette: Palette,
     stroke: Option<StrokeBuilder>,
     queued: VecDeque<Queued>,
     frame_dab_limit: Option<usize>,
@@ -73,6 +75,7 @@ impl PaintSession {
         undo: HistoryLimits,
     ) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
+        let palette = Palette::starting(&db, &spec.pigment_slots);
         let canvas = Canvas::new(gpu, &db, spec)?;
         let mut session = PaintSession {
             canvas,
@@ -83,6 +86,7 @@ impl PaintSession {
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
             db,
+            palette,
             stroke: None,
             queued: VecDeque::new(),
             frame_dab_limit: None,

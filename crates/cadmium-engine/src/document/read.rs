@@ -24,15 +24,19 @@ struct FormatProbe {
 impl DocumentSnapshot {
     pub fn read(path: &Path) -> Result<DocumentSnapshot, DocumentError> {
         let mut archive = zip::ZipArchive::new(BufReader::new(File::open(path)?))?;
-        let spec = read_manifest(&mut archive)?;
+        let Manifest { spec, palette, .. } = read_manifest(&mut archive)?;
         let states = read_states(&mut archive, PAINTING_PREFIX, &spec)?;
-        Ok(DocumentSnapshot { spec, states })
+        Ok(DocumentSnapshot {
+            spec,
+            palette,
+            states,
+        })
     }
 }
 
 fn read_manifest<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-) -> Result<CanvasSpec, DocumentError> {
+) -> Result<Manifest, DocumentError> {
     let mut bytes = Vec::new();
     entry(archive, MANIFEST_ENTRY)?
         .take(MAX_MANIFEST_BYTES + 1)
@@ -47,6 +51,11 @@ fn read_manifest<R: Read + std::io::Seek>(
         return Err(DocumentError::UnsupportedVersion(probe.format));
     }
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(manifest_error)?;
+    validate_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn validate_manifest(manifest: &Manifest) -> Result<(), DocumentError> {
     if manifest.pigment_db != PigmentDb::VERSION {
         return Err(DocumentError::Format(format!(
             "pigment database version {} is not {}",
@@ -70,7 +79,10 @@ fn read_manifest<R: Read + std::io::Seek>(
         .spec
         .validate(&PigmentDb::builtin())
         .map_err(DocumentError::Format)?;
-    Ok(manifest.spec)
+    manifest
+        .palette
+        .validate(manifest.spec.pigment_slots.len())
+        .map_err(|reason| DocumentError::Format(format!("palette: {reason}")))
 }
 
 fn read_states<R: Read + std::io::Seek>(

@@ -24,6 +24,7 @@ impl DocumentSnapshot {
             spec: self.spec.clone(),
             bands: BANDS,
             units: THICKNESS_UNITS.to_string(),
+            palette: self.palette.clone(),
         };
         let manifest = serde_json::to_vec_pretty(&manifest)
             .map_err(|error| DocumentError::Format(error.to_string()))?;

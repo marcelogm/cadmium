@@ -1,5 +1,6 @@
 use crate::canvas::{Canvas, CanvasError, CanvasSpec};
 use crate::gpu::GpuContext;
+use crate::palette::Palette;
 use crate::pigments::PigmentDb;
 use crate::render::ViewMode;
 
@@ -18,6 +19,7 @@ impl PaintSession {
         self.history.clear();
         let previous = self.swap_in_placeholder(gpu)?;
         let replaced = self.replace_canvas(gpu, spec, previous);
+        self.palette = Palette::starting(&self.db, &self.canvas.spec.pigment_slots);
         self.history.refit(gpu, history_budget(&self.canvas.spec));
         self.view_mode = ViewMode::Color;
         self.engine.clean_brush(gpu);
