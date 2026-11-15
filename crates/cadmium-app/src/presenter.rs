@@ -101,6 +101,17 @@ fn encode_test_sheet(
     sheet.encode_present(gpu, SheetFrame { clock_ms, view }, target, encoder);
 }
 
+impl PresentSource {
+    /// The easel whose frames this source presents; the test sheet, which is no easel, counts
+    /// as the painting.
+    fn easel(&self) -> EaselId {
+        match self {
+            PresentSource::Sheet => EaselId::Sheet,
+            PresentSource::Painting | PresentSource::TestSheet(_) => EaselId::Painting,
+        }
+    }
+}
+
 pub struct FramePresenter {
     source: PresentSource,
     forced: Option<PresentMode>,
@@ -195,7 +206,7 @@ impl FramePresenter {
                 self.mode.unwrap_or(mode).name(),
                 started.elapsed().as_secs_f64() * MILLISECONDS_PER_SECOND,
                 state.pen.samples_last_frame,
-                state.painting.session.last_frame_dabs()
+                state.easel(self.source.easel()).session.last_frame_dabs()
             );
         }
         texture

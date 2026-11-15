@@ -40,6 +40,16 @@ fn drying_wet_paint_can_be_undone() {
 }
 
 #[test]
+fn the_painting_is_not_dried_under_the_palette_dialog() {
+    let mut state = painting_state();
+    stroke(&mut state, Tool::Brush, &row_samples(PAINT_ROW_Y));
+    state.begin_palette_edit();
+    assert_eq!(state.dry(), DryOutcome::PaletteOpen);
+    state.end_palette_edit();
+    assert_eq!(state.dry(), DryOutcome::Dried { undoable: true });
+}
+
+#[test]
 fn undo_lifts_a_stroke_that_is_still_down() {
     let mut state = painting_state();
     state.press(EaselId::Painting, sample_at(280.0, 100.0, 1.0), false);

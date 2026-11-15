@@ -5,7 +5,11 @@ use super::{AppState, Easel, EaselId};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DryOutcome {
     NothingWet,
-    Dried { undoable: bool },
+    /// The Palette dialog is up over the painting: nothing is dried.
+    PaletteOpen,
+    Dried {
+        undoable: bool,
+    },
 }
 
 impl Easel {
@@ -29,7 +33,12 @@ impl Easel {
 }
 
 impl AppState {
+    /// Dries the painting's wet paint; not while the Palette dialog hides the painting, where
+    /// the drying could be neither seen nor undone.
     pub fn dry(&mut self) -> DryOutcome {
+        if self.is_editing_palette() {
+            return DryOutcome::PaletteOpen;
+        }
         self.release(EaselId::Painting);
         let session = &mut self.painting.session;
         session.flush(&self.gpu);
