@@ -77,13 +77,14 @@ impl Easel {
     }
 
     /// Loads the tool with the paint under `(x, y)`, giving that paint's mixture with the
-    /// medium left out; `None` where there is none to pick.
+    /// medium left out; `None`, leaving the tool as it is, where there is no pigment to pick.
     pub fn pick_colour(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Option<Recipe> {
         let fractions = self.paint_fractions_at(gpu, x, y)?;
+        let colour = normalised(&fractions)?;
         self.session.brush.recipe = recipe_from_fractions(&fractions);
         self.clean_and_load(gpu);
         self.measure_brush(gpu);
-        normalised(&fractions)
+        Some(colour)
     }
 
     /// The mixture of the paint under `(x, y)` with the medium left out, leaving the tool as

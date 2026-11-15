@@ -22,7 +22,7 @@ impl AppState {
     }
 
     /// Gives the painting a blank sheet with its paints.
-    fn blank_sheet(&mut self) -> Result<(), CanvasError> {
+    pub(super) fn blank_sheet(&mut self) -> Result<(), CanvasError> {
         let spec = sheet_spec(&self.painting.session.canvas.spec.pigment_slots);
         self.sheet.session.replace_document(&self.gpu, spec)
     }

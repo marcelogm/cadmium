@@ -147,7 +147,12 @@ impl AppState {
         }
         let palette = &mut self.painting.session.palette;
         let before = palette.circle.clone();
-        palette.insert_in_circle(insertion_index(turn, before.len()), colour);
+        let index = insertion_index(turn, before.len());
+        let index = match before.iter().position(|present| *present == colour) {
+            Some(present) if present < index => index - 1,
+            _ => index,
+        };
+        palette.insert_in_circle(index, colour);
         if palette.circle != before {
             self.palette_changed();
         }

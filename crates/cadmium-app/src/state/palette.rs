@@ -25,11 +25,14 @@ impl AppState {
         self.painting.slot_count()
     }
 
-    /// Adds the paint `id` to the painting and to its sheet, so the two keep the same slots.
+    /// Adds the paint `id` to the painting and to its sheet, so the two keep the same slots; a
+    /// sheet that cannot take it starts over blank with the painting's paints.
     pub fn add_pile(&mut self, id: &str) -> Result<usize, String> {
         let slot = self.painting.session.add_slot(&self.gpu, id)?;
         self.edits.record();
-        self.sheet.session.add_slot(&self.gpu, id)?;
+        if self.sheet.session.add_slot(&self.gpu, id).is_err() {
+            self.blank_sheet().map_err(|error| error.to_string())?;
+        }
         self.click_colour(ColourRef::Paint(slot), ColourClick::Load);
         self.wake();
         Ok(slot)

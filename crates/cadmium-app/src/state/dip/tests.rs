@@ -4,6 +4,7 @@ use crate::state::test_support::{
     finish_painting, holding_the_knife, knife_totals, paint_stroke, painting_state,
     present_one_frame, reserve_volume, row_samples, stroke,
 };
+use cadmium_engine::canvas::StateTexture;
 use cadmium_engine::palette::ColourRef;
 use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
@@ -275,4 +276,20 @@ fn a_brush_read_that_was_not_deferred_is_not_announced() {
     let mut state = painting_state();
     state.click_colour(ColourRef::Paint(WHITE_SLOT), ColourClick::Load);
     assert!(!state.take_brush_measured());
+}
+
+#[test]
+fn picking_wet_paint_that_holds_no_pigment_leaves_the_tool_as_it_is() {
+    const MEDIUM_ONLY_VOLUME_UM: f32 = 5.0;
+    let mut state = painting_state();
+    let canvas = &state.painting.session.canvas;
+    let texels = (canvas.spec.width * canvas.spec.height) as usize;
+    let medium_only = vec![MEDIUM_ONLY_VOLUME_UM; texels];
+    canvas.write_f32(&state.gpu, StateTexture::WetVol, &medium_only);
+    let held = state.painting.session.brush.recipe.clone();
+    let reserve = reserve_volume(&state);
+    assert!(reserve > 0.0);
+    assert!(!state.pick_colour(EaselId::Painting, 100.0, 100.0));
+    assert_eq!(state.painting.session.brush.recipe, held);
+    assert!((reserve_volume(&state) - reserve).abs() < RESERVE_TOLERANCE * reserve);
 }

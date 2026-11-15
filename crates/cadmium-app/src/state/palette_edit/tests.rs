@@ -5,6 +5,7 @@ use crate::state::test_support::{
 use crate::state::{ColourClick, EaselId};
 use crate::tools::{Press, UiTool};
 use cadmium_engine::palette::{ColourRef, MAX_DARKEN};
+use cadmium_engine::sheet::sheet_spec;
 use cadmium_engine::stroke::Tool;
 
 const SHEET_ROW_Y: f64 = 200.0;
@@ -324,4 +325,37 @@ fn closing_the_palette_mid_stroke_ends_the_stroke_on_the_sheet() {
     assert!(!state.is_stroking());
     assert!(!state.sheet.is_stroking());
     assert_ne!(state.edit_mark(), mark);
+}
+
+#[test]
+fn a_circle_colour_dropped_further_on_lands_where_it_is_dropped() {
+    let mut state = painting_state();
+    let [a, b, c] = [0, 1, 2].map(ColourRef::Paint);
+    state.painting.session.palette.circle = vec![a, b, c];
+    state.drop_on_circle(a, 2.0 / 3.0);
+    assert_eq!(state.painting.session.palette.circle, [b, a, c]);
+}
+
+#[test]
+fn a_circle_colour_dropped_further_back_lands_where_it_is_dropped() {
+    let mut state = painting_state();
+    let [a, b, c] = [0, 1, 2].map(ColourRef::Paint);
+    state.painting.session.palette.circle = vec![a, b, c];
+    state.drop_on_circle(c, 1.0 / 3.0);
+    assert_eq!(state.painting.session.palette.circle, [a, c, b]);
+}
+
+#[test]
+fn a_sheet_that_cannot_take_a_new_paint_starts_over_with_the_paintings_paints() {
+    let mut state = painting_state();
+    let mut spec = state.painting.session.canvas.spec.clone();
+    let filler = spec.pigment_slots.split_off(2);
+    state.start_painting(spec).unwrap();
+    for id in &filler {
+        state.sheet.session.add_slot(&state.gpu, id).unwrap();
+    }
+    let slot = state.add_pile("burnt_sienna").unwrap();
+    let slots = &state.painting.session.canvas.spec.pigment_slots;
+    assert_eq!(slots[slot], "burnt_sienna");
+    assert_eq!(state.sheet.session.canvas.spec, sheet_spec(slots));
 }
