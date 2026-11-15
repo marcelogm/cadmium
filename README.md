@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href=".github/images/screenshot.png"><img src=".github/images/screenshot.png" width="32%" alt="The Cadmium logo, painted in Cadmium"></a>
+  <a href=".github/images/screenshot.png"><img src=".github/images/screenshot.png" width="32%" alt="A brush stroke in Cadmium"></a>
   <a href=".github/images/brush-editor.png"><img src=".github/images/brush-editor.png" width="32%" alt="The brush editor"></a>
   <a href=".github/images/palette-editor.png"><img src=".github/images/palette-editor.png" width="32%" alt="Mixing paints in the Palette dialog"></a>
 </p>
