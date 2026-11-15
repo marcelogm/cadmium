@@ -61,12 +61,15 @@ fn export_png_restores_the_view_mode_and_reshades_it() {
 }
 
 const RGB: usize = 3;
+/// The relief's shading reaches one row past the paint on either side.
 const RELIEF_REACH: u32 = 1;
 
 fn rgb_at(rgba: &[u8], width: u32, x: u32, y: u32) -> &[u8] {
     &rgba[((y * width + x) * 4) as usize..][..RGB]
 }
 
+/// Two exports of the same texel can differ by one step: the dither is keyed on the
+/// target pixel, not on the canvas texel.
 fn within_one(a: &[u8], b: &[u8]) -> bool {
     a.iter().zip(b).all(|(a, b)| a.abs_diff(*b) <= 1)
 }
@@ -148,14 +151,10 @@ fn paint_on_the_painting_is_exported_where_it_was_laid() {
     stroke(&gpu, &mut s, margin + 100.0, margin + 20.0, margin + 280.0);
     let image = ExportedImage::render(&gpu, &mut s).unwrap();
     let clean = ExportedImage::render(&gpu, &mut clean).unwrap();
-    assert_ne!(
-        rgb_at(&image.rgba, image.width, 150, 100),
-        rgb_at(&image.rgba, image.width, 150, 10)
-    );
     assert_shows_the_canvas_under_the_painting(&gpu, &s, &image);
     let wet_rows = wet_rows_of_the_painting(&gpu, &s);
+    assert!(!wet_rows.is_empty(), "the stroke laid no paint");
     let (first, last) = (wet_rows[0], wet_rows[wet_rows.len() - 1]);
-    // The relief's shading reaches one row past the paint on either side.
     let band: Vec<u32> = (first - RELIEF_REACH..=last + RELIEF_REACH).collect();
     assert_eq!(
         rows_that_differ(&image, &clean),

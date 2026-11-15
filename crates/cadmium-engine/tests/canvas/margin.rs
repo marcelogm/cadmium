@@ -6,8 +6,8 @@ use cadmium_engine::{
 };
 
 use crate::support::{
-    self, drag, frame, line, load, painting_request, painting_session, presented_rgba, stroke,
-    without_wgpu_errors,
+    self, drag, frame, line, load, margin_wet_volume, painting_request, painting_session,
+    painting_wet_volume, presented_rgba, stroke, total_where, without_wgpu_errors,
 };
 
 const GROUNDS_DIFFER_BY: u8 = 40;
@@ -69,29 +69,6 @@ fn column(x: f64, from_y: f64, to_y: f64) -> Vec<StrokeSample> {
             ..sample
         })
         .collect()
-}
-
-fn total_where(gpu: &GpuContext, s: &PaintSession, which: StateTexture, in_margin: bool) -> f64 {
-    let spec = &s.canvas.spec;
-    s.canvas
-        .read_f32(gpu, which)
-        .unwrap()
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| {
-            let index = *index as u32;
-            spec.is_in_margin(index % spec.width, index / spec.width) == in_margin
-        })
-        .map(|(_, value)| f64::from(*value))
-        .sum()
-}
-
-fn margin_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
-    total_where(gpu, s, StateTexture::WetVol, true)
-}
-
-fn painting_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
-    total_where(gpu, s, StateTexture::WetVol, false)
 }
 
 #[test]

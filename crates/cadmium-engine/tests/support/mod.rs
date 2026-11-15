@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use cadmium_engine::{
-    canvas::{CanvasSpec, PaintingRequest, Primer, Weave},
+    canvas::{CanvasSpec, PaintingRequest, Primer, StateTexture, Weave},
     gpu::GpuContext,
     present::{PresentRequest, ViewTransform, readback_rgba8},
     session::PaintSession,
@@ -170,4 +170,33 @@ pub fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
 pub fn median(mut values: Vec<usize>) -> usize {
     values.sort_unstable();
     values[values.len() / 2]
+}
+
+/// The sum of `which` over the margin, or over the painting when `in_margin` is false.
+pub fn total_where(
+    gpu: &GpuContext,
+    s: &PaintSession,
+    which: StateTexture,
+    in_margin: bool,
+) -> f64 {
+    let spec = &s.canvas.spec;
+    s.canvas
+        .read_f32(gpu, which)
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| {
+            let index = *index as u32;
+            spec.is_in_margin(index % spec.width, index / spec.width) == in_margin
+        })
+        .map(|(_, value)| f64::from(*value))
+        .sum()
+}
+
+pub fn margin_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
+    total_where(gpu, s, StateTexture::WetVol, true)
+}
+
+pub fn painting_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
+    total_where(gpu, s, StateTexture::WetVol, false)
 }

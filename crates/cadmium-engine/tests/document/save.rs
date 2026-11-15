@@ -10,7 +10,7 @@ use cadmium_engine::{
 };
 
 use crate::entries::STATE_ENTRIES;
-use crate::support::{load, painting_session, session, stroke};
+use crate::support::{load, painting_session, painting_wet_volume, session, stroke};
 use crate::{
     BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, TempDir, blank_sheet, open_painting,
     painted_session, painted_session_with_stroke, painted_spec, sample, save_painting,
@@ -277,22 +277,6 @@ fn a_snapshot_restored_into_a_running_session_replaces_its_painting() {
             "{t:?}"
         );
     }
-}
-
-/// The wet volume on the painting, leaving out the margin around it.
-fn painting_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
-    let spec = &s.canvas.spec;
-    s.canvas
-        .read_f32(gpu, StateTexture::WetVol)
-        .unwrap()
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| {
-            let index = *index as u32;
-            !spec.is_in_margin(index % spec.width, index / spec.width)
-        })
-        .map(|(_, volume)| f64::from(*volume))
-        .sum()
 }
 
 #[test]
