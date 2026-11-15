@@ -126,6 +126,7 @@ impl CadmiumWindow {
     fn after_history_change(&self) {
         self.canvas().queue_present();
         self.sync_history_actions();
+        self.refresh_panels();
     }
 
     fn dry(&self) {

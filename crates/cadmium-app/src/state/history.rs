@@ -24,6 +24,7 @@ impl AppState {
         let undone = self.session.undo(&self.gpu);
         if undone {
             self.edits.record();
+            self.measure_brush();
         }
         self.wake();
         undone
@@ -34,6 +35,7 @@ impl AppState {
         let redone = self.session.redo(&self.gpu);
         if redone {
             self.edits.record();
+            self.measure_brush();
         }
         self.wake();
         redone
