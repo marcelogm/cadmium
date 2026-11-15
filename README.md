@@ -16,7 +16,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/marcelogm/cadmium" alt="License"></a>
 </p>
 
-![The Cadmium logo, painted in Cadmium](.github/images/screenshot.png)
+<p align="center">
+  <a href=".github/images/screenshot.png"><img src=".github/images/screenshot.png" width="32%" alt="The Cadmium logo, painted in Cadmium"></a>
+  <a href=".github/images/brush-editor.png"><img src=".github/images/brush-editor.png" width="32%" alt="The brush editor"></a>
+  <a href=".github/images/palette-editor.png"><img src=".github/images/palette-editor.png" width="32%" alt="Mixing paints in the Palette dialog"></a>
+</p>
 
 Paint stays wet on the canvas. The brush deposits, drags and mixes what is already there, the
 palette knife lays thick slabs and carves grooves, and colors mix like pigments, not light:

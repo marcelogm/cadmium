@@ -43,7 +43,16 @@
   </description>
   <screenshots>
     <screenshot type="default">
+      <caption>The Cadmium logo, painted in Cadmium</caption>
       <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/screenshot.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The brush editor, with strokes on its trial paper</caption>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/brush-editor.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Mixing paints on the sheet of the Palette dialog</caption>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/palette-editor.png</image>
     </screenshot>
   </screenshots>
   <launchable type="desktop-id">io.github.marcelogm.Cadmium.desktop</launchable>
