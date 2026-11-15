@@ -63,6 +63,15 @@ impl UiTool {
         UiTool::Paint(Tool::Eyedropper),
     ];
 
+    /// The tools the mixing sheet offers: the painting's paint tools, without the pencil.
+    pub const SHEET: [UiTool; 5] = [
+        UiTool::Paint(Tool::Brush),
+        UiTool::Paint(Tool::Knife),
+        UiTool::Paint(Tool::Blender),
+        UiTool::Paint(Tool::Rag),
+        UiTool::Paint(Tool::Eyedropper),
+    ];
+
     pub(crate) const fn profile(self) -> &'static UiToolProfile {
         match self {
             UiTool::Move => &moving::MOVE,

@@ -2,7 +2,7 @@ use cadmium_engine::brush::FULL_RESERVOIR_VOLUME_UM;
 use cadmium_engine::canvas::PaintTotals;
 use cadmium_engine::engine::BrushReadout;
 use cadmium_engine::gpu::GpuContext;
-use cadmium_engine::palette::Recipe;
+use cadmium_engine::palette::{Recipe, normalised};
 use cadmium_engine::pigments::Mixture;
 
 use super::recipe::recipe_from_fractions;
@@ -76,16 +76,27 @@ impl Easel {
         self.measure_brush_once_painted(gpu);
     }
 
-    /// Loads the tool with the paint under `(x, y)`, giving that paint's shares; `None` where
-    /// there is none to pick.
+    /// Loads the tool with the paint under `(x, y)`, giving that paint's mixture with the
+    /// medium left out; `None` where there is none to pick.
     pub fn pick_colour(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Option<Recipe> {
+        let fractions = self.paint_fractions_at(gpu, x, y)?;
+        self.session.brush.recipe = recipe_from_fractions(&fractions);
+        self.clean_and_load(gpu);
+        self.measure_brush(gpu);
+        normalised(&fractions)
+    }
+
+    /// The mixture of the paint under `(x, y)` with the medium left out, leaving the tool as
+    /// it is; `None` where there is none to pick.
+    pub fn colour_at(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Option<Recipe> {
+        normalised(&self.paint_fractions_at(gpu, x, y)?)
+    }
+
+    fn paint_fractions_at(&mut self, gpu: &GpuContext, x: f32, y: f32) -> Option<Recipe> {
         self.put_down_stroke_tool(gpu);
         let Ok(Some(picked)) = self.session.pick_colour(gpu, x, y) else {
             return None;
         };
-        self.session.brush.recipe = recipe_from_fractions(&picked.fractions);
-        self.clean_and_load(gpu);
-        self.measure_brush(gpu);
         Some(picked.fractions)
     }
 
@@ -161,7 +172,12 @@ impl AppState {
         self.wake();
     }
 
+    /// Loads the tool on `id` with the paint under `(x, y)`; on the sheet with a pick armed,
+    /// chooses that paint's colour instead and disarms. True when there was paint there.
     pub fn pick_colour(&mut self, id: EaselId, x: f32, y: f32) -> bool {
+        if self.sheet_pick_is_armed(id) {
+            return self.choose_from_sheet(x, y);
+        }
         self.release(id);
         let gpu = self.gpu.clone();
         let picked = self.easel_mut(id).pick_colour(&gpu, x, y);

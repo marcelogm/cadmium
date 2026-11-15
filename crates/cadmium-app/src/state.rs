@@ -17,6 +17,7 @@ pub use easel::{Easel, EaselId};
 pub use history::DryOutcome;
 use pacing::FramePacing;
 pub use palette::PaletteView;
+pub use palette_edit::PaletteEdit;
 pub use pen::PenReadout;
 use provisional::Provisional;
 pub use provisional::{Mark, ProvisionalTrail};
@@ -34,6 +35,7 @@ mod lab;
 mod library;
 mod pacing;
 mod palette;
+mod palette_edit;
 mod pen;
 mod provisional;
 mod recipe;
@@ -77,6 +79,9 @@ pub type Waker = Rc<dyn Fn() -> bool>;
 pub struct AppState {
     pub gpu: Rc<GpuContext>,
     pub painting: Easel,
+    pub sheet: Easel,
+    pub palette_edit: PaletteEdit,
+    editing_palette: bool,
     pub brushes: BrushLibrary,
     pub settings: SettingsStore,
     /// The library brush last picked, told apart from others with the same head and hair.
@@ -98,9 +103,14 @@ pub struct AppState {
 impl AppState {
     pub fn new(gpu: Rc<GpuContext>, spec: CanvasSpec) -> Result<AppState, CanvasError> {
         let painting = Easel::new(starting_session(&gpu, spec)?);
+        let slots = &painting.session.canvas.spec.pigment_slots;
+        let sheet = Easel::new(PaintSession::for_sheet(&gpu, slots)?);
         let mut state = AppState {
             gpu,
             painting,
+            sheet,
+            palette_edit: PaletteEdit::default(),
+            editing_palette: false,
             brushes: BrushLibrary::factory_only(),
             settings: SettingsStore::default(),
             worn_brush_index: None,
@@ -133,12 +143,14 @@ impl AppState {
     pub fn easel(&self, id: EaselId) -> &Easel {
         match id {
             EaselId::Painting => &self.painting,
+            EaselId::Sheet => &self.sheet,
         }
     }
 
     pub fn easel_mut(&mut self, id: EaselId) -> &mut Easel {
         match id {
             EaselId::Painting => &mut self.painting,
+            EaselId::Sheet => &mut self.sheet,
         }
     }
 

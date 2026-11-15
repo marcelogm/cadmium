@@ -15,14 +15,21 @@ pub enum PaletteView {
     Circle,
 }
 
+/// `darken` within `0..=MAX_DARKEN`; `None` for a value that is not a number.
+pub(super) fn bounded_darken(darken: f32) -> Option<f32> {
+    darken.is_finite().then(|| darken.clamp(0.0, MAX_DARKEN))
+}
+
 impl AppState {
     pub fn slot_count(&self) -> usize {
         self.painting.slot_count()
     }
 
+    /// Adds the paint `id` to the painting and to its sheet, so the two keep the same slots.
     pub fn add_pile(&mut self, id: &str) -> Result<usize, String> {
         let slot = self.painting.session.add_slot(&self.gpu, id)?;
         self.edits.record();
+        self.sheet.session.add_slot(&self.gpu, id)?;
         self.click_colour(ColourRef::Paint(slot), ColourClick::Load);
         self.wake();
         Ok(slot)
@@ -30,18 +37,23 @@ impl AppState {
 
     /// Loads the tool from a colour of the palette; a colour the painting does not hold is ignored.
     pub fn click_colour(&mut self, colour: ColourRef, click: ColourClick) {
-        if matches!(colour, ColourRef::Paint(slot) if slot >= self.slot_count()) {
-            return;
-        }
-        if let Some(recipe) = self.painting.session.palette.recipe_of(colour) {
+        if let Some(recipe) = self.recipe_of(colour) {
             self.load_colour(&recipe, click);
         }
+    }
+
+    /// The shares of a colour of the palette; `None` for a colour the painting does not hold.
+    pub(super) fn recipe_of(&self, colour: ColourRef) -> Option<Recipe> {
+        if matches!(colour, ColourRef::Paint(slot) if slot >= self.slot_count()) {
+            return None;
+        }
+        self.painting.session.palette.recipe_of(colour)
     }
 
     /// Loads the tool from a point of the colour circle, darkened by `circle_darken`; an empty
     /// circle and a point that is not a number are ignored.
     pub fn click_circle(&mut self, turn: f32, radius: f32, click: ColourClick) {
-        if let Some(recipe) = self.circle_recipe_at(turn, radius) {
+        if let Some(recipe) = self.circle_recipe_at(turn, radius, self.circle_darken) {
             self.load_colour(&recipe, click);
         }
     }
@@ -49,7 +61,7 @@ impl AppState {
     /// As `click_circle`, but reads the brush in the next frame, so a burst of drag events
     /// waits on the GPU once per frame rather than once per event.
     pub fn drag_on_circle(&mut self, turn: f32, radius: f32, click: ColourClick) {
-        if let Some(recipe) = self.circle_recipe_at(turn, radius) {
+        if let Some(recipe) = self.circle_recipe_at(turn, radius, self.circle_darken) {
             self.release(EaselId::Painting);
             let gpu = self.gpu.clone();
             self.painting.take_colour(&gpu, &recipe, click);
@@ -58,14 +70,14 @@ impl AppState {
         }
     }
 
-    fn circle_recipe_at(&self, turn: f32, radius: f32) -> Option<Recipe> {
+    pub(super) fn circle_recipe_at(&self, turn: f32, radius: f32, darken: f32) -> Option<Recipe> {
         if !turn.is_finite() || !radius.is_finite() {
             return None;
         }
         let point = CirclePoint {
             turn,
             radius,
-            darken: self.circle_darken,
+            darken,
         };
         let session = &self.painting.session;
         let axes = circle_axes(&session.canvas.spec.pigment_slots);
@@ -83,8 +95,8 @@ impl AppState {
 
     /// Keeps the darkening within `0..=MAX_DARKEN`; a value that is not a number is ignored.
     pub fn set_circle_darken(&mut self, darken: f32) {
-        if darken.is_finite() {
-            self.circle_darken = darken.clamp(0.0, MAX_DARKEN);
+        if let Some(darken) = bounded_darken(darken) {
+            self.circle_darken = darken;
         }
     }
 

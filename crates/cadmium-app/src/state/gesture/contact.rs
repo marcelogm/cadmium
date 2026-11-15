@@ -30,7 +30,7 @@ impl Easel {
 impl AppState {
     /// Whether a stroke runs on any easel.
     pub fn is_stroking(&self) -> bool {
-        self.painting.is_stroking()
+        self.painting.is_stroking() || self.sheet.is_stroking()
     }
 
     pub fn motion(&mut self, id: EaselId, samples: &[StrokeSample]) {

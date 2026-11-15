@@ -10,6 +10,7 @@ use crate::tools::UiTool;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EaselId {
     Painting,
+    Sheet,
 }
 
 /// A canvas with the tool in hand over it: the session, the gesture running on it and what

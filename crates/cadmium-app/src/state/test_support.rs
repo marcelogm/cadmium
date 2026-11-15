@@ -50,6 +50,12 @@ pub(crate) fn stroke(state: &mut AppState, tool: Tool, samples: &[StrokeSample])
     state.release(EaselId::Painting);
 }
 
+pub(crate) fn stroke_on(state: &mut AppState, id: EaselId, samples: &[StrokeSample]) {
+    assert!(state.press(id, samples[0], false));
+    state.motion(id, &samples[1..]);
+    state.release(id);
+}
+
 /// Presents frames with `present` until the queued dabs are painted and the brush is read
 /// after them, as the app does over the frames that follow a stroke.
 pub(crate) fn finish_painting(state: &mut AppState, present: fn(&mut AppState)) {
