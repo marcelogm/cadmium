@@ -4,7 +4,9 @@ use crate::brush::BrushSettings;
 use crate::canvas::{Canvas, CanvasError, CanvasSpec, TILE_SIZE};
 use crate::engine::{PaintEngine, PickRequest, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost, new_encoder};
-use crate::history::{History, bytes_per_tile_all_textures};
+use crate::history::{
+    HELD_PAINT_HISTORY_BUDGET_BYTES, History, HistoryLimits, bytes_per_tile_all_textures,
+};
 use crate::pigments::{Mixture, PigmentDb};
 use crate::present::Presenter;
 use crate::render::{Renderer, ShadeRequest, ViewMode};
@@ -27,11 +29,6 @@ const HISTORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const HISTORY_MAX_STEPS: usize = 100;
 const HISTORY_PAINTING_COPIES: u64 = 4;
 
-struct UndoLimits {
-    budget_bytes: u64,
-    max_steps: usize,
-}
-
 pub struct PaintSession {
     pub canvas: Canvas,
     pub engine: WetOilEngine,
@@ -50,9 +47,10 @@ pub struct PaintSession {
 
 impl PaintSession {
     pub fn new(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
-        let undo = UndoLimits {
-            budget_bytes: history_budget(&spec),
+        let undo = HistoryLimits {
+            tile_budget_bytes: history_budget(&spec),
             max_steps: HISTORY_MAX_STEPS,
+            held_paint_budget_bytes: HELD_PAINT_HISTORY_BUDGET_BYTES,
         };
         PaintSession::assemble(gpu, spec, undo)
     }
@@ -61,9 +59,10 @@ impl PaintSession {
     /// little more than its canvas. It stays without undo even if its document is
     /// replaced.
     pub fn headless(gpu: &GpuContext, spec: CanvasSpec) -> Result<PaintSession, CanvasError> {
-        let undo = UndoLimits {
-            budget_bytes: 0,
+        let undo = HistoryLimits {
+            tile_budget_bytes: 0,
             max_steps: 0,
+            held_paint_budget_bytes: 0,
         };
         PaintSession::assemble(gpu, spec, undo)
     }
@@ -71,7 +70,7 @@ impl PaintSession {
     fn assemble(
         gpu: &GpuContext,
         spec: CanvasSpec,
-        undo: UndoLimits,
+        undo: HistoryLimits,
     ) -> Result<PaintSession, CanvasError> {
         let db = PigmentDb::builtin();
         let canvas = Canvas::new(gpu, &db, spec)?;
@@ -80,7 +79,7 @@ impl PaintSession {
             engine: WetOilEngine::new(gpu),
             renderer: Renderer::new(gpu),
             presenter: Presenter::new(gpu),
-            history: History::new(gpu, undo.budget_bytes, undo.max_steps),
+            history: History::new(gpu, undo),
             brush: BrushSettings::default(),
             view_mode: ViewMode::Color,
             db,
@@ -134,12 +133,12 @@ impl PaintSession {
 
     pub fn undo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
-        self.history.undo(gpu, &mut self.canvas)
+        self.history.undo(gpu, &mut self.canvas, &mut self.engine)
     }
 
     pub fn redo(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
-        self.history.redo(gpu, &mut self.canvas)
+        self.history.redo(gpu, &mut self.canvas, &mut self.engine)
     }
 
     pub fn pick_colour(

@@ -92,6 +92,13 @@ impl ToolProfile {
             .any(|stage| !PAINTLESS_STAGES.contains(stage))
     }
 
+    /// Whether its dabs move paint between the surface and what the tool holds.
+    pub(crate) fn changes_held_paint(&self) -> bool {
+        self.dab_stages
+            .iter()
+            .any(|stage| matches!(stage, DabStage::Exchange | DabStage::Blade))
+    }
+
     /// Whether its dabs settle on the surface: only the exchange and blade stages read the rest.
     pub(crate) fn rests_on_surface(&self) -> bool {
         self.dab_stages

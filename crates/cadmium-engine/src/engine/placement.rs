@@ -161,14 +161,20 @@ impl WetOilEngine {
         }
     }
 
+    /// The rectangle holding every texel `encode_dabs` may write for this dab swept from
+    /// the stroke's dab before it, however far a blade has turned on its way there.
     pub fn dab_bounds(
         &self,
         canvas: &Canvas,
         brush: &BrushSettings,
         dab: &Dab,
+        swept_from: Option<&Dab>,
     ) -> Option<[f32; 4]> {
-        self.place(canvas, brush, dab, STILL_STEP)
-            .map(|placement| placement.canvas_rect)
+        if !paints(brush.tool.profile(), dab) {
+            return None;
+        }
+        let footprint = Footprint::of(dab, brush, self.tip_radius, None);
+        swept_bounds(dab, swept_from, &footprint, pixel_limits(canvas))
     }
 
     fn place(
@@ -179,14 +185,11 @@ impl WetOilEngine {
         step: DabStep,
     ) -> Option<Placement> {
         let profile = brush.tool.profile();
-        if !profile.places_dabs() || !is_finite(dab) {
-            return None;
-        }
-        if profile.has_blade_footprint() && !heading_known(dab) {
+        if !paints(profile, dab) {
             return None;
         }
         let footprint = Footprint::of(dab, brush, self.tip_radius, step.blade_orientation);
-        let regions = DabRegions::around(dab, step.sweep, footprint, canvas)?;
+        let regions = DabRegions::around(dab, step.sweep, footprint, pixel_limits(canvas))?;
         Some(Placement {
             record: self.record(brush, dab, step, &regions),
             canvas_rect: regions.canvas_rect(),
@@ -278,19 +281,9 @@ impl DabRegions {
         dab: &Dab,
         sweep: [f32; 2],
         footprint: Footprint,
-        canvas: &Canvas,
+        limits: [i32; 2],
     ) -> Option<DabRegions> {
-        let [half_x, half_y] = footprint.canvas_half_extents();
-        let swept_from = [dab.x + sweep[0], dab.y + sweep[1]];
-        let first = [
-            (dab.x.min(swept_from[0]) - half_x).floor() as i32,
-            (dab.y.min(swept_from[1]) - half_y).floor() as i32,
-        ];
-        let last = [
-            (dab.x.max(swept_from[0]) + half_x).floor() as i32,
-            (dab.y.max(swept_from[1]) + half_y).floor() as i32,
-        ];
-        let limits = [canvas.spec.width as i32, canvas.spec.height as i32];
+        let (first, last) = swept_span(dab, sweep, footprint.canvas_half_extents());
         let (canvas_origin, canvas_size) = clamped_region(first, last, DAB_APRON_PX, limits)?;
         let (spread_origin, spread_size) = clamped_region(first, last, SPREAD_APRON_PX, limits)?;
         let (tip_origin, tip_size) = tip_window(footprint.semi_axes());
@@ -306,11 +299,44 @@ impl DabRegions {
     }
 
     fn canvas_rect(&self) -> [f32; 4] {
-        let [x0, y0] = self.canvas_origin.map(|origin| origin as f32);
-        let [x1, y1] =
-            [0, 1].map(|axis| (self.canvas_origin[axis] + self.canvas_size[axis] as i32) as f32);
-        [x0, y0, x1 - 1.0, y1 - 1.0]
+        region_rect(self.canvas_origin, self.canvas_size)
     }
+}
+
+/// The first and last pixel under a footprint of `half_extents` swept from `sweep` away
+/// to the dab.
+fn swept_span(dab: &Dab, sweep: [f32; 2], half_extents: [f32; 2]) -> ([i32; 2], [i32; 2]) {
+    let at = [dab.x, dab.y];
+    let first = [0, 1]
+        .map(|axis| (at[axis].min(at[axis] + sweep[axis]) - half_extents[axis]).floor() as i32);
+    let last = [0, 1]
+        .map(|axis| (at[axis].max(at[axis] + sweep[axis]) + half_extents[axis]).floor() as i32);
+    (first, last)
+}
+
+/// The canvas rectangle holding `DabRegions::around` for the dab swept from `swept_from`,
+/// whatever the turn of the blade `footprint` is.
+fn swept_bounds(
+    dab: &Dab,
+    swept_from: Option<&Dab>,
+    footprint: &Footprint,
+    limits: [i32; 2],
+) -> Option<[f32; 4]> {
+    let sweep = swept_from.map_or([0.0; 2], |from| [from.x - dab.x, from.y - dab.y]);
+    let reach = footprint.canvas_half_extents_at_any_turn();
+    let (first, last) = swept_span(dab, sweep, reach);
+    let (origin, size) = clamped_region(first, last, DAB_APRON_PX, limits)?;
+    Some(region_rect(origin, size))
+}
+
+fn pixel_limits(canvas: &Canvas) -> [i32; 2] {
+    [canvas.spec.width as i32, canvas.spec.height as i32]
+}
+
+fn region_rect(origin: [i32; 2], size: [u32; 2]) -> [f32; 4] {
+    let [x0, y0] = origin.map(|origin| origin as f32);
+    let [x1, y1] = [0, 1].map(|axis| (origin[axis] + size[axis] as i32) as f32);
+    [x0, y0, x1 - 1.0, y1 - 1.0]
 }
 
 pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
@@ -325,6 +351,12 @@ pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
             canvas.wet_tiles.mark_rect(x0, y0, x1, y1);
         }
     }
+}
+
+fn paints(profile: &ToolProfile, dab: &Dab) -> bool {
+    profile.places_dabs()
+        && is_finite(dab)
+        && (!profile.has_blade_footprint() || heading_known(dab))
 }
 
 fn heading_known(dab: &Dab) -> bool {

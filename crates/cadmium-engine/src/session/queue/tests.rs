@@ -146,3 +146,22 @@ fn a_frame_out_of_dabs_stops_in_front_of_the_next_dab() {
         [WalkStep::Dabs(1), WalkStep::Wait]
     );
 }
+
+#[test]
+fn each_dab_taken_sweeps_from_the_dab_painted_before_it_in_its_stroke() {
+    let mut stroke = QueuedStroke::new(BrushSettings::default());
+    stroke.dabs = (0..3).map(|i| dab_at(i as f32)).collect();
+    let swept = |dab: f32, from: Option<f32>| SweptDab {
+        dab: dab_at(dab),
+        swept_from: from.map(dab_at),
+    };
+    assert_eq!(
+        stroke.take_dabs(2),
+        [swept(0.0, None), swept(1.0, Some(0.0))]
+    );
+    assert_eq!(stroke.take_dabs(1), [swept(2.0, Some(1.0))]);
+    assert!(stroke.dabs.is_empty());
+    let mut next = QueuedStroke::new(BrushSettings::default());
+    next.dabs.push_back(dab_at(3.0));
+    assert_eq!(next.take_dabs(1), [swept(3.0, None)]);
+}

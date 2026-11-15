@@ -290,7 +290,7 @@ fn the_largest_brush_keeps_the_dab_inside_its_saved_tiles() {
         let press = centre_press(tilt_x_deg);
         let bounds = s
             .engine
-            .dab_bounds(&s.canvas, &s.brush, &still_dab(&press))
+            .dab_bounds(&s.canvas, &s.brush, &still_dab(&press), None)
             .unwrap();
         let canvas_last = (LARGE_CANVAS_PX - 1) as f32;
         assert!(

@@ -6,10 +6,8 @@ use crate::engine::{DabBatch, PaintEngine, WetOilEngine};
 use crate::gpu::{GpuContext, new_encoder};
 use crate::stroke::Dab;
 
-use super::queue::{Queued, WalkProgress, WalkStep, next_step};
+use super::queue::{Queued, SweptDab, WalkProgress, WalkStep, next_step};
 use super::{MotionAnchor, PaintSession};
-
-const SAVE_MARGIN_PX: f32 = 4.0;
 
 impl PaintSession {
     pub fn flush(&mut self, gpu: &GpuContext) {
@@ -106,14 +104,19 @@ impl PaintSession {
         let Some(Queued::Stroke(stroke)) = self.queued.front_mut() else {
             return;
         };
-        let batch: Vec<Dab> = stroke.dabs.drain(..count).collect();
-        let Some(latest) = batch.last() else {
+        let swept = stroke.take_dabs(count);
+        let Some(latest) = swept.last() else {
             return;
         };
-        self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.time_ms));
-        let touched = tiles_touched_by(&self.engine, &self.canvas, &stroke.brush, &batch);
+        self.motion_anchor = Some(MotionAnchor::at_latest_dab(latest.dab.time_ms));
+        let batch: Vec<Dab> = swept.iter().map(|swept| swept.dab).collect();
+        let touched = tiles_touched_by(&self.engine, &self.canvas, &stroke.brush, &swept);
         self.history
             .encode_save_tiles(gpu, &self.canvas, &touched, encoder);
+        if stroke.brush.tool.profile().changes_held_paint() && self.history.awaits_held_paint() {
+            let before = self.engine.encode_capture_held_paint(gpu, encoder);
+            self.history.hold_before(before, self.engine.load_epoch());
+        }
         let batch = DabBatch {
             brush: &stroke.brush,
             dabs: &batch,
@@ -127,25 +130,14 @@ fn tiles_touched_by(
     engine: &WetOilEngine,
     canvas: &Canvas,
     brush: &BrushSettings,
-    dabs: &[Dab],
+    dabs: &[SweptDab],
 ) -> Vec<TileCoord> {
     let width = canvas.spec.width;
     let height = canvas.spec.height;
     let touched: BTreeSet<TileCoord> = dabs
         .iter()
-        .filter_map(|dab| engine.dab_bounds(canvas, brush, dab))
-        .flat_map(|[x0, y0, x1, y1]| {
-            tiles_in_rect(
-                width,
-                height,
-                [
-                    x0 - SAVE_MARGIN_PX,
-                    y0 - SAVE_MARGIN_PX,
-                    x1 + SAVE_MARGIN_PX,
-                    y1 + SAVE_MARGIN_PX,
-                ],
-            )
-        })
+        .filter_map(|swept| engine.dab_bounds(canvas, brush, &swept.dab, swept.swept_from.as_ref()))
+        .flat_map(|bounds| tiles_in_rect(width, height, bounds))
         .collect();
     touched.into_iter().collect()
 }
