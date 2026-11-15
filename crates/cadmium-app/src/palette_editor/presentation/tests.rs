@@ -48,3 +48,11 @@ fn tool_keys_choose_the_sheets_tools_and_swallow_the_pencil_and_move() {
     assert_eq!(tool_key(Some(UiTool::Move)), ToolKey::Swallow);
     assert_eq!(tool_key(None), ToolKey::NotATool);
 }
+
+#[test]
+fn each_mode_is_found_again_by_its_name() {
+    for (mode, _) in MODES {
+        assert_eq!(mode_named(mode_name(mode)), Some(mode));
+    }
+    assert_eq!(mode_named("wheel"), None);
+}

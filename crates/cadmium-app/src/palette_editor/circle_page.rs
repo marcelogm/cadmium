@@ -1,13 +1,12 @@
 //! The Circle page: the big editable wheel, its hint and the Darken slider.
 
 use adw::prelude::*;
-use cadmium_engine::palette::{MAX_DARKEN, circle_axes};
+use cadmium_engine::palette::MAX_DARKEN;
 
 use super::PaletteEditor;
 use super::presentation::CIRCLE_HINT;
 use super::snapshot::Snapshot;
-use crate::brush_panel::wheel_is_stale;
-use crate::colour_wheel::{ColourWheel, WheelPaint, wheel_image};
+use crate::colour_wheel::ColourWheel;
 use crate::state::PaletteMode;
 
 const WHEEL_SIZE_PX: i32 = 400;
@@ -85,21 +84,9 @@ impl PaletteEditor {
         let page = &self.circle;
         page.darken.set_sensitive(snapshot.can_darken);
         page.darken.set_value(f64::from(snapshot.edit.darken));
-        let wanted = &snapshot.wheel_key;
         let shows = snapshot.edit.mode == PaletteMode::Circle;
-        if !wheel_is_stale(shows, self.shown.wheel.borrow().as_ref(), wanted) {
-            return;
-        }
         let state = self.state.borrow();
-        let image = wheel_image(&WheelPaint {
-            db: &state.painting.session.db,
-            slots: &wanted.slots,
-            palette: &wanted.palette,
-            axes: circle_axes(&wanted.slots),
-            darken: f32::from_bits(wanted.darken_bits),
-        });
-        drop(state);
-        page.wheel.show(image);
-        self.shown.wheel.replace(Some(wanted.clone()));
+        let db = &state.painting.session.db;
+        page.wheel.show_if_stale(shows, &snapshot.wheel_key, db);
     }
 }

@@ -101,5 +101,15 @@ impl UiTool {
     }
 }
 
+/// The toggle that picks `tool` in a tool bar: its icon and tooltip, named by the tool.
+pub(crate) fn tool_toggle(tool: UiTool) -> adw::Toggle {
+    let profile = tool.profile();
+    adw::Toggle::builder()
+        .name(tool.name())
+        .icon_name(profile.icon)
+        .tooltip(profile.tooltip)
+        .build()
+}
+
 #[cfg(test)]
 mod tests;

@@ -4,7 +4,9 @@ use cadmium_engine::palette::{ColourRef, circle_axes};
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 use cadmium_engine::tool::Holder;
 
-use super::presentation::{PLATE_GAP_KEY, RackEntry, WheelKey, highlighted_colour, rack_entry};
+use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
+use crate::colour_wheel::WheelKey;
+use crate::palette_colours::{highlighted_colour, pigment_tooltip};
 use crate::state::{AppState, PaletteView};
 use crate::thumbnails::ThumbnailKey;
 use crate::tools::Tool;
@@ -150,7 +152,7 @@ fn held_paint(
 fn pigment_tooltips(pigments: &[&Pigment]) -> Vec<String> {
     pigments
         .iter()
-        .map(|pigment| format!("{} ({})", pigment.name, pigment.colour_index))
+        .map(|pigment| pigment_tooltip(pigment))
         .collect()
 }
 

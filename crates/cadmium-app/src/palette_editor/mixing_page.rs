@@ -1,14 +1,12 @@
 //! The Mixing page: the sheet's tools, undo and redo, Clear Sheet, and the sheet.
 
-use std::rc::Rc;
-
 use adw::prelude::*;
 
 use super::PaletteEditor;
 use super::sheet_view::SheetView;
 use super::snapshot::Snapshot;
 use crate::state::SharedState;
-use crate::tools::UiTool;
+use crate::tools::{UiTool, tool_toggle};
 
 const PAGE_MARGIN: i32 = 18;
 const PAGE_SPACING: i32 = 12;
@@ -66,15 +64,6 @@ pub(super) fn mixing_page(state: SharedState) -> MixingPage {
     }
 }
 
-fn tool_toggle(tool: UiTool) -> adw::Toggle {
-    let profile = tool.profile();
-    adw::Toggle::builder()
-        .name(tool.name())
-        .icon_name(profile.icon)
-        .tooltip(profile.tooltip)
-        .build()
-}
-
 fn history_button(icon: &str, tooltip: &str, action: &str) -> gtk::Button {
     gtk::Button::builder()
         .icon_name(icon)
@@ -94,7 +83,7 @@ impl PaletteEditor {
     }
 
     /// Picks the sheet's tool as its toggle does.
-    pub(super) fn choose_sheet_tool(self: &Rc<Self>, tool: UiTool) {
+    pub(super) fn choose_sheet_tool(&self, tool: UiTool) {
         self.mixing.tools.set_active_name(Some(tool.name()));
     }
 }

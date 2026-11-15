@@ -1,4 +1,5 @@
 use gtk::gdk;
+use gtk::prelude::*;
 
 use super::UiTool;
 
@@ -98,4 +99,24 @@ pub(crate) fn plain_key_pick(key: gdk::Key, modifiers: gdk::ModifierType) -> Opt
         .chain(KEYPAD_TOOL_KEYS)
         .find(|&(bound, _)| bound == key)
         .map(|(_, tool)| tool)
+}
+
+/// The painting's tool for the number-row key `keycode` pressed under `keys`, read on both
+/// keyboard levels as [`digit_pick`] wants it.
+pub(crate) fn pressed_tool(
+    keys: &gtk::EventControllerKey,
+    keycode: u32,
+    modifiers: gdk::ModifierType,
+) -> Option<UiTool> {
+    let display = keys.widget()?.display();
+    let level = |state| {
+        display
+            .translate_key(keycode, state, keys.group() as i32)
+            .map(|(key, ..)| key)
+    };
+    digit_pick(
+        level(gdk::ModifierType::empty()),
+        level(gdk::ModifierType::SHIFT_MASK),
+        modifiers,
+    )
 }

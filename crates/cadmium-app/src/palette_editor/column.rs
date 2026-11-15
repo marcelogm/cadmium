@@ -11,8 +11,8 @@ use gtk::{gdk, gio, graphene};
 use super::presentation::{chosen_hint, pin_button_is_enabled, shows_circle_markers};
 use super::snapshot::Snapshot;
 use super::{PaletteEditor, with_editor};
-use crate::brush_panel::WheelKey;
 use crate::colour_wheel::colour_ref_text;
+use crate::palette_colours::current_modifiers;
 use crate::swatch::{Swatch, SwatchShape};
 
 const COLUMN_MARGIN: i32 = 14;
@@ -35,6 +35,7 @@ const MY_COLOUR_TOOLTIP: &str = "My colour";
 pub(super) const ACTION_GROUP: &str = "palette";
 pub(super) const REMOVE_ACTION: &str = "remove";
 const MARKER_CLASS: &str = "circle-marker";
+const COLOUR_CURSOR: &str = "pointer";
 
 pub(super) struct Column {
     pub(super) root: gtk::Box,
@@ -67,7 +68,6 @@ pub(super) struct ShownColumn {
     paint_cells: RefCell<Vec<ColourCell>>,
     my_colours: RefCell<Option<Vec<[u8; 3]>>>,
     my_cells: RefCell<Vec<ColourCell>>,
-    pub(super) wheel: RefCell<Option<WheelKey>>,
 }
 
 /// The chosen colour's line: its swatch and the hint beside it.
@@ -269,12 +269,13 @@ impl PaletteEditor {
             button.add_css_class("circular");
         }
         button.set_tooltip_text(tooltip);
+        button.set_cursor_from_name(Some(COLOUR_CURSOR));
         if let Some(name) = tooltip {
             button.update_property(&[gtk::accessible::Property::Label(name)]);
         }
         let editor = Rc::downgrade(self);
         button.connect_clicked(move |button| {
-            let modifiers = crate::brush_panel::current_modifiers(button);
+            let modifiers = current_modifiers(button);
             with_editor(&editor, |editor| editor.click_colour(colour, modifiers));
         });
         button.add_controller(drag_source(colour, &swatch));
@@ -289,12 +290,12 @@ impl PaletteEditor {
         let editor = Rc::downgrade(self);
         click.connect_pressed(move |click, _, _, _| {
             let button = click.widget();
-            with_editor(&editor, |shown| shown.offer_removal(index, button.as_ref()));
+            with_editor(&editor, |editor| editor.offer_removal(index, button));
         });
         click
     }
 
-    fn offer_removal(&self, index: usize, button: Option<&gtk::Widget>) {
+    fn offer_removal(&self, index: usize, button: Option<gtk::Widget>) {
         let column = &self.column;
         let Some(bounds) = button.and_then(|button| button.compute_bounds(&column.root)) else {
             return;

@@ -10,18 +10,21 @@ use adw::prelude::*;
 use gtk::{cairo, gdk, glib};
 
 use cadmium_engine::palette::ColourRef;
+use cadmium_engine::pigments::PigmentDb;
 
 use crate::LOG_DOMAIN;
 
 mod dragging;
 mod geometry;
 mod image;
+mod key;
 
 pub(crate) use dragging::colour_ref_text;
 use geometry::rim_centre;
 use image::WheelImage;
 use image::{ARGB32_STRIDE, WHEEL_CELLS};
-pub(crate) use image::{WheelPaint, wheel_image};
+pub(crate) use key::WheelKey;
+use key::wheel_is_stale;
 
 const NEUTRAL_GREY: f64 = 225.0 / 255.0;
 const CHANNEL_MAX: f64 = 255.0;
@@ -87,6 +90,8 @@ struct Wheel {
 pub(crate) struct ColourWheel {
     area: gtk::DrawingArea,
     wheel: Rc<Wheel>,
+    /// What the picture on show was mixed from.
+    drawn: RefCell<Option<WheelKey>>,
 }
 
 impl ColourWheel {
@@ -109,16 +114,30 @@ impl ColourWheel {
             );
         });
         dragging::attach(&area, &wheel);
-        ColourWheel { area, wheel }
+        ColourWheel {
+            area,
+            wheel,
+            drawn: RefCell::new(None),
+        }
     }
 
     pub(crate) fn widget(&self) -> &gtk::DrawingArea {
         &self.area
     }
 
-    pub(crate) fn show(&self, image: WheelImage) {
+    fn show(&self, image: WheelImage) {
         self.wheel.shown.replace(Shown::of(image));
         self.area.queue_draw();
+    }
+
+    /// Mixes the picture again from `wanted`, only while the wheel `shows` and what its picture
+    /// was mixed from changed.
+    pub(crate) fn show_if_stale(&self, shows: bool, wanted: &WheelKey, db: &PigmentDb) {
+        if !wheel_is_stale(shows, self.drawn.borrow().as_ref(), wanted) {
+            return;
+        }
+        self.show(wanted.image(db));
+        self.drawn.replace(Some(wanted.clone()));
     }
 
     /// An editable wheel draws bigger rim dots, lets them be dragged round or off it, and takes

@@ -5,9 +5,9 @@ use std::f64::consts::TAU;
 /// How far inside the edge of the wheel the dots of its colours sit.
 pub(crate) const RIM_INSET_PX: f64 = 14.0;
 /// How near the centre of a rim dot a press must fall to grab it.
-pub(crate) const RIM_HIT_PX: f64 = 18.0;
+const RIM_HIT_PX: f64 = 18.0;
 /// How far past the edge of the wheel a rim dot must be dragged to come off it.
-pub(crate) const REMOVE_REACH_PX: f64 = 20.0;
+const REMOVE_REACH_PX: f64 = 20.0;
 
 /// The turn (0 at the top, clockwise) and radius (1 on the edge) of a point of a wheel
 /// `size_px` across; `None` outside the disc and for a wheel with no size.

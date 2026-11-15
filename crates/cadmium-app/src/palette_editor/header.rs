@@ -1,7 +1,5 @@
 //! The dialog's header: its title and the Circle | Mixing switch.
 
-use std::rc::Rc;
-
 use adw::prelude::*;
 
 use super::PaletteEditor;
@@ -37,7 +35,7 @@ pub(super) fn header() -> Header {
 
 impl PaletteEditor {
     /// Shows the page of the dialog's mode, and the pick only where there is a sheet.
-    pub(super) fn show_mode(self: &Rc<Self>, snapshot: &Snapshot) {
+    pub(super) fn show_mode(&self, snapshot: &Snapshot) {
         let name = mode_name(snapshot.edit.mode);
         if self.modes.active_name().as_deref() != Some(name) {
             self.modes.set_active_name(Some(name));

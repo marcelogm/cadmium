@@ -13,7 +13,7 @@ use gtk::{gdk, glib, graphene, gsk};
 
 use crate::cursor_outline::CursorOutline;
 use crate::handlers::{Handler, run_handlers};
-use crate::input::PaintSurfaceWidget;
+use crate::input::{PaintSurfaceWidget, attach_stylus};
 use crate::presenter::{FramePresenter, PresentSource};
 use crate::state::{EaselId, SharedState};
 use crate::surface_scale::{SurfaceScaleWatch, device_scale, viewport_px};
@@ -44,7 +44,7 @@ impl SheetView {
         if view.imp().state.set(state).is_err() {
             unreachable!("a fresh sheet view has no state yet");
         }
-        crate::input::attach_stylus(&view);
+        attach_stylus(&view);
         view
     }
 

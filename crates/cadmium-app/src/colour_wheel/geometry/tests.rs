@@ -94,9 +94,3 @@ fn a_press_between_two_crowded_rim_points_grabs_the_nearer() {
     let (x, y) = between(0.6);
     assert_eq!(rim_hit(x, y, 64, 400.0), Some(1));
 }
-
-#[test]
-fn an_empty_circle_has_no_rim_point_to_grab_even_where_the_first_would_sit() {
-    let (x, y) = rim_centre(0, 0, 400.0);
-    assert_eq!(rim_hit(x, y, 0, 400.0), None);
-}

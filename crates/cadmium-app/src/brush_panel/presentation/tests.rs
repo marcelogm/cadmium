@@ -3,8 +3,6 @@ use crate::tools::knife::KNIFE_HANDLING;
 use crate::tools::panel::panel_tool;
 use crate::tools::{Tool, UiTool};
 use cadmium_engine::brush::{BrushSpec, HairSpec, HeadSpec, factory_brushes};
-use cadmium_engine::palette::paint_recipe;
-use cadmium_engine::pigments::MAX_SLOTS;
 
 #[test]
 fn recipe_description_names_a_single_pigment() {
@@ -89,68 +87,6 @@ fn knife_panel_speaks_of_the_knife_and_how_to_hold_it() {
 }
 
 #[test]
-fn the_selected_colour_highlights_the_paint_or_pinned_colour_it_equals() {
-    let mut mix = [0.0; MAX_SLOTS];
-    mix[0] = 0.5;
-    mix[1] = 0.5;
-    let palette = Palette {
-        my_colours: vec![mix],
-        circle: vec![],
-    };
-    assert_eq!(
-        highlighted_colour(&palette, Some(&paint_recipe(1))),
-        Some(ColourRef::Paint(1))
-    );
-    assert_eq!(
-        highlighted_colour(&palette, Some(&mix)),
-        Some(ColourRef::Mine(0))
-    );
-    let mut other = mix;
-    other[0] = 0.4;
-    other[1] = 0.6;
-    assert_eq!(highlighted_colour(&palette, Some(&other)), None);
-    assert_eq!(highlighted_colour(&palette, None), None);
-}
-
-#[test]
-fn a_pinned_colour_that_is_one_paint_highlights_the_paint() {
-    let palette = Palette {
-        my_colours: vec![paint_recipe(2)],
-        circle: vec![],
-    };
-    assert_eq!(
-        highlighted_colour(&palette, Some(&paint_recipe(2))),
-        Some(ColourRef::Paint(2))
-    );
-}
-
-#[test]
-fn a_colour_within_a_thousandth_of_a_pinned_one_per_paint_is_that_colour() {
-    let mut mix = [0.0; MAX_SLOTS];
-    mix[0] = 0.5;
-    mix[1] = 0.5;
-    let palette = Palette {
-        my_colours: vec![paint_recipe(3), mix],
-        circle: vec![],
-    };
-    let mut near = mix;
-    near[0] = 0.5005;
-    near[1] = 0.4995;
-    assert_eq!(
-        highlighted_colour(&palette, Some(&near)),
-        Some(ColourRef::Mine(1))
-    );
-    let mut far = mix;
-    far[0] = 0.502;
-    far[1] = 0.498;
-    assert_eq!(highlighted_colour(&palette, Some(&far)), None);
-    let mut last_differs = mix;
-    last_differs[0] = 0.4;
-    last_differs[MAX_SLOTS - 1] = 0.1;
-    assert_eq!(highlighted_colour(&palette, Some(&last_differs)), None);
-}
-
-#[test]
 fn the_palette_views_are_named_as_their_toggles_are() {
     for view in [PaletteView::Colours, PaletteView::Circle] {
         assert_eq!(palette_view_named(palette_view_name(view)), Some(view));
@@ -173,62 +109,10 @@ fn the_circle_shows_only_in_its_view_and_for_a_tool_that_takes_paint() {
     assert!(!circle_shows(Tool::Pencil, PaletteView::Circle));
 }
 
-fn wheel_key(darken: f32) -> WheelKey {
-    WheelKey::of(
-        &Palette {
-            my_colours: vec![],
-            circle: vec![ColourRef::Paint(1)],
-        },
-        &["titanium_white".to_string(), "ultramarine_blue".to_string()],
-        darken,
-    )
-}
-
-#[test]
-fn the_wheel_is_drawn_again_only_when_it_shows_and_what_it_draws_changed() {
-    let key = wheel_key(0.25);
-    assert!(wheel_is_stale(true, None, &key));
-    assert!(!wheel_is_stale(false, None, &key));
-    assert!(!wheel_is_stale(true, Some(&key), &wheel_key(0.25)));
-    assert!(wheel_is_stale(true, Some(&key), &wheel_key(0.5)));
-    assert!(!wheel_is_stale(false, Some(&key), &wheel_key(0.5)));
-}
-
-#[test]
-fn the_wheel_depends_on_the_circle_the_pinned_colours_the_paints_and_the_darkening() {
-    let key = wheel_key(0.25);
-    let mut other_circle = key.clone();
-    other_circle.palette.circle.push(ColourRef::Paint(0));
-    let mut other_pinned = key.clone();
-    other_pinned.palette.my_colours.push(paint_recipe(1));
-    let mut other_paints = key.clone();
-    other_paints.slots.push("ivory_black".to_string());
-    for other in [other_circle, other_pinned, other_paints, wheel_key(0.26)] {
-        assert_ne!(key, other);
-    }
-}
-
 #[test]
 fn moving_keeps_the_panel_of_the_tool_in_hand() {
     assert_eq!(panel_tool(UiTool::Move, Tool::Knife), Tool::Knife);
     assert_eq!(panel_tool(UiTool::Paint(Tool::Rag), Tool::Brush), Tool::Rag);
-}
-
-#[test]
-fn ctrl_mixes_a_colour_in_and_a_plain_click_loads_it() {
-    assert_eq!(
-        colour_click(gdk::ModifierType::CONTROL_MASK),
-        ColourClick::MixIn
-    );
-    assert_eq!(
-        colour_click(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK),
-        ColourClick::MixIn
-    );
-    assert_eq!(
-        colour_click(gdk::ModifierType::SHIFT_MASK),
-        ColourClick::Load
-    );
-    assert_eq!(colour_click(gdk::ModifierType::empty()), ColourClick::Load);
 }
 
 #[test]

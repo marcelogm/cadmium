@@ -20,6 +20,7 @@ mod ink;
 mod input;
 mod lab_panel;
 mod new_painting_dialog;
+mod palette_colours;
 mod palette_editor;
 mod preferences_dialog;
 mod presenter;

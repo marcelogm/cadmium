@@ -24,12 +24,10 @@ mod thumbnail_job;
 
 use build::{PaletteGroup, ToolGroup};
 use palette::ShownPalette;
-pub(crate) use palette::current_modifiers;
 use presentation::{
     RackEntry, describe_recipe, hardness_grade, percent_text, plate_gap_text, size_to_slider,
     slider_needs_sync, tool_hint,
 };
-pub(crate) use presentation::{WheelKey, colour_click, highlighted_colour, wheel_is_stale};
 use snapshot::Snapshot;
 use thumbnail_job::ThumbnailJob;
 

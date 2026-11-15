@@ -7,11 +7,11 @@ use gtk::{gdk, gio, glib};
 use super::column::{ACTION_GROUP, REMOVE_ACTION};
 use super::presentation::{ToolKey, mode_named, tool_key};
 use super::{PaletteEditor, with_editor};
-use crate::brush_panel::colour_click;
 use crate::colour_wheel::PickedPoint;
+use crate::palette_colours::colour_click;
 use crate::state::{AppState, PaletteMode};
 use crate::tools::UiTool;
-use crate::tools::keys::{digit_pick, plain_key_pick};
+use crate::tools::keys::{plain_key_pick, pressed_tool};
 use crate::window::CadmiumWindow;
 
 const HISTORY_ACTIONS: [&str; 2] = ["undo", "redo"];
@@ -125,24 +125,14 @@ impl PaletteEditor {
     }
 
     fn tool_key_pressed(
-        self: &Rc<Self>,
+        &self,
         keys: &gtk::EventControllerKey,
         key: gdk::Key,
         keycode: u32,
         modifiers: gdk::ModifierType,
     ) -> glib::Propagation {
-        let display = self.dialog.display();
-        let level = |state| {
-            display
-                .translate_key(keycode, state, keys.group() as i32)
-                .map(|(key, ..)| key)
-        };
-        let picked = digit_pick(
-            level(gdk::ModifierType::empty()),
-            level(gdk::ModifierType::SHIFT_MASK),
-            modifiers,
-        )
-        .or_else(|| plain_key_pick(key, modifiers));
+        let picked =
+            pressed_tool(keys, keycode, modifiers).or_else(|| plain_key_pick(key, modifiers));
         match tool_key(picked) {
             ToolKey::NotATool => glib::Propagation::Proceed,
             ToolKey::Swallow => glib::Propagation::Stop,

@@ -1,7 +1,8 @@
 use cadmium_engine::palette::{ColourRef, circle_axes};
 use cadmium_engine::pigments::mixture_srgb8;
 
-use crate::brush_panel::{WheelKey, highlighted_colour};
+use crate::colour_wheel::WheelKey;
+use crate::palette_colours::{highlighted_colour, pigment_tooltip};
 use crate::state::{AppState, PaletteEdit, PaletteMode};
 use crate::tools::UiTool;
 
@@ -42,7 +43,7 @@ impl Snapshot {
             paint_tooltips: slots
                 .iter()
                 .map(|id| match db.get(id) {
-                    Some(pigment) => format!("{} ({})", pigment.name, pigment.colour_index),
+                    Some(pigment) => pigment_tooltip(pigment),
                     None => id.clone(),
                 })
                 .collect(),
@@ -56,3 +57,6 @@ impl Snapshot {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

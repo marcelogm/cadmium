@@ -23,7 +23,7 @@ pub(crate) fn colour_ref_text(colour: ColourRef) -> String {
 }
 
 /// The colour `colour_ref_text` wrote, or `None` for any other text.
-pub(crate) fn parse_colour_ref(text: &str) -> Option<ColourRef> {
+fn parse_colour_ref(text: &str) -> Option<ColourRef> {
     let (kind, index) = text.split_once(':')?;
     let index = index.parse().ok()?;
     match kind {
@@ -160,6 +160,8 @@ fn attach_drop(area: &gtk::DrawingArea, wheel: &Rc<Wheel>) {
         glib::Type::STRING,
         gdk::DragAction::COPY | gdk::DragAction::MOVE,
     );
+    target.set_preload(true);
+    target.connect_value_notify(reject_foreign_text);
     target.connect_accept(glib::clone!(
         #[strong]
         wheel,
@@ -173,8 +175,23 @@ fn attach_drop(area: &gtk::DrawingArea, wheel: &Rc<Wheel>) {
     area.add_controller(target);
 }
 
+/// Only a drag started in this app can carry a colour; text from elsewhere is not one.
 fn accepts(wheel: &Wheel, drop: &gdk::Drop) -> bool {
-    wheel.editable.get() && drop.formats().contains_type(glib::Type::STRING)
+    wheel.editable.get()
+        && drop.drag().is_some()
+        && drop.formats().contains_type(glib::Type::STRING)
+}
+
+/// Once the dragged text has loaded, a text that names no colour is turned away, so the wheel
+/// does not offer itself as a place to drop it.
+fn reject_foreign_text(target: &gtk::DropTarget) {
+    let Some(value) = target.value() else {
+        return;
+    };
+    let text = value.get::<String>().ok();
+    if text.as_deref().and_then(parse_colour_ref).is_none() {
+        target.reject();
+    }
 }
 
 fn dropped(
