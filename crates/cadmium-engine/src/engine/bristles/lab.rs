@@ -24,6 +24,7 @@ pub(super) struct LabStrand {
     curl: [f32; 4],
     tip_force: [f32; 4],
     floor_slope: [f32; 4],
+    step: [f32; 4],
     compliances: [f32; LAB_HINGE_SLOTS],
 }
 
@@ -42,6 +43,7 @@ impl LabStrand {
             curl: [0.0; 4],
             tip_force: [0.0, 0.0, 0.0, 1.0],
             floor_slope: [0.0; 4],
+            step: [0.0; 4],
             compliances,
         }
     }
@@ -54,6 +56,13 @@ impl LabStrand {
     /// Tilts the floor into the plane z = height + slope · xy.
     pub(super) fn with_floor_slope(mut self, slope: [f32; 2]) -> LabStrand {
         self.floor_slope[..2].copy_from_slice(&slope);
+        self
+    }
+
+    /// Replaces the floor with a step `height_px` high for x > `edge_px`, on which the
+    /// strand rests as a hair `radius_px` thick.
+    pub(super) fn with_step(mut self, edge_px: f32, height_px: f32, radius_px: f32) -> LabStrand {
+        self.step = [edge_px, height_px, radius_px, 1.0];
         self
     }
 

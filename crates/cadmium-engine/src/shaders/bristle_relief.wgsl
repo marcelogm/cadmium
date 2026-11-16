@@ -21,28 +21,6 @@ fn surface_px(at: vec2<f32>) -> f32 {
     return mix(top, bottom, share.y) / RELIEF_UM_PER_PX;
 }
 
-/// Half the span of the central differences that measure the relief's slope, px.
-const SLOPE_PROBE_PX: f32 = 1.0;
-
-/// The relief's slope (∂f/∂x, ∂f/∂y) at `at`, by central differences.
-fn surface_slope(at: vec2<f32>) -> vec2<f32> {
-    let dx = vec2<f32>(SLOPE_PROBE_PX, 0.0);
-    let dy = vec2<f32>(0.0, SLOPE_PROBE_PX);
-    return vec2<f32>(
-        surface_px(at + dx) - surface_px(at - dx),
-        surface_px(at + dy) - surface_px(at - dy),
-    ) / (2.0 * SLOPE_PROBE_PX);
-}
-
-fn floors_under(chain: Chain) -> Floors {
-    var floors: Floors;
-    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        floors.heights_px[vertex] = surface_px(chain[vertex].xy);
-        floors.slopes[vertex] = surface_slope(chain[vertex].xy);
-    }
-    return floors;
-}
-
 /// Larger than any height: the identity of a max-reduction that starts at its negative.
 const NO_FLOOR_PX: f32 = 3.0e38;
 

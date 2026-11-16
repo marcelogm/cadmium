@@ -32,11 +32,12 @@ fn owned_bristle(thread: u32, share: u32) -> u32 {
 /// How high the ferrule must stand for this strand's rest shape to just touch: the floor
 /// under each rest vertex, less that vertex's depth below the ferrule.
 fn strand_touch_px(bristle: u32, placed: Pose) -> f32 {
-    let local = rest_chain_local(rests[bristle]);
+    let rest = rests[bristle];
+    let local = rest_chain_local(rest);
     var touch = -NO_FLOOR_PX;
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
         let at = from_ferrule(local[vertex], placed);
-        touch = max(touch, surface_px(at.xy) - (at.z - placed.ferrule.z));
+        touch = max(touch, disc_floor_px(at.xy, rest.radius_px) - (at.z - placed.ferrule.z));
     }
     return touch;
 }
@@ -73,10 +74,11 @@ fn start_pose(touch_px: f32) -> Pose {
 }
 
 fn place_at_rest(bristle: u32, pose: Pose) {
-    let local = rest_chain_local(rests[bristle]);
+    let rest = rests[bristle];
+    let local = rest_chain_local(rest);
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
         let at = from_ferrule(local[vertex], pose);
-        states[position_slot(bristle, vertex)] = vec4<f32>(at, surface_px(at.xy));
+        states[position_slot(bristle, vertex)] = vec4<f32>(at, disc_floor_px(at.xy, rest.radius_px));
     }
 }
 
@@ -88,10 +90,13 @@ fn held_chain(bristle: u32) -> Chain {
     return chain;
 }
 
+/// Stores the chain with the floor the solve rests each vertex on, so Contact's clearance
+/// matches what the solve enforced.
 fn store_chain(bristle: u32, chain: Chain) {
+    let radius_px = rests[bristle].radius_px;
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
         let at = chain[vertex];
-        states[position_slot(bristle, vertex)] = vec4<f32>(at, surface_px(at.xy));
+        states[position_slot(bristle, vertex)] = vec4<f32>(at, disc_floor_px(at.xy, radius_px));
     }
 }
 
@@ -106,6 +111,8 @@ fn carry(chain: ptr<function, Chain>, start: Pose, end: Pose) {
 /// returns the canvas's normal force at the end, N.
 fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
     var chain = held_chain(bristle);
+    var sampled = chain;
+    let radius_px = rests[bristle].radius_px;
     let substeps = max(dab.substeps, 1u);
     let iterations = max(substeps, MIN_DAB_ITERATIONS);
     var previous = start;
@@ -115,7 +122,9 @@ fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
         carry(&chain, previous, pose);
         previous = pose;
         let shape = strand_shape(rests[bristle], pose);
-        force = summed(solve_iteration(&chain, shape, floors_under(chain)));
+        let floors = floors_under(sampled, chain, radius_px);
+        sampled = chain;
+        force = summed(solve_iteration(&chain, shape, floors));
     }
     store_chain(bristle, chain);
     return force;

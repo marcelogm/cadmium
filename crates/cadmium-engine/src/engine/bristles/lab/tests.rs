@@ -48,6 +48,15 @@ const DEEP_PRESS_PX: f32 = 15.0;
 const DEEP_STEPS: u32 = 30;
 const MIN_LANDED_VERTICES: usize = 2;
 
+/// A dried step, px: its height, the hair's radius, and how far past the resting tip its
+/// edge stands for a tip that slides into the wall, or before it for one that lands on top.
+const STEP_HEIGHT_PX: f32 = 4.0;
+const STEP_HAIR_RADIUS_PX: f32 = 0.5;
+const WALL_AHEAD_PX: f32 = 0.3;
+const LEDGE_BEHIND_PX: f32 = 3.0;
+const STEP_PRESS_PX: f32 = 15.0;
+const STEP_STEPS: u32 = 3;
+
 /// A floor plane rising 45° toward +x through the upright strand's tip.
 const RAMP_SLOPE: [f32; 2] = [1.0, 0.0];
 const RAMP_PRESS_PX: f32 = 5.0;
@@ -288,4 +297,37 @@ fn a_strand_pressed_onto_a_ramp_slides_down_it_and_never_sinks_into_it() {
         tip[0] <= -MIN_RAMP_SLIDE_PX && over_ramp(&tip) <= SINK_TOLERANCE_PX,
         "the tip {tip:?} did not slide down the ramp"
     );
+}
+
+/// The strand of `pressed_tilted` at 45°, its tip resting `lift_px` up, over a step at `edge_px`.
+fn over_step(edge_px: f32, lift_px: f32) -> LabStrand {
+    let clamp = tilted(DEEP_DEGREES);
+    let rise = -clamp[2] * LENGTH_PX + lift_px;
+    strand(clamp, [0.0, 0.0, rise])
+        .with_step(edge_px, STEP_HEIGHT_PX, STEP_HAIR_RADIUS_PX)
+        .with_press(STEP_PRESS_PX, STEP_STEPS)
+}
+
+#[test]
+fn a_strand_pressed_against_or_onto_a_step_never_sinks_into_it() {
+    let gpu = GpuContext::new().unwrap();
+    let tip_x = tilted(DEEP_DEGREES)[0] * LENGTH_PX;
+    let wall = tip_x + WALL_AHEAD_PX;
+    let ledge = tip_x - LEDGE_BEHIND_PX;
+    let runs = run(
+        &gpu,
+        &[over_step(wall, 0.0), over_step(ledge, STEP_HEIGHT_PX)],
+    );
+    for (run, edge) in runs.iter().zip([wall, ledge]) {
+        assert_lengths_kept(run);
+        let floor = |x: f32| if x > edge { STEP_HEIGHT_PX } else { 0.0 };
+        assert!(
+            run.chain_px
+                .iter()
+                .all(|at| at[2] >= floor(at[0]) - SINK_TOLERANCE_PX),
+            "edge at {edge}: {:?}",
+            run.chain_px
+        );
+        assert!(run.normal_force_n > 0.0, "edge at {edge}: no force");
+    }
 }

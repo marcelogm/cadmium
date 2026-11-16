@@ -4,13 +4,16 @@
 /// One strand for the lab, all vec4 so the layout is the same on both sides:
 /// root.xyz and w = segment px; clamp.xyz and w = floor height px; curl.xyz and
 /// w = press px; tip_force.xyz N and w = press steps; floor_slope.xy the floor plane's
-/// slope, so the floor is z = height + slope · xy; compliances rad per N·m.
+/// slope, so the floor is z = height + slope · xy; step, when its w is 1, replaces the
+/// plane with a step of height y for x > x, read as a hair of radius z rests on it;
+/// compliances rad per N·m.
 struct LabStrand {
     root: vec4<f32>,
     clamp: vec4<f32>,
     curl: vec4<f32>,
     tip_force: vec4<f32>,
     floor_slope: vec4<f32>,
+    step: vec4<f32>,
     compliances: array<vec4<f32>, 2>,
 };
 
@@ -52,20 +55,39 @@ fn plane_floors(strand: LabStrand, chain: Chain) -> Floors {
     return floors;
 }
 
+/// The step the lab's `surface_px` stands for: edge x, height and radius px.
+var<private> lab_step: vec4<f32>;
+
+/// The relief `bristle_floor.wgsl` reads: the lab's step.
+fn surface_px(at: vec2<f32>) -> f32 {
+    return select(0.0, lab_step.y, at.x > lab_step.x);
+}
+
+fn lab_floors(strand: LabStrand, previous: Chain, chain: Chain) -> Floors {
+    if strand.step.w != 0.0 {
+        return floors_under(previous, chain, strand.step.z);
+    }
+    return plane_floors(strand, chain);
+}
+
 @compute @workgroup_size(1)
 fn solve_lab(@builtin(workgroup_id) id: vec3<u32>) {
     let strand = lab_strands[id.x];
+    lab_step = strand.step;
     let shape = lab_shape(strand);
     var chain = lab_rest_chain(shape, strand.root.xyz);
     let steps = max(u32(strand.tip_force.w), 1u);
     let drop = vec3<f32>(0.0, 0.0, strand.curl.w / f32(steps));
     var forces: PerContact;
+    var sampled = chain;
     for (var step = 0u; step < steps; step++) {
         for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
             chain[vertex] -= drop;
         }
         for (var iteration = 0u; iteration < LAB_ITERATIONS_PER_STEP; iteration++) {
-            forces = solve_iteration(&chain, shape, plane_floors(strand, chain));
+            let floors = lab_floors(strand, sampled, chain);
+            sampled = chain;
+            forces = solve_iteration(&chain, shape, floors);
         }
     }
     let first = id.x * LAB_OUT_VECTORS;
