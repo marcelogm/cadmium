@@ -3,12 +3,14 @@
 ///
 /// One strand for the lab, all vec4 so the layout is the same on both sides:
 /// root.xyz and w = segment px; clamp.xyz and w = floor height px; curl.xyz and
-/// w = press px; tip_force.xyz N and w = press steps; compliances rad per N·m.
+/// w = press px; tip_force.xyz N and w = press steps; floor_slope.xy the floor plane's
+/// slope, so the floor is z = height + slope · xy; compliances rad per N·m.
 struct LabStrand {
     root: vec4<f32>,
     clamp: vec4<f32>,
     curl: vec4<f32>,
     tip_force: vec4<f32>,
+    floor_slope: vec4<f32>,
     compliances: array<vec4<f32>, 2>,
 };
 
@@ -39,10 +41,13 @@ fn lab_rest_chain(shape: StrandShape, root: vec3<f32>) -> Chain {
     return chain;
 }
 
-fn flat_floors(height_px: f32) -> Floors {
+/// The floor plane z = height + slope · xy under each vertex of `chain`.
+fn plane_floors(strand: LabStrand, chain: Chain) -> Floors {
     var floors: Floors;
+    let slope = strand.floor_slope.xy;
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        floors[vertex] = height_px;
+        floors.heights_px[vertex] = strand.clamp.w + dot(slope, chain[vertex].xy);
+        floors.slopes[vertex] = slope;
     }
     return floors;
 }
@@ -60,7 +65,7 @@ fn solve_lab(@builtin(workgroup_id) id: vec3<u32>) {
             chain[vertex] -= drop;
         }
         for (var iteration = 0u; iteration < LAB_ITERATIONS_PER_STEP; iteration++) {
-            forces = solve_iteration(&chain, shape, flat_floors(strand.clamp.w));
+            forces = solve_iteration(&chain, shape, plane_floors(strand, chain));
         }
     }
     let first = id.x * LAB_OUT_VECTORS;

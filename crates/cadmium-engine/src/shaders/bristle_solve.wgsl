@@ -1,11 +1,10 @@
 alias Chain = array<vec3<f32>, BRISTLE_VERTICES>;
-alias Floors = array<f32, BRISTLE_VERTICES>;
+alias Normals = array<vec3<f32>, BRISTLE_VERTICES>;
 alias Edges = array<vec3<f32>, BRISTLE_SEGMENTS>;
 alias Turns = array<vec3<f32>, BRISTLE_SEGMENTS>;
 alias HingeCompliances = array<f32, BRISTLE_SEGMENTS>;
 
 const METRES_PER_PX: f32 = RELIEF_UM_PER_PX * 1.0e-6;
-const UP: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
 /// Largest turn a hinge takes in one iteration: a guard for steps that leave the linear
 /// range, not physics.
 const MAX_HINGE_TURN_RAD: f32 = 0.3;
@@ -18,6 +17,22 @@ const MIN_ONE_PLUS_COSINE: f32 = 1.0e-3;
 /// Above this |x| a unit vector is too close to x to build a perpendicular from it.
 const NEAR_X_AXIS: f32 = 0.9;
 const PI: f32 = 3.14159265358979;
+
+/// The relief under each vertex: its height, px, and its slope (∂f/∂x, ∂f/∂y).
+struct Floors {
+    heights_px: array<f32, BRISTLE_VERTICES>,
+    slopes: array<vec2<f32>, BRISTLE_VERTICES>,
+};
+
+/// The unit normal of the relief under each vertex, pointing out of it: the gradient of
+/// z − f(x, y), normalised.
+fn floor_normals(floors: Floors) -> Normals {
+    var normals: Normals;
+    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+        normals[vertex] = normalize(vec3<f32>(-floors.slopes[vertex], 1.0));
+    }
+    return normals;
+}
 
 /// What the solve needs to know about one strand at the current ferrule pose.
 struct StrandShape {
@@ -148,7 +163,7 @@ fn turn_chain(chain: ptr<function, Chain>, edges: Edges, turns: Turns, segment_p
     }
 }
 
-/// The canvas's total normal force, N.
+/// The canvas's total normal force, N: the sum of the magnitudes along each normal.
 fn summed(forces: PerContact) -> f32 {
     var total = 0.0;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
@@ -158,18 +173,19 @@ fn summed(forces: PerContact) -> f32 {
 }
 
 /// One Gauss-Newton step of the strand's bending energy under its canvas contacts, from
-/// `chain` (vertex 0 already on the ferrule). Returns the canvas's normal force on each
-/// vertex (1..), N: the equilibrium of the full step, exact only once the cap on the turns
-/// no longer engages.
+/// `chain` (vertex 0 already on the ferrule). Returns the canvas's force on each vertex
+/// (1..), N, along the relief's normal there: the equilibrium of the full step, exact only
+/// once the cap on the turns no longer engages.
 fn solve_iteration(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors) -> PerContact {
     let edges = edges_of(*chain, shape.clamp);
     var turns = free_turns(*chain, edges, shape);
-    let forces = contact_forces(*chain, turns, shape.compliances, floors);
+    let normals = floor_normals(floors);
+    let forces = contact_forces(*chain, turns, shape.compliances, floors, normals);
     for (var pushed = 1u; pushed < BRISTLE_VERTICES; pushed++) {
         let force = forces[pushed - 1u];
         for (var hinge = 0u; hinge < pushed; hinge++) {
             let arm_m = ((*chain)[pushed] - (*chain)[hinge]) * METRES_PER_PX;
-            turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, UP);
+            turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, normals[pushed]);
         }
     }
     turn_chain(chain, edges, capped(turns), shape.segment_px);

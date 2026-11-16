@@ -1,4 +1,4 @@
-//! Runs the strand solve of `bristle_solve.wgsl` on single strands with flat floors, so
+//! Runs the strand solve of `bristle_solve.wgsl` on single strands over floor planes, so
 //! its mechanics can be checked against the closed forms in `mechanics`.
 
 use bytemuck::{Pod, Zeroable};
@@ -23,6 +23,7 @@ pub(super) struct LabStrand {
     clamp: [f32; 4],
     curl: [f32; 4],
     tip_force: [f32; 4],
+    floor_slope: [f32; 4],
     compliances: [f32; LAB_HINGE_SLOTS],
 }
 
@@ -40,12 +41,19 @@ impl LabStrand {
             clamp: [cx, cy, cz, 0.0],
             curl: [0.0; 4],
             tip_force: [0.0, 0.0, 0.0, 1.0],
+            floor_slope: [0.0; 4],
             compliances,
         }
     }
 
     pub(super) fn with_floor(mut self, height_px: f32) -> LabStrand {
         self.clamp[3] = height_px;
+        self
+    }
+
+    /// Tilts the floor into the plane z = height + slope · xy.
+    pub(super) fn with_floor_slope(mut self, slope: [f32; 2]) -> LabStrand {
+        self.floor_slope[..2].copy_from_slice(&slope);
         self
     }
 

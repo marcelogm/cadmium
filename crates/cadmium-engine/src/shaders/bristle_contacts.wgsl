@@ -13,37 +13,42 @@ const CONTACT_TOLERANCE_PX: f32 = 1.0e-3;
 const CONTACT_RIDGE_SHARE: f32 = 1.0e-5;
 const MIN_PIVOT: f32 = 1.0e-20;
 
-/// How far vertex `vertex` rises, px, under 1 N pushing vertex `pushed` up (indices are
-/// vertices, 1-based): Σ over the hinges above both of α·(lever · arm) in the canvas plane.
-fn contact_compliance(chain: Chain, compliances: HingeCompliances, vertex: u32, pushed: u32) -> f32 {
+/// How far vertex `vertex` moves out along its floor normal, px, under 1 N pushing vertex
+/// `pushed` along its own (indices are vertices, 1-based): Σ over the hinges above both of
+/// α·(arm × n_pushed)·(lever × n_vertex). The same normals on both sides keep it symmetric;
+/// on a flat floor it is α·(lever · arm) in the canvas plane.
+fn contact_compliance(chain: Chain, compliances: HingeCompliances, normals: Normals, vertex: u32, pushed: u32) -> f32 {
     var rise = 0.0;
     for (var hinge = 0u; hinge < min(vertex, pushed); hinge++) {
-        let lever = (chain[vertex] - chain[hinge]).xy;
-        let arm_m = (chain[pushed] - chain[hinge]).xy * METRES_PER_PX;
-        rise += compliances[hinge] * dot(lever, arm_m);
+        let lever = chain[vertex] - chain[hinge];
+        let arm_m = (chain[pushed] - chain[hinge]) * METRES_PER_PX;
+        rise += compliances[hinge] * dot(cross(arm_m, normals[pushed]), cross(lever, normals[vertex]));
     }
     return rise;
 }
 
-fn contact_matrix(chain: Chain, compliances: HingeCompliances) -> ContactMatrix {
+fn contact_matrix(chain: Chain, compliances: HingeCompliances, normals: Normals) -> ContactMatrix {
     var matrix: ContactMatrix;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         for (var column = 0u; column < BRISTLE_SEGMENTS; column++) {
-            matrix[row][column] = contact_compliance(chain, compliances, row + 1u, column + 1u);
+            matrix[row][column] = contact_compliance(chain, compliances, normals, row + 1u, column + 1u);
         }
     }
     return matrix;
 }
 
-/// How far under its floor each vertex (1..) would end after `turns`, px.
-fn gaps_after(chain: Chain, turns: Turns, floors: Floors) -> PerContact {
+/// How far inside the relief each vertex (1..) would end after `turns`, px along its floor
+/// normal: the linearised z − f(x, y) ≥ 0 divided by the gradient's length.
+fn gaps_after(chain: Chain, turns: Turns, floors: Floors, normals: Normals) -> PerContact {
     var gaps: PerContact;
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        var z = chain[vertex].z;
+        var moved = vec3<f32>(0.0);
         for (var hinge = 0u; hinge < vertex; hinge++) {
-            z += cross(turns[hinge], chain[vertex] - chain[hinge]).z;
+            moved += cross(turns[hinge], chain[vertex] - chain[hinge]);
         }
-        gaps[vertex - 1u] = floors[vertex] - z;
+        let normal = normals[vertex];
+        let under = (floors.heights_px[vertex] - chain[vertex].z) * normal.z;
+        gaps[vertex - 1u] = under - dot(normal, moved);
     }
     return gaps;
 }
@@ -148,12 +153,12 @@ fn landed(engaged: ptr<function, Engaged>, matrix: ContactMatrix, ridge: f32, ga
     return added;
 }
 
-/// The canvas's normal force on each vertex (1..), N: the active set of a frictionless,
-/// one-sided contact (Baxter & Lin's and Chu & Tai's quasi-static brushes).
-fn contact_forces(chain: Chain, turns: Turns, compliances: HingeCompliances, floors: Floors) -> PerContact {
-    let matrix = contact_matrix(chain, compliances);
+/// The canvas's force on each vertex (1..) along its floor normal, N: the active set of a
+/// frictionless, one-sided contact (Baxter & Lin's and Chu & Tai's quasi-static brushes).
+fn contact_forces(chain: Chain, turns: Turns, compliances: HingeCompliances, floors: Floors, normals: Normals) -> PerContact {
+    let matrix = contact_matrix(chain, compliances, normals);
     let ridge = CONTACT_RIDGE_SHARE * ridge_scale(matrix, chain, compliances);
-    let gaps = gaps_after(chain, turns, floors);
+    let gaps = gaps_after(chain, turns, floors, normals);
     var engaged: Engaged;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         engaged[row] = gaps[row] > 0.0 && liftable(matrix, ridge, row);

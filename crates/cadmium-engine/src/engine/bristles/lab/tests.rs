@@ -48,6 +48,13 @@ const DEEP_PRESS_PX: f32 = 15.0;
 const DEEP_STEPS: u32 = 30;
 const MIN_LANDED_VERTICES: usize = 2;
 
+/// A floor plane rising 45° toward +x through the upright strand's tip.
+const RAMP_SLOPE: [f32; 2] = [1.0, 0.0];
+const RAMP_PRESS_PX: f32 = 5.0;
+const RAMP_STEPS: u32 = 20;
+/// How far down the ramp the pressed tip must slide at least, px.
+const MIN_RAMP_SLIDE_PX: f32 = 1.0;
+
 fn segment_px() -> f32 {
     LENGTH_PX / SEGMENTS as f32
 }
@@ -256,4 +263,29 @@ fn pressing_in_twice_the_steps_ends_in_the_same_shape() {
             .fold(0.0, f32::max);
         assert!(gap < SAME_SHAPE_PX, "{a:?} vs {b:?}");
     }
+}
+
+#[test]
+fn a_strand_pressed_onto_a_ramp_slides_down_it_and_never_sinks_into_it() {
+    let gpu = GpuContext::new().unwrap();
+    let pressed = strand(STRAIGHT_DOWN, [0.0, 0.0, LENGTH_PX])
+        .with_floor(0.0)
+        .with_floor_slope(RAMP_SLOPE)
+        .with_press(RAMP_PRESS_PX, RAMP_STEPS);
+    let run = &run(&gpu, &[pressed])[0];
+    assert_lengths_kept(run);
+    let over_ramp = |at: &[f32; 3]| at[2] - (RAMP_SLOPE[0] * at[0] + RAMP_SLOPE[1] * at[1]);
+    assert!(
+        run.chain_px
+            .iter()
+            .all(|at| over_ramp(at) >= -SINK_TOLERANCE_PX),
+        "{:?}",
+        run.chain_px
+    );
+    assert!(run.normal_force_n > 0.0, "{}", run.normal_force_n);
+    let tip = run.chain_px[SEGMENTS];
+    assert!(
+        tip[0] <= -MIN_RAMP_SLIDE_PX && over_ramp(&tip) <= SINK_TOLERANCE_PX,
+        "the tip {tip:?} did not slide down the ramp"
+    );
 }
