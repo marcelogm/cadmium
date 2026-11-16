@@ -2,6 +2,9 @@ mod cells;
 mod clusters;
 mod handle;
 mod layout;
+// Used by the bristle tuning from Task 5 of the phase 1 plan.
+#[cfg_attr(not(test), allow(dead_code))]
+mod material;
 mod owners;
 mod rig;
 mod roots;
