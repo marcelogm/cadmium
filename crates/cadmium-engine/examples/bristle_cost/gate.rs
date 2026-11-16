@@ -74,26 +74,42 @@ pub(crate) fn warnings(
     lines
 }
 
+/// A warning for each scenario whose frame count differs from the baseline's.
+fn frame_warnings(baseline: &[Measured], current: &[Measured]) -> Vec<String> {
+    current
+        .iter()
+        .filter_map(|now| {
+            let before = baseline.iter().find(|row| row.name == now.name)?;
+            (before.frames != now.frames).then(|| {
+                format!(
+                    "warning: {} took {} frames, the baseline {}: its per-frame costs are not \
+                     comparable",
+                    now.name, now.frames, before.frames
+                )
+            })
+        })
+        .collect()
+}
+
 /// The summary of a run within budget, or the lines saying why it is not: nothing compared,
-/// or the scenarios over budget.
+/// or the scenarios over budget. Either way it starts with the frame count warnings.
 pub(crate) fn verdict(baseline: &Baseline, rows: &[Measured]) -> Result<String, Vec<String>> {
     let compared = record::compared(&baseline.rows, rows);
-    let count = format!(
+    let mut lines = frame_warnings(&baseline.rows, rows);
+    lines.push(format!(
         "compared {compared} of {} baseline scenarios",
         baseline.rows.len()
-    );
+    ));
     if compared == 0 {
-        return Err(vec![
-            count,
-            "no scenario of this run is in the baseline".to_string(),
-        ]);
+        lines.push("no scenario of this run is in the baseline".to_string());
+        return Err(lines);
     }
     let slower = record::over_budget(&baseline.rows, rows);
     if slower.is_empty() {
         let percent = (record::ALLOWED_SLOWDOWN - 1.0) * 100.0;
-        return Ok(format!("{count}\nwithin {percent:.0}% of the baseline"));
+        lines.push(format!("within {percent:.0}% of the baseline"));
+        return Ok(lines.join("\n"));
     }
-    let mut lines = vec![count];
     lines.extend(slower.iter().map(|line| format!("over budget: {line}")));
     Err(lines)
 }
