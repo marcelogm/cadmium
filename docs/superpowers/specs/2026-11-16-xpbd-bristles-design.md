@@ -1,7 +1,7 @@
 # Quasi-static bristles: a physically grounded brush
 
 Date: 2026-11-16
-Status: approved design, awaiting spec review
+Status: phase 1 stopped (see #62): the quasi-static solve below is physically right but costs about 2.7× the bristle budget
 Literature: [2026-11-16-xpbd-bristles-literature.md](2026-11-16-xpbd-bristles-literature.md)
 (every claim there is tagged [V] read in the primary source, [P] indirect, [U] unverified)
 
