@@ -1,0 +1,14 @@
+# adapter: AMD Radeon RX 9060 XT (RADV GFX1200)
+scenario	frames	gpu_mean_ms	gpu_p95_ms	wall_mean_ms	wall_p95_ms
+brush, default size	152	1.1536	1.2859	1.6359	1.8872
+brush, 200 px	152	1.5042	2.7440	1.9552	3.3318
+brush, max size	152	1.8178	3.5568	2.6182	4.4701
+brush, 200 px over impasto	152	0.7996	1.2824	1.1442	1.8788
+brush, max size over impasto	152	1.2301	2.4632	1.8421	3.0919
+knife, default size over impasto	152	0.1873	0.2082	0.3240	0.3803
+blender, default size over impasto	152	0.7058	0.7773	0.8977	1.0089
+long brush stroke over impasto	604	0.7547	0.8182	0.9380	1.0308
+long 200 px stroke over impasto	604	0.7153	1.1196	0.9075	1.5477
+idle settle after a stroke	89	0.0308	0.0312	0.0837	0.0914
+shade the full canvas	120	0.4086	0.4240	0.4721	0.5206
+present the full canvas	120	0.0506	0.0511	0.1108	0.1168
