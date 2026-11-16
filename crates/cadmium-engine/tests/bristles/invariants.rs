@@ -22,6 +22,8 @@ const STEADY_PRESSURE: f32 = 0.6;
 const COARSE_RATE_HZ: f64 = 120.0;
 const FINE_RATE_HZ: f64 = 480.0;
 const MAX_RELATIVE_GAP: f64 = 0.1;
+/// Narrowest mark that counts as painted, so an empty canvas cannot pass a width comparison.
+const MIN_MARK_WIDTH_PX: f64 = 2.0;
 const VISIBLE_UM: f32 = 0.5;
 /// Columns this far from either end of the line are left out of the mark's width.
 const END_MARGIN_PX: usize = 40;
@@ -179,6 +181,10 @@ fn the_mark_does_not_depend_on_how_often_the_pen_is_sampled() {
     let coarse = mark_width_px(&gpu, COARSE_RATE_HZ, 1.0);
     let fine = mark_width_px(&gpu, FINE_RATE_HZ, 1.0);
     assert!(
+        coarse >= MIN_MARK_WIDTH_PX && fine >= MIN_MARK_WIDTH_PX,
+        "no mark painted: {coarse} px at {COARSE_RATE_HZ} Hz, {fine} px at {FINE_RATE_HZ} Hz"
+    );
+    assert!(
         relative_gap(coarse, fine) <= MAX_RELATIVE_GAP,
         "mark width {coarse} px at {COARSE_RATE_HZ} Hz, {fine} px at {FINE_RATE_HZ} Hz"
     );
@@ -189,6 +195,10 @@ fn the_mark_does_not_depend_on_how_many_hairs_are_simulated() {
     let gpu = GpuContext::new().unwrap();
     let base = mark_width_px(&gpu, COARSE_RATE_HZ, 1.0);
     let denser = mark_width_px(&gpu, COARSE_RATE_HZ, DENSITY_SCALE);
+    assert!(
+        base >= MIN_MARK_WIDTH_PX && denser >= MIN_MARK_WIDTH_PX,
+        "no mark painted: {base} px, {denser} px with {DENSITY_SCALE}x hair density"
+    );
     assert!(
         relative_gap(base, denser) <= MAX_RELATIVE_GAP,
         "mark width {base} px, {denser} px with {DENSITY_SCALE}x hair density"
