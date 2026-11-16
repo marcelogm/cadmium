@@ -6,7 +6,6 @@ pub(crate) const CLEAN_LABEL: &str = "Clean";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ToolWording {
-    pub(crate) pigments: &'static str,
     pub(crate) loaded_title: &'static str,
     pub(crate) loaded_tooltip: &'static str,
     pub(crate) level_tooltip: &'static str,
