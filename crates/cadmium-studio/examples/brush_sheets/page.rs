@@ -15,18 +15,48 @@ figcaption{font-size:12px;color:#6b665d}";
 
 /// `NN` and brush name, one per rendered sheet, from a render's brush list.
 fn brushes(dir: &Path) -> Vec<(String, String)> {
-    let text = std::fs::read_to_string(dir.join(BRUSHES_FILE)).expect("a render's brush list");
+    let path = dir.join(BRUSHES_FILE);
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| fail(&format!("cannot read {}: {error}", path.display())));
     text.lines()
         .filter_map(|line| line.split_once('\t'))
         .map(|(index, name)| (index.to_string(), name.to_string()))
         .collect()
 }
 
+fn fail(message: &str) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
+}
+
+/// Exits naming the brushes found in only one of the two lists, when they differ.
+fn require_same(before: &[(String, String)], after: &[(String, String)]) {
+    if before == after {
+        return;
+    }
+    let only = |from: &[(String, String)], other: &[(String, String)]| {
+        let names: Vec<String> = from
+            .iter()
+            .filter(|entry| !other.contains(entry))
+            .map(|(i, n)| format!("{i} {n}"))
+            .collect();
+        names.join(", ")
+    };
+    fail(&format!(
+        "the renders hold different brushes: only in before: {}; only in after: {}",
+        only(before, after),
+        only(after, before)
+    ));
+}
+
 fn copy_render(from: &Path, to: &Path, sheets: &[(String, String)]) {
-    std::fs::create_dir_all(to).expect("the copy's directory is creatable");
+    std::fs::create_dir_all(to)
+        .unwrap_or_else(|error| fail(&format!("cannot create {}: {error}", to.display())));
     for (index, _) in sheets {
         let file = format!("{index}.png");
-        std::fs::copy(from.join(&file), to.join(&file)).expect("the sheet copies");
+        let source = from.join(&file);
+        std::fs::copy(&source, to.join(&file))
+            .unwrap_or_else(|error| fail(&format!("cannot copy {}: {error}", source.display())));
     }
 }
 
@@ -43,6 +73,7 @@ fn row(html: &mut String, index: &str, name: &str) {
 /// Copies the `before` and `after` renders into `out` and writes `out/index.html`.
 pub(crate) fn compare(before: &Path, after: &Path, out: &Path) {
     let sheets = brushes(before);
+    require_same(&sheets, &brushes(after));
     copy_render(before, &out.join(BEFORE), &sheets);
     copy_render(after, &out.join(AFTER), &sheets);
     let mut html = format!(

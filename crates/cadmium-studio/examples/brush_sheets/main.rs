@@ -1,8 +1,10 @@
 //! Renders the brush editor's example sheet for every factory brush, and compares two
 //! renders side by side.
 //!
+//! ```text
 //! cargo run --release -p cadmium-studio --example brush_sheets -- render <dir>
 //! cargo run --release -p cadmium-studio --example brush_sheets -- compare <before> <after> <out>
+//! ```
 //!
 //! `render` writes `<dir>/NN.png` per brush and `<dir>/brushes.tsv` naming them. `compare`
 //! copies two renders into `<out>/before` and `<out>/after` and writes `<out>/index.html`.
