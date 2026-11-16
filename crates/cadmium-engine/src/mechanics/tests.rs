@@ -3,7 +3,7 @@ use super::*;
 const NYLON_MODULUS_PA: f64 = 3.5e9;
 const NYLON_RADIUS_M: f64 = 50e-6;
 const HAIR_LENGTH_M: f64 = 15e-3;
-const TIP_FORCE_N: f64 = 1e-3;
+const TIP_FORCE_N: f64 = 1e-5;
 /// Bico et al. 2004: polyester lamellae 100 µm thick in silicone oil.
 const BICO_STIFFNESS_N_M: f64 = 5.1e-4;
 const BICO_SURFACE_TENSION_N_PER_M: f64 = 20.6e-3;
@@ -22,14 +22,10 @@ fn a_tenth_of_a_millimetre_nylon_hair_has_the_bending_stiffness_of_the_literatur
 }
 
 #[test]
-fn a_cantilever_tip_load_and_its_deflection_agree_with_the_beam_stiffness() {
+fn a_light_tip_load_bends_a_nylon_hair_under_a_millimetre() {
     let stiffness = bending_stiffness(NYLON_MODULUS_PA, NYLON_RADIUS_M);
     let deflection = cantilever_tip_deflection(TIP_FORCE_N, HAIR_LENGTH_M, stiffness);
-    let spring_n_per_m = 3.0 * stiffness / HAIR_LENGTH_M.powi(3);
-    assert!(
-        close(deflection * spring_n_per_m, TIP_FORCE_N),
-        "{deflection}"
-    );
+    assert!(close(deflection, 6.548e-4), "{deflection}");
 }
 
 #[test]
@@ -42,21 +38,16 @@ fn the_elastocapillary_length_of_bicos_lamellae_is_fifteen_centimetres() {
 #[test]
 fn a_cluster_of_two_closes_at_bicos_pair_length() {
     let l_ec = elastocapillary_length(BICO_STIFFNESS_N_M, BICO_SURFACE_TENSION_N_PER_M);
-    let pair = (4.5 * BICO_SPACING_M.powi(2) * l_ec.powi(2)).powf(0.25);
-    assert!(close(coalescence_length(2, BICO_SPACING_M, l_ec), pair));
+    let pair = coalescence_length(2, BICO_SPACING_M, l_ec);
+    assert!(close(pair, 0.018_27), "{pair}");
 }
 
 #[test]
-fn larger_clusters_need_longer_hairs_to_close() {
+fn cluster_closing_length_grows_with_the_three_quarter_power_of_the_hair_count() {
     let l_ec = elastocapillary_length(BICO_STIFFNESS_N_M, BICO_SURFACE_TENSION_N_PER_M);
-    let lengths: Vec<f64> = [2, 4, 8, 16]
-        .iter()
-        .map(|&hairs| coalescence_length(hairs, BICO_SPACING_M, l_ec))
-        .collect();
-    assert!(
-        lengths.windows(2).all(|pair| pair[1] > pair[0]),
-        "{lengths:?}"
-    );
+    let two = coalescence_length(2, BICO_SPACING_M, l_ec);
+    let sixteen = coalescence_length(16, BICO_SPACING_M, l_ec);
+    assert!(close(sixteen / two, 8f64.powf(0.75)), "{}", sixteen / two);
 }
 
 #[test]

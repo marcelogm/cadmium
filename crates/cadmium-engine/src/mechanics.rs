@@ -29,9 +29,12 @@ pub fn cantilever_tip_deflection(force_n: f64, length_m: f64, stiffness_n_m2: f6
     force_n * length_m.powi(3) / (3.0 * stiffness_n_m2)
 }
 
-/// Elastocapillary length √(κ/γ), in metres (Bico et al. 2004).
-pub fn elastocapillary_length(stiffness_n_m2: f64, surface_tension_n_per_m: f64) -> f64 {
-    (stiffness_n_m2 / surface_tension_n_per_m).sqrt()
+/// Elastocapillary length √(κ/γ), in metres, of lamellae of bending stiffness
+/// `stiffness_per_width_n_m` per unit width (κ = Eh³/12, in N·m) in a liquid of surface tension
+/// `surface_tension_n_per_m` (Bico et al. 2004). A hair's EI (N·m²) is a different quantity:
+/// fibres need their own form, which is not derived here.
+pub fn elastocapillary_length(stiffness_per_width_n_m: f64, surface_tension_n_per_m: f64) -> f64 {
+    (stiffness_per_width_n_m / surface_tension_n_per_m).sqrt()
 }
 
 /// The free length, in metres, at which a cluster of `hairs` hairs set `spacing_m` apart
