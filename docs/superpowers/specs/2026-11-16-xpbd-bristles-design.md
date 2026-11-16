@@ -57,7 +57,9 @@ touch but breaks the spacing calibration everywhere else.
   from the ferrule frame. There is no per-edge quaternion and no twist.
 - State persists across strokes.
 - Reset only on a layout change, a tool change or a clean. The rest state is then reached
-  by relaxing the dynamics in the air, never by an analytic hang.
+  by relaxing the dynamics in the air, never by an analytic hang. Until clumping exists
+  (phase 3) the rest shape is the equilibrium in the air, so a reset places the strands
+  on it directly.
 
 **Time step (Small Steps).**
 - The dab dt is the gap between sample timestamps, clamped to 50 ms. The settle clock
@@ -66,6 +68,12 @@ touch but breaks the spacing calibration everywhere else.
   substep. The handle pose is interpolated across the dab.
 - Integration happens in the ferrule frame. The ferrule's acceleration (linear and
   rotational, Wetbrush eq. 2) enters scaled by β_B ≈ 0.05.
+  - Positions and previous positions are carried rigidly with the ferrule pose at every
+    substep, so the frame's own motion adds no velocity.
+  - The ferrule's linear velocity change between dabs enters on the dab's first substep,
+    scaled by β_B. Rotation is carried rigidly and adds no fictitious force (no Coriolis
+    or centrifugal term); revisit if turning flats need it.
+- A dab with dt = 0 runs one projection substep and leaves the velocities as they were.
 - Damping comes only from XPBD constraint damping and from β_B.
 
 **Removed:** `handle_drop_px` and `DROP_RELAX_SHARE`, `HAIR_VISCOSITY_PER_SECOND`,
@@ -186,8 +194,15 @@ Presets:
 **Pressure → handle height** (DiVerdi/Adobe, US 8,760,438):
 - The handle sits on the pen axis above the nib, as today.
 - h(p) = h_touch − p·`press_depth`·L.
-- h_touch is the height at which the lowest vertex of the *current* strand state touches.
-  A reduction at the start of the bristle step measures it.
+- h_touch is the height at which the brush's *rest shape*, placed in the dab's pose,
+  first touches: the floor is read under each rest vertex, so relief and impasto under
+  the hairs count. A max-reduction at the start of the bristle step measures it.
+  - The rest shape includes the rest curvature, and from phase 2 the plastic one.
+  - It is not the deformed current state: a pressed hair already lies on the floor, so
+    measuring the current state would return the handle's own height and lower the
+    handle by the press depth again on every dab.
+- The CPU sends only the press depth p·`press_depth`·L, or the clearance when lifted;
+  the GPU adds h_touch.
 - p = 0 therefore means only the tip touches, by definition.
 - The patent's reduced press depth for stiff brushes is kept as a calibration option.
 - A force target with a feedback loop was considered and rejected: no source uses it,
@@ -271,7 +286,15 @@ phase 0 holds the ones today's model can already run.
 1. **XPBD core.** New state, Small Steps, ferrule-frame integration, stretch, bend and
    clamp, frictionless canvas contact, pressure → height, persistent state. The old
    step is removed. GPU cantilever, head-stiffness and step-independence tests run
-   against `mechanics`.
+   against `mechanics`. Until the later phases:
+   - **Removed with the old step:** friction, bend memory, the wet point and clumping.
+     Tests that need them are `#[ignore]`d and name the phase that brings them back.
+   - **Material bridge:** `Hair` arrives in phase 4, so E comes from `HairSpec.stiffness`
+     (about 1 GPa at 0 to 7 GPa at 1), and ρ, d and the taper are named constants
+     tagged [U]. One module holds the bridge; phase 4 replaces it.
+   - **Contact:** z ≥ floor, without + r(s), because Contact still decides touching by a
+     clearance of one radius. The r(s) offset arrives with the contact bit in phase 4.
+   - **`hair_loads`:** a flat 1 for every hair until phase 4 brings the normal force.
 2. **Friction.** Static and kinetic friction, anisotropy, plasticity.
 3. **Clumping.** Neighbour density and elastocapillary clumping with hysteresis.
 4. **Interface and parameters.** Normal force → `hair_loads`, the contact bit, `Hair`
