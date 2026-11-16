@@ -45,6 +45,16 @@ jobs:
       - name: Set the version
         run: sh packaging/set-version.sh "${{ needs.version.outputs.version }}"
 
+      # Updating a preinstalled runtime renames directories that live in a lower
+      # image layer, which overlayfs refuses (EXDEV). A copy lives in the upper one.
+      - name: Copy the preinstalled runtimes out of the image layer
+        run: |
+          for dir in $(flatpak --installations); do
+            cp -a "$dir" "$dir.copy"
+            rm -rf "$dir"
+            mv "$dir.copy" "$dir"
+          done
+
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: packaging/flatpak/io.github.marcelogm.Cadmium.yml
