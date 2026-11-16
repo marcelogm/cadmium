@@ -15,8 +15,13 @@ pub(crate) const ALLOWED_ABSOLUTE_SLOWDOWN_MS: f64 = 0.05;
 const HEADER: &str = "scenario\tframes\tgpu_mean_ms\tgpu_p95_ms\twall_mean_ms\twall_p95_ms";
 const NO_VALUE: &str = "-";
 
-pub(crate) fn write(path: &Path, adapter: &str, rows: &[Measured]) -> std::io::Result<()> {
-    let mut text = format!("# adapter: {adapter}\n{HEADER}\n");
+pub(crate) fn write(
+    path: &Path,
+    adapter: &str,
+    repeats: usize,
+    rows: &[Measured],
+) -> std::io::Result<()> {
+    let mut text = format!("# adapter: {adapter}\n# repeats: {repeats}\n{HEADER}\n");
     for row in rows {
         let (gpu_mean, gpu_p95) = row.gpu.map_or_else(
             || (NO_VALUE.to_string(), NO_VALUE.to_string()),
@@ -32,9 +37,11 @@ pub(crate) fn write(path: &Path, adapter: &str, rows: &[Measured]) -> std::io::R
     std::fs::write(path, text)
 }
 
-/// A recorded run: the adapter it was measured on, when the file says, and its scenarios.
+/// A recorded run: the adapter and the number of repeats it was measured with, when the file
+/// says, and its scenarios.
 pub(crate) struct Baseline {
     pub(crate) adapter: Option<String>,
+    pub(crate) repeats: Option<usize>,
     pub(crate) rows: Vec<Measured>,
 }
 
@@ -44,12 +51,20 @@ pub(crate) fn read(path: &Path) -> std::io::Result<Baseline> {
         .lines()
         .find_map(|line| line.strip_prefix("# adapter: "))
         .map(str::to_string);
+    let repeats = text
+        .lines()
+        .find_map(|line| line.strip_prefix("# repeats: "))
+        .and_then(|count| count.trim().parse().ok());
     let rows = text
         .lines()
         .filter(|line| !line.starts_with('#') && *line != HEADER)
         .filter_map(parse_row)
         .collect();
-    Ok(Baseline { adapter, rows })
+    Ok(Baseline {
+        adapter,
+        repeats,
+        rows,
+    })
 }
 
 fn parse_row(line: &str) -> Option<Measured> {

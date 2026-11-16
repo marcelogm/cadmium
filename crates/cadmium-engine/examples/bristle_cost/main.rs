@@ -19,6 +19,8 @@
 //! quarters of the long strokes are only printed when n is 1. When n is above 1 the repeats
 //! are interleaved, each pass going through all the scenarios before the next begins, after
 //! one discarded warm-up pass, so that a slow spell of the GPU is spread over the scenarios.
+//! The results file records n, and a check without `CADMIUM_BENCH_REPEATS` uses the n of its
+//! baseline, so that it is measured the way the baseline was.
 //! `CADMIUM_BENCH_OUT=<file>` also writes each scenario's results to the file as
 //! tab-separated values; `CADMIUM_BENCH_BASELINE=<file>` compares them with a file written
 //! that way and exits with status 1 when a scenario got slower by more than 10% and by more
@@ -99,12 +101,19 @@ fn selected(scenario: &Scenario) -> bool {
     }
 }
 
-fn repeats() -> usize {
-    std::env::var(REPEATS_VARIABLE)
+/// The repeats asked for, else those the baseline was recorded with, else 1.
+fn repeats(baseline: Option<&record::Baseline>) -> usize {
+    let asked: Option<usize> = std::env::var(REPEATS_VARIABLE)
         .ok()
         .and_then(|text| text.parse().ok())
-        .filter(|&count| count > 0)
-        .unwrap_or(1)
+        .filter(|&count| count > 0);
+    let recorded = baseline.and_then(|baseline| baseline.repeats);
+    if let (Some(asked), Some(recorded)) = (asked, recorded)
+        && asked != recorded
+    {
+        println!("warning: baseline recorded with {recorded} repeats, measuring with {asked}");
+    }
+    asked.or(recorded).unwrap_or(1)
 }
 
 fn measure_pass(
@@ -118,12 +127,11 @@ fn measure_pass(
         .collect()
 }
 
-fn measure_all(gpu: &GpuContext, timestamps: Option<&Timestamps>) -> Vec<Measured> {
+fn measure_all(gpu: &GpuContext, timestamps: Option<&Timestamps>, repeats: usize) -> Vec<Measured> {
     println!(
         "{:<36} {:>6} {:>9} {:>9} {:>9} {:>9}",
         "scenario (ms per frame)", "frames", "gpu mean", "gpu p95", "wall mean", "wall p95"
     );
-    let repeats = repeats();
     let scenarios: Vec<&Scenario> = SCENARIOS
         .iter()
         .filter(|scenario| selected(scenario))
@@ -208,11 +216,13 @@ fn main() {
             "unavailable, wall clock only"
         }
     );
-    let rows = measure_all(&gpu, timestamps.as_ref());
     let baseline =
         std::env::var_os(record::BASELINE_VARIABLE).map(|path| load_baseline(Path::new(&path)));
+    let repeats = repeats(baseline.as_ref());
+    let rows = measure_all(&gpu, timestamps.as_ref(), repeats);
     if let Some(path) = std::env::var_os(record::OUT_VARIABLE) {
-        record::write(Path::new(&path), &info.name, &rows).expect("the results file is writable");
+        record::write(Path::new(&path), &info.name, repeats, &rows)
+            .expect("the results file is writable");
     }
     if let Some(baseline) = baseline {
         check_against(&baseline, &info.name, &rows);
