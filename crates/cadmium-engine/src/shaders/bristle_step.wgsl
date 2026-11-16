@@ -70,7 +70,7 @@ fn start_pose(touch_px: f32) -> Pose {
     if dab.bristle_reset != 0u {
         return held_pose(max(dab.handle_offset_px, 0.0), touch_px);
     }
-    return pose_of(handle);
+    return pose_of(handle.end);
 }
 
 fn place_at_rest(bristle: u32, pose: Pose) {
@@ -130,22 +130,31 @@ fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
     return force;
 }
 
+/// Measures the dab's touch height across all strands and records its ferrule path: the
+/// start is read from the last dab's end before the end is overwritten.
 @compute @workgroup_size(BRISTLE_WORKGROUP_SIZE)
-fn step(@builtin(local_invocation_index) thread: u32) {
+fn touch(@builtin(local_invocation_index) thread: u32) {
     let touch_px = touch_height_px(thread);
-    let start = start_pose(touch_px);
-    let end = held_pose(dab.handle_offset_px, touch_px);
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            if dab.bristle_reset != 0u {
-                place_at_rest(bristle, start);
-            }
-            normal_forces[bristle] = solved_dab(bristle, start, end);
-            hair_loads[bristle] = FLAT_HAIR_LOAD;
-        }
-    }
     if thread == 0u {
-        handle = HandleState(end.ferrule, 0.0, end.axis, 0.0, end.orientation, vec2<f32>(0.0));
+        let start = start_pose(touch_px);
+        let end = held_pose(dab.handle_offset_px, touch_px);
+        handle = HandleState(stored_pose(start), stored_pose(end));
     }
+}
+
+/// Solves one strand along the path `touch` recorded. No barriers, so the workgroup can be
+/// small and each thread gets the registers the solve needs.
+@compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
+fn solve(@builtin(global_invocation_id) id: vec3<u32>) {
+    let bristle = id.x;
+    if bristle >= dab.bristle_total {
+        return;
+    }
+    let start = pose_of(handle.start);
+    let end = pose_of(handle.end);
+    if dab.bristle_reset != 0u {
+        place_at_rest(bristle, start);
+    }
+    normal_forces[bristle] = solved_dab(bristle, start, end);
+    hair_loads[bristle] = FLAT_HAIR_LOAD;
 }

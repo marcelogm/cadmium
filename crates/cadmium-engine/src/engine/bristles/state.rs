@@ -10,6 +10,8 @@ use crate::engine::{TIP_CHANNELS, TIP_TEXELS, VOLUME_CHANNEL, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 
 pub(crate) const BRISTLE_WORKGROUP_SIZE: u32 = 512;
+/// Threads per workgroup of the per-strand solve, one strand each.
+pub(crate) const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = 64;
 pub(crate) const BRISTLES_PER_THREAD: u32 = MAX_BRISTLES as u32 / BRISTLE_WORKGROUP_SIZE;
 /// Each vertex's position and the floor under it.
 pub(crate) const BRISTLE_STATE_VECTORS: usize = BRISTLE_VERTICES;
@@ -26,7 +28,8 @@ const OWNER_BYTES: u64 = (TIP_TEXELS * std::mem::size_of::<u32>()) as u64;
 const CELL_GRID_BYTES: u64 = (MAX_BRISTLES * CELL_GRID_BINS * std::mem::size_of::<u32>()) as u64;
 const RANK_BYTES: u64 = RANKS_PER_TEXEL as u64 * OWNER_BYTES;
 const CLUSTER_BYTES: u64 = (CLUSTER_INDEX_WORDS * std::mem::size_of::<u32>()) as u64;
-const HANDLE_STATE_BYTES: u64 = 64;
+/// The dab's start and end poses, three vec4 each.
+const HANDLE_STATE_BYTES: u64 = 96;
 const HAIR_LOAD_BYTES: u64 = (MAX_BRISTLES * std::mem::size_of::<f32>()) as u64;
 const _: () = assert!(MAX_BRISTLES as u32 == BRISTLES_PER_THREAD * BRISTLE_WORKGROUP_SIZE);
 const _: () = assert!(std::mem::size_of::<BristleRest>() == 64);

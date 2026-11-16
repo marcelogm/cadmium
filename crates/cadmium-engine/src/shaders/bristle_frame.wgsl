@@ -1,10 +1,18 @@
-struct HandleState {
+/// A pose as the handle buffer stores it.
+struct StoredPose {
     ferrule: vec3<f32>,
     spare_0: f32,
     axis: vec3<f32>,
     spare_1: f32,
     orientation: vec2<f32>,
     spare_2: vec2<f32>,
+};
+
+/// The current dab's ferrule path: where it starts, and where it ends, which is where the
+/// next dab starts.
+struct HandleState {
+    start: StoredPose,
+    end: StoredPose,
 };
 
 struct Frame {
@@ -19,8 +27,12 @@ struct Pose {
     orientation: vec2<f32>,
 };
 
-fn pose_of(state: HandleState) -> Pose {
-    return Pose(state.ferrule, state.axis, state.orientation);
+fn pose_of(stored: StoredPose) -> Pose {
+    return Pose(stored.ferrule, stored.axis, stored.orientation);
+}
+
+fn stored_pose(pose: Pose) -> StoredPose {
+    return StoredPose(pose.ferrule, 0.0, pose.axis, 0.0, pose.orientation, vec2<f32>(0.0));
 }
 
 fn state_slot(bristle: u32) -> u32 {

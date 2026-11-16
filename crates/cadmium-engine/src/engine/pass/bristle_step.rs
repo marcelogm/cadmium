@@ -3,15 +3,21 @@ use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_entry, texture_binding, texture_entry, uniform_entry,
 };
+use crate::engine::bristles::{BRISTLE_SOLVE_WORKGROUP_SIZE, MAX_BRISTLES};
 use crate::engine::shader::{BRISTLE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
 const SINGLE_WORKGROUP: [u32; 2] = [1, 1];
+const SOLVE_WORKGROUPS: [u32; 2] = [
+    MAX_BRISTLES.div_ceil(BRISTLE_SOLVE_WORKGROUP_SIZE as usize) as u32,
+    1,
+];
 const FIRST_RECORD_OFFSET: wgpu::DynamicOffset = 0;
 
 pub(super) struct BristleStepPass {
     compute: ComputeStage,
-    step: wgpu::ComputePipeline,
+    touch: wgpu::ComputePipeline,
+    solve: wgpu::ComputePipeline,
 }
 
 impl BristleStepPass {
@@ -39,7 +45,8 @@ impl BristleStepPass {
             ],
         );
         BristleStepPass {
-            step: compute.pipeline(gpu, "bristle_step", "step"),
+            touch: compute.pipeline(gpu, "bristle_touch", "touch"),
+            solve: compute.pipeline(gpu, "bristle_solve", "solve"),
             compute,
         }
     }
@@ -70,7 +77,7 @@ impl BristleStepPass {
         dab: PlacedDab<'_>,
     ) {
         bind_at_dab(pass, bind_group, dab);
-        dispatch(pass, &self.step, SINGLE_WORKGROUP);
+        self.dispatch_both(pass);
     }
 
     pub(super) fn encode_first(
@@ -79,6 +86,12 @@ impl BristleStepPass {
         bind_group: &wgpu::BindGroup,
     ) {
         pass.set_bind_group(0, bind_group, &[FIRST_RECORD_OFFSET]);
-        dispatch(pass, &self.step, SINGLE_WORKGROUP);
+        self.dispatch_both(pass);
+    }
+
+    /// The touch height and the dab's path first, then one thread per strand.
+    fn dispatch_both(&self, pass: &mut wgpu::ComputePass<'_>) {
+        dispatch(pass, &self.touch, SINGLE_WORKGROUP);
+        dispatch(pass, &self.solve, SOLVE_WORKGROUPS);
     }
 }
