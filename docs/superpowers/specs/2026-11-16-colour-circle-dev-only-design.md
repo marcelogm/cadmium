@@ -5,7 +5,9 @@ builds (Flatpak, AppImage, Windows) hide it. Mixing on the palette sheet stays a
 
 ## Flag
 
-`pub(crate) const COLOUR_CIRCLE: bool = cfg!(debug_assertions);` in `colour_wheel.rs`.
+`pub(crate) const COLOUR_CIRCLE: bool = cfg!(any(debug_assertions, feature = "smoke"));` in
+`colour_wheel.rs`. The `smoke` feature counts as dev, as elsewhere in the app: CI runs the smoke
+tests in release, and shipped builds never enable it.
 
 `cfg!` rather than `#[cfg]`: the circle code still compiles and is tested in both profiles,
 with no dead-code warnings. Only the places that show the circle read the flag.
