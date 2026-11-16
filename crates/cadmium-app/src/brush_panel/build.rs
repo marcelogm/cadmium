@@ -109,21 +109,23 @@ fn palette_preferences_group(
         .build();
     content.append(view_toggles);
     content.append(stack);
-    content.append(&edit_palette_button());
     let group = adw::PreferencesGroup::builder()
         .title(PALETTE_TITLE)
-        .description(Tool::Brush.wording().pigments)
         .build();
+    group.set_header_suffix(Some(&palette_menu_button()));
     group.add(&content);
     group
 }
 
-fn edit_palette_button() -> gtk::Button {
-    gtk::Button::builder()
-        .label(EDIT_PALETTE_LABEL)
-        .action_name("win.edit-palette")
-        .halign(gtk::Align::Center)
-        .css_classes(["pill"])
+fn palette_menu_button() -> gtk::MenuButton {
+    let menu = gtk::gio::Menu::new();
+    menu.append(Some(EDIT_PALETTE_LABEL), Some("win.edit-palette"));
+    gtk::MenuButton::builder()
+        .icon_name("view-more-symbolic")
+        .tooltip_text(PALETTE_TITLE)
+        .menu_model(&menu)
+        .valign(gtk::Align::Center)
+        .css_classes(["flat"])
         .build()
 }
 

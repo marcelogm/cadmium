@@ -194,7 +194,6 @@ impl BrushPanel {
     fn show_wording_for(&self, tool: Tool) {
         let wording = tool.wording();
         let group = &self.tool_group;
-        self.palette.group.set_description(Some(wording.pigments));
         group.loaded_row.set_title(wording.loaded_title);
         group
             .loaded_swatch
