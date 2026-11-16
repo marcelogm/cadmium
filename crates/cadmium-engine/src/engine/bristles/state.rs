@@ -36,7 +36,7 @@ const CLUSTER_BYTES: u64 = (CLUSTER_INDEX_WORDS * std::mem::size_of::<u32>()) as
 const HANDLE_STATE_BYTES: u64 = 64;
 const HAIR_LOAD_BYTES: u64 = (MAX_BRISTLES * std::mem::size_of::<f32>()) as u64;
 const _: () = assert!(MAX_BRISTLES as u32 == BRISTLES_PER_THREAD * BRISTLE_WORKGROUP_SIZE);
-const _: () = assert!(std::mem::size_of::<BristleRest>() == 48);
+const _: () = assert!(std::mem::size_of::<BristleRest>() == 64);
 
 pub(crate) struct BristleBuffers {
     pub(crate) rests: wgpu::Buffer,

@@ -343,3 +343,18 @@ fn the_reach_of_an_out_of_range_head_is_the_reach_of_its_clamped_head() {
     );
     assert_ne!(wild, wild.clamped());
 }
+
+#[test]
+fn every_bristle_curls_a_little_and_the_curls_keep_their_seed() {
+    let laid = layout(&request(HeadSpec::ROUND, 20.0));
+    for bristle in &laid.bristles {
+        let size = bristle.curl[0].hypot(bristle.curl[1]);
+        assert!(
+            (size - super::layout::REST_CURL_RAD).abs() < 1e-6,
+            "{:?}",
+            bristle.curl
+        );
+    }
+    let again = layout(&request(HeadSpec::ROUND, 20.0));
+    assert_eq!(laid.bristles, again.bristles);
+}

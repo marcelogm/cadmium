@@ -7,6 +7,8 @@ struct BristleRest {
     cluster: u32,
     lane_start: vec2<f32>,
     lane_end: vec2<f32>,
+    curl: vec2<f32>,
+    _pad: vec2<f32>,
 };
 
 fn texel_slot(texel: vec2<u32>) -> u32 {
