@@ -137,8 +137,13 @@ fn cholesky_solved(problem: ptr<function, ContactProblem>, rows: ActiveRows, cou
 fn active_forces(problem: ptr<function, ContactProblem>, engaged: Engaged) -> PerContact {
     var rows: ActiveRows;
     let count = active_rows(engaged, &rows);
-    let solved = cholesky_solved(problem, rows, count);
     var forces: PerContact;
+    if count == 1u {
+        let row = rows[0];
+        forces[row] = (*problem).gaps[row] / ((*problem).diagonal[row] + (*problem).ridge);
+        return forces;
+    }
+    let solved = cholesky_solved(problem, rows, count);
     for (var i = 0u; i < count; i++) {
         forces[rows[i]] = solved[i];
     }
@@ -207,8 +212,13 @@ fn any_under(gaps: PerContact) -> bool {
 
 fn contact_problem(chain: Chain, compliances: HingeCompliances, normals: Normals, gaps: PerContact) -> ContactProblem {
     var problem = ContactProblem(chain, compliances, normals, PerContact(), 0.0, gaps);
-    for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
-        problem.diagonal[row] = contact_compliance(chain, compliances, normals, row + 1u, row + 1u);
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        var own = 0.0;
+        for (var hinge = 0u; hinge < vertex; hinge++) {
+            let lever = cross(chain[vertex] - chain[hinge], normals[vertex]);
+            own += compliances[hinge] * dot(lever, lever);
+        }
+        problem.diagonal[vertex - 1u] = own * METRES_PER_PX;
     }
     problem.ridge = CONTACT_RIDGE_SHARE * ridge_scale(problem.diagonal, chain, compliances);
     return problem;
