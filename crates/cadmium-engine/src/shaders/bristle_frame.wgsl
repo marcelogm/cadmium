@@ -1,12 +1,10 @@
 struct HandleState {
     ferrule: vec3<f32>,
-    substep_seconds: f32,
+    spare_0: f32,
     axis: vec3<f32>,
-    drop_px: f32,
-    velocity: vec3<f32>,
-    _pad1: f32,
+    spare_1: f32,
     orientation: vec2<f32>,
-    _pad2: vec2<f32>,
+    spare_2: vec2<f32>,
 };
 
 struct Frame {
@@ -29,21 +27,9 @@ fn state_slot(bristle: u32) -> u32 {
     return bristle * BRISTLE_STATE_VECTORS;
 }
 
+/// A vertex's position in `xyz` and the floor under it in `w`.
 fn position_slot(bristle: u32, vertex: u32) -> u32 {
     return state_slot(bristle) + vertex;
-}
-
-fn previous_slot(bristle: u32, vertex: u32) -> u32 {
-    return state_slot(bristle) + BRISTLE_VERTICES + vertex;
-}
-
-fn anchor_slot(bristle: u32, vertex: u32) -> u32 {
-    return state_slot(bristle) + 2u * BRISTLE_VERTICES + vertex;
-}
-
-/// The hair's remembered bend in `xy`, its steady wetness in `z`, `WETNESS_KNOWN` in `w`.
-fn bend_slot(bristle: u32) -> u32 {
-    return state_slot(bristle) + 3u * BRISTLE_VERTICES;
 }
 
 fn frame_of(axis: vec3<f32>) -> Frame {
@@ -75,4 +61,22 @@ fn unspun(world: vec2<f32>, orientation: vec2<f32>) -> vec2<f32> {
         world.y * orientation.x - world.x * orientation.y,
         -world.x * orientation.x - world.y * orientation.y,
     );
+}
+
+fn to_ferrule(world: vec3<f32>, pose: Pose) -> vec3<f32> {
+    let local = untilted(world - pose.ferrule, pose.axis);
+    return vec3<f32>(unspun(local.xy, pose.orientation), local.z);
+}
+
+fn from_ferrule(local: vec3<f32>, pose: Pose) -> vec3<f32> {
+    return pose.ferrule + direction_at(local, pose);
+}
+
+fn direction_at(local: vec3<f32>, pose: Pose) -> vec3<f32> {
+    return tilted(vec3<f32>(spun(local.xy, pose.orientation), local.z), pose.axis);
+}
+
+/// `world` moved rigidly with the ferrule from pose `start` to pose `end`.
+fn carried(world: vec3<f32>, start: Pose, end: Pose) -> vec3<f32> {
+    return from_ferrule(to_ferrule(world, start), end);
 }

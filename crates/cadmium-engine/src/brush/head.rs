@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use super::within;
 
-const ROUND_POINT_ONSET: f32 = 0.5;
-const FAN_POINT_FADE_DEG: f32 = 10.0;
 const BELLY_SPLAY_SHARE: f32 = 0.35;
 pub(crate) const MIN_LENGTH_SHARE: f32 = 0.2;
 /// Thickness from which a bar's roots start drawing into the round spiral (round at 1).
@@ -151,15 +149,6 @@ impl HeadSpec {
             bar: (1.0 - round) * (1.0 - arc),
             arc: (1.0 - round) * arc,
         }
-    }
-
-    /// How strongly a wet head draws to a point across its width and its thickness.
-    pub(crate) fn point_axes(&self) -> [f32; 2] {
-        let round_share = ((self.thickness - ROUND_POINT_ONSET)
-            / (Self::THICKNESS_RANGE[1] - ROUND_POINT_ONSET))
-            .clamp(0.0, 1.0);
-        let open = 1.0 - (self.fan_deg / FAN_POINT_FADE_DEG).clamp(0.0, 1.0);
-        [self.point * round_share * open, self.point * open]
     }
 
     /// Share of the full hair length for a root at `[across, thick]` in ferrule radii.

@@ -1,6 +1,7 @@
 use super::handle::{HandleClock, HandleGauge, ferrule_over_nib, substeps};
 use super::layout::{BristleLayout, LayoutRequest, layout};
 use super::state::BristleBuffers;
+use super::tuning::BristleTuning;
 use crate::brush::{HairSpec, HeadSpec};
 use crate::engine::dab_record::DabRecord;
 use crate::gpu::GpuContext;
@@ -82,16 +83,19 @@ impl BristleRig {
         &self.radii_px
     }
 
-    pub(crate) fn head(&self) -> HeadSpec {
-        self.head
-    }
-
     pub(crate) fn wear(&mut self, hair: HairSpec) {
         self.hair = hair;
     }
 
-    pub(crate) fn hair(&self) -> HairSpec {
-        self.hair
+    /// The step's tuning for the worn hair on the current layout.
+    pub(crate) fn tuning(&self, params: &SimParams, canvas_tooth_um: f32) -> BristleTuning {
+        BristleTuning::of(
+            params,
+            &self.hair,
+            canvas_tooth_um,
+            self.ferrule_radius_px,
+            self.count as usize,
+        )
     }
 
     pub(crate) fn clusters(&self) -> &[u32] {

@@ -1,18 +1,16 @@
 struct BristleTuning {
-    static_friction: f32,
-    kinetic_friction: f32,
-    drag_anisotropy: f32,
-    plasticity: f32,
-    clumping: f32,
-    pointing: f32,
-    point_release: f32,
-    point_axis_across: f32,
-    point_axis_along: f32,
-    point_film: f32,
     wet_support: f32,
     canvas_tooth_um: f32,
+    spare_0: f32,
+    spare_1: f32,
+    hinge_compliance_per_m: array<vec4<f32>, 2>,
 };
 
 fn load_bearing_um(dry_um: f32, wet_um: f32) -> f32 {
     return max(dry_um + tuning.wet_support * wet_um - tuning.canvas_tooth_um, 0.0);
+}
+
+/// Bending compliance per metre of segment of hinge `hinge`, 1/(N·m²).
+fn hinge_compliance_per_m(hinge: u32) -> f32 {
+    return tuning.hinge_compliance_per_m[hinge / 4u][hinge % 4u];
 }

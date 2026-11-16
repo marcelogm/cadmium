@@ -46,13 +46,6 @@ fn every_factory_head_lays_its_roots_in_one_section() {
 }
 
 #[test]
-fn round_flat_and_fan_heads_keep_todays_point_axes() {
-    assert_eq!(HeadSpec::ROUND.point_axes(), [1.0, 1.0]);
-    assert_eq!(HeadSpec::FLAT.point_axes(), [0.0, 1.0]);
-    assert_eq!(HeadSpec::FAN.point_axes(), [0.0, 0.0]);
-}
-
-#[test]
 fn a_nearly_round_head_is_half_bar_half_round() {
     let mix = HeadSpec {
         thickness: 0.9,
@@ -101,15 +94,6 @@ fn a_nan_control_counts_as_its_low_end() {
     }
     .section_mix();
     assert_eq!(mix.parts().collect::<Vec<_>>(), [(Section::Bar, 1.0)]);
-}
-
-#[test]
-fn point_scales_the_point_axes() {
-    let half = HeadSpec {
-        point: 0.5,
-        ..HeadSpec::ROUND
-    };
-    assert_eq!(half.point_axes(), [0.5, 0.5]);
 }
 
 #[test]

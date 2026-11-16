@@ -31,7 +31,7 @@ pub use readout::BrushReadout;
 
 pub(crate) use pass::pick::PickRequest;
 
-use bristles::{BristleBuffers, BristleRig, BristleTuning, LayoutRequest, MAX_BRISTLES};
+use bristles::{BristleBuffers, BristleRig, LayoutRequest, MAX_BRISTLES};
 use dab_record::{upload_dab_records, upload_records};
 use pass::dip::DipPass;
 use pass::dry::DryPass;
@@ -244,7 +244,7 @@ impl WetOilEngine {
         };
         self.bristles
             .fit(gpu, &self.buffers.bristles, &request, encoder);
-        let tuning = BristleTuning::of(&self.params, &head, &hair, canvas.tooth_height_um());
+        let tuning = self.bristles.tuning(&self.params, canvas.tooth_height_um());
         self.buffers.bristles.tune(gpu, &tuning, encoder);
     }
 
@@ -330,12 +330,7 @@ impl PaintEngine for WetOilEngine {
         let Some(record) = self.bristles.settle(now_ms) else {
             return;
         };
-        let tuning = BristleTuning::of(
-            &self.params,
-            &self.bristles.head(),
-            &self.bristles.hair(),
-            canvas.tooth_height_um(),
-        );
+        let tuning = self.bristles.tuning(&self.params, canvas.tooth_height_um());
         self.buffers.bristles.tune(gpu, &tuning, encoder);
         let records = upload_records(gpu, &[record]);
         let resources = DabResources {
