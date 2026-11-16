@@ -157,28 +157,39 @@ fn released(engaged: ptr<function, Engaged>, forces: PerContact) -> bool {
     return dropped;
 }
 
-/// How far the engaged forces lift vertex `row` + 1 along its normal, px.
-fn rise_of(problem: ptr<function, ContactProblem>, engaged: Engaged, forces: PerContact, row: u32) -> f32 {
-    var rise = 0.0;
-    for (var column = 0u; column < BRISTLE_SEGMENTS; column++) {
-        if engaged[column] {
-            rise += entry(problem, row, column) * forces[column];
+/// How far the forces lift each vertex (1..) along its normal, px: the turns they give
+/// every hinge, Σ α·f·(arm × n), moving each vertex below it.
+fn rises(problem: ptr<function, ContactProblem>, forces: PerContact) -> PerContact {
+    var turns: Turns;
+    for (var pushed = 1u; pushed < BRISTLE_VERTICES; pushed++) {
+        let force = forces[pushed - 1u];
+        if force != 0.0 {
+            for (var hinge = 0u; hinge < pushed; hinge++) {
+                let arm_m = ((*problem).chain[pushed] - (*problem).chain[hinge]) * METRES_PER_PX;
+                turns[hinge] += (*problem).compliances[hinge] * force * cross(arm_m, (*problem).normals[pushed]);
+            }
         }
     }
-    return rise;
+    var lifted: PerContact;
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        var moved = vec3<f32>(0.0);
+        for (var hinge = 0u; hinge < vertex; hinge++) {
+            moved += cross(turns[hinge], (*problem).chain[vertex] - (*problem).chain[hinge]);
+        }
+        lifted[vertex - 1u] = dot((*problem).normals[vertex], moved);
+    }
+    return lifted;
 }
 
 /// Adds the vertices the forces leave under their floor. True if any was added.
 fn landed(problem: ptr<function, ContactProblem>, engaged: ptr<function, Engaged>, forces: PerContact) -> bool {
-    let before = *engaged;
+    let lifted = rises(problem, forces);
     var added = false;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
-        if !before[row] && liftable(problem, row) {
-            let under = (*problem).gaps[row] - rise_of(problem, before, forces, row);
-            if under > CONTACT_TOLERANCE_PX {
-                (*engaged)[row] = true;
-                added = true;
-            }
+        let under = (*problem).gaps[row] - lifted[row] > CONTACT_TOLERANCE_PX;
+        if !(*engaged)[row] && under && liftable(problem, row) {
+            (*engaged)[row] = true;
+            added = true;
         }
     }
     return added;
