@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::timing::Measured;
+use crate::summary::Measured;
 
 pub(crate) const OUT_VARIABLE: &str = "CADMIUM_BENCH_OUT";
 pub(crate) const BASELINE_VARIABLE: &str = "CADMIUM_BENCH_BASELINE";
@@ -88,8 +88,9 @@ pub(crate) fn compared(baseline: &[Measured], current: &[Measured]) -> usize {
         .count()
 }
 
-/// The scenarios measured in both runs that got slower than `ALLOWED_SLOWDOWN` and `ALLOWED_ABSOLUTE_SLOWDOWN_MS` allow,
-/// judged on GPU time when both runs have it and on wall time otherwise.
+/// The scenarios measured in both runs that got slower than `ALLOWED_SLOWDOWN` and
+/// `ALLOWED_ABSOLUTE_SLOWDOWN_MS` allow, judged on GPU time when both runs have it and on
+/// wall time otherwise.
 pub(crate) fn over_budget(baseline: &[Measured], current: &[Measured]) -> Vec<String> {
     current
         .iter()
