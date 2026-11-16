@@ -6,7 +6,8 @@
 
 /// Points on the ring of the disc the floor is the highest relief of.
 const FLOOR_RING_POINTS: u32 = 6u;
-const TAU: f32 = 6.28318530717959;
+/// sin 60°: the hexagon's ring points sit at (±1, 0) and (±½, ±√3/2) radii.
+const HEXAGON_SINE: f32 = 0.866025403784439;
 /// Most points read along a vertex's path besides its end.
 const MAX_SWEEP_SAMPLES: u32 = 3u;
 /// Half the span of the central differences that measure the floor's slope, px.
@@ -14,10 +15,17 @@ const SLOPE_PROBE_PX: f32 = 1.0;
 
 /// The highest relief within `radius_px` of `at`: the centre and a ring at the radius.
 fn disc_floor_px(at: vec2<f32>, radius_px: f32) -> f32 {
+    let ring = array<vec2<f32>, FLOOR_RING_POINTS>(
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.5, HEXAGON_SINE),
+        vec2<f32>(-0.5, HEXAGON_SINE),
+        vec2<f32>(-1.0, 0.0),
+        vec2<f32>(-0.5, -HEXAGON_SINE),
+        vec2<f32>(0.5, -HEXAGON_SINE),
+    );
     var highest = surface_px(at);
     for (var point = 0u; point < FLOOR_RING_POINTS; point++) {
-        let angle = TAU * f32(point) / f32(FLOOR_RING_POINTS);
-        highest = max(highest, surface_px(at + radius_px * vec2<f32>(cos(angle), sin(angle))));
+        highest = max(highest, surface_px(at + radius_px * ring[point]));
     }
     return highest;
 }
