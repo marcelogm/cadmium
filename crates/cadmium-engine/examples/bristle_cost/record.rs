@@ -9,6 +9,9 @@ pub(crate) const OUT_VARIABLE: &str = "CADMIUM_BENCH_OUT";
 pub(crate) const BASELINE_VARIABLE: &str = "CADMIUM_BENCH_BASELINE";
 /// How much slower than the baseline a scenario may get: the budget of the XPBD rewrite (#62).
 pub(crate) const ALLOWED_SLOWDOWN: f64 = 1.10;
+/// A field must also get this much slower, in ms, to be over budget, so that jitter cannot
+/// fail the scenarios that cost almost nothing.
+pub(crate) const ALLOWED_ABSOLUTE_SLOWDOWN_MS: f64 = 0.05;
 const HEADER: &str = "scenario\tframes\tgpu_mean_ms\tgpu_p95_ms\twall_mean_ms\twall_p95_ms";
 const NO_VALUE: &str = "-";
 
@@ -70,7 +73,7 @@ pub(crate) fn compared(baseline: &[Measured], current: &[Measured]) -> usize {
         .count()
 }
 
-/// The scenarios measured in both runs that got slower than `ALLOWED_SLOWDOWN` allows,
+/// The scenarios measured in both runs that got slower than `ALLOWED_SLOWDOWN` and `ALLOWED_ABSOLUTE_SLOWDOWN_MS` allow,
 /// judged on GPU time when both runs have it and on wall time otherwise.
 pub(crate) fn over_budget(baseline: &[Measured], current: &[Measured]) -> Vec<String> {
     current
@@ -82,12 +85,17 @@ pub(crate) fn over_budget(baseline: &[Measured], current: &[Measured]) -> Vec<St
         .collect()
 }
 
+/// Over budget: beyond `ALLOWED_SLOWDOWN` times the baseline and beyond the absolute floor.
+fn over(then: f64, current: f64) -> bool {
+    current > then * ALLOWED_SLOWDOWN && current > then + ALLOWED_ABSOLUTE_SLOWDOWN_MS
+}
+
 fn slower_than(before: &Measured, now: &Measured) -> Option<String> {
     let (then, current, clock) = match (before.gpu, now.gpu) {
         (Some(then), Some(current)) => (then, current, "gpu"),
         _ => (before.wall, now.wall, "wall"),
     };
-    let slower = current.0 > then.0 * ALLOWED_SLOWDOWN || current.1 > then.1 * ALLOWED_SLOWDOWN;
+    let slower = over(then.0, current.0) || over(then.1, current.1);
     slower.then(|| {
         format!(
             "{}: {clock} mean {:.2} -> {:.2} ms, p95 {:.2} -> {:.2} ms",

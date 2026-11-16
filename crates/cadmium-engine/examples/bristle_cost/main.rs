@@ -14,9 +14,14 @@
 //! `CADMIUM_PEN_SPEED=<px/s>` draws the strokes at that speed instead of 800 px/s.
 //! `CADMIUM_PACED=1` paces the dabs over frames the way the app does, and also prints how
 //! many frames a stroke kept painting after the pen lifted.
+//! `CADMIUM_BENCH_REPEATS=<n>` measures each scenario n times (default 1), on a fresh canvas
+//! each time, and reports and records the median of the n means and of the n p95s; the
+//! quarters of the long strokes are only printed when n is 1.
 //! `CADMIUM_BENCH_OUT=<file>` also writes each scenario's results to the file as
 //! tab-separated values; `CADMIUM_BENCH_BASELINE=<file>` compares them with a file written
-//! that way and exits with status 1 when a scenario got more than 10% slower.
+//! that way and exits with status 1 when a scenario got slower by more than 10% and by more
+//! than 0.05 ms, in its mean or its p95. The 0.05 ms floor keeps jitter from failing the
+//! scenarios that cost almost nothing.
 
 mod bench;
 mod record;
@@ -32,11 +37,14 @@ use cadmium_engine::session::PaintSession;
 
 use bench::{Bench, STROKE_PRESSURE, long_stroke, s_curve};
 use scenarios::{Ground, Motion, SCENARIOS, Scenario};
-use timing::{FrameCost, Measured, Timestamps, report, report_quarters, timestamps};
+use timing::{
+    FrameCost, Measured, Timestamps, measured, median_of, print_row, report_quarters, timestamps,
+};
 
 const CANVAS_WIDTH_PX: u32 = 2048;
 const CANVAS_HEIGHT_PX: u32 = 1536;
 const SCENARIO_FILTER_VARIABLE: &str = "CADMIUM_SCENARIO";
+const REPEATS_VARIABLE: &str = "CADMIUM_BENCH_REPEATS";
 const PACED_VARIABLE: &str = "CADMIUM_PACED";
 const PIGMENTS: [&str; 3] = ["cadmium_red", "ultramarine_blue", "titanium_white"];
 
@@ -89,18 +97,35 @@ fn selected(scenario: &Scenario) -> bool {
     }
 }
 
+fn repeats() -> usize {
+    std::env::var(REPEATS_VARIABLE)
+        .ok()
+        .and_then(|text| text.parse().ok())
+        .filter(|&count| count > 0)
+        .unwrap_or(1)
+}
+
 fn measure_all(gpu: &GpuContext, timestamps: Option<&Timestamps>) -> Vec<Measured> {
     println!(
         "{:<36} {:>6} {:>9} {:>9} {:>9} {:>9}",
         "scenario (ms per frame)", "frames", "gpu mean", "gpu p95", "wall mean", "wall p95"
     );
+    let repeats = repeats();
     let mut rows = Vec::new();
     for scenario in SCENARIOS.iter().filter(|scenario| selected(scenario)) {
-        let costs = measure(gpu, timestamps, scenario);
-        rows.push(report(scenario.name, &costs));
-        if scenario.motion == Motion::LongStroke {
-            report_quarters(&costs);
+        let runs: Vec<Vec<FrameCost>> = (0..repeats)
+            .map(|_| measure(gpu, timestamps, scenario))
+            .collect();
+        let each: Vec<Measured> = runs
+            .iter()
+            .map(|costs| measured(scenario.name, costs))
+            .collect();
+        let row = median_of(&each);
+        print_row(&row);
+        if scenario.motion == Motion::LongStroke && repeats == 1 {
+            report_quarters(&runs[0]);
         }
+        rows.push(row);
     }
     rows
 }

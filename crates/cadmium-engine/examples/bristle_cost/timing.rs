@@ -116,7 +116,7 @@ pub(crate) struct Measured {
     pub(crate) wall: (f64, f64),
 }
 
-fn measured(name: &str, costs: &[FrameCost]) -> Measured {
+pub(crate) fn measured(name: &str, costs: &[FrameCost]) -> Measured {
     let gpu: Option<Vec<f64>> = costs.iter().map(|cost| cost.gpu_ms).collect();
     Measured {
         name: name.to_string(),
@@ -126,18 +126,49 @@ fn measured(name: &str, costs: &[FrameCost]) -> Measured {
     }
 }
 
-pub(crate) fn report(name: &str, costs: &[FrameCost]) -> Measured {
-    let row = measured(name, costs);
+pub(crate) fn print_row(row: &Measured) {
     let gpu = row.gpu.map_or_else(
         || format!("{:>9} {:>9}", "-", "-"),
         |(mean, p95)| format!("{mean:>9.2} {p95:>9.2}"),
     );
     let (wall_mean, wall_p95) = row.wall;
     println!(
-        "{name:<36} {:>6} {gpu} {wall_mean:>9.2} {wall_p95:>9.2}",
-        row.frames
+        "{:<36} {:>6} {gpu} {wall_mean:>9.2} {wall_p95:>9.2}",
+        row.name, row.frames
     );
-    row
+}
+
+pub(crate) fn report(name: &str, costs: &[FrameCost]) {
+    print_row(&measured(name, costs));
+}
+
+fn median(mut values: Vec<f64>) -> f64 {
+    values.sort_by(f64::total_cmp);
+    let middle = values.len() / 2;
+    if values.len() % 2 == 1 {
+        values[middle]
+    } else {
+        (values[middle - 1] + values[middle]) / 2.0
+    }
+}
+
+fn median_pair(pairs: Vec<(f64, f64)>) -> (f64, f64) {
+    (
+        median(pairs.iter().map(|pair| pair.0).collect()),
+        median(pairs.iter().map(|pair| pair.1).collect()),
+    )
+}
+
+/// The repeats of one scenario as a single row: the median of each mean and of each p95,
+/// and the frame count of the first repeat. It has GPU time only when every repeat does.
+pub(crate) fn median_of(runs: &[Measured]) -> Measured {
+    let gpu: Option<Vec<(f64, f64)>> = runs.iter().map(|run| run.gpu).collect();
+    Measured {
+        name: runs[0].name.clone(),
+        frames: runs[0].frames,
+        gpu: gpu.map(median_pair),
+        wall: median_pair(runs.iter().map(|run| run.wall).collect()),
+    }
 }
 
 const QUARTERS: usize = 4;
