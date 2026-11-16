@@ -67,5 +67,15 @@ pub(super) fn mode_named(name: &str) -> Option<PaletteMode> {
     modes.find(|mode| mode_name(*mode) == name)
 }
 
+/// The modes the dialog offers: without the circle, only mixing.
+pub(super) fn modes(circle: bool) -> &'static [(PaletteMode, &'static str)] {
+    if circle { &MODES } else { &MODES[1..] }
+}
+
+/// The mode the dialog opens in: `asked`, or mixing when the app has no circle.
+pub(super) fn opening_mode(asked: PaletteMode, circle: bool) -> PaletteMode {
+    if circle { asked } else { PaletteMode::Mixing }
+}
+
 #[cfg(test)]
 mod tests;

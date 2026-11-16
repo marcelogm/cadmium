@@ -7,6 +7,7 @@ use super::column::Column;
 use super::header::TITLE;
 use super::presentation::mode_name;
 use crate::brush_editor::DIALOG_SIZE;
+use crate::colour_wheel::COLOUR_CIRCLE;
 use crate::state::PaletteMode;
 
 const COLUMN_WIDTH: i32 = 340;
@@ -20,7 +21,9 @@ pub(super) fn dialog(
     column: &Column,
 ) -> (adw::Dialog, gtk::Stack) {
     let stack = gtk::Stack::builder().hexpand(true).vexpand(true).build();
-    stack.add_named(circle, Some(mode_name(PaletteMode::Circle)));
+    if COLOUR_CIRCLE {
+        stack.add_named(circle, Some(mode_name(PaletteMode::Circle)));
+    }
     stack.add_named(mixing, Some(mode_name(PaletteMode::Mixing)));
     let body = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     body.append(&stack);
