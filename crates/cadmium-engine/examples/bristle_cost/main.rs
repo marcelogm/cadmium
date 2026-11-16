@@ -16,7 +16,9 @@
 //! many frames a stroke kept painting after the pen lifted.
 //! `CADMIUM_BENCH_REPEATS=<n>` measures each scenario n times (default 1), on a fresh canvas
 //! each time, and reports and records the median of the n means and of the n p95s; the
-//! quarters of the long strokes are only printed when n is 1.
+//! quarters of the long strokes are only printed when n is 1. When n is above 1 the repeats
+//! are interleaved, each pass going through all the scenarios before the next begins, after
+//! one discarded warm-up pass, so that a slow spell of the GPU is spread over the scenarios.
 //! `CADMIUM_BENCH_OUT=<file>` also writes each scenario's results to the file as
 //! tab-separated values; `CADMIUM_BENCH_BASELINE=<file>` compares them with a file written
 //! that way and exits with status 1 when a scenario got slower by more than 10% and by more
@@ -105,25 +107,43 @@ fn repeats() -> usize {
         .unwrap_or(1)
 }
 
+fn measure_pass(
+    gpu: &GpuContext,
+    timestamps: Option<&Timestamps>,
+    scenarios: &[&Scenario],
+) -> Vec<Vec<FrameCost>> {
+    scenarios
+        .iter()
+        .map(|scenario| measure(gpu, timestamps, scenario))
+        .collect()
+}
+
 fn measure_all(gpu: &GpuContext, timestamps: Option<&Timestamps>) -> Vec<Measured> {
     println!(
         "{:<36} {:>6} {:>9} {:>9} {:>9} {:>9}",
         "scenario (ms per frame)", "frames", "gpu mean", "gpu p95", "wall mean", "wall p95"
     );
     let repeats = repeats();
+    let scenarios: Vec<&Scenario> = SCENARIOS
+        .iter()
+        .filter(|scenario| selected(scenario))
+        .collect();
+    if repeats > 1 {
+        measure_pass(gpu, timestamps, &scenarios);
+    }
+    let passes: Vec<_> = (0..repeats)
+        .map(|_| measure_pass(gpu, timestamps, &scenarios))
+        .collect();
     let mut rows = Vec::new();
-    for scenario in SCENARIOS.iter().filter(|scenario| selected(scenario)) {
-        let runs: Vec<Vec<FrameCost>> = (0..repeats)
-            .map(|_| measure(gpu, timestamps, scenario))
-            .collect();
-        let each: Vec<Measured> = runs
+    for (index, scenario) in scenarios.iter().enumerate() {
+        let each: Vec<Measured> = passes
             .iter()
-            .map(|costs| measured(scenario.name, costs))
+            .map(|pass| measured(scenario.name, &pass[index]))
             .collect();
         let row = median_of(&each);
         print_row(&row);
         if scenario.motion == Motion::LongStroke && repeats == 1 {
-            report_quarters(&runs[0]);
+            report_quarters(&passes[0][index]);
         }
         rows.push(row);
     }
