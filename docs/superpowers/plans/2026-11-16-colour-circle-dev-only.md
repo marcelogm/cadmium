@@ -162,14 +162,7 @@ pub(super) fn opening_mode(asked: PaletteMode, circle: bool) -> PaletteMode {
 
 - [ ] **Step 4: Header** (`palette_editor/header.rs`)
 
-Change `use super::presentation::{MODES, mode_name};` to `use super::presentation::{mode_name, modes};`, add `use crate::colour_wheel::COLOUR_CIRCLE;`, and replace the loop in `header()`:
-
-```rust
-    let modes = adw::ToggleGroup::new();
-    for (mode, label) in modes_on_offer() {
-```
-
-— concretely, rename to avoid the shadowing of `modes`:
+Change `use super::presentation::{MODES, mode_name};` to `use super::presentation::{mode_name, modes};`, add `use crate::colour_wheel::COLOUR_CIRCLE;`, and replace the group and its loop in `header()`, renaming the local to `toggles` so it does not shadow `modes`:
 
 ```rust
     let toggles = adw::ToggleGroup::new();
