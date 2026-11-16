@@ -11,6 +11,10 @@ use crate::gpu::GpuContext;
 
 const OUT_VECTORS: usize = BRISTLE_VERTICES + 1;
 const VECTOR_FLOATS: usize = 4;
+/// Hinge compliances a `LabStrand` carries: two vec4 in the shader.
+pub(super) const LAB_HINGE_SLOTS: usize = 8;
+
+const _: () = assert!(BRISTLE_VERTICES - 1 <= LAB_HINGE_SLOTS);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -19,7 +23,7 @@ pub(super) struct LabStrand {
     clamp: [f32; 4],
     curl: [f32; 4],
     tip_force: [f32; 4],
-    compliances: [f32; 8],
+    compliances: [f32; LAB_HINGE_SLOTS],
 }
 
 impl LabStrand {
@@ -27,7 +31,7 @@ impl LabStrand {
         root: [f32; 3],
         clamp: [f32; 3],
         segment_px: f32,
-        compliances: [f32; 8],
+        compliances: [f32; LAB_HINGE_SLOTS],
     ) -> LabStrand {
         let [x, y, z] = root;
         let [cx, cy, cz] = clamp;
@@ -65,6 +69,8 @@ impl LabStrand {
 
 pub(super) struct LabRun {
     pub(super) chain_px: Vec<[f32; 3]>,
+    /// The canvas's normal force on each vertex, N; the root's is 0.
+    pub(super) vertex_forces_n: Vec<f32>,
     pub(super) normal_force_n: f32,
 }
 
@@ -121,6 +127,7 @@ fn lab_run(floats: &[f32]) -> LabRun {
             .iter()
             .map(|v| [v[0], v[1], v[2]])
             .collect(),
+        vertex_forces_n: vectors[..BRISTLE_VERTICES].iter().map(|v| v[3]).collect(),
         normal_force_n: vectors[BRISTLE_VERTICES][0],
     }
 }

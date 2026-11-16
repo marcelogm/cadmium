@@ -29,6 +29,14 @@ fn a_light_tip_load_bends_a_nylon_hair_under_a_millimetre() {
 }
 
 #[test]
+fn a_nylon_hair_pressed_on_its_tip_buckles_at_a_fifth_of_a_millinewton() {
+    // π²EI/(4L²) with EI = 1.718e-8 N·m² and L = 15 mm.
+    let stiffness = bending_stiffness(NYLON_MODULUS_PA, NYLON_RADIUS_M);
+    let load = euler_buckling_load(stiffness, HAIR_LENGTH_M);
+    assert!(close(load, 1.884e-4), "{load}");
+}
+
+#[test]
 fn the_elastocapillary_length_of_bicos_lamellae_is_fifteen_centimetres() {
     // Bico et al. report L_EC ≈ 150 mm for these lamellae.
     let length = elastocapillary_length(BICO_STIFFNESS_N_M, BICO_SURFACE_TENSION_N_PER_M);

@@ -1,12 +1,15 @@
-alias Gaps = array<f32, BRISTLE_SEGMENTS>;
+alias PerContact = array<f32, BRISTLE_SEGMENTS>;
 alias Engaged = array<bool, BRISTLE_SEGMENTS>;
 alias ContactMatrix = array<array<f32, BRISTLE_SEGMENTS>, BRISTLE_SEGMENTS>;
 
 const CONTACT_ROUNDS: u32 = 8u;
 /// How far under its floor a vertex left out of the active set may end, px.
 const CONTACT_TOLERANCE_PX: f32 = 1.0e-3;
-/// Share of the largest diagonal added to every active pivot: a straight strand pressed
-/// along its length has no bending answer, and this keeps it from dividing by zero.
+/// Share of the contact compliance added to every active pivot, so the Cholesky never
+/// divides by zero. A vertex whose own compliance is no larger than the ridge has no
+/// bending lever (a straight strand pressed along its length): no force can lift it, so
+/// it takes none and sinks instead. In the app every strand has a rest curl, which gives
+/// it the lever to buckle.
 const CONTACT_RIDGE_SHARE: f32 = 1.0e-5;
 const MIN_PIVOT: f32 = 1.0e-20;
 
@@ -33,8 +36,8 @@ fn contact_matrix(chain: Chain, compliances: HingeCompliances) -> ContactMatrix 
 }
 
 /// How far under its floor each vertex (1..) would end after `turns`, px.
-fn gaps_after(chain: Chain, turns: Turns, floors: Floors) -> Gaps {
-    var gaps: Gaps;
+fn gaps_after(chain: Chain, turns: Turns, floors: Floors) -> PerContact {
+    var gaps: PerContact;
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
         var z = chain[vertex].z;
         for (var hinge = 0u; hinge < vertex; hinge++) {
@@ -65,7 +68,7 @@ fn factorised(system: ContactMatrix) -> ContactMatrix {
     return lower;
 }
 
-fn cholesky_solved(system: ContactMatrix, rhs: Gaps) -> Gaps {
+fn cholesky_solved(system: ContactMatrix, rhs: PerContact) -> PerContact {
     let lower = factorised(system);
     var x = rhs;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
@@ -84,27 +87,40 @@ fn cholesky_solved(system: ContactMatrix, rhs: Gaps) -> Gaps {
     return x;
 }
 
-/// The forces that put every active vertex on its floor; inactive rows solve to 0.
-fn active_forces(matrix: ContactMatrix, gaps: Gaps, engaged: Engaged) -> Gaps {
-    var largest = 0.0;
+/// The compliance the ridge is a share of, px per N: the largest diagonal, but never less
+/// than the tip hinge's rise under a one-segment lever, so a strand with no lever keeps a
+/// finite answer.
+fn ridge_scale(matrix: ContactMatrix, chain: Chain, compliances: HingeCompliances) -> f32 {
+    let segment_px = distance(chain[1], chain[0]);
+    var largest = compliances[BRISTLE_SEGMENTS - 1u] * segment_px * segment_px * METRES_PER_PX;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         largest = max(largest, matrix[row][row]);
     }
+    return largest;
+}
+
+/// The forces that put every active vertex on its floor; inactive rows solve to 0.
+fn active_forces(matrix: ContactMatrix, ridge: f32, gaps: PerContact, engaged: Engaged) -> PerContact {
     var system: ContactMatrix;
-    var rhs: Gaps;
+    var rhs: PerContact;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         for (var column = 0u; column < BRISTLE_SEGMENTS; column++) {
             system[row][column] = select(0.0, matrix[row][column], engaged[row] && engaged[column]);
         }
-        let ridged = matrix[row][row] + CONTACT_RIDGE_SHARE * largest;
+        let ridged = matrix[row][row] + ridge;
         system[row][row] = select(1.0, ridged, engaged[row]);
         rhs[row] = select(0.0, gaps[row], engaged[row]);
     }
     return cholesky_solved(system, rhs);
 }
 
+/// Whether a force on vertex `row` + 1 can lift it by bending at all.
+fn liftable(matrix: ContactMatrix, ridge: f32, row: u32) -> bool {
+    return matrix[row][row] > ridge;
+}
+
 /// Drops the contacts that would pull the strand down. True if any was dropped.
-fn released(engaged: ptr<function, Engaged>, forces: Gaps) -> bool {
+fn released(engaged: ptr<function, Engaged>, forces: PerContact) -> bool {
     var dropped = false;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         if (*engaged)[row] && forces[row] < 0.0 {
@@ -116,14 +132,15 @@ fn released(engaged: ptr<function, Engaged>, forces: Gaps) -> bool {
 }
 
 /// Adds the vertices the forces leave under their floor. True if any was added.
-fn landed(engaged: ptr<function, Engaged>, matrix: ContactMatrix, gaps: Gaps, forces: Gaps) -> bool {
+fn landed(engaged: ptr<function, Engaged>, matrix: ContactMatrix, ridge: f32, gaps: PerContact, forces: PerContact) -> bool {
     var added = false;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         var rise = 0.0;
         for (var column = 0u; column < BRISTLE_SEGMENTS; column++) {
             rise += select(0.0, matrix[row][column] * forces[column], (*engaged)[column]);
         }
-        if !(*engaged)[row] && gaps[row] - rise > CONTACT_TOLERANCE_PX {
+        let under = gaps[row] - rise > CONTACT_TOLERANCE_PX;
+        if !(*engaged)[row] && under && liftable(matrix, ridge, row) {
             (*engaged)[row] = true;
             added = true;
         }
@@ -133,20 +150,23 @@ fn landed(engaged: ptr<function, Engaged>, matrix: ContactMatrix, gaps: Gaps, fo
 
 /// The canvas's normal force on each vertex (1..), N: the active set of a frictionless,
 /// one-sided contact (Baxter & Lin's and Chu & Tai's quasi-static brushes).
-fn contact_forces(chain: Chain, turns: Turns, compliances: HingeCompliances, floors: Floors) -> Gaps {
+fn contact_forces(chain: Chain, turns: Turns, compliances: HingeCompliances, floors: Floors) -> PerContact {
     let matrix = contact_matrix(chain, compliances);
+    let ridge = CONTACT_RIDGE_SHARE * ridge_scale(matrix, chain, compliances);
     let gaps = gaps_after(chain, turns, floors);
     var engaged: Engaged;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
-        engaged[row] = gaps[row] > 0.0;
+        engaged[row] = gaps[row] > 0.0 && liftable(matrix, ridge, row);
     }
-    var forces: Gaps;
-    for (var round = 0u; round < CONTACT_ROUNDS; round++) {
-        forces = active_forces(matrix, gaps, engaged);
+    var forces: PerContact;
+    var settled = false;
+    for (var round = 0u; round < CONTACT_ROUNDS && !settled; round++) {
+        forces = active_forces(matrix, ridge, gaps, engaged);
         let dropped = released(&engaged, forces);
-        if !dropped && !landed(&engaged, matrix, gaps, forces) {
-            break;
-        }
+        settled = !dropped && !landed(&engaged, matrix, ridge, gaps, forces);
+    }
+    if !settled {
+        forces = active_forces(matrix, ridge, gaps, engaged);
     }
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         forces[row] = select(0.0, max(forces[row], 0.0), engaged[row]);
