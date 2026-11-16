@@ -29,7 +29,6 @@ pub(super) const BRUSH: UiToolProfile = UiToolProfile {
 };
 
 pub(super) const BRUSH_WORDING: ToolWording = ToolWording {
-    pigments: "Click loads a clean brush with that colour; Ctrl+click mixes in a little",
     loaded_title: "On the Brush",
     loaded_tooltip: "Left: mix on the palette · right: brush tip",
     level_tooltip: "Paint in the brush reservoir",
