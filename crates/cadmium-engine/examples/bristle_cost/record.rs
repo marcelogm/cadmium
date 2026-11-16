@@ -29,13 +29,24 @@ pub(crate) fn write(path: &Path, adapter: &str, rows: &[Measured]) -> std::io::R
     std::fs::write(path, text)
 }
 
-pub(crate) fn read(path: &Path) -> std::io::Result<Vec<Measured>> {
+/// A recorded run: the adapter it was measured on, when the file says, and its scenarios.
+pub(crate) struct Baseline {
+    pub(crate) adapter: Option<String>,
+    pub(crate) rows: Vec<Measured>,
+}
+
+pub(crate) fn read(path: &Path) -> std::io::Result<Baseline> {
     let text = std::fs::read_to_string(path)?;
-    Ok(text
+    let adapter = text
+        .lines()
+        .find_map(|line| line.strip_prefix("# adapter: "))
+        .map(str::to_string);
+    let rows = text
         .lines()
         .filter(|line| !line.starts_with('#') && *line != HEADER)
         .filter_map(parse_row)
-        .collect())
+        .collect();
+    Ok(Baseline { adapter, rows })
 }
 
 fn parse_row(line: &str) -> Option<Measured> {
@@ -49,6 +60,14 @@ fn parse_row(line: &str) -> Option<Measured> {
         gpu: gpu_mean.parse().ok().zip(gpu_p95.parse().ok()),
         wall: (wall_mean.parse().ok()?, wall_p95.parse().ok()?),
     })
+}
+
+/// How many of the current scenarios the baseline also has.
+pub(crate) fn compared(baseline: &[Measured], current: &[Measured]) -> usize {
+    current
+        .iter()
+        .filter(|now| baseline.iter().any(|row| row.name == now.name))
+        .count()
 }
 
 /// The scenarios measured in both runs that got slower than `ALLOWED_SLOWDOWN` allows,

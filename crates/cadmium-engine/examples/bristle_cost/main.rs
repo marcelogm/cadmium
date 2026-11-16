@@ -105,9 +105,35 @@ fn measure_all(gpu: &GpuContext, timestamps: Option<&Timestamps>) -> Vec<Measure
     rows
 }
 
-fn check_against(path: &Path, rows: &[Measured]) {
+fn fail(message: &str) -> ! {
+    println!("{message}");
+    std::process::exit(1);
+}
+
+fn load_baseline(path: &Path) -> record::Baseline {
     let baseline = record::read(path).expect("the baseline file is readable");
-    let slower = record::over_budget(&baseline, rows);
+    if baseline.rows.is_empty() {
+        fail(&format!(
+            "the baseline at {} holds no results",
+            path.display()
+        ));
+    }
+    baseline
+}
+
+fn check_against(baseline: &record::Baseline, adapter: &str, rows: &[Measured]) {
+    if let Some(recorded) = baseline.adapter.as_deref().filter(|name| *name != adapter) {
+        println!("warning: baseline recorded on {recorded}, measuring on {adapter}");
+    }
+    let compared = record::compared(&baseline.rows, rows);
+    println!(
+        "compared {compared} of {} baseline scenarios",
+        baseline.rows.len()
+    );
+    if compared == 0 {
+        fail("no scenario of this run is in the baseline");
+    }
+    let slower = record::over_budget(&baseline.rows, rows);
     if slower.is_empty() {
         println!(
             "within {:.0}% of the baseline",
@@ -138,10 +164,12 @@ fn main() {
         }
     );
     let rows = measure_all(&gpu, timestamps.as_ref());
+    let baseline =
+        std::env::var_os(record::BASELINE_VARIABLE).map(|path| load_baseline(Path::new(&path)));
     if let Some(path) = std::env::var_os(record::OUT_VARIABLE) {
         record::write(Path::new(&path), &info.name, &rows).expect("the results file is writable");
     }
-    if let Some(path) = std::env::var_os(record::BASELINE_VARIABLE) {
-        check_against(Path::new(&path), &rows);
+    if let Some(baseline) = baseline {
+        check_against(&baseline, &info.name, &rows);
     }
 }
