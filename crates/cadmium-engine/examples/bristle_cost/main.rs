@@ -20,7 +20,8 @@
 //! are interleaved, each pass going through all the scenarios before the next begins, after
 //! one discarded warm-up pass, so that a slow spell of the GPU is spread over the scenarios.
 //! The results file records n, and a check without `CADMIUM_BENCH_REPEATS` uses the n of its
-//! baseline, so that it is measured the way the baseline was.
+//! baseline, so that it is measured the way the baseline was. Check full runs only: a run
+//! filtered by `CADMIUM_SCENARIO` warms the GPU less and warns when it has a baseline.
 //! `CADMIUM_BENCH_OUT=<file>` also writes each scenario's results to the file as
 //! tab-separated values; `CADMIUM_BENCH_BASELINE=<file>` compares them with a file written
 //! that way and exits with status 1 when a scenario got slower by more than 10% and by more
@@ -174,6 +175,15 @@ fn load_baseline(path: &Path) -> record::Baseline {
     baseline
 }
 
+fn warn_if_filtered() {
+    if std::env::var_os(SCENARIO_FILTER_VARIABLE).is_some() {
+        println!(
+            "warning: a filtered run warms the GPU less than the full run the baseline was \
+             recorded with; compare full runs only"
+        );
+    }
+}
+
 fn check_against(baseline: &record::Baseline, adapter: &str, rows: &[Measured]) {
     if let Some(recorded) = baseline.adapter.as_deref().filter(|name| *name != adapter) {
         println!("warning: baseline recorded on {recorded}, measuring on {adapter}");
@@ -218,6 +228,9 @@ fn main() {
     );
     let baseline =
         std::env::var_os(record::BASELINE_VARIABLE).map(|path| load_baseline(Path::new(&path)));
+    if baseline.is_some() {
+        warn_if_filtered();
+    }
     let repeats = repeats(baseline.as_ref());
     let rows = measure_all(&gpu, timestamps.as_ref(), repeats);
     if let Some(path) = std::env::var_os(record::OUT_VARIABLE) {
