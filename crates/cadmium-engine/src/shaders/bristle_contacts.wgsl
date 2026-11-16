@@ -153,17 +153,30 @@ fn landed(engaged: ptr<function, Engaged>, matrix: ContactMatrix, ridge: f32, ga
     return added;
 }
 
+/// Whether the free step leaves any vertex under its floor: without one, no contact can
+/// engage, since a vertex only lands when the forces leave it under.
+fn any_under(gaps: PerContact) -> bool {
+    var under = false;
+    for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
+        under = under || gaps[row] > 0.0;
+    }
+    return under;
+}
+
 /// The canvas's force on each vertex (1..) along its floor normal, N: the active set of a
 /// frictionless, one-sided contact (Baxter & Lin's and Chu & Tai's quasi-static brushes).
 fn contact_forces(chain: Chain, turns: Turns, compliances: HingeCompliances, floors: Floors, normals: Normals) -> PerContact {
+    let gaps = gaps_after(chain, turns, floors, normals);
+    var forces: PerContact;
+    if !any_under(gaps) {
+        return forces;
+    }
     let matrix = contact_matrix(chain, compliances, normals);
     let ridge = CONTACT_RIDGE_SHARE * ridge_scale(matrix, chain, compliances);
-    let gaps = gaps_after(chain, turns, floors, normals);
     var engaged: Engaged;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         engaged[row] = gaps[row] > 0.0 && liftable(matrix, ridge, row);
     }
-    var forces: PerContact;
     var settled = false;
     for (var round = 0u; round < CONTACT_ROUNDS && !settled; round++) {
         forces = active_forces(matrix, ridge, gaps, engaged);
