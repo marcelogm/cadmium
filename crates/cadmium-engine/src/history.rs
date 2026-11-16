@@ -39,21 +39,28 @@ struct Step {
     tiles: Vec<SavedTile>,
     saved: HashSet<TileCoord>,
     complete: bool,
-    removes_wet_paint: bool,
+    /// The tiles this step leaves without wet paint when it is redone.
+    leaves_dry: HashSet<TileCoord>,
     held: Option<HeldRecord>,
     held_asked: bool,
 }
 
 impl Step {
-    fn new(removes_wet_paint: bool) -> Step {
+    fn new(leaves_dry: HashSet<TileCoord>) -> Step {
         Step {
             tiles: Vec::new(),
             saved: HashSet::new(),
             complete: true,
-            removes_wet_paint,
+            leaves_dry,
             held: None,
             held_asked: false,
         }
+    }
+
+    /// Whether the step takes wet paint off tiles, as Dry and the clears do; a stroke's
+    /// step never does.
+    fn dries_tiles(&self) -> bool {
+        !self.leaves_dry.is_empty()
     }
 
     fn slots(&self) -> impl Iterator<Item = Slot> + '_ {
@@ -136,11 +143,19 @@ impl History {
     }
 
     pub fn begin_step(&mut self) {
-        self.open_step(false);
+        self.open_step(HashSet::new());
     }
 
-    pub fn begin_removal_step(&mut self, wet_tile_count: usize) {
-        self.open_step(true);
+    /// Opens a step that leaves `leaves_dry` without wet paint when it is redone.
+    pub fn begin_step_leaving_dry(&mut self, leaves_dry: HashSet<TileCoord>) {
+        self.open_step(leaves_dry);
+    }
+
+    /// Opens a step that removes the wet paint of `wet_tiles`, or gives up on undoing it
+    /// when they do not fit the history.
+    pub fn begin_removal_step(&mut self, wet_tiles: &[TileCoord]) {
+        let wet_tile_count = wet_tiles.len();
+        self.open_step(wet_tiles.iter().copied().collect());
         if wet_tile_count > self.slot_capacity as usize
             && let Some(mut step) = self.current.take()
         {
@@ -149,9 +164,9 @@ impl History {
         }
     }
 
-    fn open_step(&mut self, removes_wet_paint: bool) {
+    fn open_step(&mut self, leaves_dry: HashSet<TileCoord>) {
         self.commit_step();
-        self.current = Some(Step::new(removes_wet_paint));
+        self.current = Some(Step::new(leaves_dry));
     }
 
     pub fn encode_save_tiles(
@@ -265,15 +280,13 @@ impl History {
         };
         let mut encoder = new_encoder(gpu, "redo");
         for saved in &step.tiles {
-            self.redo_tile(canvas, saved, step.removes_wet_paint, &mut encoder);
+            self.redo_tile(canvas, saved, &step.leaves_dry, &mut encoder);
         }
         if let Some(held) = step.held.as_mut() {
             held.encode_redo(engine, &mut encoder);
         }
         gpu.queue.submit([encoder.finish()]);
-        if step.removes_wet_paint {
-            forget_wet(canvas, &step.saved);
-        }
+        forget_wet(canvas, &step.leaves_dry);
         self.undo_steps.push_back(step);
         self.trim_to_max_steps();
         true
@@ -297,7 +310,7 @@ impl History {
         &self,
         canvas: &mut Canvas,
         saved: &SavedTile,
-        removes_wet_paint: bool,
+        leaves_dry: &HashSet<TileCoord>,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         let Some(after) = saved.after else {
@@ -305,7 +318,7 @@ impl History {
         };
         self.copy_slot_to_canvas(canvas, saved.tile, after, encoder);
         mark_restored(canvas, saved.tile);
-        if !removes_wet_paint {
+        if !leaves_dry.contains(&saved.tile) {
             mark_wet(canvas, saved.tile);
         }
     }

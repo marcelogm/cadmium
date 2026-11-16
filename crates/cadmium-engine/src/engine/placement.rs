@@ -340,12 +340,16 @@ fn region_rect(origin: [i32; 2], size: [u32; 2]) -> [f32; 4] {
 }
 
 pub(super) fn mark_dab_regions(canvas: &mut Canvas, placements: &[Placement]) {
+    let painting = canvas.spec.painting_rect();
     for placement in placements {
         let [x0, y0, x1, y1] = placement.canvas_rect;
         if placement.profile.has_bristle_footprint() {
             canvas.possibly_dirty.mark_rect(x0, y0, x1, y1);
         } else {
             canvas.dirty.mark_rect(x0, y0, x1, y1);
+        }
+        if !painting.contains_rect(placement.canvas_rect) {
+            canvas.margin_touched.mark_rect(x0, y0, x1, y1);
         }
         if placement.profile.touches_paint() {
             canvas.wet_tiles.mark_rect(x0, y0, x1, y1);

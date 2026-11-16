@@ -6,7 +6,7 @@ use cadmium_engine::{
     history::{History, HistoryLimits},
     session::PaintSession,
 };
-use support::{session, stroke, without_wgpu_errors};
+use support::{load, session, stroke, without_wgpu_errors};
 
 const BLUE: usize = 0;
 const YELLOW: usize = 1;
@@ -16,11 +16,6 @@ const LOWER_ROW: f64 = 192.0;
 const ROW_OFF_THE_CANVAS: f64 = -600.0;
 const NARROW_DIAMETER_PX: f32 = 24.0;
 const WIDE_DIAMETER_PX: f32 = 160.0;
-
-fn load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
-    s.brush.recipe = vec![(slot, 1.0)];
-    without_wgpu_errors(gpu, || s.reload_brush(gpu));
-}
 
 fn one_capture_bytes(gpu: &GpuContext, s: &PaintSession) -> u64 {
     s.engine.capture_held_paint(gpu).unwrap().bytes()

@@ -1,3 +1,7 @@
+#[path = "../support/mod.rs"]
+pub mod support;
+
+mod margin;
 mod new_canvas;
 mod slots;
 mod spec_validation;
@@ -13,5 +17,6 @@ fn spec(primer: Primer, weave: Weave) -> CanvasSpec {
         primer,
         weave,
         pigment_slots: vec!["titanium_white".into(), "ultramarine_blue".into()],
+        margin_px: 0,
     }
 }

@@ -73,6 +73,7 @@ fn placeholder_spec(spec: &CanvasSpec) -> CanvasSpec {
     CanvasSpec {
         width: PLACEHOLDER_SIZE_PX,
         height: PLACEHOLDER_SIZE_PX,
+        margin_px: 0,
         ..spec.clone()
     }
 }

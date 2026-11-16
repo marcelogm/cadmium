@@ -50,7 +50,7 @@ fn a_stroke_on_a_sheet_can_be_undone() {
 fn clearing_a_sheet_removes_its_wet_paint_in_one_undoable_step() {
     let gpu = GpuContext::new().unwrap();
     let mut sheet = sheet(&gpu);
-    assert_eq!(sheet.clear_wet(&gpu), ClearOutcome::NothingWet);
+    assert_eq!(sheet.clear_wet(&gpu), ClearOutcome::NothingToClear);
     let painted = mix_on(&gpu, &mut sheet);
     assert_eq!(
         sheet.clear_wet(&gpu),
@@ -70,5 +70,5 @@ fn redoing_a_clear_leaves_nothing_to_clear() {
     assert!(sheet.undo(&gpu));
     assert!(sheet.redo(&gpu));
     assert_eq!(sheet.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
-    assert_eq!(sheet.clear_wet(&gpu), ClearOutcome::NothingWet);
+    assert_eq!(sheet.clear_wet(&gpu), ClearOutcome::NothingToClear);
 }

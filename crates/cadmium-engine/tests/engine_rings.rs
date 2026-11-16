@@ -62,6 +62,7 @@ fn session(gpu: &GpuContext, arc: &Arc) -> PaintSession {
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["ultramarine_blue".into(), "titanium_white".into()],
+            margin_px: 0,
         },
     )
     .unwrap();

@@ -61,9 +61,9 @@ fn size_with_a_known_aspect_is_recognised_as_that_format() {
 
 #[test]
 fn starting_painting_size_is_recognised_as_landscape() {
-    let spec = starting_canvas_spec();
+    let rect = starting_canvas_spec().painting_rect();
     assert_eq!(
-        PaintingFormat::matching(spec.width, spec.height),
+        PaintingFormat::matching(rect.width, rect.height),
         PaintingFormat::Landscape4x3
     );
 }

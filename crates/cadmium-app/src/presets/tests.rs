@@ -1,3 +1,4 @@
+use cadmium_engine::canvas::MARGIN_PX;
 use cadmium_engine::pigments::{MAX_SLOTS, PigmentDb};
 
 use super::*;
@@ -45,4 +46,12 @@ fn first_brush_skips_the_whites_when_there_is_no_ultramarine() {
 #[test]
 fn an_all_white_palette_starts_with_the_first_white() {
     assert_eq!(starting_recipe(&slots(&["titanium_white"])), [(0, 1.0)]);
+}
+
+#[test]
+fn the_starting_painting_keeps_its_size_inside_a_margin() {
+    let spec = starting_canvas_spec();
+    let rect = spec.painting_rect();
+    assert_eq!((rect.width, rect.height), STARTING_SIZE);
+    assert_eq!(spec.margin_px, MARGIN_PX);
 }

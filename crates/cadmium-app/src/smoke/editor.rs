@@ -1,6 +1,7 @@
 //! The brush editor smoke step: the editor on show for the screenshot.
 
 use adw::prelude::*;
+use cadmium_engine::canvas::PaintingRect;
 use gtk::glib;
 
 use super::steps::smoke_stroke;
@@ -110,8 +111,13 @@ pub(super) fn paint_on_sheet(window: &CadmiumWindow) {
     let Some(sheet) = sheet else {
         fail("the brush editor has no test sheet");
     };
-    let (width, height) = (sheet.width().max(1) as u32, sheet.height().max(1) as u32);
-    sheet.paint_stroke(&smoke_stroke(width, height));
+    let card = PaintingRect {
+        x: 0,
+        y: 0,
+        width: sheet.width().max(1) as u32,
+        height: sheet.height().max(1) as u32,
+    };
+    sheet.paint_stroke(&smoke_stroke(card));
 }
 
 fn fail(reason: &str) -> ! {

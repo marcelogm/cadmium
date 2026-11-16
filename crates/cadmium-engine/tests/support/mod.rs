@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use cadmium_engine::{
-    canvas::{CanvasSpec, Primer, Weave},
+    canvas::{CanvasSpec, PaintingRequest, Primer, StateTexture, Weave},
     gpu::GpuContext,
     present::{PresentRequest, ViewTransform, readback_rgba8},
     session::PaintSession,
@@ -31,7 +31,35 @@ pub fn spec(width: u32, height: u32) -> CanvasSpec {
             "cadmium_yellow".into(),
             "titanium_white".into(),
         ],
+        margin_px: 0,
     }
+}
+
+pub fn painting_request(width: u32, height: u32) -> PaintingRequest {
+    let CanvasSpec {
+        primer,
+        weave,
+        pigment_slots,
+        ..
+    } = spec(width, height);
+    PaintingRequest {
+        width,
+        height,
+        primer,
+        weave,
+        pigment_slots,
+    }
+}
+
+pub fn painting_session(gpu: &GpuContext, width: u32, height: u32) -> PaintSession {
+    let spec = CanvasSpec::for_painting(painting_request(width, height));
+    without_wgpu_errors(gpu, || PaintSession::new(gpu, spec).unwrap())
+}
+
+pub fn load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
+    s.brush.recipe = vec![(slot, 1.0)];
+    without_wgpu_errors(gpu, || s.reload_brush(gpu));
+    s.flush(gpu);
 }
 
 pub fn session(gpu: &GpuContext) -> PaintSession {
@@ -142,4 +170,33 @@ pub fn write_preview(gpu: &GpuContext, s: &PaintSession, name: &str) {
 pub fn median(mut values: Vec<usize>) -> usize {
     values.sort_unstable();
     values[values.len() / 2]
+}
+
+/// The sum of `which` over the margin, or over the painting when `in_margin` is false.
+pub fn total_where(
+    gpu: &GpuContext,
+    s: &PaintSession,
+    which: StateTexture,
+    in_margin: bool,
+) -> f64 {
+    let spec = &s.canvas.spec;
+    s.canvas
+        .read_f32(gpu, which)
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| {
+            let index = *index as u32;
+            spec.is_in_margin(index % spec.width, index / spec.width) == in_margin
+        })
+        .map(|(_, value)| f64::from(*value))
+        .sum()
+}
+
+pub fn margin_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
+    total_where(gpu, s, StateTexture::WetVol, true)
+}
+
+pub fn painting_wet_volume(gpu: &GpuContext, s: &PaintSession) -> f64 {
+    total_where(gpu, s, StateTexture::WetVol, false)
 }

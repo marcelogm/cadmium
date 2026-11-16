@@ -1,5 +1,6 @@
 use adw::prelude::*;
 use adw::subclass::prelude::*;
+use cadmium_engine::session::ClearOutcome;
 use gtk::{gio, glib};
 
 use super::CadmiumWindow;
@@ -9,6 +10,7 @@ use crate::state::{AppState, DryOutcome, EaselId};
 use crate::tools::UiTool;
 
 const DRIED_TOAST: &str = "Canvas dried";
+const MARGIN_CLEARED_TOAST: &str = "Margin cleared";
 const UNDO_LABEL: &str = "Undo";
 
 type Activate = fn(&CadmiumWindow);
@@ -20,6 +22,7 @@ const ACTIONS: &[(&str, Activate)] = &[
     ("undo", CadmiumWindow::undo),
     ("redo", CadmiumWindow::redo),
     ("dry", CadmiumWindow::dry),
+    ("clear-margin", CadmiumWindow::clear_margin),
     ("zoom-in", CadmiumWindow::zoom_in),
     ("zoom-out", CadmiumWindow::zoom_out),
     ("zoom-fit", CadmiumWindow::zoom_fit),
@@ -153,7 +156,21 @@ impl CadmiumWindow {
             return;
         };
         self.after_history_change();
-        let toast = adw::Toast::new(DRIED_TOAST);
+        self.toast_edit(DRIED_TOAST, undoable);
+    }
+
+    fn clear_margin(&self) {
+        let outcome = self.state().borrow_mut().clear_margin();
+        let ClearOutcome::Cleared { undoable } = outcome else {
+            return;
+        };
+        self.after_history_change();
+        self.toast_edit(MARGIN_CLEARED_TOAST, undoable);
+    }
+
+    /// Tells of an edit made on the whole painting, offering to undo it when it can be.
+    fn toast_edit(&self, title: &str, undoable: bool) {
+        let toast = adw::Toast::new(title);
         if undoable {
             toast.set_button_label(Some(UNDO_LABEL));
             toast.set_action_name(Some("win.undo"));

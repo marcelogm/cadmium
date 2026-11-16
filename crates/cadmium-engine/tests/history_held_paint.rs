@@ -31,7 +31,8 @@ fn blue_of(volume_um: f32) -> Mixture {
     }
 }
 
-fn load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
+/// Loads the brush without flushing, so the load waits behind any queued stroke.
+fn queue_load(gpu: &GpuContext, s: &mut PaintSession, slot: usize) {
     s.brush.recipe = vec![(slot, 1.0)];
     without_wgpu_errors(gpu, || s.reload_brush(gpu));
 }
@@ -77,7 +78,7 @@ fn drain(gpu: &GpuContext, s: &mut PaintSession) {
 fn held_paint_restored_after_a_stroke_is_the_paint_held_before_it() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     let before = held(&gpu, &s);
     let captured = s.engine.capture_held_paint(&gpu).unwrap();
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
@@ -104,7 +105,7 @@ fn loading_cleaning_and_resizing_each_start_a_new_load_epoch_and_a_stroke_does_n
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
     let fresh = s.engine.load_epoch();
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     let loaded = s.engine.load_epoch();
     s.clean_brush(&gpu);
     let cleaned = s.engine.load_epoch();
@@ -149,7 +150,7 @@ fn every_dip_and_knife_cleaning_starts_a_new_load_epoch_and_an_empty_dip_or_a_re
 fn undoing_a_stroke_gives_the_brush_back_the_paint_it_laid() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     let before = held(&gpu, &s);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
@@ -160,9 +161,9 @@ fn undoing_a_stroke_gives_the_brush_back_the_paint_it_laid() {
 fn undoing_a_stroke_through_wet_paint_takes_its_dirt_off_the_brush() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, YELLOW);
+    queue_load(&gpu, &mut s, YELLOW);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 470.0, 40.0);
     assert!(s.engine.brush_totals(&gpu).unwrap().pigment[YELLOW] > 0.0);
     s.undo(&gpu);
@@ -173,7 +174,7 @@ fn undoing_a_stroke_through_wet_paint_takes_its_dirt_off_the_brush() {
 fn redoing_a_stroke_leaves_the_brush_as_the_stroke_left_it() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let after = held(&gpu, &s);
     s.undo(&gpu);
@@ -185,7 +186,7 @@ fn redoing_a_stroke_leaves_the_brush_as_the_stroke_left_it() {
 fn a_redone_stroke_undone_and_redone_again_moves_the_brush_both_ways() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     let before = held(&gpu, &s);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let after = held(&gpu, &s);
@@ -201,9 +202,9 @@ fn a_redone_stroke_undone_and_redone_again_moves_the_brush_both_ways() {
 fn a_brush_loaded_after_a_stroke_keeps_that_load_when_the_stroke_is_undone() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
-    load(&gpu, &mut s, YELLOW);
+    queue_load(&gpu, &mut s, YELLOW);
     let loaded = held(&gpu, &s);
     assert!(s.undo(&gpu));
     assert_eq!(s.canvas.wet_totals(&gpu).unwrap().volume, 0.0);
@@ -216,11 +217,11 @@ fn a_brush_loaded_after_a_stroke_keeps_that_load_when_the_stroke_is_undone() {
 fn a_brush_loaded_after_an_undo_keeps_that_load_when_the_stroke_is_redone() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let painted = snapshot(&gpu, &s);
     assert!(s.undo(&gpu));
-    load(&gpu, &mut s, YELLOW);
+    queue_load(&gpu, &mut s, YELLOW);
     let loaded = held(&gpu, &s);
     assert!(without_wgpu_errors(&gpu, || s.redo(&gpu)));
     assert!(snapshot(&gpu, &s) == painted);
@@ -231,7 +232,7 @@ fn a_brush_loaded_after_an_undo_keeps_that_load_when_the_stroke_is_redone() {
 fn a_tip_resized_after_an_undo_stays_as_it_is_when_the_stroke_is_redone() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     let painted = snapshot(&gpu, &s);
     assert!(s.undo(&gpu));
@@ -246,7 +247,7 @@ fn a_tip_resized_after_an_undo_stays_as_it_is_when_the_stroke_is_redone() {
 fn a_tip_resized_after_a_stroke_stays_as_it_is_when_the_stroke_is_undone() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     let blank = snapshot(&gpu, &s);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     narrow_the_tip(&mut s);
@@ -260,10 +261,10 @@ fn a_tip_resized_after_a_stroke_stays_as_it_is_when_the_stroke_is_undone() {
 fn a_load_queued_behind_a_stroke_survives_undoing_that_stroke() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     s.limit_dabs_per_frame(Some(DABS_PER_FRAME));
     queue_stroke(&mut s, UPPER_ROW);
-    load(&gpu, &mut s, YELLOW);
+    queue_load(&gpu, &mut s, YELLOW);
     assert!(s.has_queued_dabs());
     drain(&gpu, &mut s);
     let loaded = held(&gpu, &s);
@@ -276,13 +277,13 @@ fn a_load_queued_behind_a_stroke_survives_undoing_that_stroke() {
 fn a_stroke_queued_behind_a_load_gives_that_load_back_when_undone() {
     let gpu = GpuContext::new().unwrap();
     let mut fresh = session(&gpu);
-    load(&gpu, &mut fresh, YELLOW);
+    queue_load(&gpu, &mut fresh, YELLOW);
     let full_yellow = held(&gpu, &fresh);
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     s.limit_dabs_per_frame(Some(DABS_PER_FRAME));
     queue_stroke(&mut s, UPPER_ROW);
-    load(&gpu, &mut s, YELLOW);
+    queue_load(&gpu, &mut s, YELLOW);
     queue_stroke(&mut s, LOWER_ROW);
     assert!(without_wgpu_errors(&gpu, || s.undo(&gpu)));
     assert!(held(&gpu, &s) == full_yellow);
@@ -314,7 +315,7 @@ fn undoing_a_knife_stroke_gives_the_knife_back_its_load() {
 fn undoing_a_blender_stroke_gives_the_blender_back_what_it_held() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     s.brush.tool = Tool::Blender;
     let before = held(&gpu, &s);
@@ -330,7 +331,7 @@ fn undoing_a_blender_stroke_gives_the_blender_back_what_it_held() {
 fn a_pencil_or_rag_stroke_holds_no_tool_paint_and_leaves_the_brush_alone() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
-    load(&gpu, &mut s, BLUE);
+    queue_load(&gpu, &mut s, BLUE);
     stroke(&gpu, &mut s, 128.0, 40.0, 470.0);
     s.history.clear();
     let before = held(&gpu, &s);

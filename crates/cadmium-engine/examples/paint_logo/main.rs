@@ -257,6 +257,7 @@ fn main() {
         primer: Primer::WhiteGesso,
         weave: Weave::Linen,
         pigment_slots: PALETTE.iter().map(|id| id.to_string()).collect(),
+        margin_px: 0,
     };
     let session = PaintSession::new(&gpu, spec).expect("canvas");
     let mut painter = Painter::new(gpu, session, SEED);

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use adw::prelude::*;
+use cadmium_engine::canvas::PaintingRect;
 use cadmium_engine::stroke::StrokeSample;
 use gtk::{glib, graphene, gsk};
 
@@ -261,8 +262,10 @@ impl std::fmt::Display for ScreenshotError {
     }
 }
 
-pub(super) fn smoke_stroke(width: u32, height: u32) -> Vec<StrokeSample> {
-    let (width, height) = (f64::from(width), f64::from(height));
+/// A wavy stroke across the middle of `painting`.
+pub(super) fn smoke_stroke(painting: PaintingRect) -> Vec<StrokeSample> {
+    let (left, top) = (f64::from(painting.x), f64::from(painting.y));
+    let (width, height) = (f64::from(painting.width), f64::from(painting.height));
     let last = (STROKE_SAMPLES - 1) as f64;
     (0..STROKE_SAMPLES)
         .map(|index| {
@@ -277,8 +280,8 @@ pub(super) fn smoke_stroke(width: u32, height: u32) -> Vec<StrokeSample> {
                     + (STROKE_PRESSURE_END - STROKE_PRESSURE_PEAK) * (t - 0.5) * 2.0
             };
             StrokeSample {
-                x: width * along,
-                y: height * (0.5 + STROKE_AMPLITUDE * wave),
+                x: left + width * along,
+                y: top + height * (0.5 + STROKE_AMPLITUDE * wave),
                 pressure,
                 tilt_x_deg: STROKE_TILT_DEG,
                 tilt_y_deg: STROKE_TILT_DEG,
@@ -304,7 +307,7 @@ fn paint_stroke(window: &CadmiumWindow) {
         );
         return;
     };
-    let samples = smoke_stroke(spec.width, spec.height);
+    let samples = smoke_stroke(spec.painting_rect());
     let gpu = state.gpu.clone();
     state.painting.session.brush.recipe = vec![(slot, 1.0)];
     state.painting.session.reload_brush(&gpu);

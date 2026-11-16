@@ -36,19 +36,17 @@ impl CadmiumCanvas {
 
     pub fn zoom_fit(&self) {
         let scale = self.device_scale();
-        let spec_size = {
+        let framed = {
             let state = self.state();
             let state = state.borrow();
-            (
-                state.painting.session.canvas.spec.width,
-                state.painting.session.canvas.spec.height,
-            )
+            let spec = &state.painting.session.canvas.spec;
+            view::fitted_rect(spec.painting_rect(), spec.margin_px)
         };
         let viewport = (
             f64::from(self.width()) * scale,
             f64::from(self.height()) * scale,
         );
-        self.set_view(view::fit_view(spec_size, viewport, FIT_MARGIN * scale));
+        self.set_view(view::fit_view(framed, viewport, FIT_MARGIN * scale));
         update_auto_fit(&self.imp().auto_fit, AutoFit::fitted);
     }
 
