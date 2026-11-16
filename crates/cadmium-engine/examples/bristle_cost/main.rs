@@ -14,10 +14,16 @@
 //! `CADMIUM_PEN_SPEED=<px/s>` draws the strokes at that speed instead of 800 px/s.
 //! `CADMIUM_PACED=1` paces the dabs over frames the way the app does, and also prints how
 //! many frames a stroke kept painting after the pen lifted.
+//! `CADMIUM_BENCH_OUT=<file>` also writes each scenario's results to the file as
+//! tab-separated values; `CADMIUM_BENCH_BASELINE=<file>` compares them with a file written
+//! that way and exits with status 1 when a scenario got more than 10% slower.
 
 mod bench;
+mod record;
 mod scenarios;
 mod timing;
+
+use std::path::Path;
 
 use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
 use cadmium_engine::frame_budget::DabBudget;
@@ -26,7 +32,7 @@ use cadmium_engine::session::PaintSession;
 
 use bench::{Bench, STROKE_PRESSURE, long_stroke, s_curve};
 use scenarios::{Ground, Motion, SCENARIOS, Scenario};
-use timing::{FrameCost, Timestamps, report, report_quarters, timestamps};
+use timing::{FrameCost, Measured, Timestamps, report, report_quarters, timestamps};
 
 const CANVAS_WIDTH_PX: u32 = 2048;
 const CANVAS_HEIGHT_PX: u32 = 1536;
@@ -83,6 +89,38 @@ fn selected(scenario: &Scenario) -> bool {
     }
 }
 
+fn measure_all(gpu: &GpuContext, timestamps: Option<&Timestamps>) -> Vec<Measured> {
+    println!(
+        "{:<36} {:>6} {:>9} {:>9} {:>9} {:>9}",
+        "scenario (ms per frame)", "frames", "gpu mean", "gpu p95", "wall mean", "wall p95"
+    );
+    let mut rows = Vec::new();
+    for scenario in SCENARIOS.iter().filter(|scenario| selected(scenario)) {
+        let costs = measure(gpu, timestamps, scenario);
+        rows.push(report(scenario.name, &costs));
+        if scenario.motion == Motion::LongStroke {
+            report_quarters(&costs);
+        }
+    }
+    rows
+}
+
+fn check_against(path: &Path, rows: &[Measured]) {
+    let baseline = record::read(path).expect("the baseline file is readable");
+    let slower = record::over_budget(&baseline, rows);
+    if slower.is_empty() {
+        println!(
+            "within {:.0}% of the baseline",
+            (record::ALLOWED_SLOWDOWN - 1.0) * 100.0
+        );
+        return;
+    }
+    for line in &slower {
+        println!("over budget: {line}");
+    }
+    std::process::exit(1);
+}
+
 fn main() {
     let gpu = GpuContext::new().expect("a Vulkan adapter to measure on");
     let info = gpu.adapter.get_info();
@@ -99,18 +137,11 @@ fn main() {
             "unavailable, wall clock only"
         }
     );
-    println!(
-        "{:<36} {:>6} {:>9} {:>9} {:>9} {:>9}",
-        "scenario (ms per frame)", "frames", "gpu mean", "gpu p95", "wall mean", "wall p95"
-    );
-    for scenario in &SCENARIOS {
-        if !selected(scenario) {
-            continue;
-        }
-        let costs = measure(&gpu, timestamps.as_ref(), scenario);
-        report(scenario.name, &costs);
-        if scenario.motion == Motion::LongStroke {
-            report_quarters(&costs);
-        }
+    let rows = measure_all(&gpu, timestamps.as_ref());
+    if let Some(path) = std::env::var_os(record::OUT_VARIABLE) {
+        record::write(Path::new(&path), &info.name, &rows).expect("the results file is writable");
+    }
+    if let Some(path) = std::env::var_os(record::BASELINE_VARIABLE) {
+        check_against(Path::new(&path), &rows);
     }
 }

@@ -108,21 +108,36 @@ fn mean_and_percentile(mut values: Vec<f64>) -> (f64, f64) {
     (mean, values.get(rank).copied().unwrap_or(0.0))
 }
 
-pub(crate) fn report(name: &str, costs: &[FrameCost]) {
-    let (wall_mean, wall_p95) =
-        mean_and_percentile(costs.iter().map(|cost| cost.wall_ms).collect());
+/// One scenario's frame costs, summarised: mean and 95th percentile, in ms.
+pub(crate) struct Measured {
+    pub(crate) name: String,
+    pub(crate) frames: usize,
+    pub(crate) gpu: Option<(f64, f64)>,
+    pub(crate) wall: (f64, f64),
+}
+
+fn measured(name: &str, costs: &[FrameCost]) -> Measured {
     let gpu: Option<Vec<f64>> = costs.iter().map(|cost| cost.gpu_ms).collect();
-    let gpu = gpu.map_or_else(
+    Measured {
+        name: name.to_string(),
+        frames: costs.len(),
+        gpu: gpu.map(mean_and_percentile),
+        wall: mean_and_percentile(costs.iter().map(|cost| cost.wall_ms).collect()),
+    }
+}
+
+pub(crate) fn report(name: &str, costs: &[FrameCost]) -> Measured {
+    let row = measured(name, costs);
+    let gpu = row.gpu.map_or_else(
         || format!("{:>9} {:>9}", "-", "-"),
-        |gpu| {
-            let (mean, p95) = mean_and_percentile(gpu);
-            format!("{mean:>9.2} {p95:>9.2}")
-        },
+        |(mean, p95)| format!("{mean:>9.2} {p95:>9.2}"),
     );
+    let (wall_mean, wall_p95) = row.wall;
     println!(
         "{name:<36} {:>6} {gpu} {wall_mean:>9.2} {wall_p95:>9.2}",
-        costs.len()
+        row.frames
     );
+    row
 }
 
 const QUARTERS: usize = 4;
