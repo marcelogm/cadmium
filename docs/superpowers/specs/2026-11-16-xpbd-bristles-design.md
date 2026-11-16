@@ -1,9 +1,12 @@
-# XPBD bristles: a physically grounded brush
+# Quasi-static bristles: a physically grounded brush
 
 Date: 2026-11-16
 Status: approved design, awaiting spec review
 Literature: [2026-11-16-xpbd-bristles-literature.md](2026-11-16-xpbd-bristles-literature.md)
 (every claim there is tagged [V] read in the primary source, [P] indirect, [U] unverified)
+
+The file keeps the name of the first draft, which used XPBD. Measurement in phase 1
+replaced XPBD with a quasi-static solve; section 2 says why.
 
 ## Why
 
@@ -31,12 +34,13 @@ touch but breaks the spacing calibration everywhere else.
 | Topic | Decision |
 |---|---|
 | Scope | Rewrite the bristle physics. Paint transfer keeps its algorithm and gets better inputs. |
-| Grounding | Published models: XPBD, Small Steps, DER, Wetbrush, Baxter, Chu & Tai, DiVerdi, Bico. |
+| Grounding | Published models: Baxter & Lin and Chu & Tai (quasi-static brushes), DER, Wetbrush, DiVerdi, Bico. |
+| Solver | Quasi-static, one direct solve per strand in hinge coordinates. XPBD was measured and rejected (section 2). |
 | Performance | Same GPU budget as today, checked by the `bristle_cost` gate (see `docs/superpowers/baselines/README.md`). |
 | Parameters | New physical parameters. No migration of saved brushes, since nobody depends on them yet. |
 | Validation | Invariants from the literature as tests, side-by-side sheets per phase, and two paper figures reproduced. |
 
-## 1. Architecture, units, time step
+## 1. Architecture, units, substeps
 
 **What stays.**
 - The dab pipeline: Bristles → Contact → Exchange → Apply → Capillary → Refill → Spread.
@@ -46,90 +50,113 @@ touch but breaks the spacing calibration everywhere else.
 **Units.**
 - Length uses the scale the relief already uses, `RELIEF_UM_PER_PX` = 40 µm/px
   (25 px/mm), so a 40 px brush has a 1.6 mm ferrule.
-- Mass and time are SI.
-- Each simulated strand stands for a tuft of n real hairs. Mass scales by n. Bending
-  stiffness also scales by n, because parallel, unbonded hairs add their EI.
+- Force is SI. The solve has no mass and no time step (section 2).
+- Each simulated strand stands for a tuft of n real hairs. Bending stiffness scales by n,
+  because parallel, unbonded hairs add their EI.
 - Compliances come from E, the hair radius and n.
 
 **State.**
-- 8 vertices per strand (today 6), each with position, previous position and inverse mass.
-- Bending is measured with the DER curvature binormal against a rest curvature carried
-  from the ferrule frame. There is no per-edge quaternion and no twist.
+- 8 vertices per strand (today 6), positions only. There are no velocities: the solve is
+  quasi-static.
+- Bending is measured per hinge against a rest curvature carried from the ferrule frame.
+  There is no per-edge quaternion and no twist.
 - State persists across strokes.
-- Reset only on a layout change, a tool change or a clean. The rest state is then reached
-  by relaxing the dynamics in the air, never by an analytic hang. Until clumping exists
-  (phase 3) the rest shape is the equilibrium in the air, so a reset places the strands
-  on it directly.
+- Reset only on a layout change, a tool change or a clean. The strands are then placed
+  on their rest shape, which is the equilibrium in the air until clumping exists
+  (phase 3), never by an analytic hang.
 
-**Time step (Small Steps).**
-- The dab dt is the gap between sample timestamps, clamped to 50 ms. The settle clock
-  keeps running while the brush is lifted, so a stroke's first dab no longer has dt = 0.
-- Substeps: n = ceil(dt / h_max), capped by the budget (about 16). One solver sweep per
-  substep. The handle pose is interpolated across the dab.
-- Integration happens in the ferrule frame. The ferrule's acceleration (linear and
-  rotational, Wetbrush eq. 2) enters scaled by β_B ≈ 0.05.
-  - Positions and previous positions are carried rigidly with the ferrule pose at every
-    substep, so the frame's own motion adds no velocity.
-  - The ferrule's linear velocity change between dabs enters on the dab's first substep,
-    scaled by β_B. Rotation is carried rigidly and adds no fictitious force (no Coriolis
-    or centrifugal term); revisit if turning flats need it.
-- A dab with dt = 0 runs one projection substep and leaves the velocities as they were.
-- Damping comes only from XPBD constraint damping and from β_B.
+**Substeps.**
+- The handle pose is interpolated across the dab. Substeps follow the ferrule's travel
+  as today (half a mean strand radius each, at most 16), because friction and plasticity
+  depend on the path, not on time.
+- Each substep moves the roots rigidly with the ferrule pose, then runs one solve
+  iteration. A dab runs at least two iterations, so a dab without travel still converges.
+- Time enters only where the physics has a rate: plastic creep (phase 2) and drying.
 
-**Removed:** `handle_drop_px` and `DROP_RELAX_SHARE`, `HAIR_VISCOSITY_PER_SECOND`,
+**Removed:** `handle_drop_px` and `DROP_RELAX_SHARE`, `HAIR_VISCOSITY_PER_SECOND`, the
+damping (`bristle_damping`), the velocity carry,
 `bend_toward_rest` by share, `OVERLAP_SHARE_PER_SIDE`, `WETNESS_FOLLOW_SHARE`, the
 contact band hysteresis (`RELEASE_BAND_SHARE`), the per-stroke reset and `hang_at_rest`.
 
 ## 2. Solver and constraints
 
-**Solver: Gauss-Seidel within a strand, Jacobi between strands.**
-- One thread owns one strand, so the chain constraints are swept sequentially at no cost
-  to parallelism. A sweep carries a correction from root to tip, where Jacobi would need
-  about one iteration per vertex.
-- The sweep direction alternates between substeps (root→tip, then tip→root) to remove
-  ordering bias.
-- If inextensibility is still too soft, a direct per-strand solve (Deul et al. 2018) is
-  plan B, decided by measurement.
-- Strand-to-strand constraints use Jacobi with constraint averaging (Macklin et al. 2014),
-  relaxation ω in 1 to 1.5.
-- λ is accumulated per constraint within a substep. With one sweep per substep it resets
-  every substep.
+**Why quasi-static, not XPBD.** A phase 1 prototype measured XPBD with the hair's real
+mass (60 µm hair, E ≈ 4 GPa, 1.2 mm strand):
+- The stiffest bending mode of one hinge is ω ≈ 2·10⁶ rad/s. One XPBD sweep per substep
+  reaches the right statics only when h²·w·|∇C|² ≪ α, which at h = 1 ms is off by about
+  5·10⁶. Being within 5% would need h ≈ 0.1 µs.
+- A tip load diverged on the first substep (the prediction h²·w·F alone is ~7000 px). A
+  pressed tip showed a spurious ~100 ms mode coming from solver convergence (the physical
+  period is ~0.1 ms). Alternating the sweep direction diverged.
+- Scaling the mass until the solver resolves it needs ~10⁸×, which makes the brush
+  spring back over seconds.
+- A direct solve in λ form fixes the stiffness, but the compliance falls below f32
+  precision (α̃ / J·W·Jᵀ ≈ 10⁻⁷).
+
+At this scale a hair in paint has no visible inertia: its periods are far below one dab.
+That is what Baxter & Lin and Chu & Tai found and built on: a quasi-static brush,
+solved as constrained energy minimisation with an active set (DAB calls it Aristotelian
+dynamics). The solve below follows them, with DER's discrete bending energy.
+
+**Solver: one quasi-static solve per strand, Jacobi between strands.**
+- One thread owns one strand.
+- The unknowns are the rotations of the strand's 7 hinges (vertex 0 is the clamp to the
+  ferrule). Applying them rotates every edge below a hinge, so segment lengths and the
+  root clamp hold exactly, by construction.
+- Each iteration is one Gauss-Newton step of
+  min Σᵢ |θᵢ − θ⁰ᵢ|²/(2αᵢ) − Σⱼ fⱼ·xⱼ subject to the active contacts.
+  - With no contact, the step is θ⁰ − θ plus the moments of the external forces fⱼ.
+  - Each active contact j adds a normal force μⱼ ≥ 0. The forces come from the contacts'
+    compliance matrix G = A·diag(α)·Aᵀ (at most 7×7), where Aⱼᵢ = ∂zⱼ/∂θᵢ = (xⱼ − xᵢ)×ẑ.
+  - The active set starts with the vertices the free step puts under the floor. It drops
+    contacts with μ < 0 and adds vertices a trial step puts under the floor, until it is
+    consistent.
+- The rotation per hinge and iteration is capped, as a guard.
+- Strand-to-strand forces (density, clumping) enter as external forces fⱼ taken from the
+  previous iteration (Jacobi with averaging, Macklin et al. 2014).
+- Prototype results: tip load FL³/(3EI) within 1% (the 7-segment discretisation), in one
+  or two iterations; tilted contact within 2–3.5% of 3EIΔz/(L³cos²θ) (the beam-column
+  effect); an upright brush pressed 15 px buckles smoothly, splays monotonically with the
+  press, and stays exactly inextensible.
 
 **Order inside a substep:**
-1. Predict.
-2. Per-strand Gauss-Seidel: stretch, bend, canvas contact and static friction.
+1. Move the roots and the clamp direction with the ferrule pose.
+2. Per strand: one solve iteration with bending, the canvas contacts and, from phase 2,
+   friction and plastic rest curvature.
 3. Barrier.
-4. Jacobi: density and wet clumping.
-5. Barrier.
-6. Velocity update, including dynamic friction (Müller et al. 2020).
+4. From phase 3: density and clumping forces for the next iteration.
 
-**2.1 Stretch.**
-- Segment distance with zero compliance.
-- Vertex 0 has infinite mass and is pinned to the ferrule.
-- The first segment is clamped: its rest direction in the ferrule frame is a bend
-  constraint at vertex 0, so each strand acts as a cantilever.
+**2.1 Inextensibility and the clamp.**
+- Exact in hinge coordinates: segment lengths never change and vertex 0 stays on the
+  ferrule.
+- Hinge 0 compares the first edge with its rest direction in the ferrule frame, so each
+  strand acts as a cantilever. Its compliance uses half a segment, because the clamp
+  closes the strand.
 
 **2.2 Bending.**
-- Uses the DER curvature binormal κbᵢ = 2(eᵢ₋₁×eᵢ)/(|eᵢ₋₁||eᵢ| + eᵢ₋₁·eᵢ), compared
-  with the rest κb⁰ᵢ carried along the chain from the ferrule frame.
+- Energy per hinge |θᵢ − θ⁰ᵢ|²/(2αᵢ), with θᵢ the rotation vector from edge i−1 to edge
+  i. That is DER's discrete bending with the turning angle in place of 2·tan(θ/2), equal
+  to small bends.
 - Compliance α = Δs/(n·E·I), with I = πr⁴/4.
 - The radius tapers from root to tip by `tip_taper`, so the tip is (taper)⁴ as stiff as
   the root.
 - The rest curvature comes from the head shape (splay and belly) plus a small random
   curvature, so each strand buckles in a consistent direction.
-- Plasticity: when |κ − κ⁰| exceeds `yield_angle`, κ⁰ creeps toward κ at `creep_rate`.
+- Plasticity: when |θ − θ⁰| exceeds `yield_angle`, θ⁰ creeps toward θ at `creep_rate`.
   This is Baxter's joint friction and Chu & Tai's zero-shift, capped at 0.05–0.10 rad.
 
 **2.3 Canvas contact.**
-- One-sided constraint per vertex: z ≥ floor(x, y) + r(s).
+- One-sided per vertex: z ≥ floor(x, y) + r(s), an inequality in the active set.
 - The floor is today's relief: dry height, plus wet volume scaled by the wet-support
   parameter, minus the canvas tooth.
-- The normal force is fₙ = λₙ/h².
+- The normal force fₙ is the contact's μ, in newtons.
+- Frictionless (phase 1): the force is normal, so a touching vertex slides freely.
 
 **2.4 Friction.**
-- Static friction is applied at position level: tangential slip since the anchor is
-  cancelled while it stays below μₛ·|Δxₙ|.
-- Dynamic friction is a velocity update, Δv = −v̂ₜ·min(h·μₖ·fₙ, |vₜ|).
+- A touching vertex keeps an anchor. Static friction holds it there: a tangential
+  constraint in the active set while |fₜ| ≤ μₛ·fₙ (Coulomb).
+- Past the cone it slides. Kinetic friction is the force μₖ·fₙ against the slip, and the
+  anchor moves with the vertex.
 - Starting values μₛ ≈ 0.5 and μₖ ≈ 0.3 (Baxter & Lin give 0.3–0.5). Hair-on-canvas
   friction is not measured anywhere we found, so these stay estimates.
 - Anisotropy (Baxter & Lin): μ·(1 − C_η·max(0, d_pull·Δx̂)^k), so a pushed tip catches
@@ -137,7 +164,7 @@ contact band hysteresis (`RELEASE_BAND_SHARE`), the per-stroke reset and `hang_a
 
 **2.5 Strand density.**
 - Pairs of vertices on neighbouring strands keep at least rᵢ + rⱼ apart (the Wetbrush
-  minimum-density idea).
+  minimum-density idea), through repulsion forces between iterations.
 - Neighbours are k ≈ 6 nearest roots, fixed at layout time. They replace the 8-member
   clusters, so strands in different clusters no longer pass through each other.
 
@@ -148,8 +175,8 @@ contact band hysteresis (`RELEASE_BAND_SHARE`), the per-stroke reset and `hang_a
 - L_EC = √(κ/γ_eff), with γ_eff = γ·wetness and γ ≈ 0.033 N/m for linseed oil [U].
 - Bico's law is for lamellae. Applying it to round fibres (Py 2007) is not verified, so
   the reproduction test in section 5 checks the lamella form.
-- A closed level becomes a compliant attraction between its strands near the tip. Its
-  compliance comes from a capillary force of about 2γ per wetted length.
+- A closed level becomes an attraction between its strands near the tip, a capillary
+  force of about 2γ per wetted length.
 - A level that has closed reopens only above L_c·(1 + h_open). Capillary bridges break at
   a different distance than they form, because of contact-angle hysteresis. The value of
   h_open is an estimate.
@@ -165,7 +192,6 @@ contact band hysteresis (`RELEASE_BAND_SHARE`), the per-stroke reset and `hang_a
 | Field | Unit | Feeds |
 |---|---|---|
 | `modulus` E | GPa | bending compliance |
-| `density` ρ | kg/m³ | vertex mass |
 | `diameter` d at the root | µm | I, the density distance, d in clumping |
 | `tip_taper` | 0.5–1 | r(s) along the strand |
 | `static_friction`, `kinetic_friction` | μ | friction |
@@ -208,7 +234,7 @@ Presets:
 - A force target with a feedback loop was considered and rejected: no source uses it,
   and it risks oscillating inside the step.
 
-**Lift and settle.** The handle rises on lift and the dynamics keep running on the frame
+**Lift and settle.** The handle rises on lift and the solve keeps running on the frame
 clock, as today. The next stroke starts from the settled state.
 
 ## 4. Interface with paint
@@ -220,9 +246,9 @@ Paint transfer keeps its algorithm.
   (`position_slot`) in one WGSL file, so Contact follows the new layout.
 - The strand radius per vertex, including the taper. Contact moves from a radius per
   strand to a radius per segment.
-- `hair_loads`: the strand's normal force over the dab, Σ λₙ/h², divided by the mean
+- `hair_loads`: the strand's normal force over the dab, Σ fₙ, divided by the mean
   over the touching strands. This keeps "1 = typical load", so Exchange is unchanged.
-- A contact bit per vertex: λₙ > 0 in any substep of the dab. It replaces the distance
+- A contact bit per vertex: fₙ > 0 in any substep of the dab. It replaces the distance
   band and its 1.2× hysteresis. The `swept` interpolation between dabs stays.
 - `owners`, `ranks` and `cell_grids` are unchanged.
 - The relief bisection (`resting_base`) disappears from the bristle step.
@@ -246,11 +272,11 @@ phase 0 holds the ones today's model can already run.
 |---|---|---|---|
 | Cantilever | Euler-Bernoulli | 1 | A single strand with tip load F deflects FL³/(3EI) within 5%. |
 | Head stiffness | Baxter & Lin | 1 | The whole head bends about 90° under 1–2 N. |
-| Step independence | XPBD | 1 | The same stroke with h_max and h_max/2 ends within tolerance. |
+| Step independence | §1 | 1 | The same stroke with substeps half as long ends within tolerance. |
 | Resolution independence | §3 | 0 (width), 1 (splay) | Doubling `density_per_px` keeps mark width and splay within tolerance. |
 | Light touch | DiVerdi | 0, ignored until 1 | At p = 0 only the tip touches, and the first dab does not splay the bundle (`a_light_first_touch_lands_the_wet_point_instead_of_splaying_the_hairs`). |
 | Splay vs pressure | DAB, DiVerdi | 0 | Splay grows monotonically with pressure. |
-| Friction | Baxter & Lin, Müller | 2 | The strand holds below μₛ and slides above it. A pushed tip catches and a pulled tip glides. |
+| Friction | Baxter & Lin | 2 | The strand holds below μₛ and slides above it. A pushed tip catches and a pulled tip glides. |
 | Trail and spring back | Baxter | 2 | Tips lag when dragging and in turns, and return on lift. Without plasticity they return to rest. |
 | Coalescence | Bico | 3 | Two strands stick iff L⁴ ≥ (9/2)d²L_EC². Cluster size grows with L. Drying splits clusters. |
 | Stability | — | 1 | Nothing goes below the floor. Everything stays finite with bad timestamps and at dt = 50 ms. |
@@ -275,22 +301,22 @@ phase 0 holds the ones today's model can already run.
   exact rule and commands.
 
 **Robustness.**
-- dt is clamped to 50 ms and substeps are capped by the budget.
-- The correction per substep is capped. This is a guard, not physics.
+- Substeps are capped by the budget, and the creep clock's dt is clamped to 50 ms.
+- The rotation per hinge and iteration is capped. This is a guard, not physics.
 - A strand that turns non-finite returns to rest, and the event is logged.
 
 **Phases, one PR each; the app keeps working after each:**
 0. **Baseline.** Record the bench numbers (TSV and gate) and a sheet tool tied to the
    `xpbd-baseline` tag. Add the closed-form oracles (`mechanics`) and the invariants
    today's model can run.
-1. **XPBD core.** New state, Small Steps, ferrule-frame integration, stretch, bend and
+1. **Quasi-static core.** New state, the per-strand solve in hinge coordinates, bend and
    clamp, frictionless canvas contact, pressure → height, persistent state. The old
    step is removed. GPU cantilever, head-stiffness and step-independence tests run
    against `mechanics`. Until the later phases:
    - **Removed with the old step:** friction, bend memory, the wet point and clumping.
      Tests that need them are `#[ignore]`d and name the phase that brings them back.
    - **Material bridge:** `Hair` arrives in phase 4, so E comes from `HairSpec.stiffness`
-     (about 1 GPa at 0 to 7 GPa at 1), and ρ, d and the taper are named constants
+     (about 1 GPa at 0 to 7 GPa at 1), and d and the taper are named constants
      tagged [U]. One module holds the bridge; phase 4 replaces it.
    - **Contact:** z ≥ floor, without + r(s), because Contact still decides touching by a
      clearance of one radius. The r(s) offset arrives with the contact bit in phase 4.
