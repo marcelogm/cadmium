@@ -83,6 +83,11 @@ pub(super) const BRISTLE_SNIPPETS: [&str; 10] = [
     include_str!("../shaders/bristle_point.wgsl"),
     include_str!("../shaders/bristle_clump.wgsl"),
 ];
+#[cfg(test)]
+pub(super) const LAB_SNIPPETS: [&str; 2] = [
+    include_str!("../shaders/bristle_solve.wgsl"),
+    include_str!("../shaders/bristle_contacts.wgsl"),
+];
 pub(super) const EYEDROPPER_SNIPPETS: [&str; 2] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/slot_lane.wgsl"),

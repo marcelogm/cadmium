@@ -1,6 +1,8 @@
 mod cells;
 mod clusters;
 mod handle;
+#[cfg(test)]
+mod lab;
 mod layout;
 // Used by the bristle tuning from Task 5 of the phase 1 plan.
 #[cfg_attr(not(test), allow(dead_code))]
