@@ -65,6 +65,7 @@ fn canvas_spec(fit: &ExampleFit, paint: &StudioPaint) -> CanvasSpec {
         primer: paint.primer,
         weave: paint.weave,
         pigment_slots: paint.slots.clone(),
+        margin_px: 0,
     }
 }
 
@@ -172,6 +173,7 @@ pub(crate) fn replace_canvas(
     let placeholder = CanvasSpec {
         width: 1,
         height: 1,
+        margin_px: 0,
         ..spec.clone()
     };
     session.canvas = Canvas::new(gpu, &session.db, placeholder)?;

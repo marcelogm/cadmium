@@ -63,6 +63,7 @@ impl TestSheet {
             primer: GROUND.0,
             weave: GROUND.1,
             pigment_slots: paint.slots.clone(),
+            margin_px: 0,
         };
         let mut session = PaintSession::headless(gpu, spec)?;
         ground::rule(&mut session.canvas, gpu, &session.db);

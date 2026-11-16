@@ -5,7 +5,10 @@ use crate::gpu::{GpuContext, new_encoder};
 use crate::pigments::{MAX_SLOTS, PigmentDb, mixture_reflectance};
 use crate::spectral::{BandValues, km_infinite, reflectance_srgb8};
 
-use super::{BANDS_PER_VEC4, Canvas, Primer, StateTexture, weave_heights};
+use super::{
+    BANDS_PER_VEC4, Canvas, CanvasSpec, MARGIN_REFLECTANCE, Primer, StateTexture, weave_heights,
+    weave_heights_in,
+};
 
 const PRIMER_WHITE_ID: &str = "titanium_white";
 const IMPRIMATURA_PIGMENT_ID: &str = "burnt_sienna";
@@ -22,7 +25,15 @@ const INIT_WORKGROUP_SIZE: u32 = 8;
 struct InitParams {
     primer_bands_low: [f32; 4],
     primer_bands_high: [f32; 4],
+    margin_bands_low: [f32; 4],
+    margin_bands_high: [f32; 4],
+    painting_origin: [u32; 2],
+    painting_size: [u32; 2],
+    margin_only: u32,
+    padding: [u32; 3],
 }
+
+const _: () = assert!(std::mem::size_of::<InitParams>() == 96);
 
 pub fn primer_reflectance(db: &PigmentDb, primer: Primer) -> BandValues {
     let white = db
@@ -54,9 +65,41 @@ pub fn primer_srgb8(db: &PigmentDb, primer: Primer) -> [u8; 3] {
     reflectance_srgb8(&primer_reflectance(db, primer))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InitScope {
+    WholeCanvas,
+    MarginOnly,
+}
+
 impl Canvas {
     pub(super) fn initialise(&self, gpu: &GpuContext, db: &PigmentDb) {
-        let params_buffer = init_params_buffer(gpu, db, self.spec.primer);
+        self.encode_init(gpu, db, InitScope::WholeCanvas);
+        self.write_f32(
+            gpu,
+            StateTexture::DryHeight,
+            &weave_heights(self.spec.weave, self.spec.width, self.spec.height),
+        );
+    }
+
+    /// Puts the margin back as a new canvas has it, wet and dry paint and graphite gone,
+    /// and leaves every texel of the painting alone.
+    pub(crate) fn reset_margin(&mut self, gpu: &GpuContext, db: &PigmentDb) {
+        self.encode_init(gpu, db, InitScope::MarginOnly);
+        for strip in self.spec.margin_strips() {
+            let heights = weave_heights_in(self.spec.weave, strip);
+            self.write_f32_at(gpu, StateTexture::DryHeight, &heights, strip);
+        }
+        for tile in self.spec.margin_tiles() {
+            self.dirty.mark_tile(tile);
+        }
+        self.margin_touched.clear();
+        let spec = &self.spec;
+        self.wet_tiles
+            .retain(|tile| !spec.is_tile_wholly_in_margin(tile));
+    }
+
+    fn encode_init(&self, gpu: &GpuContext, db: &PigmentDb, scope: InitScope) {
+        let params_buffer = init_params_buffer(gpu, db, &self.spec, scope);
         let stage = AutoLayoutStage::new(
             gpu,
             "canvas_init",
@@ -80,19 +123,26 @@ impl Canvas {
             ],
         );
         gpu.queue.submit([encoder.finish()]);
-        self.write_f32(
-            gpu,
-            StateTexture::DryHeight,
-            &weave_heights(self.spec.weave, self.spec.width, self.spec.height),
-        );
     }
 }
 
-fn init_params_buffer(gpu: &GpuContext, db: &PigmentDb, primer: Primer) -> wgpu::Buffer {
-    let reflectance = primer_reflectance(db, primer);
+fn init_params_buffer(
+    gpu: &GpuContext,
+    db: &PigmentDb,
+    spec: &CanvasSpec,
+    scope: InitScope,
+) -> wgpu::Buffer {
+    let reflectance = primer_reflectance(db, spec.primer);
+    let painting = spec.painting_rect();
     let params = InitParams {
         primer_bands_low: std::array::from_fn(|band| reflectance[band]),
         primer_bands_high: std::array::from_fn(|band| reflectance[BANDS_PER_VEC4 + band]),
+        margin_bands_low: [MARGIN_REFLECTANCE; BANDS_PER_VEC4],
+        margin_bands_high: [MARGIN_REFLECTANCE; BANDS_PER_VEC4],
+        painting_origin: [painting.x, painting.y],
+        painting_size: [painting.width, painting.height],
+        margin_only: u32::from(scope == InitScope::MarginOnly),
+        padding: [0; 3],
     };
     gpu.device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {

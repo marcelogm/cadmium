@@ -9,7 +9,7 @@ impl PaintSession {
     pub fn dry(&mut self, gpu: &GpuContext) -> bool {
         self.settle_pending_step(gpu);
         let tiles = self.canvas.wet_tiles.take();
-        self.history.begin_removal_step(tiles.len());
+        self.history.begin_removal_step(&tiles);
         for chunk in tiles.chunks(DRY_TILES_PER_SUBMIT) {
             let mut encoder = new_encoder(gpu, "dry");
             self.history
@@ -21,13 +21,39 @@ impl PaintSession {
         self.history.commit_step()
     }
 
+    pub fn clear_margin(&mut self, gpu: &GpuContext) -> ClearOutcome {
+        self.settle_pending_step(gpu);
+        let tiles = self.canvas.spec.margin_tiles();
+        let touched = &self.canvas.margin_touched;
+        if !tiles.iter().any(|tile| touched.contains(*tile)) {
+            return ClearOutcome::NothingToClear;
+        }
+        let spec = &self.canvas.spec;
+        let leaves_dry = tiles
+            .iter()
+            .copied()
+            .filter(|tile| spec.is_tile_wholly_in_margin(*tile))
+            .collect();
+        self.history.begin_step_leaving_dry(leaves_dry);
+        for chunk in tiles.chunks(DRY_TILES_PER_SUBMIT) {
+            let mut encoder = new_encoder(gpu, "clear_margin");
+            self.history
+                .encode_save_tiles(gpu, &self.canvas, chunk, &mut encoder);
+            gpu.queue.submit([encoder.finish()]);
+        }
+        self.canvas.reset_margin(gpu, &self.db);
+        ClearOutcome::Cleared {
+            undoable: self.history.commit_step(),
+        }
+    }
+
     pub fn clear_wet(&mut self, gpu: &GpuContext) -> ClearOutcome {
         self.settle_pending_step(gpu);
         let tiles = self.canvas.wet_tiles.take();
         if tiles.is_empty() {
-            return ClearOutcome::NothingWet;
+            return ClearOutcome::NothingToClear;
         }
-        self.history.begin_removal_step(tiles.len());
+        self.history.begin_removal_step(&tiles);
         let mut encoder = new_encoder(gpu, "clear_wet");
         self.history
             .encode_save_tiles(gpu, &self.canvas, &tiles, &mut encoder);

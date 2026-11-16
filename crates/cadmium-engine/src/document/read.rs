@@ -11,8 +11,8 @@ use crate::spectral::BANDS;
 use super::relief::dry_height_over_weave;
 use super::{
     DENSITY_BYTES, DocumentError, DocumentSnapshot, FORMAT_VERSION, MANIFEST_ENTRY,
-    MAX_GRAPHITE_DENSITY, Manifest, PAINTING_PREFIX, SHEET_PREFIX, StateBytes, THICKNESS_BYTES,
-    THICKNESS_UNITS, state_entry,
+    MAX_GRAPHITE_DENSITY, Manifest, OLDEST_READABLE_FORMAT, PAINTING_PREFIX, SHEET_PREFIX,
+    StateBytes, THICKNESS_BYTES, THICKNESS_UNITS, state_entry,
 };
 
 const MAX_MANIFEST_BYTES: u64 = 1 << 20;
@@ -52,7 +52,7 @@ fn read_manifest<R: Read + std::io::Seek>(
         )));
     }
     let probe: FormatProbe = serde_json::from_slice(&bytes).map_err(manifest_error)?;
-    if probe.format != FORMAT_VERSION {
+    if !(OLDEST_READABLE_FORMAT..=FORMAT_VERSION).contains(&probe.format) {
         return Err(DocumentError::UnsupportedVersion(probe.format));
     }
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(manifest_error)?;

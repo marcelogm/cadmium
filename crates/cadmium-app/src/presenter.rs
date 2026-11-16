@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::present::PresentRequest;
-use cadmium_engine::sheet::{SHEET_HEIGHT_PX, SHEET_WIDTH_PX};
+use cadmium_engine::sheet::SHEET_RECT;
 use cadmium_studio::{SheetFrame, TestSheet};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -74,7 +74,7 @@ fn encode_mixing_sheet(
 ) {
     state.encode_frame(EaselId::Sheet, encoder);
     let viewport = (f64::from(target.width()), f64::from(target.height()));
-    let view = fit_view((SHEET_WIDTH_PX, SHEET_HEIGHT_PX), viewport, 0.0);
+    let view = fit_view(SHEET_RECT, viewport, 0.0);
     let session = &mut state.sheet.session;
     session.presenter.encode_present(
         gpu,

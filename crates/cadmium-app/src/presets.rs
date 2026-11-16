@@ -1,5 +1,5 @@
 use cadmium_engine::brush::DEFAULT_LOAD;
-use cadmium_engine::canvas::{CanvasSpec, Primer, Weave};
+use cadmium_engine::canvas::{CanvasSpec, PaintingRequest, Primer, Weave};
 pub use cadmium_engine::palette::WHITE_IDS as WHITES;
 
 const STARTING_SIZE: (u32, u32) = (2048, 1536);
@@ -56,13 +56,13 @@ pub const PIGMENT_PRESETS: [PigmentPreset; 3] = [
 ];
 
 pub fn starting_canvas_spec() -> CanvasSpec {
-    CanvasSpec {
+    CanvasSpec::for_painting(PaintingRequest {
         width: STARTING_SIZE.0,
         height: STARTING_SIZE.1,
         primer: Primer::WhiteGesso,
         weave: Weave::Linen,
         pigment_slots: PRIMARIES.iter().map(|id| id.to_string()).collect(),
-    }
+    })
 }
 
 pub fn starting_recipe(slots: &[String]) -> Vec<(usize, f32)> {

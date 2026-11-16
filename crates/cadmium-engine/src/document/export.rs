@@ -11,12 +11,6 @@ use super::write::write_replacing;
 const RGBA_CHANNELS: usize = 4;
 const ALPHA_CHANNEL: usize = 3;
 const OPAQUE_ALPHA: u8 = 255;
-const UNSCALED_VIEW: ViewTransform = ViewTransform {
-    origin_x: 0.0,
-    origin_y: 0.0,
-    zoom: 1.0,
-    rotation: 0.0,
-};
 
 pub struct ExportedImage {
     pub width: u32,
@@ -26,7 +20,14 @@ pub struct ExportedImage {
 
 impl ExportedImage {
     pub fn render(gpu: &GpuContext, session: &mut PaintSession) -> Result<ExportedImage, GpuLost> {
-        let (width, height) = (session.canvas.spec.width, session.canvas.spec.height);
+        let painting = session.canvas.spec.painting_rect();
+        let (width, height) = (painting.width, painting.height);
+        let unscaled_painting = ViewTransform {
+            origin_x: painting.x as f32,
+            origin_y: painting.y as f32,
+            zoom: 1.0,
+            rotation: 0.0,
+        };
         let chosen_mode = session.view_mode;
         session.view_mode = ViewMode::Color;
         session.canvas.dirty.mark_all();
@@ -35,7 +36,7 @@ impl ExportedImage {
         session.encode_still_frame(gpu, &mut encoder);
         session.presenter.encode_present(
             gpu,
-            PresentRequest::of_canvas(&session.canvas, UNSCALED_VIEW),
+            PresentRequest::of_canvas(&session.canvas, unscaled_painting),
             &target,
             &mut encoder,
         );

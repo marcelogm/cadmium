@@ -10,7 +10,7 @@ use cadmium_engine::{
 
 use crate::{BLANK_HEIGHT, BLANK_WIDTH, CURRENT_FORMAT, DRY_RELIEF, GRAPHITE_ENTRY, TempDir};
 
-/// The entry names of format 8 for the painting (the sheet's add `sheet/` in front),
+/// The entry names of the current format for the painting (the sheet's add `sheet/` in front),
 /// spelled out so that renaming one changes a test.
 pub(super) const STATE_ENTRIES: [(&str, StateTexture); 9] = [
     ("state/wet_pig0.zst", StateTexture::WetPig0),
@@ -34,6 +34,7 @@ impl Entries {
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["titanium_white".into()],
+            margin_px: 0,
         };
         let manifest = serde_json::json!({
             "format": CURRENT_FORMAT,

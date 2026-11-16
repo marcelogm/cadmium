@@ -35,6 +35,21 @@ impl DirtyTiles {
         }
     }
 
+    pub fn mark_tile(&mut self, tile: TileCoord) {
+        if tile.x < self.columns && tile.y < self.rows {
+            let index = self.index(tile);
+            self.marked[index] = true;
+        }
+    }
+
+    /// Unmarks every marked tile for which `keep` is false.
+    pub fn retain(&mut self, keep: impl Fn(TileCoord) -> bool) {
+        for tile in self.tiles().into_iter().filter(|tile| !keep(*tile)) {
+            let index = self.index(tile);
+            self.marked[index] = false;
+        }
+    }
+
     pub fn mark_all(&mut self) {
         self.marked.fill(true);
     }

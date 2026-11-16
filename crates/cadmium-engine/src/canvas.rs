@@ -15,11 +15,14 @@ mod weave;
 pub(crate) use changes::{TILE_CHANGE_HEADER_WORDS, TileChanges};
 pub use pigment_slots::PigmentSlotsUniform;
 pub use primer::{primer_reflectance, primer_srgb8};
-pub use spec::{CanvasSpec, MAX_CANVAS_SIZE, Primer, Weave};
+pub use spec::{
+    CanvasSpec, MARGIN_PX, MARGIN_REFLECTANCE, MAX_PAINTING_SIZE, PaintingRect, PaintingRequest,
+    Primer, Weave,
+};
 pub use state_texture::StateTexture;
 pub use texels::{f32_to_half, half_to_f32};
 pub use tiles::{DirtyTiles, TileCoord, tiles_in_rect};
-pub use weave::weave_heights;
+pub use weave::{weave_heights, weave_heights_in};
 
 use texels::{decode_texels, encode_texels};
 
@@ -76,6 +79,9 @@ pub struct Canvas {
     pub dirty: DirtyTiles,
     pub possibly_dirty: DirtyTiles,
     pub wet_tiles: DirtyTiles,
+    /// The tiles that may hold paint or graphite on the margin since it was last cleared;
+    /// every tile once a painting is reopened.
+    pub margin_touched: DirtyTiles,
     changes: TileChanges,
     surfaces: Vec<StateSurface>,
     slot_table: wgpu::Buffer,
@@ -112,6 +118,7 @@ impl Canvas {
             dirty: DirtyTiles::new(spec.width, spec.height),
             possibly_dirty: DirtyTiles::new(spec.width, spec.height),
             wet_tiles: DirtyTiles::new(spec.width, spec.height),
+            margin_touched: DirtyTiles::new(spec.width, spec.height),
             changes: TileChanges::new(gpu, spec.width, spec.height),
             spec,
             surfaces,
@@ -165,7 +172,18 @@ impl Canvas {
     }
 
     pub fn write_f32(&self, gpu: &GpuContext, which: StateTexture, data: &[f32]) {
-        self.write_bytes(gpu, which, &encode_texels(which, data));
+        self.write_f32_at(gpu, which, data, self.whole_block());
+    }
+
+    /// Writes `data`, the values of the texels of `block`, into that block of the texture.
+    pub fn write_f32_at(
+        &self,
+        gpu: &GpuContext,
+        which: StateTexture,
+        data: &[f32],
+        block: TexelBlock,
+    ) {
+        self.write_bytes_at(gpu, which, &encode_texels(which, data), block);
     }
 
     pub fn texel_rows(&self, which: StateTexture) -> TexelRows {
@@ -198,11 +216,14 @@ impl Canvas {
     }
 
     pub fn write_bytes(&self, gpu: &GpuContext, which: StateTexture, data: &[u8]) {
-        let whole = TexelBlock {
+        self.write_bytes_at(gpu, which, data, self.whole_block());
+    }
+
+    fn whole_block(&self) -> TexelBlock {
+        TexelBlock {
             origin: [0, 0],
             size: [self.spec.width, self.spec.height],
-        };
-        self.write_bytes_at(gpu, which, data, whole);
+        }
     }
 
     /// Writes `data`, the texels of `block`, into that block of the texture.

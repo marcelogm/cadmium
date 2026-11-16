@@ -1,4 +1,4 @@
-use cadmium_engine::canvas::MAX_CANVAS_SIZE;
+use cadmium_engine::canvas::MAX_PAINTING_SIZE;
 
 pub(super) const MIN_SIDE: u32 = 64;
 pub(super) const SIDE_STEP: u32 = 64;
@@ -43,10 +43,10 @@ impl PaintingFormat {
 
     pub(super) fn size_keeping_long_side(self, width: u32, height: u32) -> Option<(u32, u32)> {
         let (aspect_width, aspect_height) = self.aspect()?;
-        let long = width.max(height).clamp(MIN_SIDE, MAX_CANVAS_SIZE);
+        let long = width.max(height).clamp(MIN_SIDE, MAX_PAINTING_SIZE);
         let short = |long_part: u32, short_part: u32| {
             ((long as f64 * short_part as f64 / long_part as f64).round() as u32)
-                .clamp(MIN_SIDE, MAX_CANVAS_SIZE)
+                .clamp(MIN_SIDE, MAX_PAINTING_SIZE)
         };
         Some(if aspect_width >= aspect_height {
             (long, short(aspect_width, aspect_height))

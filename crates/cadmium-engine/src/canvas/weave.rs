@@ -1,4 +1,4 @@
-use super::Weave;
+use super::{TexelBlock, Weave};
 
 const LINEN_AMPLITUDE_UM: f32 = 12.0;
 const LINEN_PERIOD_PX: f32 = 6.0;
@@ -45,6 +45,21 @@ pub(super) fn tooth_height_um(weave: Weave) -> f32 {
 }
 
 pub fn weave_heights(weave: Weave, width: u32, height: u32) -> Vec<f32> {
+    weave_heights_in(
+        weave,
+        TexelBlock {
+            origin: [0, 0],
+            size: [width, height],
+        },
+    )
+}
+
+/// The weave's heights over `block` of a canvas, row by row, as `weave_heights` has them there.
+pub fn weave_heights_in(weave: Weave, block: TexelBlock) -> Vec<f32> {
+    let TexelBlock {
+        origin: [x, y],
+        size: [width, height],
+    } = block;
     let (amplitude, period) = weave_profile(weave);
     let thread = |index: u32| {
         let position = index as f32 + PIXEL_CENTRE;
@@ -53,9 +68,9 @@ pub fn weave_heights(weave: Weave, width: u32, height: u32) -> Vec<f32> {
             (position / period).floor() as i32,
         )
     };
-    let columns: Vec<(f32, i32)> = (0..width).map(thread).collect();
+    let columns: Vec<(f32, i32)> = (x..x + width).map(thread).collect();
     let mut heights = Vec::with_capacity(width as usize * height as usize);
-    for (row_thread, cell_y) in (0..height).map(thread) {
+    for (row_thread, cell_y) in (y..y + height).map(thread) {
         heights.extend(columns.iter().map(|&(column_thread, cell_x)| {
             let threads = column_thread + row_thread;
             let jitter = cell_jitter(cell_x, cell_y);

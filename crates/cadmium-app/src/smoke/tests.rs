@@ -1,5 +1,7 @@
 use std::ffi::OsString;
 
+use cadmium_engine::canvas::PaintingRect;
+
 use super::brushes::{BRUSH, BRUSH_DELETE, BRUSH_DIR, BRUSH_EXPORT, BRUSH_IMPORT, BrushStep};
 use super::config::{
     DEFAULT_EXIT_AFTER_FRAMES, DIALOG, DMABUF_SELFTEST, EXIT_AFTER_FRAMES, EXPORT, OPEN, PAGE,
@@ -169,18 +171,24 @@ fn stroke_zero_does_not_paint() {
 }
 
 #[test]
-fn smoke_stroke_crosses_the_canvas_middle_with_a_pressure_ramp() {
-    let samples = smoke_stroke(2048, 1536);
+fn smoke_stroke_crosses_the_painting_middle_with_a_pressure_ramp() {
+    let painting = PaintingRect {
+        x: 128,
+        y: 128,
+        width: 2048,
+        height: 1536,
+    };
+    let samples = smoke_stroke(painting);
     assert_eq!(samples.len(), STROKE_SAMPLES);
     assert!((samples[0].pressure - STROKE_PRESSURE_START).abs() < 1e-6);
     assert!((samples[STROKE_SAMPLES - 1].pressure - STROKE_PRESSURE_END).abs() < 1e-6);
     let peak = samples.iter().map(|s| s.pressure).fold(0.0, f32::max);
     assert!(peak > 0.95);
-    assert!(samples.iter().all(|s| s.x > 0.0 && s.x < 2048.0));
+    assert!(samples.iter().all(|s| s.x > 128.0 && s.x < 128.0 + 2048.0));
     assert!(
         samples
             .iter()
-            .all(|s| s.y > 1536.0 * 0.3 && s.y < 1536.0 * 0.7)
+            .all(|s| s.y > 128.0 + 1536.0 * 0.3 && s.y < 128.0 + 1536.0 * 0.7)
     );
     assert!(
         samples

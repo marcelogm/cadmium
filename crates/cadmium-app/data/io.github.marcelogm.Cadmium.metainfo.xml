@@ -20,6 +20,11 @@
       whole simulation runs on the GPU. A pen tablet is recommended: pressure and tilt shape
       every stroke.
     </p>
+    <p>
+      Paint comes from the palette: the painting's paints, your own colours and a colour circle,
+      with a mixing sheet saved with the painting. A margin around the painting takes paint too,
+      so you can try a stroke or wipe the brush there, and clear it in one step.
+    </p>
     <p xml:lang="pt-BR">
       O Cadmium é um simulador de pintura a óleo. A tinta fica molhada na tela e se comporta
       como óleo: o pincel deposita, arrasta e mistura a tinta que já está lá, a espátula assenta
@@ -30,10 +35,24 @@
       a simulação roda na GPU. Uma mesa digitalizadora é o recomendado: pressão e inclinação
       dão forma a cada pincelada.
     </p>
+    <p xml:lang="pt-BR">
+      A tinta vem da paleta: as tintas da pintura, as suas cores e um círculo de cores, com uma
+      folha de mistura salva junto com a pintura. Uma margem em volta da pintura também recebe
+      tinta, para testar uma pincelada ou limpar o pincel, e se limpa de uma vez.
+    </p>
   </description>
   <screenshots>
     <screenshot type="default">
+      <caption>A brush stroke in Cadmium</caption>
       <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/screenshot.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The brush editor, with strokes on its trial paper</caption>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/brush-editor.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Mixing paints on the sheet of the Palette dialog</caption>
+      <image>https://raw.githubusercontent.com/marcelogm/cadmium/main/.github/images/palette-editor.png</image>
     </screenshot>
   </screenshots>
   <launchable type="desktop-id">io.github.marcelogm.Cadmium.desktop</launchable>

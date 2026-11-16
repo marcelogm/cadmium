@@ -16,7 +16,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/marcelogm/cadmium" alt="License"></a>
 </p>
 
-![The Cadmium logo, painted in Cadmium](.github/images/screenshot.png)
+<p align="center">
+  <a href=".github/images/screenshot.png"><img src=".github/images/screenshot.png" width="32%" alt="A brush stroke in Cadmium"></a>
+  <a href=".github/images/brush-editor.png"><img src=".github/images/brush-editor.png" width="32%" alt="The brush editor"></a>
+  <a href=".github/images/palette-editor.png"><img src=".github/images/palette-editor.png" width="32%" alt="Mixing paints in the Palette dialog"></a>
+</p>
 
 Paint stays wet on the canvas. The brush deposits, drags and mixes what is already there, the
 palette knife lays thick slabs and carves grooves, and colors mix like pigments, not light:
@@ -25,6 +29,9 @@ each pigment is an absorption and scattering spectrum (Kubelka-Munk), simulated 
 - Brush, palette knife, blender, rag and a graphite pencil for the underdrawing, shaped by pen
   pressure and tilt
 - Twelve pigments, up to eight per painting, on linen, cotton or smooth canvas
+- A palette in the side panel: the painting's paints, My Colours and a colour circle; the
+  Palette dialog adds a mixing sheet, saved with the painting
+- A margin around the painting to paint on and wipe the brush on; Clear Margin cleans it
 - Paintings save wet, so you can pick up where you left off; export to PNG
 - A Lab panel to look inside the simulation: height, wetness, pigment amounts, every parameter
 

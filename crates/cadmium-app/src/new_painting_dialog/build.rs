@@ -1,6 +1,6 @@
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use cadmium_engine::canvas::{CanvasSpec, MAX_CANVAS_SIZE, primer_srgb8};
+use cadmium_engine::canvas::{CanvasSpec, MAX_PAINTING_SIZE, primer_srgb8};
 use cadmium_engine::pigments::PigmentDb;
 use gtk::gio;
 
@@ -187,7 +187,8 @@ fn pigment_chips(db: &PigmentDb) -> (gtk::FlowBox, Vec<(&'static str, gtk::Toggl
 }
 
 fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow) {
-    let format = PaintingFormat::matching(initial.width, initial.height);
+    let painting = initial.painting_rect();
+    let format = PaintingFormat::matching(painting.width, painting.height);
     let format_row = combo_row(
         "Format",
         PaintingFormat::ALL.map(PaintingFormat::label),
@@ -195,7 +196,7 @@ fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow
     );
     let side_row = |title: &str, value: u32| {
         let row =
-            adw::SpinRow::with_range(MIN_SIDE as f64, MAX_CANVAS_SIZE as f64, SIDE_STEP as f64);
+            adw::SpinRow::with_range(MIN_SIDE as f64, MAX_PAINTING_SIZE as f64, SIDE_STEP as f64);
         row.set_title(title);
         row.set_digits(0);
         row.set_value(value as f64);
@@ -203,8 +204,8 @@ fn size_rows(initial: &CanvasSpec) -> (adw::ComboRow, adw::SpinRow, adw::SpinRow
     };
     (
         format_row,
-        side_row("Width", initial.width),
-        side_row("Height", initial.height),
+        side_row("Width", painting.width),
+        side_row("Height", painting.height),
     )
 }
 

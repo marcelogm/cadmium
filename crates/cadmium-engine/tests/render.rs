@@ -19,6 +19,7 @@ fn blank_sized(gpu: &GpuContext, width: u32, height: u32) -> Canvas {
             primer: Primer::WhiteGesso,
             weave: Weave::Smooth,
             pigment_slots: vec!["ultramarine_blue".into()],
+            margin_px: 0,
         },
     )
     .unwrap()

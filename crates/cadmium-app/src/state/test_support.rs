@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use cadmium_engine::canvas::{CanvasSpec, PaintTotals, StateTexture};
+use cadmium_engine::canvas::{CanvasSpec, PaintTotals, PaintingRequest, StateTexture};
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 
@@ -20,11 +20,14 @@ const PAINTING_FRAME_LIMIT: u32 = 1000;
 
 pub(crate) fn painting_state() -> AppState {
     let gpu = Rc::new(GpuContext::new().expect("tests need a Vulkan GPU"));
-    let spec = CanvasSpec {
+    let starting = starting_canvas_spec();
+    let spec = CanvasSpec::for_painting(PaintingRequest {
         width: TEST_CANVAS.0,
         height: TEST_CANVAS.1,
-        ..starting_canvas_spec()
-    };
+        primer: starting.primer,
+        weave: starting.weave,
+        pigment_slots: starting.pigment_slots,
+    });
     let mut state = AppState::new(gpu, spec).unwrap();
     state.painting.session.brush.geometry.max_diameter_px = TEST_BRUSH_DIAMETER_PX;
     state.reload_brush();

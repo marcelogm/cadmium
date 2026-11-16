@@ -45,6 +45,7 @@ fn loaded_session(gpu: &GpuContext, load: f32, reserve_factor: Option<f32>) -> P
             primer: Primer::WhiteGesso,
             weave: Weave::Linen,
             pigment_slots: vec!["titanium_white".into(), "ultramarine_blue".into()],
+            margin_px: 0,
         },
     )
     .unwrap();
