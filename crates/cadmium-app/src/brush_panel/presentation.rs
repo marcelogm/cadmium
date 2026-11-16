@@ -49,6 +49,20 @@ pub(super) fn palette_view_named(name: &str) -> Option<PaletteView> {
     views.find(|view| palette_view_name(*view) == name)
 }
 
+/// The faces the palette offers: without the circle, only its colours.
+pub(super) fn palette_views(circle: bool) -> &'static [(PaletteView, &'static str)] {
+    if circle {
+        &PALETTE_VIEWS
+    } else {
+        &PALETTE_VIEWS[..1]
+    }
+}
+
+/// The face on show: `view`, unless it is the circle and the app has none.
+pub(super) fn shown_view(view: PaletteView, circle: bool) -> PaletteView {
+    if circle { view } else { PaletteView::Colours }
+}
+
 /// Whether the wheel is on show: the palette is, and it shows its circle.
 pub(super) fn circle_shows(tool: Tool, view: PaletteView) -> bool {
     tool.controls().pigments && view == PaletteView::Circle
