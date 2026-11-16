@@ -1,7 +1,8 @@
 //! Behaviours the bristle physics must show whatever the model, from the literature the
 //! XPBD rewrite is grounded in (docs/superpowers/specs/2026-11-16-xpbd-bristles-design.md,
-//! section 5). A test today's model fails is ignored and names the phase of #62 that must
-//! make it pass.
+//! section 5) that today's model can run; the spec's table says which phase brings in the
+//! rest. A test today's model fails is ignored and names the phase of #62 that must make it
+//! pass.
 
 use cadmium_engine::brush::factory_brushes;
 use cadmium_engine::canvas::StateTexture;
@@ -30,6 +31,8 @@ const END_MARGIN_PX: usize = 40;
 const SPLAY_PRESSURES: [f32; 4] = [0.15, 0.35, 0.6, 0.9];
 const DENSITY_SCALE: f32 = 2.0;
 
+/// Where the brush editor's pressure ramp starts, which is where the bug shows. The spec's
+/// p = 0 case needs phase 1's pressure → height mapping.
 const LIGHT_TOUCH_PRESSURE: f32 = 0.04;
 const LIGHT_TOUCH_TILT_DEG: f32 = 25.0;
 const LIGHT_TOUCH_DIAMETER_PX: f32 = 24.0;

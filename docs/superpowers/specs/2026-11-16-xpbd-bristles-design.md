@@ -32,7 +32,7 @@ touch but breaks the spacing calibration everywhere else.
 |---|---|
 | Scope | Rewrite the bristle physics. Paint transfer keeps its algorithm and gets better inputs. |
 | Grounding | Published models: XPBD, Small Steps, DER, Wetbrush, Baxter, Chu & Tai, DiVerdi, Bico. |
-| Performance | Same GPU budget as today: mean and p95 per dab at most 10% over the baseline. |
+| Performance | Same GPU budget as today, checked by the `bristle_cost` gate (see `docs/superpowers/baselines/README.md`). |
 | Parameters | New physical parameters. No migration of saved brushes, since nobody depends on them yet. |
 | Validation | Invariants from the literature as tests, side-by-side sheets per phase, and two paper figures reproduced. |
 
@@ -224,21 +224,22 @@ does not use them yet:
 
 ## 5. Validation, robustness, phases
 
-**Invariant tests (GPU):**
+**Invariant tests (GPU).** The phase column says which phase brings each test in;
+phase 0 holds the ones today's model can already run.
 
-| Test | Source | Asserts |
-|---|---|---|
-| Cantilever | Euler-Bernoulli | A single strand with tip load F deflects FL³/(3EI) within 5%. |
-| Head stiffness | Baxter & Lin | The whole head bends about 90° under 1–2 N. |
-| Step independence | XPBD | The same stroke with h_max and h_max/2 ends within tolerance. |
-| Resolution independence | §3 | Doubling `density_per_px` keeps mark width and splay within tolerance. |
-| Light touch | DiVerdi | At p = 0 only the tip touches, and the first dab does not splay the bundle (`a_light_first_touch_lands_the_wet_point_instead_of_splaying_the_hairs`). |
-| Splay vs pressure | DAB, DiVerdi | Splay grows monotonically with pressure. |
-| Friction | Baxter & Lin, Müller | The strand holds below μₛ and slides above it. A pushed tip catches and a pulled tip glides. |
-| Trail and spring back | Baxter | Tips lag when dragging and in turns, and return on lift. Without plasticity they return to rest. |
-| Coalescence | Bico | Two strands stick iff L⁴ ≥ (9/2)d²L_EC². Cluster size grows with L. Drying splits clusters. |
-| Stability | — | Nothing goes below the floor. Everything stays finite with bad timestamps and at dt = 50 ms. |
-| Determinism | — | A repeated stroke and dab batching across frames stay bit-identical. Paint conservation stays exact. |
+| Test | Source | Phase | Asserts |
+|---|---|---|---|
+| Cantilever | Euler-Bernoulli | 1 | A single strand with tip load F deflects FL³/(3EI) within 5%. |
+| Head stiffness | Baxter & Lin | 1 | The whole head bends about 90° under 1–2 N. |
+| Step independence | XPBD | 1 | The same stroke with h_max and h_max/2 ends within tolerance. |
+| Resolution independence | §3 | 0 (width), 1 (splay) | Doubling `density_per_px` keeps mark width and splay within tolerance. |
+| Light touch | DiVerdi | 0, ignored until 1 | At p = 0 only the tip touches, and the first dab does not splay the bundle (`a_light_first_touch_lands_the_wet_point_instead_of_splaying_the_hairs`). |
+| Splay vs pressure | DAB, DiVerdi | 0 | Splay grows monotonically with pressure. |
+| Friction | Baxter & Lin, Müller | 2 | The strand holds below μₛ and slides above it. A pushed tip catches and a pulled tip glides. |
+| Trail and spring back | Baxter | 2 | Tips lag when dragging and in turns, and return on lift. Without plasticity they return to rest. |
+| Coalescence | Bico | 3 | Two strands stick iff L⁴ ≥ (9/2)d²L_EC². Cluster size grows with L. Drying splits clusters. |
+| Stability | — | 1 | Nothing goes below the floor. Everything stays finite with bad timestamps and at dt = 50 ms. |
+| Determinism | — | existing | A repeated stroke and dab batching across frames stay bit-identical. Paint conservation stays exact. |
 
 **Existing tests.**
 - Each is reviewed. Those that describe real behaviour stay: trailing, dry threads,
@@ -253,7 +254,10 @@ does not use them yet:
 
 **Performance.**
 - Record a `bristle_cost` baseline before any change.
-- A phase closes only if mean and p95 GPU time per dab are at most 10% over the baseline.
+- A phase closes only if a full `bristle_cost` run passes the gate against that baseline:
+  per-frame GPU mean and p95, median of five interleaved runs after a warm-up, each at
+  most 10% and 0.05 ms over the baseline. `docs/superpowers/baselines/README.md` has the
+  exact rule and commands.
 
 **Robustness.**
 - dt is clamped to 50 ms and substeps are capped by the budget.
@@ -261,11 +265,13 @@ does not use them yet:
 - A strand that turns non-finite returns to rest, and the event is logged.
 
 **Phases, one PR each; the app keeps working after each:**
-0. **Baseline.** Record the bench numbers and reference sheets. Build the harness for
-   the analytic tests.
+0. **Baseline.** Record the bench numbers (TSV and gate) and a sheet tool tied to the
+   `xpbd-baseline` tag. Add the closed-form oracles (`mechanics`) and the invariants
+   today's model can run.
 1. **XPBD core.** New state, Small Steps, ferrule-frame integration, stretch, bend and
    clamp, frictionless canvas contact, pressure → height, persistent state. The old
-   step is removed.
+   step is removed. GPU cantilever, head-stiffness and step-independence tests run
+   against `mechanics`.
 2. **Friction.** Static and kinetic friction, anisotropy, plasticity.
 3. **Clumping.** Neighbour density and elastocapillary clumping with hysteresis.
 4. **Interface and parameters.** Normal force → `hair_loads`, the contact bit, `Hair`
