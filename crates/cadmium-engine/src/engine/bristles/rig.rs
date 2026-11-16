@@ -116,11 +116,8 @@ impl BristleRig {
         self.tool = None;
     }
 
-    /// Each stroke starts from a freshly loaded brush: the hairs keep their
-    /// bend only for as long as the stroke and its settling last.
+    /// A stroke starts from the bristles as the last one left them.
     pub(crate) fn begin_stroke(&mut self) {
-        self.reset();
-        self.clock.begin_stroke();
         self.pressed = true;
         self.lift_pending = false;
     }
@@ -176,15 +173,13 @@ impl BristleRig {
         let pose = gauge.pose(dab);
         let lifted = gauge.lifted(dab);
         let travel_px = self.clock.travel_px(pose.ferrule_px, lifted.ferrule_px);
-        record.handle_height_px = pose.ferrule_px[2];
+        record.handle_offset_px = gauge.offset_px(dab.pressure);
         record.handle_axis = pose.axis;
-        record.handle_rest_height_px = lifted.ferrule_px[2];
+        record.handle_rest_height_px = gauge.hanging_px(dab.altitude);
         record.ferrule_radius_px = self.ferrule_radius_px;
         record.dt_seconds = self.clock.elapsed_seconds(dab.time_ms);
         record.substeps = substeps(travel_px, self.mean_radius_px);
         record.bristle_total = self.count;
-        record.bristle_stiffness = self.hair.stiffness;
-        record.bristle_damping = self.hair.damping;
         record.bristle_reset = u32::from(std::mem::take(&mut self.reset_pending));
         record.bristle_orientation = self.continuous_orientation(record.orientation);
         self.last_dab = Some(*record);
@@ -199,10 +194,13 @@ impl BristleRig {
             self.last_motion_ms = now_ms;
         }
         if !self.pressed {
-            record.handle_height_px += self.reach_px;
+            record.handle_offset_px = self.reach_px;
         }
-        let ferrule_px =
-            ferrule_over_nib(record.center, record.handle_height_px, record.handle_axis);
+        let ferrule_px = ferrule_over_nib(
+            record.center,
+            record.handle_rest_height_px + record.handle_offset_px,
+            record.handle_axis,
+        );
         let travel_px = self.clock.travel_px(ferrule_px, ferrule_px);
         record.substeps = substeps(travel_px, self.mean_radius_px);
         record.bristle_total = self.count;

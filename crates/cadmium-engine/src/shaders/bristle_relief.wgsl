@@ -149,7 +149,7 @@ fn resting_base_px(thread: u32, wetness: Wetness) -> f32 {
 }
 
 fn handle_press_px() -> f32 {
-    return max(dab.handle_rest_height_px - dab.handle_height_px, 0.0);
+    return max(dab.handle_rest_height_px - (dab.handle_rest_height_px + dab.handle_offset_px), 0.0);
 }
 
 fn hair_load(support_px: f32, base_px: f32) -> f32 {

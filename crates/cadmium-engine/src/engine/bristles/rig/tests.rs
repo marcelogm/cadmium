@@ -42,19 +42,30 @@ fn a_reset_forgets_the_last_dab_so_settling_waits_for_a_fresh_one() {
 fn while_the_stroke_is_open_a_settle_holds_the_handle_where_it_pressed() {
     let (mut rig, pressed) = rig_after_one_pressed_dab();
     let settled = rig.settle(16.0).unwrap();
-    assert_eq!(settled.handle_height_px, pressed.handle_height_px);
+    assert_eq!(settled.handle_offset_px, pressed.handle_offset_px);
     assert_eq!(settled.dt_seconds, 0.016);
 }
 
 #[test]
 fn once_lifted_a_settle_raises_the_handle_by_one_bristle_length() {
-    let (mut rig, pressed) = rig_after_one_pressed_dab();
+    let (mut rig, _) = rig_after_one_pressed_dab();
     rig.lift();
     let settled = rig.settle(16.0).unwrap();
+    assert_eq!(settled.handle_offset_px, REACH_PX);
+}
+
+#[test]
+fn a_new_stroke_keeps_the_bristles_the_last_one_left() {
+    let (mut rig, first) = rig_after_one_pressed_dab();
     assert_eq!(
-        settled.handle_height_px,
-        pressed.handle_height_px + REACH_PX
+        first.bristle_reset, 1,
+        "the first dab after taking the brush up places it at rest"
     );
+    rig.lift();
+    rig.begin_stroke();
+    let mut next: DabRecord = bytemuck::Zeroable::zeroed();
+    rig.advance(&mut next, &pressed_dab(), &SimParams::default());
+    assert_eq!(next.bristle_reset, 0);
 }
 
 #[test]

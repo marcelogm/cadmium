@@ -39,11 +39,21 @@ impl HandleGauge {
         }
     }
 
+    /// How far the ferrule stands from the height at which the brush's rest shape just
+    /// touches: p·press_depth·L below it (DiVerdi, US 8,760,438).
+    pub(super) fn offset_px(&self, pressure: f32) -> f32 {
+        -pressure.clamp(0.0, 1.0) * self.press_depth * self.reach_px
+    }
+
+    /// Height of the ferrule when the hanging tips reach a flat canvas.
+    pub(super) fn hanging_px(&self, altitude: f32) -> f32 {
+        self.reach_px * altitude.sin().clamp(0.0, 1.0)
+    }
+
+    /// Estimated ferrule height, only for the travel the substeps follow.
     fn height_px(&self, pressure: f32, altitude: f32) -> f32 {
-        let hanging_px = self.reach_px * altitude.sin().clamp(0.0, 1.0);
-        let pressed_px = hanging_px * (1.0 - pressure.clamp(0.0, 1.0) * self.press_depth);
         let ferrule_clearance_px = self.ferrule_radius_px * altitude.cos().max(0.0);
-        pressed_px.max(ferrule_clearance_px)
+        (self.hanging_px(altitude) + self.offset_px(pressure)).max(ferrule_clearance_px)
     }
 }
 
@@ -75,10 +85,6 @@ pub(super) struct HandleClock {
 }
 
 impl HandleClock {
-    pub(super) fn begin_stroke(&mut self) {
-        self.previous_time_ms = None;
-    }
-
     pub(super) fn forget_pose(&mut self) {
         self.previous_ferrule_px = None;
     }

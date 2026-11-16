@@ -1,6 +1,6 @@
 fn tuft_press() -> f32 {
     let lifted_px = max(dab.handle_rest_height_px, MIN_SEGMENT_SPAN_PX);
-    return clamp(1.0 - dab.handle_height_px / lifted_px, 0.0, 1.0);
+    return clamp(1.0 - (dab.handle_rest_height_px + dab.handle_offset_px) / lifted_px, 0.0, 1.0);
 }
 
 fn bridging(wetness: f32) -> f32 {

@@ -50,7 +50,7 @@ fn pose_at_height(height_px: f32, base_px: f32) -> Pose {
 }
 
 fn current_pose(base_px: f32) -> Pose {
-    return pose_at_height(dab.handle_height_px, base_px);
+    return pose_at_height((dab.handle_rest_height_px + dab.handle_offset_px), base_px);
 }
 
 fn lifted_pose(base_px: f32) -> Pose {
@@ -125,7 +125,7 @@ fn hovering_px(thread: u32) -> f32 {
 }
 
 fn lifted_off() -> bool {
-    return dab.handle_height_px > dab.handle_rest_height_px;
+    return (dab.handle_rest_height_px + dab.handle_offset_px) > dab.handle_rest_height_px;
 }
 
 /// How far the handle comes down below where the pressure alone puts it, so the lightest
@@ -192,7 +192,7 @@ fn keep_segment_lengths(chain: ptr<function, Chain>, segment: f32, hanging: vec3
 fn bend_share(rest: BristleRest, vertex: u32) -> f32 {
     let along = f32(vertex - 1u) / f32(BRISTLE_VERTICES - 2u);
     let taper = 1.0 - (1.0 - BRISTLE_TIP_STIFFNESS_SHARE) * along;
-    return clamp(dab.bristle_stiffness * rest.stiffness * taper, 0.0, 1.0);
+    return clamp(0.5 * rest.stiffness * taper, 0.0, 1.0);
 }
 
 fn bend_toward_rest(chain: ptr<function, Chain>, rest: BristleRest, hanging: vec3<f32>) {
@@ -230,7 +230,7 @@ fn local_velocity(at: vec3<f32>, follow: vec3<f32>, motion: Motion) -> vec3<f32>
         let kept = exp(-HAIR_VISCOSITY_PER_SECOND * motion.seconds);
         carried = (at - follow) / motion.previous_seconds * kept;
     }
-    return carried - dab.bristle_damping * motion.velocity_change;
+    return carried - 0.05 * motion.velocity_change;
 }
 
 fn predicted(bristle: u32, carry: vec3<f32>, motion: Motion) -> Chain {
