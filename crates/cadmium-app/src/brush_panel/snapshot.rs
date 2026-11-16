@@ -4,8 +4,8 @@ use cadmium_engine::palette::{ColourRef, circle_axes};
 use cadmium_engine::pigments::{Mixture, Pigment, PigmentDb, mixture_srgb8};
 use cadmium_engine::tool::Holder;
 
-use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry};
-use crate::colour_wheel::WheelKey;
+use super::presentation::{PLATE_GAP_KEY, RackEntry, rack_entry, shown_view};
+use crate::colour_wheel::{COLOUR_CIRCLE, WheelKey};
 use crate::palette_colours::{highlighted_colour, pigment_tooltip};
 use crate::state::{AppState, PaletteView};
 use crate::thumbnails::ThumbnailKey;
@@ -39,7 +39,7 @@ impl PaletteSnapshot {
         PaletteSnapshot {
             my_colours: palette.my_colours.iter().map(colour_of).collect(),
             highlighted: highlighted_colour(palette, state.selected_recipe().as_ref()),
-            view: state.palette_view,
+            view: shown_view(state.palette_view, COLOUR_CIRCLE),
             circle_darken: state.circle_darken(),
             can_darken: circle_axes(slots).black.is_some(),
             wheel_key: WheelKey::of(palette, slots, state.circle_darken()),

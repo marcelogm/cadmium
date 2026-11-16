@@ -215,3 +215,15 @@ fn a_row_carries_the_brush_shape_for_its_tip_icon() {
     assert_eq!(entry.head, HeadSpec::FAN);
     assert_eq!(entry.hair, HairSpec::SQUIRREL);
 }
+
+#[test]
+fn without_the_circle_the_palette_offers_and_shows_only_its_colours() {
+    assert_eq!(palette_views(true), PALETTE_VIEWS.as_slice());
+    assert_eq!(palette_views(false), [(PaletteView::Colours, "Colours")]);
+    assert_eq!(shown_view(PaletteView::Circle, true), PaletteView::Circle);
+    assert_eq!(shown_view(PaletteView::Circle, false), PaletteView::Colours);
+    assert_eq!(
+        shown_view(PaletteView::Colours, false),
+        PaletteView::Colours
+    );
+}

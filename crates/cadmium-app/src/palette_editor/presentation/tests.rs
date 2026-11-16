@@ -56,3 +56,18 @@ fn each_mode_is_found_again_by_its_name() {
     }
     assert_eq!(mode_named("wheel"), None);
 }
+
+#[test]
+fn without_the_circle_the_dialog_only_mixes() {
+    assert_eq!(modes(true), MODES.as_slice());
+    assert_eq!(modes(false), [(PaletteMode::Mixing, "Mixing")]);
+    assert_eq!(opening_mode(PaletteMode::Circle, true), PaletteMode::Circle);
+    assert_eq!(
+        opening_mode(PaletteMode::Circle, false),
+        PaletteMode::Mixing
+    );
+    assert_eq!(
+        opening_mode(PaletteMode::Mixing, false),
+        PaletteMode::Mixing
+    );
+}

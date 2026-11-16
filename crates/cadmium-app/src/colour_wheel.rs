@@ -79,6 +79,10 @@ struct Listeners {
     removed: RefCell<Option<Removed>>,
 }
 
+/// Whether the app offers the colour circle. It is still buggy, so only dev builds
+/// (and the smoke tests) show it; release builds offer the colour grid and mixing alone.
+pub(crate) const COLOUR_CIRCLE: bool = cfg!(any(debug_assertions, feature = "smoke"));
+
 /// What the wheel's drawing and its controllers share.
 #[derive(Default)]
 struct Wheel {

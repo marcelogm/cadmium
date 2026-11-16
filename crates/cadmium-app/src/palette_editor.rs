@@ -10,6 +10,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::glib;
 
+use crate::colour_wheel::COLOUR_CIRCLE;
 use crate::state::{AppState, PaletteMode, SharedState};
 use crate::window::CadmiumWindow;
 
@@ -26,6 +27,7 @@ mod snapshot;
 use circle_page::CirclePage;
 use column::{Column, ShownColumn};
 use mixing_page::MixingPage;
+use presentation::opening_mode;
 #[cfg(all(target_os = "linux", any(debug_assertions, feature = "smoke")))]
 pub(crate) use sheet_view::SheetView;
 use snapshot::Snapshot;
@@ -48,7 +50,8 @@ struct PaletteEditor {
     history_handlers: RefCell<Vec<(gtk::gio::SimpleAction, glib::SignalHandlerId)>>,
 }
 
-/// Shows the dialog arranging the circle; while an editor is open, does nothing.
+/// Shows the dialog arranging the circle (mixing when the app has none); while an editor is open,
+/// does nothing.
 pub fn open(window: &CadmiumWindow) {
     open_in(window, PaletteMode::Circle);
 }
@@ -62,7 +65,7 @@ pub fn open_in(window: &CadmiumWindow, mode: PaletteMode) {
     {
         let mut state = state.borrow_mut();
         state.begin_palette_edit();
-        state.set_palette_mode(mode);
+        state.set_palette_mode(opening_mode(mode, COLOUR_CIRCLE));
     }
     let editor = PaletteEditor::new(window, state);
     window.keep_editor(&editor.dialog, || ());

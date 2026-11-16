@@ -4,10 +4,10 @@ use cadmium_engine::pigments::MAX_SLOTS;
 use cadmium_engine::stroke::Tool;
 
 use super::presentation::{
-    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, PALETTE_VIEWS, SIZE_STEP, hardness_grade,
-    palette_view_name, plate_gap_spec,
+    EYEDROPPER_HINT, MAX_SIZE_PX, MIN_SIZE_PX, SIZE_STEP, hardness_grade, palette_view_name,
+    palette_views, plate_gap_spec,
 };
-use crate::colour_wheel::ColourWheel;
+use crate::colour_wheel::{COLOUR_CIRCLE, ColourWheel};
 use crate::sliders::{SliderRow, param_row, slider_row};
 use crate::swatch::{Swatch, SwatchShape};
 use crate::tools::panel::ToolPanel;
@@ -80,11 +80,13 @@ pub(super) fn palette_group() -> PaletteGroup {
     let wheel = ColourWheel::new(WHEEL_SIZE_PX);
     let (darken_line, darken) = darken_line();
     let circle = palette_card(&[wheel.widget().upcast_ref(), darken_line.upcast_ref()]);
-    for ((view, label), page) in PALETTE_VIEWS.into_iter().zip([colours, circle]) {
-        let name = palette_view_name(view);
-        view_toggles.add(adw::Toggle::builder().name(name).label(label).build());
+    for ((view, label), page) in palette_views(COLOUR_CIRCLE).iter().zip([colours, circle]) {
+        let name = palette_view_name(*view);
+        view_toggles.add(adw::Toggle::builder().name(name).label(*label).build());
         stack.add_named(&page, Some(name));
     }
+    // A single face needs no switch.
+    view_toggles.set_visible(COLOUR_CIRCLE);
     PaletteGroup {
         group: palette_preferences_group(&view_toggles, &stack),
         view_toggles,
