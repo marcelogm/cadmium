@@ -25,33 +25,27 @@ fn pose_at_height(height_px: f32) -> Pose {
     return Pose(vec3<f32>(over_nib, height_px), axis, dab.bristle_orientation);
 }
 
-fn owned_bristle(thread: u32, share: u32) -> u32 {
-    return thread + share * BRISTLE_WORKGROUP_SIZE;
-}
-
-/// How high the ferrule must stand for this strand's rest shape to just touch: the floor
-/// under each rest vertex, less that vertex's depth below the ferrule.
-fn strand_touch_px(bristle: u32, placed: Pose) -> f32 {
+/// How high the ferrule must stand for rest vertex `index` (strand-major over the vertices
+/// past the root) to just touch: the floor under it, less its depth below the ferrule.
+fn vertex_touch_px(index: u32, placed: Pose) -> f32 {
+    let bristle = index / BRISTLE_SEGMENTS;
+    let vertex = index % BRISTLE_SEGMENTS + 1u;
     let rest = rests[bristle];
-    let local = rest_chain_local(rest);
-    var touch = -NO_FLOOR_PX;
-    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        let at = from_ferrule(local[vertex], placed);
-        touch = max(touch, disc_floor_px(at.xy, rest.radius_px) - (at.z - placed.ferrule.z));
-    }
-    return touch;
+    var local = rest_chain_local(rest);
+    let at = from_ferrule(local[vertex], placed);
+    return disc_floor_px(at.xy, rest.radius_px) - (at.z - placed.ferrule.z);
 }
 
 /// The height at which the brush's rest shape, in the dab's pose, first touches
-/// (spec §3): p = 0 lands only the lowest tip, whatever the hairs are doing now.
+/// (spec §3): p = 0 lands only the lowest tip, whatever the hairs are doing now. Each
+/// thread takes rest vertices rather than whole strands, so the floor reads spread over the
+/// workgroup; the maximum is exact, so the order does not change the result.
 fn touch_height_px(thread: u32) -> f32 {
     let placed = pose_at_height(dab.handle_rest_height_px);
     var touch = -NO_FLOOR_PX;
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            touch = max(touch, strand_touch_px(bristle, placed));
-        }
+    let vertices = dab.bristle_total * BRISTLE_SEGMENTS;
+    for (var index = thread; index < vertices; index += BRISTLE_WORKGROUP_SIZE) {
+        touch = max(touch, vertex_touch_px(index, placed));
     }
     let bounds = workgroup_range(thread, vec2<f32>(NO_FLOOR_PX, touch));
     return select(bounds.y, 0.0, bounds.y <= -NO_FLOOR_PX);
