@@ -6,7 +6,8 @@ use super::WetOilEngine;
 use crate::gpu::{GpuContext, GpuLost, read_mapped, staging_buffer};
 use crate::tool::DabStage;
 
-const MAX_QUERIES: u32 = 4096;
+/// The largest query set wgpu allows.
+const MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 const QUERIES_PER_PASS: u32 = 2;
 const MAX_TIMED_PASSES: usize = (MAX_QUERIES / QUERIES_PER_PASS) as usize;
 const QUERY_BYTES: u64 = wgpu::QUERY_SIZE as u64;
@@ -27,6 +28,7 @@ pub(crate) struct DabStageTimer {
     period_ns: f64,
     passes: Vec<DabStage>,
     resolved_passes: usize,
+    untimed_passes: usize,
 }
 
 impl DabStageTimer {
@@ -56,6 +58,7 @@ impl DabStageTimer {
             period_ns: f64::from(gpu.queue.get_timestamp_period()),
             passes: Vec::new(),
             resolved_passes: 0,
+            untimed_passes: 0,
         })
     }
 
@@ -63,6 +66,7 @@ impl DabStageTimer {
     /// set is full, and that pass then runs untimed.
     pub(crate) fn claim(&mut self, stage: DabStage) -> Option<u32> {
         if self.passes.len() >= MAX_TIMED_PASSES {
+            self.untimed_passes += 1;
             return None;
         }
         let first = self.passes.len() as u32 * QUERIES_PER_PASS;
@@ -96,7 +100,17 @@ impl DabStageTimer {
     }
 
     /// The stage times resolved and submitted since the last read; empty if none were.
+    /// Blocks until the GPU finishes the submitted work. Call it only after the encoder that
+    /// `resolve` wrote into has been submitted; before that submit it is a wgpu validation
+    /// error.
     pub(crate) fn take(&mut self, gpu: &GpuContext) -> Result<Vec<DabStageTime>, GpuLost> {
+        if self.untimed_passes > 0 {
+            eprintln!(
+                "dab stage timer: {} passes ran untimed past the {MAX_TIMED_PASSES}-pass cap",
+                self.untimed_passes
+            );
+            self.untimed_passes = 0;
+        }
         let passes = std::mem::take(&mut self.passes);
         let resolved = std::mem::replace(&mut self.resolved_passes, 0);
         if resolved == 0 {
@@ -135,7 +149,8 @@ fn tally(passes: &[DabStage], ticks: &[u64], period_ns: f64) -> Vec<DabStageTime
 
 impl WetOilEngine {
     /// Times every dab stage in its own compute pass from now on. A measuring aid for
-    /// `bristle_cost`: false, and nothing changes, when the adapter has no timestamps.
+    /// `bristle_cost`: false, and nothing changes, when the adapter has no timestamps. The
+    /// bristle settle path (`settle_bristles`) is not timed.
     #[doc(hidden)]
     pub fn time_dab_stages(&mut self, gpu: &GpuContext) -> bool {
         self.stage_timer = DabStageTimer::new(gpu);
@@ -150,7 +165,9 @@ impl WetOilEngine {
         }
     }
 
-    /// The stage times resolved since the last read, once their frame was submitted.
+    /// The stage times resolved since the last read. Blocks until the GPU finishes the
+    /// submitted work. Call it only after the encoder that `resolve_dab_stage_times` wrote
+    /// into has been submitted; before that submit it is a wgpu validation error.
     #[doc(hidden)]
     pub fn take_dab_stage_times(&mut self, gpu: &GpuContext) -> Result<Vec<DabStageTime>, GpuLost> {
         match self.stage_timer.as_mut() {
