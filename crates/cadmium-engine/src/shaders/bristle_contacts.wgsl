@@ -94,14 +94,22 @@ fn active_rows(engaged: Engaged, rows: ptr<function, ActiveRows>) -> u32 {
 /// zero. Returns the forces in the order of `rows`.
 fn cholesky_solved(problem: ptr<function, ContactProblem>, rows: ActiveRows, count: u32) -> PerContact {
     var lower: ContactMatrix;
-    var x: PerContact;
+    var rhs: PerContact;
     for (var i = 0u; i < count; i++) {
-        x[i] = (*problem).gaps[rows[i]];
+        rhs[i] = (*problem).gaps[rows[i]];
         for (var j = 0u; j < i; j++) {
             lower[i][j] = entry(problem, rows[i], rows[j]);
         }
         lower[i][i] = (*problem).diagonal[rows[i]] + (*problem).ridge;
     }
+    return solved_by_cholesky(lower, rhs, count);
+}
+
+/// Solves L·Lᵀ·x = `rhs` for the first `count` rows, factoring the lower triangle of
+/// `matrix` (its diagonal included) in place.
+fn solved_by_cholesky(matrix: ContactMatrix, rhs: PerContact, count: u32) -> PerContact {
+    var lower = matrix;
+    var x = rhs;
     for (var column = 0u; column < count; column++) {
         var pivot = lower[column][column];
         for (var k = 0u; k < column; k++) {
