@@ -156,7 +156,10 @@ scenario.
 
 | step | default mean / p95 | blender mean / p95 | long stroke mean / p95 | Bristles µs/dab | kept |
 |---|---|---|---|---|---|
-| research HEAD | 1.40 / 1.66 | 1.35 / 1.57 | 1.34 / 1.58 | — | — |
+| research HEAD | 1.40 / 1.66 | 1.35 / 1.57 | 1.34 / 1.58 | 164.1 | — |
+| 1: lane per vertex | 0.99 / 1.09 | 0.87 / 0.95 | 0.89 / 0.97 | 75.2 | yes |
+
+Gate limits (baseline + 10%): default 0.86 / 0.95, blender 0.78 / 0.86, long stroke 0.84 / 0.91 ms. Bristles µs/dab is the median of three stage-timed passes of the default scenario.
 
 ## Outcome
 
