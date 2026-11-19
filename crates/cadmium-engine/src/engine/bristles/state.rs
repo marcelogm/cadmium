@@ -11,10 +11,10 @@ use crate::gpu::{GpuContext, GpuLost};
 
 pub(crate) const BRISTLE_WORKGROUP_SIZE: u32 = 512;
 /// Threads per workgroup of the strand solves: one strand per thread in the serial one, one
-/// lane per vertex in the grouped one. Two strands per workgroup fit one wave with room to
-/// spare, so the grouped solve's barriers cost least and its strands spread over the most
-/// compute units (measured against 4 and 8 strands per workgroup).
-pub(crate) const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = 16;
+/// lane per vertex in the grouped one. One strand per workgroup keeps the grouped solve's
+/// barriers inside a single wave and spreads its strands over the most compute units
+/// (measured faster than 2, 4 and 8 strands per workgroup).
+pub(crate) const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = 8;
 pub(crate) const BRISTLES_PER_THREAD: u32 = MAX_BRISTLES as u32 / BRISTLE_WORKGROUP_SIZE;
 /// Strands the grouped solve fits in one workgroup: one lane per vertex of each.
 pub(crate) const BRISTLE_STRANDS_PER_GROUP: u32 =
