@@ -345,7 +345,7 @@ fn the_reach_of_an_out_of_range_head_is_the_reach_of_its_clamped_head() {
 }
 
 #[test]
-fn every_bristle_curls_a_little_and_the_curls_keep_their_seed() {
+fn every_bristle_curls_a_little_outward_and_the_curls_keep_their_seed() {
     let laid = layout(&request(HeadSpec::ROUND, 20.0));
     for bristle in &laid.bristles {
         let size = bristle.curl[0].hypot(bristle.curl[1]);
@@ -354,6 +354,8 @@ fn every_bristle_curls_a_little_and_the_curls_keep_their_seed() {
             "{:?}",
             bristle.curl
         );
+        let outward = bristle.curl[0] * bristle.root_px[0] + bristle.curl[1] * bristle.root_px[1];
+        assert!(outward >= 0.0, "{bristle:?}");
     }
     let again = layout(&request(HeadSpec::ROUND, 20.0));
     assert_eq!(laid.bristles, again.bristles);

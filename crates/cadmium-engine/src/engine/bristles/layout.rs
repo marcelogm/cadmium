@@ -19,7 +19,6 @@ pub(super) const FULL_BUNDLE_GAIN_RADIUS_PX: f32 = MAX_TIP_RADIUS;
 const BASE_STIFFNESS: f32 = 1.0;
 /// Rest turn of every hinge past the clamp, so a pressed strand buckles the same way every time [estimate].
 pub(super) const REST_CURL_RAD: f32 = 0.02;
-const CURL_SEED_SALT: u64 = 0xC0_11;
 
 #[repr(C)]
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
@@ -69,7 +68,6 @@ pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
     let coverage_radius_px =
         (covered_area_px2(&head, radius_px) / (std::f32::consts::PI * count as f32)).sqrt()
             * bundle_gain(radius_px, head.density_per_px);
-    let mut curls = SplitMix::new(request.seed ^ CURL_SEED_SALT);
     let bristles = roots
         .iter()
         .enumerate()
@@ -82,7 +80,7 @@ pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
             cluster: clusters[index],
             lane_start: map.lanes[index].0,
             lane_end: map.lanes[index].1,
-            curl: rest_curl(&mut curls),
+            curl: rest_curl(root),
             _pad: [0.0; 2],
         })
         .collect();
@@ -95,9 +93,13 @@ pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
     }
 }
 
-fn rest_curl(random: &mut SplitMix) -> [f32; 2] {
-    let angle = std::f32::consts::TAU * random.unit();
-    [REST_CURL_RAD * angle.cos(), REST_CURL_RAD * angle.sin()]
+/// Along the root's lane, which points away from the head's middle (radially on the round,
+/// across the thin axis on the flat, out along the fan), so a pressed strand buckles outward
+/// as a real head splays. A random direction let neighbours buckle across each other, and
+/// the mark's edge became the extreme of a sample that grew with the hair count. The lane is
+/// set by the root's index, so the strand at the centre has one too.
+fn rest_curl(root: &Root) -> [f32; 2] {
+    root.lane_direction.map(|share| REST_CURL_RAD * share)
 }
 
 pub(crate) fn reach_bound_px(request: &ReachRequest) -> f32 {
