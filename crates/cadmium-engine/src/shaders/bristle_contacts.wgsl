@@ -216,6 +216,14 @@ fn any_under(gaps: PerContact) -> bool {
     return under;
 }
 
+fn ends_under(chain: Chain, heights_px: array<f32, BRISTLE_VERTICES>) -> bool {
+    var under = false;
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        under = under || heights_px[vertex] - chain[vertex].z > FLOOR_SLACK_PX;
+    }
+    return under;
+}
+
 fn contact_problem(chain: Chain, compliances: HingeCompliances, normals: Normals, gaps: PerContact) -> ContactProblem {
     var problem = ContactProblem(chain, compliances, normals, PerContact(), 0.0, gaps);
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {

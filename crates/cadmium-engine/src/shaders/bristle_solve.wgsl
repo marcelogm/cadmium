@@ -17,6 +17,11 @@ const MIN_ONE_PLUS_COSINE: f32 = 1.0e-3;
 /// Above this |x| a unit vector is too close to x to build a perpendicular from it.
 const NEAR_X_AXIS: f32 = 0.9;
 const PI: f32 = 3.14159265358979;
+/// Most contact-only steps that push a strand out of the relief at the end of a dab.
+const FLOOR_CORRECTIONS: u32 = 2u;
+/// How far under its floor a dab may leave a vertex, px. The corrections push a strand
+/// only to this depth, so one the two solves see either side of it moves the same.
+const FLOOR_SLACK_PX: f32 = 1.0e-2;
 
 /// The relief under each vertex: its height, px, and its slope (∂f/∂x, ∂f/∂y).
 struct Floors {
@@ -178,7 +183,16 @@ fn summed(forces: PerContact) -> f32 {
 /// once the cap on the turns no longer engages.
 fn solve_iteration(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors) -> PerContact {
     let edges = edges_of(*chain, shape.clamp);
-    var turns = free_turns(*chain, edges, shape);
+    return pushed_step(chain, edges, free_turns(*chain, edges, shape), shape, floors);
+}
+
+/// The contact step alone: the strand keeps its bend and the canvas only pushes it out.
+fn lifted_onto(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors) -> PerContact {
+    return pushed_step(chain, edges_of(*chain, shape.clamp), Turns(), shape, floors);
+}
+
+fn pushed_step(chain: ptr<function, Chain>, edges: Edges, free: Turns, shape: StrandShape, floors: Floors) -> PerContact {
+    var turns = free;
     let normals = floor_normals(floors);
     let forces = contact_forces(*chain, turns, shape.compliances, floors, normals);
     for (var pushed = 1u; pushed < BRISTLE_VERTICES; pushed++) {
@@ -189,5 +203,32 @@ fn solve_iteration(chain: ptr<function, Chain>, shape: StrandShape, floors: Floo
         }
     }
     turn_chain(chain, edges, capped(turns), shape.segment_px);
+    return forces;
+}
+
+/// The last step of a dab moves the strand onto floors read before it moved, so it can end
+/// inside the relief, past a wall the ±1 px slope did not see. Each correction reads the
+/// floors where the step left it and pushes out only a strand left under them, straight
+/// up: along a wall's tilted normal a push barely moves a vertex out of it.
+fn rested(chain: ptr<function, Chain>, sampled: Chain, shape: StrandShape, radius_px: f32) -> PerContact {
+    var swept = sampled;
+    var forces: PerContact;
+    for (var correction = 0u; correction < FLOOR_CORRECTIONS; correction++) {
+        var floors: Floors;
+        for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+            floors.heights_px[vertex] = swept_floor_px(swept[vertex].xy, (*chain)[vertex].xy, radius_px);
+        }
+        if !ends_under(*chain, floors.heights_px) {
+            break;
+        }
+        for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+            floors.heights_px[vertex] -= FLOOR_SLACK_PX;
+        }
+        swept = *chain;
+        let lifted = lifted_onto(chain, shape, floors);
+        for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
+            forces[row] += lifted[row];
+        }
+    }
     return forces;
 }

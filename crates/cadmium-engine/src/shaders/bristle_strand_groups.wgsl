@@ -27,6 +27,8 @@ var<workgroup> group_solving: array<u32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_dropped: array<u32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_settled: array<u32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_unsettled: u32;
+var<workgroup> group_lifting: array<u32, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_lifted: u32;
 
 struct Lane {
     group: u32,
@@ -75,6 +77,24 @@ fn place_vertex(lane: Lane, at: vec3<f32>, sampled: vec3<f32>, radius_px: f32) {
     group_chain[lane.strand][lane.vertex] = at;
     group_heights[lane.strand][lane.vertex] = height;
     group_normals[lane.strand][lane.vertex] = normalize(vec3<f32>(-slope, 1.0));
+}
+
+// mirrors rested
+fn place_height(lane: Lane, at: vec3<f32>, sampled: vec3<f32>, radius_px: f32, end_floor_px: f32) {
+    var height = 0.0;
+    if lane.vertex > 0u {
+        height = swept_from_px(sampled.xy, at.xy, radius_px, end_floor_px);
+    }
+    group_chain[lane.strand][lane.vertex] = at;
+    group_heights[lane.strand][lane.vertex] = height;
+}
+
+// mirrors rested
+fn place_lifted_normal(lane: Lane) {
+    if lane.vertex > 0u {
+        group_heights[lane.strand][lane.vertex] -= FLOOR_SLACK_PX;
+    }
+    group_normals[lane.strand][lane.vertex] = vec3<f32>(0.0, 0.0, 1.0);
 }
 
 // mirrors edges_of
@@ -162,12 +182,13 @@ fn group_ridge_of(strand: u32) -> f32 {
 }
 
 // mirrors any_under, contact_forces
-fn open_contacts(strand: u32) {
+fn open_contacts(strand: u32, moves: bool) {
     var under = false;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         under = under || group_gaps[strand][row] > 0.0;
         group_forces[strand][row] = 0.0;
     }
+    under = under && moves;
     group_solving[strand] = select(0u, 1u, under);
     group_settled[strand] = 0u;
     group_dropped[strand] = 0u;
@@ -262,6 +283,26 @@ fn any_added(strand: u32) -> bool {
         added = added || group_added[strand][row] != 0u;
     }
     return added;
+}
+
+// mirrors ends_under
+fn strand_under(strand: u32) -> bool {
+    var under = false;
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        under = under || group_heights[strand][vertex] - group_chain[strand][vertex].z > FLOOR_SLACK_PX;
+    }
+    return under;
+}
+
+fn lifting_strands(group: u32) -> u32 {
+    var count = 0u;
+    for (var strand = 0u; strand < BRISTLE_STRANDS_PER_GROUP; strand++) {
+        let live = group * BRISTLE_STRANDS_PER_GROUP + strand < dab.bristle_total;
+        if live && group_lifting[strand] != 0u {
+            count++;
+        }
+    }
+    return count;
 }
 
 fn unsettled_strands(group: u32) -> u32 {
@@ -365,8 +406,8 @@ fn summed_group_forces(strand: u32) -> f32 {
     return total;
 }
 
-// mirrors solve_iteration
-fn solve_step(lane: Lane, shape: StrandShape) -> Stepped {
+// mirrors solve_iteration, or lifted_onto when `lifting`
+fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     let s = lane.strand;
     if owns_hinge(lane) {
         place_edge(lane);
@@ -377,8 +418,10 @@ fn solve_step(lane: Lane, shape: StrandShape) -> Stepped {
     }
     workgroupBarrier();
     var free = vec3<f32>(0.0);
-    if owns_hinge(lane) {
+    if owns_hinge(lane) && !lifting {
         free = free_turn(lane, shape);
+    }
+    if owns_hinge(lane) {
         group_turns[s][lane.vertex] = free;
     }
     workgroupBarrier();
@@ -389,7 +432,7 @@ fn solve_step(lane: Lane, shape: StrandShape) -> Stepped {
     }
     workgroupBarrier();
     if leads(lane) {
-        open_contacts(s);
+        open_contacts(s, !lifting || group_lifting[s] != 0u);
     }
     workgroupBarrier();
     if owns_hinge(lane) && group_solving[s] != 0u {
@@ -444,9 +487,9 @@ fn solve(
     let iterations = max(substeps, MIN_DAB_ITERATIONS);
     var previous = start;
     var force = 0.0;
+    var shape: StrandShape;
     for (var iteration = 0u; iteration < iterations; iteration++) {
         let pose = pose_between(start, end, min(f32(iteration + 1u) / f32(substeps), 1.0));
-        var shape: StrandShape;
         if lane.live {
             shape = strand_shape(rests[lane.bristle], pose);
             at = carried(at, previous, pose);
@@ -455,12 +498,47 @@ fn solve(
         }
         previous = pose;
         workgroupBarrier();
-        let stepped = solve_step(lane, shape);
+        let stepped = solve_step(lane, shape, false);
         at = stepped.at;
         force = stepped.force;
     }
+    // The disc floor each check reads at `at` is the one stored, while `at` stays put.
+    var end_floor = 0.0;
+    var floored = false;
+    for (var correction = 0u; correction < FLOOR_CORRECTIONS; correction++) {
+        if lane.live {
+            end_floor = disc_floor_px(at.xy, radius_px);
+            floored = true;
+            place_height(lane, at, sampled, radius_px, end_floor);
+            sampled = at;
+        }
+        workgroupBarrier();
+        if leads(lane) {
+            group_lifting[lane.strand] = select(0u, 1u, strand_under(lane.strand));
+        }
+        workgroupBarrier();
+        if lane.strand == 0u && lane.vertex == 0u {
+            group_lifted = lifting_strands(lane.group);
+        }
+        let lifting = lane.live && group_lifting[lane.strand] != 0u;
+        if lifting {
+            place_lifted_normal(lane);
+        }
+        if workgroupUniformLoad(&group_lifted) == 0u {
+            break;
+        }
+        let stepped = solve_step(lane, shape, true);
+        if lifting {
+            at = stepped.at;
+            force += stepped.force;
+            floored = false;
+        }
+    }
     if lane.live {
-        states[position_slot(lane.bristle, lane.vertex)] = vec4<f32>(at, disc_floor_px(at.xy, radius_px));
+        if !floored {
+            end_floor = disc_floor_px(at.xy, radius_px);
+        }
+        states[position_slot(lane.bristle, lane.vertex)] = vec4<f32>(at, end_floor);
         if lane.vertex == 0u {
             normal_forces[lane.bristle] = force;
             hair_loads[lane.bristle] = FLAT_HAIR_LOAD;

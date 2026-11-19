@@ -4,9 +4,9 @@
 /// One strand for the lab, all vec4 so the layout is the same on both sides:
 /// root.xyz and w = segment px; clamp.xyz and w = floor height px; curl.xyz and
 /// w = press px; tip_force.xyz N and w = press steps; floor_slope.xy the floor plane's
-/// slope, so the floor is z = height + slope · xy; step, when its w is 1, replaces the
-/// plane with a step of height y for x > x, read as a hair of radius z rests on it;
-/// compliances rad per N·m.
+/// slope, so the floor is z = height + slope · xy, and zw how far the press slides the
+/// strand, px; step, when its w is 1, replaces the plane with a step of height y for
+/// x > x, read as a hair of radius z rests on it; compliances rad per N·m.
 struct LabStrand {
     root: vec4<f32>,
     clamp: vec4<f32>,
@@ -77,7 +77,7 @@ fn solve_lab(@builtin(workgroup_id) id: vec3<u32>) {
     let shape = lab_shape(strand);
     var chain = lab_rest_chain(shape, strand.root.xyz);
     let steps = max(u32(strand.tip_force.w), 1u);
-    let drop = vec3<f32>(0.0, 0.0, strand.curl.w / f32(steps));
+    let drop = vec3<f32>(-strand.floor_slope.zw, strand.curl.w) / f32(steps);
     var forces: PerContact;
     var sampled = chain;
     for (var step = 0u; step < steps; step++) {
@@ -88,6 +88,12 @@ fn solve_lab(@builtin(workgroup_id) id: vec3<u32>) {
             let floors = lab_floors(strand, sampled, chain);
             sampled = chain;
             forces = solve_iteration(&chain, shape, floors);
+        }
+        if strand.step.w != 0.0 {
+            let lifted = rested(&chain, sampled, shape, strand.step.z);
+            for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
+                forces[row] += lifted[row];
+            }
         }
     }
     let first = id.x * LAB_OUT_VECTORS;

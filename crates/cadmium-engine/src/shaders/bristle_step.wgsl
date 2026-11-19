@@ -108,15 +108,17 @@ fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
     let iterations = max(substeps, MIN_DAB_ITERATIONS);
     var previous = start;
     var force = 0.0;
+    var shape: StrandShape;
     for (var iteration = 0u; iteration < iterations; iteration++) {
         let pose = pose_between(start, end, min(f32(iteration + 1u) / f32(substeps), 1.0));
         carry(&chain, previous, pose);
         previous = pose;
-        let shape = strand_shape(rests[bristle], pose);
+        shape = strand_shape(rests[bristle], pose);
         let floors = floors_under(sampled, chain, radius_px);
         sampled = chain;
         force = summed(solve_iteration(&chain, shape, floors));
     }
+    force += summed(rested(&chain, sampled, shape, radius_px));
     store_chain(bristle, chain);
     return force;
 }

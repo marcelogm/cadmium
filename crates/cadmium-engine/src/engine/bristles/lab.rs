@@ -76,6 +76,12 @@ impl LabStrand {
         self
     }
 
+    /// Moves the whole strand by `slide_px` along x and y over the press.
+    pub(super) fn with_slide(mut self, slide_px: [f32; 2]) -> LabStrand {
+        self.floor_slope[2..].copy_from_slice(&slide_px);
+        self
+    }
+
     /// Lowers the whole strand by `press_px` in `steps`, solving after each.
     pub(super) fn with_press(mut self, press_px: f32, steps: u32) -> LabStrand {
         self.curl[3] = press_px;

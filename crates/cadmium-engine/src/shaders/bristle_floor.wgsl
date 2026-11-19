@@ -33,7 +33,12 @@ fn disc_floor_px(at: vec2<f32>, radius_px: f32) -> f32 {
 /// The highest disc floor along the straight path from `start` to `end`, read at most a
 /// radius apart.
 fn swept_floor_px(start: vec2<f32>, end: vec2<f32>, radius_px: f32) -> f32 {
-    var highest = disc_floor_px(end, radius_px);
+    return swept_from_px(start, end, radius_px, disc_floor_px(end, radius_px));
+}
+
+/// `swept_floor_px` given the disc floor at `end`.
+fn swept_from_px(start: vec2<f32>, end: vec2<f32>, radius_px: f32, end_floor_px: f32) -> f32 {
+    var highest = end_floor_px;
     let spans = ceil(distance(start, end) / max(radius_px, MIN_SEGMENT_SPAN_PX));
     let samples = u32(min(spans, f32(MAX_SWEEP_SAMPLES + 1u)));
     for (var sample = 1u; sample < samples; sample++) {

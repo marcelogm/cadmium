@@ -57,6 +57,18 @@ const LEDGE_BEHIND_PX: f32 = 3.0;
 const STEP_PRESS_PX: f32 = 15.0;
 const STEP_STEPS: u32 = 3;
 
+/// A steep strand pressed while it slides toward a taller step whose edge stands ahead of
+/// its resting tip, px: the press slides the tip forward, over the edge.
+const SLIDE_DEGREES: f32 = 70.0;
+const SLIDE_STEP_HEIGHT_PX: f32 = 10.0;
+const SLIDE_HAIR_RADIUS_PX: f32 = 1.0;
+const SLIDE_WALL_AHEAD_PX: f32 = 4.0;
+const SLIDE_PX: f32 = 2.0;
+const SLIDE_PRESS_PX: f32 = 2.0;
+const SLIDE_STEPS: u32 = 2;
+/// How far under its floor the end of a dab may leave a vertex, px: `FLOOR_SLACK_PX`.
+const REST_SLACK_PX: f32 = 1e-2;
+
 /// A floor plane rising 45° toward +x through the upright strand's tip.
 const RAMP_SLOPE: [f32; 2] = [1.0, 0.0];
 const RAMP_PRESS_PX: f32 = 5.0;
@@ -330,4 +342,38 @@ fn a_strand_pressed_against_or_onto_a_step_never_sinks_into_it() {
         );
         assert!(run.normal_force_n > 0.0, "edge at {edge}: no force");
     }
+}
+
+#[test]
+fn a_strand_slid_onto_a_step_ends_on_it_not_inside_it() {
+    let gpu = GpuContext::new().unwrap();
+    let clamp = tilted(SLIDE_DEGREES);
+    let edge = clamp[0] * LENGTH_PX + SLIDE_WALL_AHEAD_PX;
+    let slid = strand(clamp, [0.0, 0.0, -clamp[2] * LENGTH_PX])
+        .with_curl(UPRIGHT_CURL)
+        .with_step(edge, SLIDE_STEP_HEIGHT_PX, SLIDE_HAIR_RADIUS_PX)
+        .with_slide([SLIDE_PX, 0.0])
+        .with_press(SLIDE_PRESS_PX, SLIDE_STEPS);
+    let run = &run(&gpu, &[slid])[0];
+    assert_lengths_kept(run);
+    // The floor of a hair as thick as the radius: the step from where its side reaches it.
+    let floor = |x: f32| {
+        if x + SLIDE_HAIR_RADIUS_PX > edge {
+            SLIDE_STEP_HEIGHT_PX
+        } else {
+            0.0
+        }
+    };
+    assert!(
+        run.chain_px
+            .iter()
+            .all(|at| at[2] >= floor(at[0]) - REST_SLACK_PX),
+        "{:?}",
+        run.chain_px
+    );
+    let tip = run.chain_px[SEGMENTS];
+    assert!(
+        floor(tip[0]) == SLIDE_STEP_HEIGHT_PX && run.normal_force_n > 0.0,
+        "the tip {tip:?} did not land on the step"
+    );
 }
