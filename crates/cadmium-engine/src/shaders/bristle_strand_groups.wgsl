@@ -17,6 +17,7 @@ var<workgroup> group_heights: array<array<f32, BRISTLE_VERTICES>, BRISTLE_STRAND
 var<workgroup> group_edges: GroupHinges;
 var<workgroup> group_short: GroupFlags;
 var<workgroup> group_turns: GroupHinges;
+var<workgroup> group_compliances: GroupRows;
 var<workgroup> group_rise_turns: GroupHinges;
 var<workgroup> group_gaps: GroupRows;
 var<workgroup> group_diagonal: GroupRows;
@@ -94,6 +95,13 @@ fn place_edge(lane: Lane) {
     group_short[s][edge] = select(1u, 0u, size > MIN_SEGMENT_SPAN_PX);
 }
 
+/// Hinge `lane.vertex`'s bending compliance, rad per N·m, as `strand_shape` computes it.
+/// It depends on the rest strand alone, so it is placed once per dab.
+fn place_compliance(lane: Lane, rest: BristleRest) {
+    let segment_m = segment_length(rest) * METRES_PER_PX;
+    group_compliances[lane.strand][lane.vertex] = hinge_compliance_per_m(lane.vertex) * segment_m / rest.stiffness;
+}
+
 /// A short edge takes the heading of the edge above it, as `edges_of` does.
 fn mend_short_edges(strand: u32, clamp: vec3<f32>) {
     var previous = clamp;
@@ -117,7 +125,7 @@ fn free_turn(lane: Lane, shape: StrandShape) -> vec3<f32> {
     let rest = select(vec3<f32>(0.0), curl, hinge > 0u);
     let tip = group_chain[s][BRISTLE_VERTICES - 1u];
     let lever_m = (tip - group_chain[s][hinge]) * METRES_PER_PX;
-    let loaded = shape.compliances[hinge] * cross(lever_m, shape.tip_force_n);
+    let loaded = group_compliances[s][hinge] * cross(lever_m, shape.tip_force_n);
     return rest - rotation_between(before, group_edges[s][hinge]) + loaded;
 }
 
@@ -133,30 +141,30 @@ fn gap_of(strand: u32, vertex: u32) -> f32 {
 }
 
 /// `vertex`'s own contact compliance (`contact_problem`'s diagonal).
-fn diagonal_of(strand: u32, vertex: u32, compliances: HingeCompliances) -> f32 {
+fn diagonal_of(strand: u32, vertex: u32) -> f32 {
     var own = 0.0;
     for (var hinge = 0u; hinge < vertex; hinge++) {
         let lever = cross(group_chain[strand][vertex] - group_chain[strand][hinge], group_normals[strand][vertex]);
-        own += compliances[hinge] * dot(lever, lever);
+        own += group_compliances[strand][hinge] * dot(lever, lever);
     }
     return own * METRES_PER_PX;
 }
 
 /// `contact_compliance` over the strand's workgroup copy.
-fn group_compliance(strand: u32, compliances: HingeCompliances, vertex: u32, pushed: u32) -> f32 {
+fn group_compliance(strand: u32, vertex: u32, pushed: u32) -> f32 {
     var rise = 0.0;
     for (var hinge = 0u; hinge < min(vertex, pushed); hinge++) {
         let lever = group_chain[strand][vertex] - group_chain[strand][hinge];
         let arm_m = (group_chain[strand][pushed] - group_chain[strand][hinge]) * METRES_PER_PX;
-        rise += compliances[hinge] * dot(cross(arm_m, group_normals[strand][pushed]), cross(lever, group_normals[strand][vertex]));
+        rise += group_compliances[strand][hinge] * dot(cross(arm_m, group_normals[strand][pushed]), cross(lever, group_normals[strand][vertex]));
     }
     return rise;
 }
 
 /// `CONTACT_RIDGE_SHARE` of `ridge_scale`.
-fn group_ridge_of(strand: u32, compliances: HingeCompliances) -> f32 {
+fn group_ridge_of(strand: u32) -> f32 {
     let segment_px = distance(group_chain[strand][1], group_chain[strand][0]);
-    var largest = compliances[BRISTLE_SEGMENTS - 1u] * segment_px * segment_px * METRES_PER_PX;
+    var largest = group_compliances[strand][BRISTLE_SEGMENTS - 1u] * segment_px * segment_px * METRES_PER_PX;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         largest = max(largest, group_diagonal[strand][row]);
     }
@@ -165,7 +173,7 @@ fn group_ridge_of(strand: u32, compliances: HingeCompliances) -> f32 {
 
 /// Whether the free step leaves a vertex under its floor (`any_under`), and if so the ridge
 /// and the first active set of `contact_forces`.
-fn open_contacts(strand: u32, compliances: HingeCompliances) {
+fn open_contacts(strand: u32) {
     var under = false;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         under = under || group_gaps[strand][row] > 0.0;
@@ -177,7 +185,7 @@ fn open_contacts(strand: u32, compliances: HingeCompliances) {
     if !under {
         return;
     }
-    let ridge = group_ridge_of(strand, compliances);
+    let ridge = group_ridge_of(strand);
     group_ridge[strand] = ridge;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
         let engaged = group_gaps[strand][row] > 0.0 && group_diagonal[strand][row] > ridge;
@@ -232,13 +240,13 @@ fn solve_round(strand: u32) {
 }
 
 /// The turn the round's forces give `hinge` (`rises`).
-fn rise_turn(strand: u32, hinge: u32, compliances: HingeCompliances) -> vec3<f32> {
+fn rise_turn(strand: u32, hinge: u32) -> vec3<f32> {
     var turn = vec3<f32>(0.0);
     for (var pushed = hinge + 1u; pushed < BRISTLE_VERTICES; pushed++) {
         let force = group_forces[strand][pushed - 1u];
         if force != 0.0 {
             let arm_m = (group_chain[strand][pushed] - group_chain[strand][hinge]) * METRES_PER_PX;
-            turn += compliances[hinge] * force * cross(arm_m, group_normals[strand][pushed]);
+            turn += group_compliances[strand][hinge] * force * cross(arm_m, group_normals[strand][pushed]);
         }
     }
     return turn;
@@ -296,7 +304,7 @@ fn close_contacts(strand: u32) {
 
 /// The active-set loop of `contact_forces`, round by round across the workgroup, until
 /// every strand has settled or `CONTACT_ROUNDS` ran.
-fn settle_contacts(lane: Lane, compliances: HingeCompliances) {
+fn settle_contacts(lane: Lane) {
     let s = lane.strand;
     for (var round = 0u; round < CONTACT_ROUNDS; round++) {
         let solving = lane.live && group_solving[s] != 0u && group_settled[s] == 0u;
@@ -306,7 +314,7 @@ fn settle_contacts(lane: Lane, compliances: HingeCompliances) {
         workgroupBarrier();
         let landing = solving && group_dropped[s] == 0u && lane.vertex < BRISTLE_SEGMENTS;
         if landing {
-            group_rise_turns[s][lane.vertex] = rise_turn(s, lane.vertex, compliances);
+            group_rise_turns[s][lane.vertex] = rise_turn(s, lane.vertex);
         }
         workgroupBarrier();
         if landing {
@@ -331,12 +339,12 @@ fn settle_contacts(lane: Lane, compliances: HingeCompliances) {
 }
 
 /// Hinge `hinge`'s free turn plus what the canvas's forces turn it (`solve_iteration`).
-fn pushed_turn(strand: u32, hinge: u32, compliances: HingeCompliances, free: vec3<f32>) -> vec3<f32> {
+fn pushed_turn(strand: u32, hinge: u32, free: vec3<f32>) -> vec3<f32> {
     var turn = free;
     for (var pushed = hinge + 1u; pushed < BRISTLE_VERTICES; pushed++) {
         let force = group_forces[strand][pushed - 1u];
         let arm_m = (group_chain[strand][pushed] - group_chain[strand][hinge]) * METRES_PER_PX;
-        turn += compliances[hinge] * force * cross(arm_m, group_normals[strand][pushed]);
+        turn += group_compliances[strand][hinge] * force * cross(arm_m, group_normals[strand][pushed]);
     }
     return turn;
 }
@@ -393,23 +401,23 @@ fn solve_step(lane: Lane, shape: StrandShape) -> Stepped {
     if owns_hinge(lane) {
         let vertex = lane.vertex + 1u;
         group_gaps[s][lane.vertex] = gap_of(s, vertex);
-        group_diagonal[s][lane.vertex] = diagonal_of(s, vertex, shape.compliances);
+        group_diagonal[s][lane.vertex] = diagonal_of(s, vertex);
     }
     workgroupBarrier();
     if leads(lane) {
-        open_contacts(s, shape.compliances);
+        open_contacts(s);
     }
     workgroupBarrier();
     if owns_hinge(lane) && group_solving[s] != 0u {
         for (var column = 0u; column < lane.vertex; column++) {
             group_matrix[s][lane.vertex][column] =
-                group_compliance(s, shape.compliances, lane.vertex + 1u, column + 1u);
+                group_compliance(s, lane.vertex + 1u, column + 1u);
         }
     }
     workgroupBarrier();
-    settle_contacts(lane, shape.compliances);
+    settle_contacts(lane);
     if owns_hinge(lane) {
-        group_turns[s][lane.vertex] = pushed_turn(s, lane.vertex, shape.compliances, free);
+        group_turns[s][lane.vertex] = pushed_turn(s, lane.vertex, free);
     }
     workgroupBarrier();
     if leads(lane) {
@@ -445,6 +453,9 @@ fn solve(
     if lane.live {
         at = held_position(lane, start);
         radius_px = rests[lane.bristle].radius_px;
+    }
+    if owns_hinge(lane) {
+        place_compliance(lane, rests[lane.bristle]);
     }
     var sampled = at;
     let substeps = max(dab.substeps, 1u);
