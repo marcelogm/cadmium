@@ -16,8 +16,7 @@ const SERIAL_WORKGROUPS: [u32; 2] = [
 ];
 const FIRST_RECORD_OFFSET: wgpu::DynamicOffset = 0;
 
-/// Which strand solve the step dispatches. Both give the same strands; `Serial` is kept so
-/// tests can check `Grouped` against it.
+/// `Serial` is kept so tests can check `Grouped` against it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StrandSolve {
     Grouped,
@@ -131,7 +130,6 @@ impl BristleStepPass {
         self.strand_solve = strand_solve;
     }
 
-    /// The touch height and the dab's path first, then the chosen strand solve.
     fn dispatch_both(&self, pass: &mut wgpu::ComputePass<'_>) {
         dispatch(pass, &self.touch, SINGLE_WORKGROUP);
         let solve = match self.strand_solve {

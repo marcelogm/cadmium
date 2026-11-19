@@ -105,8 +105,6 @@ fn cholesky_solved(problem: ptr<function, ContactProblem>, rows: ActiveRows, cou
     return solved_by_cholesky(lower, rhs, count);
 }
 
-/// Solves L·Lᵀ·x = `rhs` for the first `count` rows, factoring the lower triangle of
-/// `matrix` (its diagonal included) in place.
 fn solved_by_cholesky(matrix: ContactMatrix, rhs: PerContact, count: u32) -> PerContact {
     var lower = matrix;
     var x = rhs;

@@ -25,8 +25,6 @@ fn pose_at_height(height_px: f32) -> Pose {
     return Pose(vec3<f32>(over_nib, height_px), axis, dab.bristle_orientation);
 }
 
-/// How high the ferrule must stand for rest vertex `index` (strand-major over the vertices
-/// past the root) to just touch: the floor under it, less its depth below the ferrule.
 fn vertex_touch_px(index: u32, placed: Pose) -> f32 {
     let bristle = index / BRISTLE_SEGMENTS;
     let vertex = index % BRISTLE_SEGMENTS + 1u;
@@ -37,9 +35,8 @@ fn vertex_touch_px(index: u32, placed: Pose) -> f32 {
 }
 
 /// The height at which the brush's rest shape, in the dab's pose, first touches
-/// (spec §3): p = 0 lands only the lowest tip, whatever the hairs are doing now. Each
-/// thread takes rest vertices rather than whole strands, so the floor reads spread over the
-/// workgroup; the maximum is exact, so the order does not change the result.
+/// (spec §3): p = 0 lands only the lowest tip, whatever the hairs are doing now. The max is
+/// exact, so splitting it per vertex does not change the result.
 fn touch_height_px(thread: u32) -> f32 {
     let placed = pose_at_height(dab.handle_rest_height_px);
     var touch = -NO_FLOOR_PX;
@@ -136,9 +133,8 @@ fn touch(@builtin(local_invocation_index) thread: u32) {
     }
 }
 
-/// Solves one strand per thread along the path `touch` recorded: the serial solve the
-/// grouped `solve` is checked against. No barriers, so the workgroup can be small and each
-/// thread gets the registers the solve needs.
+/// Solves one strand along the path `touch` recorded. No barriers, so the workgroup can be
+/// small and each thread gets the registers the solve needs.
 @compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
 fn solve_reference(@builtin(global_invocation_id) id: vec3<u32>) {
     solve_serially(id.x);

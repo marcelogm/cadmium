@@ -12,8 +12,7 @@ const RIDGE_PERIOD_PX: usize = 16;
 const RIDGE_WIDTH_PX: usize = 6;
 const RIDGE_HEIGHT_UM: f32 = 1200.0;
 const TILT_DEG: f32 = 20.0;
-/// The two solves add the same terms in the same order, so they differ only where the
-/// compiler fuses a multiply-add one way in one and the other way in the other.
+/// They differ only where the compiler fuses a multiply-add differently.
 const POSITION_TOLERANCE_PX: f32 = 1.0e-3;
 const FORCE_TOLERANCE_SHARE: f32 = 1.0e-3;
 const FORCE_FLOOR_N: f32 = 1.0e-9;

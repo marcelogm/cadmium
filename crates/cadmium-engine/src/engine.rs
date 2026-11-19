@@ -217,8 +217,6 @@ impl WetOilEngine {
         }
     }
 
-    /// Solves the strands one per thread, with the serial solve, instead of the grouped
-    /// one: for tests that check the two agree.
     #[doc(hidden)]
     pub fn use_reference_bristle_solve(&mut self, reference: bool) {
         let strand_solve = if reference {

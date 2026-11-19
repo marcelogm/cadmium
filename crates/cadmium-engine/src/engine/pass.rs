@@ -147,7 +147,6 @@ impl DabPasses {
         }
     }
 
-    /// `encode`, with each stage of each dab in its own pass timed by `timer`.
     pub(super) fn encode_timed(
         &self,
         bind_groups: &DabBindGroups,

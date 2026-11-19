@@ -1,10 +1,6 @@
-// The strand solve of `solve_reference`, spread over the lanes of a workgroup. Each strand
-// gets BRISTLE_VERTICES lanes, and lane v owns vertex v, hinge v and contact row v (vertex
-// v + 1). Every value is built from the same terms in the same order as the serial solve,
-// so the two agree but for the compiler's freedom to fuse multiply-adds. Lane 0 of a strand
-// keeps the strand's serial work: the Cholesky, the active-set decisions, the cap and the
-// force sum. Phases are separated by workgroup barriers, so every loop that holds one runs
-// a workgroup-uniform count.
+// Every helper mirrors the serial function of the same role, term for term, so the two
+// solves stay equivalent. Lane v owns vertex v, hinge v and contact row v (vertex v + 1).
+// Every loop holding a workgroup barrier runs a workgroup-uniform count.
 
 alias GroupVectors = array<array<vec3<f32>, BRISTLE_VERTICES>, BRISTLE_STRANDS_PER_GROUP>;
 alias GroupHinges = array<array<vec3<f32>, BRISTLE_SEGMENTS>, BRISTLE_STRANDS_PER_GROUP>;
@@ -40,7 +36,6 @@ struct Lane {
     live: bool,
 };
 
-/// What one iteration leaves the lane: its vertex, and on lane 0 the canvas's force, N.
 struct Stepped {
     at: vec3<f32>,
     force: f32,
@@ -52,18 +47,15 @@ fn lane_of(group: u32, local: u32) -> Lane {
     return Lane(group, strand, local % BRISTLE_VERTICES, bristle, bristle < dab.bristle_total);
 }
 
-/// Lane 0 of a live strand, where the strand's serial work runs.
 fn leads(lane: Lane) -> bool {
     return lane.live && lane.vertex == 0u;
 }
 
-/// A live lane with a hinge (and a contact row) of its own: every lane but the tip's.
 fn owns_hinge(lane: Lane) -> bool {
     return lane.live && lane.vertex < BRISTLE_SEGMENTS;
 }
 
-/// The lane's vertex as the dab finds it: hung at rest after a reset, else where the last
-/// dab left it (`place_at_rest`, `held_chain`).
+// mirrors held_chain, place_at_rest
 fn held_position(lane: Lane, start: Pose) -> vec3<f32> {
     if dab.bristle_reset != 0u {
         var local = rest_chain_local(rests[lane.bristle]);
@@ -72,7 +64,7 @@ fn held_position(lane: Lane, start: Pose) -> vec3<f32> {
     return states[position_slot(lane.bristle, lane.vertex)].xyz;
 }
 
-/// Publishes the lane's vertex and the floor under it (`floors_under`, `floor_normals`).
+// mirrors floors_under, floor_normals
 fn place_vertex(lane: Lane, at: vec3<f32>, sampled: vec3<f32>, radius_px: f32) {
     var height = 0.0;
     var slope = vec2<f32>(0.0);
@@ -85,7 +77,7 @@ fn place_vertex(lane: Lane, at: vec3<f32>, sampled: vec3<f32>, radius_px: f32) {
     group_normals[lane.strand][lane.vertex] = normalize(vec3<f32>(-slope, 1.0));
 }
 
-/// Edge `lane.vertex` (`edges_of`), with a short edge marked for `mend_short_edges`.
+// mirrors edges_of
 fn place_edge(lane: Lane) {
     let s = lane.strand;
     let edge = lane.vertex;
@@ -95,14 +87,13 @@ fn place_edge(lane: Lane) {
     group_short[s][edge] = select(1u, 0u, size > MIN_SEGMENT_SPAN_PX);
 }
 
-/// Hinge `lane.vertex`'s bending compliance, rad per N·m, as `strand_shape` computes it.
-/// It depends on the rest strand alone, so it is placed once per dab.
+// mirrors strand_shape; depends on the rest strand alone, so placed once per dab
 fn place_compliance(lane: Lane, rest: BristleRest) {
     let segment_m = segment_length(rest) * METRES_PER_PX;
     group_compliances[lane.strand][lane.vertex] = hinge_compliance_per_m(lane.vertex) * segment_m / rest.stiffness;
 }
 
-/// A short edge takes the heading of the edge above it, as `edges_of` does.
+// mirrors edges_of
 fn mend_short_edges(strand: u32, clamp: vec3<f32>) {
     var previous = clamp;
     for (var edge = 0u; edge < BRISTLE_SEGMENTS; edge++) {
@@ -113,7 +104,7 @@ fn mend_short_edges(strand: u32, clamp: vec3<f32>) {
     }
 }
 
-/// Hinge `lane.vertex`'s step of the bending energy alone (`free_turns`).
+// mirrors free_turns
 fn free_turn(lane: Lane, shape: StrandShape) -> vec3<f32> {
     let s = lane.strand;
     let hinge = lane.vertex;
@@ -129,7 +120,7 @@ fn free_turn(lane: Lane, shape: StrandShape) -> vec3<f32> {
     return rest - rotation_between(before, group_edges[s][hinge]) + loaded;
 }
 
-/// How far inside the relief `vertex` would end after the free turns (`gaps_after`).
+// mirrors gaps_after
 fn gap_of(strand: u32, vertex: u32) -> f32 {
     var moved = vec3<f32>(0.0);
     for (var hinge = 0u; hinge < vertex; hinge++) {
@@ -140,7 +131,7 @@ fn gap_of(strand: u32, vertex: u32) -> f32 {
     return under - dot(normal, moved);
 }
 
-/// `vertex`'s own contact compliance (`contact_problem`'s diagonal).
+// mirrors contact_problem diagonal
 fn diagonal_of(strand: u32, vertex: u32) -> f32 {
     var own = 0.0;
     for (var hinge = 0u; hinge < vertex; hinge++) {
@@ -150,7 +141,7 @@ fn diagonal_of(strand: u32, vertex: u32) -> f32 {
     return own * METRES_PER_PX;
 }
 
-/// `contact_compliance` over the strand's workgroup copy.
+// mirrors contact_compliance
 fn group_compliance(strand: u32, vertex: u32, pushed: u32) -> f32 {
     var rise = 0.0;
     for (var hinge = 0u; hinge < min(vertex, pushed); hinge++) {
@@ -161,7 +152,6 @@ fn group_compliance(strand: u32, vertex: u32, pushed: u32) -> f32 {
     return rise;
 }
 
-/// `CONTACT_RIDGE_SHARE` of `ridge_scale`.
 fn group_ridge_of(strand: u32) -> f32 {
     let segment_px = distance(group_chain[strand][1], group_chain[strand][0]);
     var largest = group_compliances[strand][BRISTLE_SEGMENTS - 1u] * segment_px * segment_px * METRES_PER_PX;
@@ -171,8 +161,7 @@ fn group_ridge_of(strand: u32) -> f32 {
     return CONTACT_RIDGE_SHARE * largest;
 }
 
-/// Whether the free step leaves a vertex under its floor (`any_under`), and if so the ridge
-/// and the first active set of `contact_forces`.
+// mirrors any_under, contact_forces
 fn open_contacts(strand: u32) {
     var under = false;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
@@ -193,7 +182,7 @@ fn open_contacts(strand: u32) {
     }
 }
 
-/// `active_forces` over the strand's workgroup copy.
+// mirrors active_forces
 fn group_active_forces(strand: u32) -> PerContact {
     var engaged: Engaged;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
@@ -224,8 +213,7 @@ fn group_active_forces(strand: u32) -> PerContact {
     return forces;
 }
 
-/// One round's forces, then the contacts that would pull the strand down dropped
-/// (`released`).
+// mirrors released
 fn solve_round(strand: u32) {
     let forces = group_active_forces(strand);
     var dropped = 0u;
@@ -239,7 +227,7 @@ fn solve_round(strand: u32) {
     group_dropped[strand] = dropped;
 }
 
-/// The turn the round's forces give `hinge` (`rises`).
+// mirrors rises
 fn rise_turn(strand: u32, hinge: u32) -> vec3<f32> {
     var turn = vec3<f32>(0.0);
     for (var pushed = hinge + 1u; pushed < BRISTLE_VERTICES; pushed++) {
@@ -252,7 +240,7 @@ fn rise_turn(strand: u32, hinge: u32) -> vec3<f32> {
     return turn;
 }
 
-/// Engages `row` if the round's forces leave its vertex under its floor (`landed`).
+// mirrors landed
 fn land_row(strand: u32, row: u32) {
     let vertex = row + 1u;
     var moved = vec3<f32>(0.0);
@@ -276,7 +264,6 @@ fn any_added(strand: u32) -> bool {
     return added;
 }
 
-/// The live strands of the workgroup still solving their contacts.
 fn unsettled_strands(group: u32) -> u32 {
     var count = 0u;
     for (var strand = 0u; strand < BRISTLE_STRANDS_PER_GROUP; strand++) {
@@ -288,7 +275,7 @@ fn unsettled_strands(group: u32) -> u32 {
     return count;
 }
 
-/// The last forces of `contact_forces`, kept only where engaged and never pulling.
+// mirrors contact_forces
 fn close_contacts(strand: u32) {
     if group_settled[strand] == 0u {
         let forces = group_active_forces(strand);
@@ -302,8 +289,7 @@ fn close_contacts(strand: u32) {
     }
 }
 
-/// The active-set loop of `contact_forces`, round by round across the workgroup, until
-/// every strand has settled or `CONTACT_ROUNDS` ran.
+// mirrors contact_forces
 fn settle_contacts(lane: Lane) {
     let s = lane.strand;
     for (var round = 0u; round < CONTACT_ROUNDS; round++) {
@@ -338,7 +324,7 @@ fn settle_contacts(lane: Lane) {
     workgroupBarrier();
 }
 
-/// Hinge `hinge`'s free turn plus what the canvas's forces turn it (`solve_iteration`).
+// mirrors solve_iteration
 fn pushed_turn(strand: u32, hinge: u32, free: vec3<f32>) -> vec3<f32> {
     var turn = free;
     for (var pushed = hinge + 1u; pushed < BRISTLE_VERTICES; pushed++) {
@@ -349,7 +335,7 @@ fn pushed_turn(strand: u32, hinge: u32, free: vec3<f32>) -> vec3<f32> {
     return turn;
 }
 
-/// The uniform scale of `capped`.
+// mirrors capped
 fn cap_scale(strand: u32) -> f32 {
     var largest = 0.0;
     for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
@@ -358,8 +344,7 @@ fn cap_scale(strand: u32) -> f32 {
     return MAX_HINGE_TURN_RAD / max(largest, MAX_HINGE_TURN_RAD);
 }
 
-/// Where `turn_chain` puts `vertex`: the quaternion prefix down to it, rebuilt by this
-/// lane alone in the serial order.
+// mirrors turn_chain; rebuilt by this lane alone, in the serial order
 fn turned_position(strand: u32, vertex: u32, scale: f32, segment_px: f32) -> vec3<f32> {
     var at = group_chain[strand][0];
     var total = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -371,7 +356,7 @@ fn turned_position(strand: u32, vertex: u32, scale: f32, segment_px: f32) -> vec
     return at;
 }
 
-/// `summed`.
+// mirrors summed
 fn summed_group_forces(strand: u32) -> f32 {
     var total = 0.0;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
@@ -380,8 +365,7 @@ fn summed_group_forces(strand: u32) -> f32 {
     return total;
 }
 
-/// One `solve_iteration` of every strand in the workgroup, once `place_vertex` has
-/// published the carried chain and its floors.
+// mirrors solve_iteration
 fn solve_step(lane: Lane, shape: StrandShape) -> Stepped {
     let s = lane.strand;
     if owns_hinge(lane) {
@@ -435,8 +419,6 @@ fn solve_step(lane: Lane, shape: StrandShape) -> Stepped {
     return stepped;
 }
 
-/// Solves BRISTLE_STRANDS_PER_GROUP strands along the path `touch` recorded, one lane per
-/// vertex: the same strands as `solve_reference`.
 @compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
 fn solve(
     @builtin(workgroup_id) group: vec3<u32>,

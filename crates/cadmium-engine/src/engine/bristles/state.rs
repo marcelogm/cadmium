@@ -10,13 +10,10 @@ use crate::engine::{TIP_CHANNELS, TIP_TEXELS, VOLUME_CHANNEL, WetOilEngine};
 use crate::gpu::{GpuContext, GpuLost};
 
 pub(crate) const BRISTLE_WORKGROUP_SIZE: u32 = 512;
-/// Threads per workgroup of the strand solves: one strand per thread in the serial one, one
-/// lane per vertex in the grouped one. One strand per workgroup keeps the grouped solve's
-/// barriers inside a single wave and spreads its strands over the most compute units
-/// (measured faster than 2, 4 and 8 strands per workgroup).
+/// One strand per workgroup beat 2, 4 and 8 in measurement: the barriers stay inside a single
+/// wave and the strands spread over the most compute units.
 pub(crate) const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = 8;
 pub(crate) const BRISTLES_PER_THREAD: u32 = MAX_BRISTLES as u32 / BRISTLE_WORKGROUP_SIZE;
-/// Strands the grouped solve fits in one workgroup: one lane per vertex of each.
 pub(crate) const BRISTLE_STRANDS_PER_GROUP: u32 =
     BRISTLE_SOLVE_WORKGROUP_SIZE / BRISTLE_VERTICES as u32;
 /// Each vertex's position and the floor under it.

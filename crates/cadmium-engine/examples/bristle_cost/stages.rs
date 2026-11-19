@@ -1,5 +1,3 @@
-//! `CADMIUM_BENCH_STAGES=1`: each scenario also reports each dab stage's GPU time per dab.
-
 use std::collections::BTreeMap;
 
 use cadmium_engine::engine::DabStageTime;
@@ -11,7 +9,6 @@ pub(crate) fn wanted() -> bool {
     std::env::var_os(STAGES_VARIABLE).is_some()
 }
 
-/// Each stage's dabs and GPU time over a scenario.
 #[derive(Default)]
 pub(crate) struct StageTally {
     totals: BTreeMap<String, (u64, f64)>,
@@ -26,7 +23,6 @@ impl StageTally {
         }
     }
 
-    /// Each stage's mean µs per dab, by stage name.
     pub(crate) fn per_dab_us(&self) -> Vec<(String, f64, u64)> {
         self.totals
             .iter()
