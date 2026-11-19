@@ -3,7 +3,9 @@ use crate::canvas::StateTexture;
 use crate::compute::{
     ComputeStage, buffer_binding, storage_entry, texture_binding, texture_entry, uniform_entry,
 };
-use crate::engine::bristles::{BRISTLE_SOLVE_WORKGROUP_SIZE, MAX_BRISTLES};
+use crate::engine::bristles::{
+    BRISTLE_SOLVE_WORKGROUP_SIZE, BRISTLE_STRANDS_PER_GROUP, MAX_BRISTLES,
+};
 use crate::engine::shader::{BRISTLE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
@@ -32,7 +34,8 @@ impl StrandSolve {
 
     fn workgroups(self) -> [u32; 2] {
         match self {
-            StrandSolve::Grouped | StrandSolve::Serial => SERIAL_WORKGROUPS,
+            StrandSolve::Grouped => [MAX_BRISTLES as u32 / BRISTLE_STRANDS_PER_GROUP, 1],
+            StrandSolve::Serial => SERIAL_WORKGROUPS,
         }
     }
 }
@@ -55,7 +58,11 @@ impl BristleStepPass {
             "bristle_step",
             &shader_source(
                 &BRISTLE_SNIPPETS,
-                include_str!("../../shaders/bristle_step.wgsl"),
+                &format!(
+                    "{}\n{}",
+                    include_str!("../../shaders/bristle_step.wgsl"),
+                    include_str!("../../shaders/bristle_strand_groups.wgsl"),
+                ),
             ),
             &[
                 dab_record_entry(),

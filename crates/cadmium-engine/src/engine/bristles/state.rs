@@ -13,6 +13,9 @@ pub(crate) const BRISTLE_WORKGROUP_SIZE: u32 = 512;
 /// Threads per workgroup of the per-strand solve, one strand each.
 pub(crate) const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = 64;
 pub(crate) const BRISTLES_PER_THREAD: u32 = MAX_BRISTLES as u32 / BRISTLE_WORKGROUP_SIZE;
+/// Strands the grouped solve fits in one workgroup: one lane per vertex of each.
+pub(crate) const BRISTLE_STRANDS_PER_GROUP: u32 =
+    BRISTLE_SOLVE_WORKGROUP_SIZE / BRISTLE_VERTICES as u32;
 /// Each vertex's position and the floor under it.
 pub(crate) const BRISTLE_STATE_VECTORS: usize = BRISTLE_VERTICES;
 pub(crate) const BRISTLE_FLARE_SHARE: f32 = 0.015;
@@ -33,6 +36,9 @@ const HANDLE_STATE_BYTES: u64 = 96;
 const HAIR_LOAD_BYTES: u64 = (MAX_BRISTLES * std::mem::size_of::<f32>()) as u64;
 const _: () = assert!(MAX_BRISTLES as u32 == BRISTLES_PER_THREAD * BRISTLE_WORKGROUP_SIZE);
 const _: () = assert!(std::mem::size_of::<BristleRest>() == 64);
+const _: () =
+    assert!(BRISTLE_STRANDS_PER_GROUP * BRISTLE_VERTICES as u32 == BRISTLE_SOLVE_WORKGROUP_SIZE);
+const _: () = assert!((MAX_BRISTLES as u32).is_multiple_of(BRISTLE_STRANDS_PER_GROUP));
 
 pub(crate) struct BristleBuffers {
     pub(crate) rests: wgpu::Buffer,

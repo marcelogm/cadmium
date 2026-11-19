@@ -150,12 +150,6 @@ fn solve_reference(@builtin(global_invocation_id) id: vec3<u32>) {
     solve_serially(id.x);
 }
 
-/// `solve_reference` under the name the app dispatches, until the grouped solve replaces it.
-@compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
-fn solve(@builtin(global_invocation_id) id: vec3<u32>) {
-    solve_serially(id.x);
-}
-
 fn solve_serially(bristle: u32) {
     if bristle >= dab.bristle_total {
         return;
