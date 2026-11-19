@@ -14,6 +14,10 @@
 //! `CADMIUM_PEN_SPEED=<px/s>` draws the strokes at that speed instead of 800 px/s.
 //! `CADMIUM_PACED=1` paces the dabs over frames the way the app does, and also prints how
 //! many frames a stroke kept painting after the pen lifted (with one repeat only).
+//! `CADMIUM_BENCH_STAGES=1` also times each dab stage in its own compute pass and prints each
+//! stage's GPU time per dab after each scenario. Splitting the passes costs a little, so the
+//! frame times of such a run are not the ones the gate compares: use it to attribute, and
+//! check the gate on a run without it.
 //!
 //! `CADMIUM_BENCH_REPEATS=<n>` measures each scenario n times (default 1), on a fresh canvas
 //! each time, and reports and records the median of the n means and of the n p95s. The
@@ -38,6 +42,7 @@ mod bench;
 mod gate;
 mod record;
 mod scenarios;
+mod stages;
 mod summary;
 mod timing;
 
@@ -50,6 +55,7 @@ use cadmium_engine::session::PaintSession;
 
 use bench::{Bench, STROKE_PRESSURE, long_stroke, s_curve};
 use scenarios::{Ground, Motion, SCENARIOS, Scenario};
+use stages::StageTally;
 use summary::{Measured, measured, median_of, print_header, print_row, report_quarters};
 use timing::{FrameCost, Timestamps, timestamps};
 
@@ -81,11 +87,13 @@ fn measure(
         frame_index: 0,
         pacing: std::env::var_os(PACED_VARIABLE).map(|_| DabBudget::default()),
         frames_after_lift: 0,
+        stages: None,
     };
     if scenario.ground == Ground::Impasto {
         bench.lay_impasto();
     }
     bench.take_up(scenario);
+    bench.stages = start_stage_timing(&mut bench);
     let costs = match scenario.motion {
         Motion::Stroke => bench.stroke(&s_curve(STROKE_PRESSURE)),
         Motion::LongStroke => bench.stroke(&long_stroke(STROKE_PRESSURE)),
@@ -93,13 +101,27 @@ fn measure(
         Motion::Shade => bench.shade(),
         Motion::Present => bench.present(),
     };
+    report(&bench, scenario, report_lift);
+    costs
+}
+
+/// What a scenario printed beyond its frame row: the frames after the lift, the stage times.
+fn report(bench: &Bench, scenario: &Scenario, report_lift: bool) {
     if report_lift && bench.pacing.is_some() && bench.frames_after_lift > 0 {
         println!(
             "  painting {} frames after the pen lifted",
             bench.frames_after_lift
         );
     }
-    costs
+    if let Some(tally) = &bench.stages {
+        println!("{} stages:", scenario.name);
+        tally.print();
+    }
+}
+
+/// The tally of each dab stage's GPU time, when `CADMIUM_BENCH_STAGES` asks for it.
+fn start_stage_timing(bench: &mut Bench) -> Option<StageTally> {
+    (stages::wanted() && bench.session.engine.time_dab_stages(bench.gpu)).then(StageTally::default)
 }
 
 fn selected(scenario: &Scenario, filter: Option<&str>) -> bool {

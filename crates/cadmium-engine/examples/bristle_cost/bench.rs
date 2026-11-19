@@ -8,6 +8,7 @@ use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::{StrokeSample, Tool};
 
 use crate::scenarios::Scenario;
+use crate::stages::StageTally;
 use crate::timing::{FrameCost, Timestamps, finish_frame, write_timestamp};
 use crate::{CANVAS_HEIGHT_PX, CANVAS_WIDTH_PX, PIGMENTS};
 
@@ -37,6 +38,7 @@ pub(crate) struct Bench<'gpu> {
     pub(crate) frame_index: u32,
     pub(crate) pacing: Option<DabBudget>,
     pub(crate) frames_after_lift: usize,
+    pub(crate) stages: Option<StageTally>,
 }
 
 impl Bench<'_> {
@@ -58,7 +60,18 @@ impl Bench<'_> {
         if let Some(target) = &self.present_target {
             encode_full_present(self.gpu, &self.session, target, &mut encoder);
         }
+        if self.stages.is_some() {
+            self.session.engine.resolve_dab_stage_times(&mut encoder);
+        }
         let gpu_ms = finish_frame(self.gpu, self.timestamps, encoder);
+        if let Some(tally) = self.stages.as_mut() {
+            let times = self
+                .session
+                .engine
+                .take_dab_stage_times(self.gpu)
+                .expect("the GPU stays available while measuring");
+            tally.add(&times);
+        }
         self.frame_index += 1;
         let wall_ms = started.elapsed().as_secs_f64() * 1000.0;
         if let Some(pacing) = self.pacing.as_mut() {
