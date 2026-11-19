@@ -35,6 +35,7 @@ pub(crate) use pass::pick::PickRequest;
 
 use bristles::{BristleBuffers, BristleRig, LayoutRequest, MAX_BRISTLES};
 use dab_record::{upload_dab_records, upload_records};
+use pass::bristle_step::StrandSolve;
 use pass::dip::DipPass;
 use pass::dry::DryPass;
 use pass::pick::PickPass;
@@ -214,6 +215,18 @@ impl WetOilEngine {
             dip_pass: DipPass::new(gpu),
             stage_timer: None,
         }
+    }
+
+    /// Solves the strands one per thread, with the serial solve, instead of the grouped
+    /// one: for tests that check the two agree.
+    #[doc(hidden)]
+    pub fn use_reference_bristle_solve(&mut self, reference: bool) {
+        let strand_solve = if reference {
+            StrandSolve::Serial
+        } else {
+            StrandSolve::Grouped
+        };
+        self.dab_passes.choose_strand_solve(strand_solve);
     }
 
     pub fn resize_tip(&mut self, radius_px: f32) {

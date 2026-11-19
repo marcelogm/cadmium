@@ -10,6 +10,7 @@ use apply::ApplyPass;
 use blade::BladePass;
 use bristle_contact::ContactPass;
 use bristle_step::BristleStepPass;
+use bristle_step::StrandSolve;
 use capillary::CapillaryPass;
 use exchange::ExchangePass;
 use graphite::GraphitePass;
@@ -21,7 +22,7 @@ use wipe::WipePass;
 mod apply;
 mod blade;
 pub(super) mod bristle_contact;
-mod bristle_step;
+pub(super) mod bristle_step;
 mod capillary;
 pub(super) mod dip;
 pub(super) mod dry;
@@ -83,6 +84,10 @@ pub(super) struct DabBindGroups {
 }
 
 impl DabPasses {
+    pub(super) fn choose_strand_solve(&mut self, strand_solve: StrandSolve) {
+        self.bristles.choose(strand_solve);
+    }
+
     pub(super) fn new(gpu: &GpuContext) -> DabPasses {
         let refill = RefillPass::new(gpu);
         DabPasses {

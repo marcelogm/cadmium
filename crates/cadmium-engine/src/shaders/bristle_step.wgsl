@@ -142,11 +142,21 @@ fn touch(@builtin(local_invocation_index) thread: u32) {
     }
 }
 
-/// Solves one strand along the path `touch` recorded. No barriers, so the workgroup can be
-/// small and each thread gets the registers the solve needs.
+/// Solves one strand per thread along the path `touch` recorded: the serial solve the
+/// grouped `solve` is checked against. No barriers, so the workgroup can be small and each
+/// thread gets the registers the solve needs.
+@compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
+fn solve_reference(@builtin(global_invocation_id) id: vec3<u32>) {
+    solve_serially(id.x);
+}
+
+/// `solve_reference` under the name the app dispatches, until the grouped solve replaces it.
 @compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
 fn solve(@builtin(global_invocation_id) id: vec3<u32>) {
-    let bristle = id.x;
+    solve_serially(id.x);
+}
+
+fn solve_serially(bristle: u32) {
     if bristle >= dab.bristle_total {
         return;
     }

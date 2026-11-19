@@ -8,16 +8,41 @@ use crate::engine::shader::{BRISTLE_SNIPPETS, shader_source};
 use crate::gpu::GpuContext;
 
 const SINGLE_WORKGROUP: [u32; 2] = [1, 1];
-const SOLVE_WORKGROUPS: [u32; 2] = [
+const SERIAL_WORKGROUPS: [u32; 2] = [
     MAX_BRISTLES.div_ceil(BRISTLE_SOLVE_WORKGROUP_SIZE as usize) as u32,
     1,
 ];
 const FIRST_RECORD_OFFSET: wgpu::DynamicOffset = 0;
 
+/// Which strand solve the step dispatches. Both give the same strands; `Serial` is kept so
+/// tests can check `Grouped` against it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StrandSolve {
+    Grouped,
+    Serial,
+}
+
+impl StrandSolve {
+    fn entry_point(self) -> &'static str {
+        match self {
+            StrandSolve::Grouped => "solve",
+            StrandSolve::Serial => "solve_reference",
+        }
+    }
+
+    fn workgroups(self) -> [u32; 2] {
+        match self {
+            StrandSolve::Grouped | StrandSolve::Serial => SERIAL_WORKGROUPS,
+        }
+    }
+}
+
 pub(super) struct BristleStepPass {
     compute: ComputeStage,
     touch: wgpu::ComputePipeline,
-    solve: wgpu::ComputePipeline,
+    grouped: wgpu::ComputePipeline,
+    serial: wgpu::ComputePipeline,
+    strand_solve: StrandSolve,
 }
 
 impl BristleStepPass {
@@ -46,7 +71,13 @@ impl BristleStepPass {
         );
         BristleStepPass {
             touch: compute.pipeline(gpu, "bristle_touch", "touch"),
-            solve: compute.pipeline(gpu, "bristle_solve", "solve"),
+            grouped: compute.pipeline(gpu, "bristle_solve", StrandSolve::Grouped.entry_point()),
+            serial: compute.pipeline(
+                gpu,
+                "bristle_solve_reference",
+                StrandSolve::Serial.entry_point(),
+            ),
+            strand_solve: StrandSolve::Grouped,
             compute,
         }
     }
@@ -89,9 +120,20 @@ impl BristleStepPass {
         self.dispatch_both(pass);
     }
 
-    /// The touch height and the dab's path first, then one thread per strand.
+    pub(super) fn choose(&mut self, strand_solve: StrandSolve) {
+        self.strand_solve = strand_solve;
+    }
+
+    /// The touch height and the dab's path first, then the chosen strand solve.
     fn dispatch_both(&self, pass: &mut wgpu::ComputePass<'_>) {
         dispatch(pass, &self.touch, SINGLE_WORKGROUP);
-        dispatch(pass, &self.solve, SOLVE_WORKGROUPS);
+        let solve = match self.strand_solve {
+            StrandSolve::Grouped => &self.grouped,
+            StrandSolve::Serial => &self.serial,
+        };
+        dispatch(pass, solve, self.strand_solve.workgroups());
     }
 }
+
+#[cfg(test)]
+mod tests;
