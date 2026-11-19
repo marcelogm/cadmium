@@ -9,6 +9,7 @@ mod exchange;
 mod frame;
 mod friction;
 mod hull;
+mod invariants;
 mod look;
 mod paint;
 mod patches;

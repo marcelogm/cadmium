@@ -3,7 +3,6 @@ use cadmium_engine::gpu::{GpuContext, read_mapped, staging_buffer};
 const TIMESTAMP_QUERIES: u32 = 2;
 const TIMESTAMP_BYTES: u64 = TIMESTAMP_QUERIES as u64 * wgpu::QUERY_SIZE as u64;
 const NANOSECONDS_PER_MILLISECOND: f64 = 1.0e6;
-const PERCENTILE: f64 = 0.95;
 
 pub(crate) struct Timestamps {
     queries: wgpu::QuerySet,
@@ -99,43 +98,4 @@ pub(crate) fn timestamps(gpu: &GpuContext) -> Option<Timestamps> {
         staging: staging_buffer(gpu, "bristle_cost_staging", TIMESTAMP_BYTES),
         period_ns: f64::from(gpu.queue.get_timestamp_period()),
     })
-}
-
-fn mean_and_percentile(mut values: Vec<f64>) -> (f64, f64) {
-    values.sort_by(f64::total_cmp);
-    let mean = values.iter().sum::<f64>() / values.len().max(1) as f64;
-    let rank = ((values.len() as f64 * PERCENTILE).ceil() as usize).saturating_sub(1);
-    (mean, values.get(rank).copied().unwrap_or(0.0))
-}
-
-pub(crate) fn report(name: &str, costs: &[FrameCost]) {
-    let (wall_mean, wall_p95) =
-        mean_and_percentile(costs.iter().map(|cost| cost.wall_ms).collect());
-    let gpu: Option<Vec<f64>> = costs.iter().map(|cost| cost.gpu_ms).collect();
-    let gpu = gpu.map_or_else(
-        || format!("{:>9} {:>9}", "-", "-"),
-        |gpu| {
-            let (mean, p95) = mean_and_percentile(gpu);
-            format!("{mean:>9.2} {p95:>9.2}")
-        },
-    );
-    println!(
-        "{name:<36} {:>6} {gpu} {wall_mean:>9.2} {wall_p95:>9.2}",
-        costs.len()
-    );
-}
-
-const QUARTERS: usize = 4;
-const QUARTER_NAMES: [&str; QUARTERS] = [
-    "  first quarter",
-    "  second quarter",
-    "  third quarter",
-    "  last quarter",
-];
-
-pub(crate) fn report_quarters(costs: &[FrameCost]) {
-    let quarter = costs.len().div_ceil(QUARTERS).max(1);
-    for (name, chunk) in QUARTER_NAMES.iter().zip(costs.chunks(quarter)) {
-        report(name, chunk);
-    }
 }

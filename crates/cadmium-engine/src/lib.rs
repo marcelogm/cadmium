@@ -7,6 +7,7 @@ pub mod frame_budget;
 pub mod gpu;
 pub mod gpu_timer;
 pub mod history;
+pub mod mechanics;
 pub mod palette;
 pub mod params;
 pub mod pigments;

@@ -1,0 +1,121 @@
+//! A run's results as tab-separated values, and the check of a run against a recorded one.
+
+use std::fmt::Write as _;
+use std::path::Path;
+
+use crate::summary::Measured;
+
+pub(crate) const OUT_VARIABLE: &str = "CADMIUM_BENCH_OUT";
+pub(crate) const BASELINE_VARIABLE: &str = "CADMIUM_BENCH_BASELINE";
+/// How much slower than the baseline a scenario may get: the budget of the XPBD rewrite (#62).
+pub(crate) const ALLOWED_SLOWDOWN: f64 = 1.10;
+/// A field must also get this much slower, in ms, to be over budget, so that jitter cannot
+/// fail the scenarios that cost almost nothing.
+pub(crate) const ALLOWED_ABSOLUTE_SLOWDOWN_MS: f64 = 0.05;
+const HEADER: &str = "scenario\tframes\tgpu_mean_ms\tgpu_p95_ms\twall_mean_ms\twall_p95_ms";
+const NO_VALUE: &str = "-";
+
+pub(crate) fn write(
+    path: &Path,
+    adapter: &str,
+    repeats: usize,
+    rows: &[Measured],
+) -> std::io::Result<()> {
+    let mut text = format!("# adapter: {adapter}\n# repeats: {repeats}\n{HEADER}\n");
+    for row in rows {
+        let (gpu_mean, gpu_p95) = row.gpu.map_or_else(
+            || (NO_VALUE.to_string(), NO_VALUE.to_string()),
+            |(mean, p95)| (format!("{mean:.4}"), format!("{p95:.4}")),
+        );
+        let (wall_mean, wall_p95) = row.wall;
+        let _ = writeln!(
+            text,
+            "{}\t{}\t{gpu_mean}\t{gpu_p95}\t{wall_mean:.4}\t{wall_p95:.4}",
+            row.name, row.frames
+        );
+    }
+    std::fs::write(path, text)
+}
+
+/// A recorded run: the adapter and the number of repeats it was measured with, when the file
+/// says, and its scenarios.
+pub(crate) struct Baseline {
+    pub(crate) adapter: Option<String>,
+    pub(crate) repeats: Option<usize>,
+    pub(crate) rows: Vec<Measured>,
+}
+
+pub(crate) fn read(path: &Path) -> std::io::Result<Baseline> {
+    let text = std::fs::read_to_string(path)?;
+    let adapter = text
+        .lines()
+        .find_map(|line| line.strip_prefix("# adapter: "))
+        .map(str::to_string);
+    let repeats = text
+        .lines()
+        .find_map(|line| line.strip_prefix("# repeats: "))
+        .and_then(|count| count.trim().parse().ok());
+    let rows = text
+        .lines()
+        .filter(|line| !line.starts_with('#') && *line != HEADER)
+        .filter_map(parse_row)
+        .collect();
+    Ok(Baseline {
+        adapter,
+        repeats,
+        rows,
+    })
+}
+
+fn parse_row(line: &str) -> Option<Measured> {
+    let fields: Vec<&str> = line.split('\t').collect();
+    let [name, frames, gpu_mean, gpu_p95, wall_mean, wall_p95] = fields.as_slice() else {
+        return None;
+    };
+    Some(Measured {
+        name: (*name).to_string(),
+        frames: frames.parse().ok()?,
+        gpu: gpu_mean.parse().ok().zip(gpu_p95.parse().ok()),
+        wall: (wall_mean.parse().ok()?, wall_p95.parse().ok()?),
+    })
+}
+
+/// How many of the current scenarios the baseline also has.
+pub(crate) fn compared(baseline: &[Measured], current: &[Measured]) -> usize {
+    current
+        .iter()
+        .filter(|now| baseline.iter().any(|row| row.name == now.name))
+        .count()
+}
+
+/// The scenarios measured in both runs that got slower than `ALLOWED_SLOWDOWN` and
+/// `ALLOWED_ABSOLUTE_SLOWDOWN_MS` allow, judged on GPU time when both runs have it and on
+/// wall time otherwise.
+pub(crate) fn over_budget(baseline: &[Measured], current: &[Measured]) -> Vec<String> {
+    current
+        .iter()
+        .filter_map(|now| {
+            let before = baseline.iter().find(|row| row.name == now.name)?;
+            slower_than(before, now)
+        })
+        .collect()
+}
+
+/// Over budget: beyond `ALLOWED_SLOWDOWN` times the baseline and beyond the absolute floor.
+fn over(then: f64, current: f64) -> bool {
+    current > then * ALLOWED_SLOWDOWN && current > then + ALLOWED_ABSOLUTE_SLOWDOWN_MS
+}
+
+fn slower_than(before: &Measured, now: &Measured) -> Option<String> {
+    let (then, current, clock) = match (before.gpu, now.gpu) {
+        (Some(then), Some(current)) => (then, current, "gpu"),
+        _ => (before.wall, now.wall, "wall"),
+    };
+    let slower = over(then.0, current.0) || over(then.1, current.1);
+    slower.then(|| {
+        format!(
+            "{}: {clock} mean {:.2} -> {:.2} ms, p95 {:.2} -> {:.2} ms",
+            now.name, then.0, current.0, then.1, current.1
+        )
+    })
+}
