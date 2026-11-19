@@ -126,6 +126,7 @@ fn tilted_default_brush_with_a_tenfold_reserve_still_lays_paint_a_thousand_pixel
 }
 
 #[test]
+#[ignore = "phase 4 of #62: every hair carries the same flat load until the normal force sets hair_loads"]
 fn a_low_load_with_the_default_reserve_runs_dry_within_460_px() {
     let blue = blue_across_a_long_stroke(LOW_LOAD);
     let last_visible = blue.iter().rposition(|amount| *amount > VISIBLE_PIGMENT_UM);

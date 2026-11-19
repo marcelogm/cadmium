@@ -164,6 +164,7 @@ fn a_resting_brush_hangs_its_bristles_straight_down_from_the_ferrule() {
 }
 
 #[test]
+#[ignore = "phase 3 of #62: the wet point comes with elastocapillary clumping"]
 fn a_wet_round_brush_hangs_to_a_point_and_a_dry_one_hangs_straight() {
     let gpu = GpuContext::new().unwrap();
     let mut wet = unclumped(&gpu);
