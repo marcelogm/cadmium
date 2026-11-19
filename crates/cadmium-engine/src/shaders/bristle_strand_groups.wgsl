@@ -72,13 +72,131 @@ fn held_position(lane: Lane, start: Pose) -> vec3<f32> {
     return states[position_slot(lane.bristle, lane.vertex)].xyz;
 }
 
-/// Publishes the lane's vertex and the floor under it (`floors_under`, `floor_normals`).
+/// Texels a side of a lane's floor window holds.
+const FLOOR_WINDOW_SIDE: u32 = 12u;
+/// How far past its sample points a floor window reaches, px, so a point that rounds an ulp
+/// past the box's bound still lands inside it.
+const FLOOR_WINDOW_MARGIN_PX: f32 = 1.0 / 64.0;
+
+/// Each lane's copy of the relief under its vertex, µm: `surface_um_at` of the texels its
+/// floor reads touch, row by row from the window's origin.
+var<workgroup> floor_windows: array<array<f32, FLOOR_WINDOW_SIDE * FLOOR_WINDOW_SIDE>, BRISTLE_SOLVE_WORKGROUP_SIZE>;
+
+/// The texels a lane's window holds: `slot` is its lane, `origin` its first texel and
+/// `size` its texels per axis.
+struct FloorWindow {
+    slot: u32,
+    origin: vec2<i32>,
+    size: vec2<i32>,
+};
+
+/// The texels `surface_px` reads for every point of `swept_floor_px(start, end, radius_px)`
+/// and `floor_slope(end, radius_px)`, from `surface_px`'s own clamp and floor.
+fn floor_window_of(slot: u32, start: vec2<f32>, end: vec2<f32>, radius_px: f32) -> FloorWindow {
+    let reach = vec2<f32>(radius_px + SLOPE_PROBE_PX + FLOOR_WINDOW_MARGIN_PX);
+    let last = vec2<f32>(textureDimensions(dry_height)) - vec2<f32>(1.0);
+    let low = floor(clamp(min(start, end) - reach - vec2<f32>(PIXEL_CENTRE_PX), vec2<f32>(0.0), last));
+    let high = floor(clamp(max(start, end) + reach - vec2<f32>(PIXEL_CENTRE_PX), vec2<f32>(0.0), last));
+    let origin = vec2<i32>(low);
+    // A bilinear reads its corner and the texel past it, which `surface_um_at` clamps.
+    return FloorWindow(slot, origin, vec2<i32>(high) + vec2<i32>(2) - origin);
+}
+
+fn fits_floor_window(window: FloorWindow) -> bool {
+    let side = i32(FLOOR_WINDOW_SIDE);
+    return all(window.size >= vec2<i32>(1)) && all(window.size <= vec2<i32>(side));
+}
+
+/// Fills the lane's window. Only the lane reads it, so no barrier follows.
+fn fill_floor_window(window: FloorWindow) {
+    for (var y = 0; y < window.size.y; y++) {
+        for (var x = 0; x < window.size.x; x++) {
+            let index = u32(y) * FLOOR_WINDOW_SIDE + u32(x);
+            floor_windows[window.slot][index] = surface_um_at(window.origin + vec2<i32>(x, y));
+        }
+    }
+}
+
+/// `surface_um_at` from the lane's window, or from the textures for a texel outside it.
+fn windowed_um_at(window: FloorWindow, texel: vec2<i32>) -> f32 {
+    let offset = texel - window.origin;
+    if all(offset >= vec2<i32>(0)) && all(offset < window.size) {
+        return floor_windows[window.slot][u32(offset.y) * FLOOR_WINDOW_SIDE + u32(offset.x)];
+    }
+    return surface_um_at(texel);
+}
+
+/// `surface_px`, reading the lane's window.
+fn windowed_surface_px(window: FloorWindow, at: vec2<f32>) -> f32 {
+    let last = vec2<f32>(textureDimensions(dry_height)) - vec2<f32>(1.0);
+    let centred = clamp(at - vec2<f32>(PIXEL_CENTRE_PX), vec2<f32>(0.0), last);
+    let corner = floor(centred);
+    let share = centred - corner;
+    let texel = vec2<i32>(corner);
+    let top = mix(windowed_um_at(window, texel), windowed_um_at(window, texel + vec2<i32>(1, 0)), share.x);
+    let bottom = mix(
+        windowed_um_at(window, texel + vec2<i32>(0, 1)),
+        windowed_um_at(window, texel + vec2<i32>(1, 1)),
+        share.x,
+    );
+    return mix(top, bottom, share.y) / RELIEF_UM_PER_PX;
+}
+
+/// `disc_floor_px`, reading the lane's window.
+fn windowed_disc_floor_px(window: FloorWindow, at: vec2<f32>, radius_px: f32) -> f32 {
+    let ring = array<vec2<f32>, FLOOR_RING_POINTS>(
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.5, HEXAGON_SINE),
+        vec2<f32>(-0.5, HEXAGON_SINE),
+        vec2<f32>(-1.0, 0.0),
+        vec2<f32>(-0.5, -HEXAGON_SINE),
+        vec2<f32>(0.5, -HEXAGON_SINE),
+    );
+    var highest = windowed_surface_px(window, at);
+    for (var point = 0u; point < FLOOR_RING_POINTS; point++) {
+        highest = max(highest, windowed_surface_px(window, at + radius_px * ring[point]));
+    }
+    return highest;
+}
+
+/// `swept_floor_px`, reading the lane's window.
+fn windowed_swept_floor_px(window: FloorWindow, start: vec2<f32>, end: vec2<f32>, radius_px: f32) -> f32 {
+    var highest = windowed_disc_floor_px(window, end, radius_px);
+    let spans = ceil(distance(start, end) / max(radius_px, MIN_SEGMENT_SPAN_PX));
+    let samples = u32(min(spans, f32(MAX_SWEEP_SAMPLES + 1u)));
+    for (var sample = 1u; sample < samples; sample++) {
+        let along = mix(start, end, f32(sample) / f32(samples));
+        highest = max(highest, windowed_disc_floor_px(window, along, radius_px));
+    }
+    return highest;
+}
+
+/// `floor_slope`, reading the lane's window.
+fn windowed_floor_slope(window: FloorWindow, at: vec2<f32>, radius_px: f32) -> vec2<f32> {
+    let dx = vec2<f32>(SLOPE_PROBE_PX, 0.0);
+    let dy = vec2<f32>(0.0, SLOPE_PROBE_PX);
+    return vec2<f32>(
+        windowed_disc_floor_px(window, at + dx, radius_px) - windowed_disc_floor_px(window, at - dx, radius_px),
+        windowed_disc_floor_px(window, at + dy, radius_px) - windowed_disc_floor_px(window, at - dy, radius_px),
+    ) / (2.0 * SLOPE_PROBE_PX);
+}
+
+/// Publishes the lane's vertex and the floor under it (`floors_under`, `floor_normals`),
+/// read from a window of the relief when the vertex's reads fit one.
 fn place_vertex(lane: Lane, at: vec3<f32>, sampled: vec3<f32>, radius_px: f32) {
     var height = 0.0;
     var slope = vec2<f32>(0.0);
     if lane.vertex > 0u {
-        height = swept_floor_px(sampled.xy, at.xy, radius_px);
-        slope = floor_slope(at.xy, radius_px);
+        let slot = lane.strand * BRISTLE_VERTICES + lane.vertex;
+        let window = floor_window_of(slot, sampled.xy, at.xy, radius_px);
+        if fits_floor_window(window) {
+            fill_floor_window(window);
+            height = windowed_swept_floor_px(window, sampled.xy, at.xy, radius_px);
+            slope = windowed_floor_slope(window, at.xy, radius_px);
+        } else {
+            height = swept_floor_px(sampled.xy, at.xy, radius_px);
+            slope = floor_slope(at.xy, radius_px);
+        }
     }
     group_chain[lane.strand][lane.vertex] = at;
     group_heights[lane.strand][lane.vertex] = height;
