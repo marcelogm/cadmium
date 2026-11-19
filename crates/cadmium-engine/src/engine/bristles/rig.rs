@@ -52,6 +52,7 @@ pub(crate) struct BristleRig {
     clock: HandleClock,
     last_dab: Option<DabRecord>,
     pressed: bool,
+    stroke_advanced: bool,
     lift_pending: bool,
     last_motion_ms: f32,
 }
@@ -74,6 +75,7 @@ impl BristleRig {
             clock: HandleClock::default(),
             last_dab: None,
             pressed: false,
+            stroke_advanced: false,
             lift_pending: false,
             last_motion_ms: 0.0,
         }
@@ -123,11 +125,13 @@ impl BristleRig {
     /// A stroke starts from the bristles as the last one left them.
     pub(crate) fn begin_stroke(&mut self) {
         self.pressed = true;
+        self.stroke_advanced = false;
         self.lift_pending = false;
+        self.last_motion_ms = f32::NEG_INFINITY;
     }
 
     pub(crate) fn lift(&mut self) {
-        self.lift_pending |= std::mem::take(&mut self.pressed);
+        self.lift_pending |= std::mem::take(&mut self.pressed) && self.stroke_advanced;
     }
 
     pub(crate) fn settling(&self, now_ms: f32) -> bool {
@@ -187,6 +191,7 @@ impl BristleRig {
         record.bristle_reset = u32::from(std::mem::take(&mut self.reset_pending));
         record.bristle_orientation = self.continuous_orientation(record.orientation);
         self.last_dab = Some(*record);
+        self.stroke_advanced = true;
         self.last_motion_ms = dab.time_ms;
     }
 

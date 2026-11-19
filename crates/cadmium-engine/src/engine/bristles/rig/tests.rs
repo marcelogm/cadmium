@@ -69,6 +69,16 @@ fn a_new_stroke_keeps_the_bristles_the_last_one_left() {
 }
 
 #[test]
+fn a_stroke_that_placed_no_dab_leaves_nothing_to_settle() {
+    let (mut rig, _) = rig_after_one_pressed_dab();
+    rig.lift();
+    rig.settle(5000.0).unwrap();
+    rig.begin_stroke();
+    rig.lift();
+    assert!(!rig.settling(0.0));
+}
+
+#[test]
 fn a_settle_takes_no_step_until_time_has_passed_since_the_last_one() {
     let (mut rig, _) = rig_after_one_pressed_dab();
     assert!(rig.settle(0.0).is_none());
