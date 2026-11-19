@@ -131,6 +131,19 @@ fn ferrule_height_on(gpu: &GpuContext, painting: &mut PaintSession) -> f32 {
     ))
 }
 
+/// The ferrule's height on a stroke's first dab, which stands on the canvas as it was:
+/// later dabs stand on the paint the stroke itself lays.
+fn first_dab_ferrule_height_px(gpu: &GpuContext, painting: &mut PaintSession) -> f32 {
+    painting.limit_dabs_per_frame(Some(1));
+    painting.begin_stroke(upright(LAYER_PRESS_X, STEP_PRESSURE, 0));
+    frame(gpu, painting);
+    assert_eq!(painting.last_frame_dabs(), 1);
+    let height_px = ferrule_z_px(&painting.engine.bristle_snapshot(gpu).unwrap());
+    painting.end_stroke();
+    frame(gpu, painting);
+    height_px
+}
+
 fn ferrule_z_px(snapshot: &BristleSnapshot) -> f32 {
     let roots = &snapshot.chains_px;
     roots.iter().map(|chain| chain[0][2]).sum::<f32>() / roots.len() as f32
@@ -155,7 +168,7 @@ fn a_brush_pressed_onto_a_thick_dried_layer_holds_its_ferrule_as_high_above_it()
 #[test]
 fn wet_paint_holds_the_hairs_up_only_by_its_support_share() {
     let gpu = GpuContext::new().unwrap();
-    let above_bare_canvas_px = ferrule_height_px(&gpu, 0.0);
+    let above_bare_canvas_px = first_dab_ferrule_height_px(&gpu, &mut session(&gpu));
     let mut painting = session(&gpu);
     painting
         .engine
@@ -163,11 +176,14 @@ fn wet_paint_holds_the_hairs_up_only_by_its_support_share() {
         .set("bristle_wet_support", WET_SUPPORT);
     layered(&gpu, &painting, StateTexture::WetVol, |_| LAYER_HEIGHT_UM);
     let supported_px = relief_px(&painting, WET_SUPPORT * LAYER_HEIGHT_UM);
-    let lifted_px = ferrule_height_on(&gpu, &mut painting) - above_bare_canvas_px;
+    // Where the weave stands above its tooth the bare canvas already bears the hairs, so
+    // there the whole share lifts them, tooth included.
+    let share_px = WET_SUPPORT * LAYER_HEIGHT_UM / RELIEF_UM_PER_PX;
+    let lifted_px = first_dab_ferrule_height_px(&gpu, &mut painting) - above_bare_canvas_px;
     eprintln!("a {supported_px} px wet support lifts the ferrule {lifted_px:.3} px");
     assert!(
         lifted_px >= MIN_WET_LIFT_SHARE * supported_px
-            && lifted_px <= supported_px + CONTACT_TOLERANCE_PX,
+            && lifted_px <= share_px + CONTACT_TOLERANCE_PX,
         "a {supported_px} px wet support lifted the ferrule {lifted_px:.3} px"
     );
 }

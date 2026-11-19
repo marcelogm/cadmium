@@ -209,7 +209,6 @@ fn the_mark_does_not_depend_on_how_many_hairs_are_simulated() {
 }
 
 #[test]
-#[ignore = "phase 1 of #62: each stroke hangs the hairs into one point and the first clump step flings them apart"]
 fn a_light_first_touch_lands_the_wet_point_instead_of_splaying_the_hairs() {
     let gpu = GpuContext::new().unwrap();
     for brush in factory_brushes()
