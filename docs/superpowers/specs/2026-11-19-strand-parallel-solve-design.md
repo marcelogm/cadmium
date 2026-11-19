@@ -158,6 +158,18 @@ scenario.
 |---|---|---|---|---|---|
 | research HEAD | 1.40 / 1.66 | 1.35 / 1.57 | 1.34 / 1.58 | 164.1 | — |
 | 1: lane per vertex | 0.99 / 1.09 | 0.87 / 0.95 | 0.89 / 0.97 | 75.2 | yes |
+| 2a: 2 strands per workgroup | A/B only | A/B only | A/B only | −13% (A/B 95.0 → 82.6) | yes |
+| 2b: touch per rest vertex | A/B only | A/B only | A/B only | −5% (A/B 82.6 → 78.8) | yes |
+
+From step 2 on, a single gate run cannot resolve a step: GPU clocks stay on auto, and an untouched scenario (shade the full canvas) moved 0.41 → 0.47 ms between runs. Steps are compared by interleaving prebuilt binaries A B B A (`target/ab.sh` for stage times, `target/abgate.sh` for frame times). Each run is a single pass, so its first scenario runs cold and its absolute figures sit above a warmed gate run's. Step 1 → 2b in that frame-time A/B: default 1.31 / 1.46 → 1.21 / 1.38, blender 0.92 / 1.05 → 0.88 / 1.02, long stroke 0.91 / 1.04 → 0.91 / 1.02.
+
+Attribution on step 2b (default size, filtered stage runs, each variant breaking the physics on purpose to remove one part):
+- fixed cost (empty solve: `touch` and the dispatches): ~11 µs/dab;
+- floor reads: ~6 µs;
+- contact solve: ~19 µs;
+- kinematics: ~8 µs.
+
+The rest depends on how far the strands bend. With free turns scaled to ~0, the whole stage drops to ~28 µs, although the free turn itself is cheap. That points at value-dependent paths: trigonometric branches, how many strands are in contact, and active-set rounds. Passes do not overlap: each begins ~5 µs after the previous one ends. The texel cache (old step 2) is therefore worth at most ~5% and moves to the end of the ladder.
 
 Gate limits (baseline + 10%): default 0.86 / 0.95, blender 0.78 / 0.86, long stroke 0.84 / 0.91 ms. Bristles µs/dab is the median of three stage-timed passes of the default scenario.
 
