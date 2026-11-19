@@ -20,6 +20,7 @@ mod placement;
 mod readout;
 mod reservoir;
 pub(crate) mod shader;
+mod stage_timer;
 
 pub use bristles::{
     BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX, bristle_reach_px,
@@ -28,6 +29,7 @@ pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use held_paint::HeldPaint;
 pub use readout::BrushReadout;
+pub use stage_timer::DabStageTime;
 
 pub(crate) use pass::pick::PickRequest;
 
@@ -38,6 +40,7 @@ use pass::dry::DryPass;
 use pass::pick::PickPass;
 use pass::{DabPasses, DabResources};
 use placement::{FirstRest, PreviousDab, mark_dab_regions};
+use stage_timer::DabStageTimer;
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -191,6 +194,7 @@ pub struct WetOilEngine {
     pick_pass: PickPass,
     dry_pass: DryPass,
     dip_pass: DipPass,
+    stage_timer: Option<DabStageTimer>,
 }
 
 impl WetOilEngine {
@@ -208,6 +212,7 @@ impl WetOilEngine {
             pick_pass: PickPass::new(gpu),
             dry_pass: DryPass::new(gpu),
             dip_pass: DipPass::new(gpu),
+            stage_timer: None,
         }
     }
 
@@ -311,12 +316,16 @@ impl PaintEngine for WetOilEngine {
             buffers: &self.buffers,
         };
         let bind_groups = self.dab_passes.bind_groups(&resources, &pencil_lead);
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("dab_exchange"),
-            timestamp_writes: None,
-        });
-        self.dab_passes.encode(&bind_groups, &mut pass, &placements);
-        drop(pass);
+        if let Some(timer) = self.stage_timer.as_mut() {
+            self.dab_passes
+                .encode_timed(&bind_groups, encoder, &placements, timer);
+        } else {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("dab_exchange"),
+                timestamp_writes: None,
+            });
+            self.dab_passes.encode(&bind_groups, &mut pass, &placements);
+        }
         mark_dab_regions(canvas, &placements);
     }
 

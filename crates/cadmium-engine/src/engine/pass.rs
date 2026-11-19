@@ -1,6 +1,7 @@
 use super::Buffers;
 use super::dab_record::{DAB_RECORD_SIZE, DAB_RECORD_STRIDE};
 use super::placement::Placement;
+use super::stage_timer::DabStageTimer;
 use crate::canvas::Canvas;
 use crate::compute::uniform_entry;
 use crate::gpu::GpuContext;
@@ -138,6 +139,36 @@ impl DabPasses {
     ) {
         for (index, placement) in placements.iter().enumerate() {
             self.encode_dab(bind_groups, pass, PlacedDab::at(index, placement));
+        }
+    }
+
+    /// `encode`, with each stage of each dab in its own pass timed by `timer`.
+    pub(super) fn encode_timed(
+        &self,
+        bind_groups: &DabBindGroups,
+        encoder: &mut wgpu::CommandEncoder,
+        placements: &[Placement],
+        timer: &mut DabStageTimer,
+    ) {
+        for (index, placement) in placements.iter().enumerate() {
+            self.encode_dab_timed(bind_groups, encoder, PlacedDab::at(index, placement), timer);
+        }
+    }
+
+    fn encode_dab_timed(
+        &self,
+        bind_groups: &DabBindGroups,
+        encoder: &mut wgpu::CommandEncoder,
+        dab: PlacedDab<'_>,
+        timer: &mut DabStageTimer,
+    ) {
+        for stage in dab.placement.profile.dab_stages {
+            let first = timer.claim(*stage);
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("dab_stage_timed"),
+                timestamp_writes: first.map(|first| timer.writes(first)),
+            });
+            self.encode_stage(*stage, bind_groups, &mut pass, dab);
         }
     }
 
