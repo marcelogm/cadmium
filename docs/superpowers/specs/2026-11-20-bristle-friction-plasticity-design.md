@@ -149,3 +149,37 @@ and p.
 - Friction that depends on paint or wetness.
 - Plastic recovery other than a reset.
 - Density and clumping (phase 3); `hair_loads` and the contact bit (phase 4).
+
+## Results
+
+Full gate (5 interleaved repeats after a warm-up, AMD Radeon RX 9060 XT, RADV), GPU mean / p95 ms per frame. Phase 1 is `bdd0862`, phase 2 is this branch; prebuilt binaries run A B B A twice, median of the four runs each (two for friction off, a throwaway build that calls `use_frictionless_bristles(true)`).
+
+| scenario | baseline | phase 1 | phase 2 | phase 2, friction off |
+|---|---|---|---|---|
+| brush, default size | 0.78 / 0.86 | 1.00 / 1.12 | 1.95 / 2.25 | 1.21 / 1.49 |
+| brush, 200 px | 0.91 / 1.47 | 1.26 / 2.30 | 1.44 / 2.21 | 0.97 / 1.55 |
+| brush, max size | 1.64 / 3.23 | 1.55 / 2.85 | 2.10 / 3.48 | 1.68 / 3.09 |
+| brush, 200 px over impasto | 0.78 / 1.24 | 0.98 / 1.78 | 1.37 / 2.11 | 0.88 / 1.39 |
+| brush, max size over impasto | 1.23 / 2.41 | 1.51 / 2.94 | 1.85 / 3.00 | 1.33 / 2.37 |
+| knife, default size over impasto | 0.19 / 0.21 | 0.23 / 0.26 | 0.17 / 0.19 | 0.18 / 0.20 |
+| blender, default size over impasto | 0.71 / 0.78 | 0.84 / 0.93 | 1.79 / 1.98 | 1.15 / 1.37 |
+| long brush stroke over impasto | 0.76 / 0.83 | 0.88 / 0.94 | 1.83 / 1.95 | 1.16 / 1.24 |
+| long 200 px stroke over impasto | 0.72 / 1.12 | 0.72 / 1.10 | 1.31 / 1.98 | 0.80 / 1.20 |
+| idle settle after a stroke | 0.03 / 0.03 | 0.03 / 0.03 | 0.04 / 0.04 | 0.04 / 0.04 |
+| shade the full canvas | 0.41 / 0.43 | 0.51 / 0.53 | 0.41 / 0.42 | 0.41 / 0.43 |
+| present the full canvas | 0.05 / 0.05 | 0.06 / 0.06 | 0.05 / 0.05 | 0.05 / 0.05 |
+
+Bristles stage, µs/dab (`CADMIUM_BENCH_STAGES=1`, mean of two passes):
+
+| scenario | phase 1 | phase 2 | phase 2, friction off |
+|---|---|---|---|
+| brush, default size | 70.1 | 366.5 | 182.1 |
+| blender, default size over impasto | 53.0 | 215.0 | 111.1 |
+| long brush stroke over impasto | 59.4 | 210.7 | 110.4 |
+| brush, 200 px | 199.7 | 927.0 | 502.0 |
+| brush, max size | 260.0 | 1294.6 | 691.7 |
+
+- Bristles stage at default size: 70.1 → 366.5 µs/dab (5.2×); the frame went 1.00 → 1.95 ms. The other stages did not grow.
+- Friction is half of it: with static friction zeroed the stage reads 182.1 µs/dab, still 2.6× phase 1.
+- The untouched `shade the full canvas` read 0.51 ms in every phase 1 run and 0.41 in every phase 2 run: the lighter phase 1 load let the clocks drop, so phase 1's figures sit high and the phase 1 → 2 step is, if anything, understated.
+- Proposed phase 2 budget: +162% over the baseline (worst scenario, `brush, default size` p95 0.86 → 2.25 ms; worst mean `blender, default size over impasto` +153%).
