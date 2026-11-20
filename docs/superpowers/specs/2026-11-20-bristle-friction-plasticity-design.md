@@ -45,35 +45,50 @@ clamped to 50 ms. `BristleSnapshot::rest_bends` reports p.
 
 **Rows.** Each active-set row has a direction d at its vertex:
 - an engaged contact has a normal row, d = n;
-- a stuck contact also has two tangential rows, d = t₁ and d = t₂, a basis of the
-  relief's tangent plane.
+- an anchored contact also has two tangential rows: d = t₁, the pull direction (the
+  segment toward the root, projected onto the tangent plane), and d = t₂ = n × t₁.
+- When a vertex and the one above it are both anchored, the lower one drops its t₁ row.
+  Inextensibility already ties its motion along the segment to the upper vertex's, so
+  the row would be redundant and leave G near-singular.
 
 The contact compliance matrix uses each row's direction in place of the normal:
 
 G_ab = Σₕ αₕ ((x_a − xₕ)×d_a)·((x_b − xₕ)×d_b), over the hinges above both vertices.
 
 G stays symmetric positive definite, so the shared Cholesky solves it unchanged. At most
-21 rows (7 normal, 14 tangential); typically 6 (two stuck contacts).
+21 rows (7 normal, 14 tangential).
 
 **Gaps.** A normal row keeps phase 1's gap. A tangential row's gap is minus the
 tangential displacement from the anchor that the free step would give the vertex.
 
-**One iteration:**
-1. Free turns, with two new terms:
-   - the rest turn is θ⁰ + p, p carried from the ferrule frame;
-   - each sliding contact adds an external force of magnitude μₖ(ŝ)·|fₙ| from the last
-     iteration, against its slip direction ŝ, as the lab's tip load does.
-2. The active set runs phase 1's loop (drop fₙ < 0, add vertices the step puts under the
-   floor) plus one test: a stuck contact with |fₜ| > μₛ(−f̂ₜ)·fₙ starts to slide. It loses
-   its tangential rows and the system is solved again.
+**One iteration (always try to stick):**
+1. Free turns, with the rest turn θ⁰ + p, p carried from the ferrule frame.
+2. Every engaged contact with an anchor starts with its tangent rows, stuck or sliding.
+   The active set runs phase 1's loop (drop fₙ < 0, add vertices the step puts under the
+   floor) plus the cone test. The force fₜ it takes to hold the contact is compared with
+   μₛ(−f̂ₜ)·|fₙ| if the contact was stuck, or μₖ(−f̂ₜ)·|fₙ| if it was sliding. The kinetic
+   threshold is a hysteresis: a sliding contact sticks again only when holding it needs no
+   more than kinetic friction, so it does not chatter. Past the threshold the contact
+   slides: it loses its tangent rows and takes the kinetic force μₖ(ŝ)·|fₙ|·f̂ₜ, with slip
+   direction ŝ = −f̂ₜ, and the system is solved again.
+   - A held contact whose normal force comes out negative slides before it is released:
+     fₙ < 0 lies outside every cone. Only a contact without tangent rows is released.
+   - Each tangent row's pivot gets 10⁻³ of the vertex's normal compliance: the contact's
+     shear compliance. A near-straight strand cannot move an anchored vertex along its axis
+     to first order, so without it normal + t₁ + t₂ is rank-deficient and the ridge returns
+     arbitrary forces. A held vertex creeps by that share of the drive.
+   - The cone is tested against the normal force of the same solve that holds the contact
+     (Coulomb's cone is on one solution's forces). The kinetic force's magnitude instead
+     uses the previous iteration's |fₙ|, held in the anchor's w: the normal of a solve that
+     pins the vertex can be orders of magnitude off, and a kinetic force built on it throws
+     the vertex off the canvas.
 3. After the step, anchors update:
    - a new contact lands frictionless on its first iteration and is anchored where that
-     step leaves it, so it is stuck from the next iteration;
+     step leaves it;
    - a stuck contact keeps its anchor;
-   - a sliding contact's anchor moves to the vertex. If this step's slip reversed ŝ or
-     fell under the slip tolerance, it sticks again. A sliding contact does not retry
-     sticking every substep, which would chatter;
-   - a released contact clears its anchor.
+   - a sliding contact's anchor moves to the vertex;
+   - a released contact clears its anchor;
+   - without friction (μₛ = 0) no anchor is written.
 
 **Anisotropy (Baxter & Lin).** μ(ŝ) = μ·(1 − C_η·max(0, d_pull·ŝ)ᵏ), with d_pull the
 direction from the vertex toward the one above it (toward the root), projected onto the
@@ -97,8 +112,10 @@ and p.
 ## 3. Tests and measurement
 
 **GPU lab, against closed forms** (oracles in `mechanics`):
-- **Stick and slip.** A strand with its tip resting on a flat floor; the root translates
-  horizontally in small steps. While stuck, fₜ grows linearly with the displacement, as
+- **Stick and slip.** A strand curled like the app's (−0.02 rad) with its tip pressed
+  on a flat floor. Hold tests drag sideways, where bending holds the tip; slide tests drag
+  along the strand's plane, where an inextensible strand cannot give and the tip slides
+  at once. The root translates in small steps, each iteration taking its share. While stuck, fₜ grows linearly with the displacement, as
   the CPU oracle gives from the same G. It lets go at μₛ·fₙ, then slides at fₜ = μₖ·fₙ.
   Within 2%.
 - **Anisotropy.** The same test pushed and pulled: the thresholds' ratio is
