@@ -154,11 +154,27 @@ fn paint_on_the_painting_is_exported_where_it_was_laid() {
     assert_shows_the_canvas_under_the_painting(&gpu, &s, &image);
     let wet_rows = wet_rows_of_the_painting(&gpu, &s);
     assert!(!wet_rows.is_empty(), "the stroke laid no paint");
+    let differ = rows_that_differ(&image, &clean);
+    let missing: Vec<u32> = wet_rows
+        .iter()
+        .copied()
+        .filter(|row| !differ.contains(row))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "wet rows {missing:?} export as bare canvas"
+    );
+    // The relief's normals reach one row past the paint; how far they shade it depends on
+    // how thick the stroke's edge is.
     let (first, last) = (wet_rows[0], wet_rows[wet_rows.len() - 1]);
-    let band: Vec<u32> = (first - RELIEF_REACH..=last + RELIEF_REACH).collect();
-    assert_eq!(
-        rows_that_differ(&image, &clean),
-        band,
-        "wet rows {wet_rows:?}"
+    let band = first - RELIEF_REACH..=last + RELIEF_REACH;
+    let strayed: Vec<u32> = differ
+        .iter()
+        .copied()
+        .filter(|row| !band.contains(row))
+        .collect();
+    assert!(
+        strayed.is_empty(),
+        "rows {strayed:?} change though the paint lies in rows {first}..={last}"
     );
 }

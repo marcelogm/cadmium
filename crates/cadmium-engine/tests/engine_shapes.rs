@@ -229,7 +229,7 @@ fn a_flat_brush_turns_its_thin_side_towards_the_lean_of_the_pen() {
 }
 
 #[test]
-#[ignore = "phase 2 of #62: frictionless strands splay as far edgewise as broadside"]
+#[ignore = "phase 3 of #62: without packing the flat bundle splays edgewise to 130 px against 217 broadside; even μ = 10 gives a ratio of 2.0"]
 fn a_flat_brush_paints_broadside_wide_and_edgewise_thin() {
     let gpu = GpuContext::new().unwrap();
     let mut edgewise = session(&gpu, HeadSpec::FLAT);

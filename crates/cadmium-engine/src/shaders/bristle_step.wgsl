@@ -70,6 +70,10 @@ fn place_at_rest(bristle: u32, pose: Pose) {
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
         let at = from_ferrule(local[vertex], pose);
         states[position_slot(bristle, vertex)] = vec4<f32>(at, disc_floor_px(at.xy, rest.radius_px));
+        states[anchor_slot(bristle, vertex)] = vec4<f32>(0.0);
+    }
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        states[plastic_slot(bristle, hinge)] = vec4<f32>(0.0);
     }
 }
 
@@ -91,6 +95,34 @@ fn store_chain(bristle: u32, chain: Chain) {
     }
 }
 
+fn held_anchors(bristle: u32) -> Anchors {
+    var anchors: Anchors;
+    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+        anchors[vertex] = states[anchor_slot(bristle, vertex)];
+    }
+    return anchors;
+}
+
+fn store_anchors(bristle: u32, anchors: Anchors) {
+    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+        states[anchor_slot(bristle, vertex)] = anchors[vertex];
+    }
+}
+
+fn held_plastic(bristle: u32, pose: Pose) -> Turns {
+    var plastic: Turns;
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        plastic[hinge] = direction_at(states[plastic_slot(bristle, hinge)].xyz, pose);
+    }
+    return plastic;
+}
+
+fn store_plastic(bristle: u32, plastic: Turns, pose: Pose) {
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        states[plastic_slot(bristle, hinge)] = vec4<f32>(direction_in_ferrule(plastic[hinge], pose), 0.0);
+    }
+}
+
 /// Moves `chain` rigidly with the ferrule from pose `start` to pose `end`.
 fn carry(chain: ptr<function, Chain>, start: Pose, end: Pose) {
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
@@ -109,17 +141,21 @@ fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
     var previous = start;
     var force = 0.0;
     var shape: StrandShape;
+    var anchors = held_anchors(bristle);
     for (var iteration = 0u; iteration < iterations; iteration++) {
         let pose = pose_between(start, end, min(f32(iteration + 1u) / f32(substeps), 1.0));
         carry(&chain, previous, pose);
         previous = pose;
         shape = strand_shape(rests[bristle], pose);
+        shape.plastic = held_plastic(bristle, pose);
         let floors = floors_under(sampled, chain, radius_px);
         sampled = chain;
-        force = summed(solve_iteration(&chain, shape, floors));
+        force = summed(normal_loads(solve_iteration(&chain, shape, floors, &anchors)));
     }
     force += summed(rested(&chain, sampled, shape, radius_px));
+    store_plastic(bristle, crept(chain, shape, creep_share(tuning.friction.w, dab.dt_seconds)), previous);
     store_chain(bristle, chain);
+    store_anchors(bristle, anchors);
     return force;
 }
 

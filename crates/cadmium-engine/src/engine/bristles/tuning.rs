@@ -9,6 +9,12 @@ const COMPLIANCE_SLOTS: usize = 8;
 const _: () = assert!(BRISTLE_TUNING_BYTES.is_multiple_of(UNIFORM_ALIGNMENT_BYTES));
 const _: () = assert!(HINGES <= COMPLIANCE_SLOTS);
 
+/// Coulomb coefficients of hair on canvas until `Hair` arrives in phase 4 of #62: Baxter &
+/// Lin give 0.3–0.5. Not measured for hair on primed canvas [U]. `HairSpec::static_friction`
+/// and `kinetic_friction` are saved but unused until μ is calibrated in phase 5.
+pub(crate) const STATIC_FRICTION: f32 = 0.5;
+pub(crate) const KINETIC_FRICTION: f32 = 0.3;
+
 /// What the bristle step reads besides the dab: the relief's load bearing and the hairs'
 /// bending compliances.
 #[repr(C)]
@@ -19,6 +25,8 @@ pub(crate) struct BristleTuning {
     pub(crate) spare: [f32; 2],
     /// Bending compliance per metre of segment, per hinge, 1/(N·m²).
     pub(crate) hinge_compliance_per_m: [f32; COMPLIANCE_SLOTS],
+    /// μₛ, μₖ, Baxter & Lin's anisotropy C_η, and the plastic creep rate, 1/s.
+    pub(crate) friction: [f32; 4],
 }
 
 impl BristleTuning {
@@ -37,6 +45,12 @@ impl BristleTuning {
             canvas_tooth_um,
             spare: [0.0; 2],
             hinge_compliance_per_m,
+            friction: [
+                STATIC_FRICTION,
+                KINETIC_FRICTION,
+                hair.drag_anisotropy,
+                hair.bend_memory,
+            ],
         }
     }
 }

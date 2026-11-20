@@ -227,6 +227,12 @@ impl WetOilEngine {
         self.dab_passes.choose_strand_solve(strand_solve);
     }
 
+    /// Runs the bristle solve with static friction zeroed, which turns friction off.
+    #[doc(hidden)]
+    pub fn use_frictionless_bristles(&mut self, frictionless: bool) {
+        self.bristles.set_frictionless(frictionless);
+    }
+
     pub fn resize_tip(&mut self, radius_px: f32) {
         if !radius_px.is_finite() {
             return;

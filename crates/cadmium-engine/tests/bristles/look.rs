@@ -150,7 +150,7 @@ fn apex_extents(volume: &[f32], progress: f64) -> [f64; 2] {
 }
 
 #[test]
-#[ignore = "phase 2 of #62: the tips trail outside a bend by friction, and frictionless tips paint both sides alike"]
+#[ignore = "phase 5 of #62: friction does not paint it: the apexes read 26/25 and 24/24 px for μ from 0 to 10, and the tips trailing 6 px off-track d²/2R ≈ 0.23 px; reproduce it from a calibrated trail or drop it"]
 fn an_s_curve_leaves_different_tracks_inside_and_outside_each_bend() {
     let gpu = GpuContext::new().unwrap();
     let mut painting = session(&gpu);

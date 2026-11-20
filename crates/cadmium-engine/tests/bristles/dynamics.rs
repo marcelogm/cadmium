@@ -1,4 +1,4 @@
-use cadmium_engine::brush::HeadSpec;
+use cadmium_engine::brush::{HairSpec, HeadSpec};
 use cadmium_engine::engine::BristleSnapshot;
 use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
@@ -351,5 +351,32 @@ fn taking_the_brush_up_again_after_another_tool_rebuilds_the_bristles_at_rest() 
     assert!(
         bits(&retaken) == bits(&expected),
         "the brush came back from the knife still bent"
+    );
+}
+
+#[test]
+fn another_hair_on_the_same_shape_starts_without_the_last_one_s_bend_memory() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = loose(&gpu);
+    s.brush.hair = HairSpec {
+        clumping: 0.0,
+        wet_point: 0.0,
+        ..HairSpec::HOG
+    };
+    let pressed = press(&gpu, &mut s, 1.0);
+    assert!(
+        pressed.rest_bends.iter().any(|bend| *bend != [0.0; 2]),
+        "the hog hair kept no bend"
+    );
+    s.brush.hair = HairSpec {
+        bend_memory: 0.0,
+        clumping: 0.0,
+        wet_point: 0.0,
+        ..HairSpec::SYNTHETIC
+    };
+    let worn = touch_once(&gpu, &mut s, 0.6);
+    assert!(
+        worn.rest_bends.iter().all(|bend| *bend == [0.0; 2]),
+        "the synthetic hair took over the hog's bends"
     );
 }

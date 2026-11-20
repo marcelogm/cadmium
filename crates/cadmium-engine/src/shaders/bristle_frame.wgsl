@@ -44,6 +44,17 @@ fn position_slot(bristle: u32, vertex: u32) -> u32 {
     return state_slot(bristle) + vertex;
 }
 
+/// A vertex's friction anchor in `xyz`, and in `w` the normal force holding it: 0 free,
+/// > 0 stuck, < 0 sliding.
+fn anchor_slot(bristle: u32, vertex: u32) -> u32 {
+    return state_slot(bristle) + BRISTLE_VERTICES + vertex;
+}
+
+/// A hinge's plastic rest shift in `xyz`: a rotation vector in the ferrule frame.
+fn plastic_slot(bristle: u32, hinge: u32) -> u32 {
+    return state_slot(bristle) + 2u * BRISTLE_VERTICES + hinge;
+}
+
 fn frame_of(axis: vec3<f32>) -> Frame {
     let lean = 1.0 / (1.0 + axis.z);
     let across = vec3<f32>(1.0 - axis.x * axis.x * lean, -axis.x * axis.y * lean, -axis.x);
@@ -91,4 +102,9 @@ fn direction_at(local: vec3<f32>, pose: Pose) -> vec3<f32> {
 /// `world` moved rigidly with the ferrule from pose `start` to pose `end`.
 fn carried(world: vec3<f32>, start: Pose, end: Pose) -> vec3<f32> {
     return from_ferrule(to_ferrule(world, start), end);
+}
+
+fn direction_in_ferrule(world: vec3<f32>, pose: Pose) -> vec3<f32> {
+    let local = untilted(world, pose.axis);
+    return vec3<f32>(unspun(local.xy, pose.orientation), local.z);
 }

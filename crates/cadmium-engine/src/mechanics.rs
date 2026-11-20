@@ -56,5 +56,76 @@ pub fn real_hair_count(packing: f64, ferrule_radius_m: f64, hair_diameter_m: f64
     4.0 * packing * ferrule_radius_m.powi(2) / hair_diameter_m.powi(2)
 }
 
+/// A contact row: the vertex it pushes and the unit direction it pushes it along.
+pub type ContactRow = (usize, [f64; 3]);
+
+/// The contact compliance matrix of a chain clamped above its first vertex, with hinge h at
+/// vertex h of compliance `compliances[h]`, rad per N·m: how far, in metres, row a's vertex
+/// moves along d_a under 1 N on row b's vertex along d_b. Over the hinges above both,
+/// G_ab = Σₕ αₕ ((x_a − xₕ)×d_a)·((x_b − xₕ)×d_b).
+pub fn contact_compliance(
+    chain_m: &[[f64; 3]],
+    compliances: &[f64],
+    rows: &[ContactRow],
+) -> Vec<Vec<f64>> {
+    let lever = |(vertex, direction): ContactRow, hinge: usize| {
+        let arm = std::array::from_fn(|axis| chain_m[vertex][axis] - chain_m[hinge][axis]);
+        cross(arm, direction)
+    };
+    rows.iter()
+        .map(|&a| {
+            rows.iter()
+                .map(|&b| {
+                    (0..a.0.min(b.0))
+                        .map(|hinge| compliances[hinge] * dot(lever(a, hinge), lever(b, hinge)))
+                        .sum()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// The solution x of `matrix` · x = `rhs`, by Gaussian elimination with partial pivoting.
+pub fn linear_solution(matrix: &[Vec<f64>], rhs: &[f64]) -> Vec<f64> {
+    let n = rhs.len();
+    let mut rows: Vec<Vec<f64>> = matrix
+        .iter()
+        .zip(rhs)
+        .map(|(row, &b)| row.iter().copied().chain([b]).collect())
+        .collect();
+    for column in 0..n {
+        let pivot = (column..n)
+            .max_by(|&i, &j| rows[i][column].abs().total_cmp(&rows[j][column].abs()))
+            .unwrap_or(column);
+        rows.swap(column, pivot);
+        let (above, below) = rows.split_at_mut(column + 1);
+        let pivot_row = &above[column];
+        for row in below {
+            let factor = row[column] / pivot_row[column];
+            row.iter_mut()
+                .zip(pivot_row)
+                .for_each(|(value, &by)| *value -= factor * by);
+        }
+    }
+    let mut x = vec![0.0; n];
+    for row in (0..n).rev() {
+        let known: f64 = (row + 1..n).map(|k| rows[row][k] * x[k]).sum();
+        x[row] = (rows[row][n] - known) / rows[row][row];
+    }
+    x
+}
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
 #[cfg(test)]
 mod tests;

@@ -36,5 +36,7 @@ fn strand_shape(rest: BristleRest, pose: Pose) -> StrandShape {
         segment_length(rest),
         compliances,
         vec3<f32>(0.0),
+        Friction(tuning.friction.x, tuning.friction.y, tuning.friction.z),
+        Turns(),
     );
 }

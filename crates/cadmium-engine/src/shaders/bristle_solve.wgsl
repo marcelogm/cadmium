@@ -51,6 +51,9 @@ struct StrandShape {
     compliances: HingeCompliances,
     /// A load on the tip, N. Zero in the app; the lab uses it.
     tip_force_n: vec3<f32>,
+    friction: Friction,
+    /// The plastic shift of every hinge's rest turn, world, at the clamp.
+    plastic: Turns,
 };
 
 /// A unit vector perpendicular to unit `v`.
@@ -112,7 +115,7 @@ fn free_turns(chain: Chain, edges: Edges, shape: StrandShape) -> Turns {
     let tip = chain[BRISTLE_VERTICES - 1u];
     for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
         let curl = transported(shape.curl, shape.clamp, before);
-        let rest = select(vec3<f32>(0.0), curl, hinge > 0u);
+        let rest = select(vec3<f32>(0.0), curl, hinge > 0u) + transported(shape.plastic[hinge], shape.clamp, before);
         let lever_m = (tip - chain[hinge]) * METRES_PER_PX;
         let loaded = shape.compliances[hinge] * cross(lever_m, shape.tip_force_n);
         turns[hinge] = rest - rotation_between(before, edges[hinge]) + loaded;
@@ -177,33 +180,45 @@ fn summed(forces: PerContact) -> f32 {
     return total;
 }
 
-/// One Gauss-Newton step of the strand's bending energy under its canvas contacts, from
-/// `chain` (vertex 0 already on the ferrule). Returns the canvas's force on each vertex
-/// (1..), N, along the relief's normal there: the equilibrium of the full step, exact only
-/// once the cap on the turns no longer engages.
-fn solve_iteration(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors) -> PerContact {
+/// One Gauss-Newton step of the strand's bending energy under its canvas contacts and
+/// friction, from `chain` (vertex 0 already on the ferrule). Moves `anchors` on with the
+/// contacts. The forces are the equilibrium of the full step, exact only once the cap on
+/// the turns no longer engages.
+fn solve_iteration(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors, anchors: ptr<function, Anchors>) -> Contacts {
     let edges = edges_of(*chain, shape.clamp);
-    return pushed_step(chain, edges, free_turns(*chain, edges, shape), shape, floors);
+    return pushed_step(chain, edges, free_turns(*chain, edges, shape), shape, shape.friction, floors, anchors);
 }
 
-/// The contact step alone: the strand keeps its bend and the canvas only pushes it out.
-fn lifted_onto(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors) -> PerContact {
-    return pushed_step(chain, edges_of(*chain, shape.clamp), Turns(), shape, floors);
+/// The contact step alone: the strand keeps its bend and the canvas only pushes it out,
+/// frictionless, leaving no anchors.
+fn lifted_onto(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors) -> Contacts {
+    var none: Anchors;
+    return pushed_step(chain, edges_of(*chain, shape.clamp), Turns(), shape, Friction(0.0, 0.0, 0.0), floors, &none);
 }
 
-fn pushed_step(chain: ptr<function, Chain>, edges: Edges, free: Turns, shape: StrandShape, floors: Floors) -> PerContact {
-    var turns = free;
+fn pushed_step(chain: ptr<function, Chain>, edges: Edges, free: Turns, shape: StrandShape, friction: Friction, floors: Floors, anchors: ptr<function, Anchors>) -> Contacts {
     let normals = floor_normals(floors);
-    let forces = contact_forces(*chain, turns, shape.compliances, floors, normals);
-    for (var pushed = 1u; pushed < BRISTLE_VERTICES; pushed++) {
-        let force = forces[pushed - 1u];
-        for (var hinge = 0u; hinge < pushed; hinge++) {
-            let arm_m = ((*chain)[pushed] - (*chain)[hinge]) * METRES_PER_PX;
-            turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, normals[pushed]);
+    let contacts = contact_forces(*chain, free, shape.compliances, floors, normals, friction, *anchors);
+    var turns = kinetic_turns(free, *chain, shape.compliances, contacts.kinetic);
+    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
+        let force = contacts.forces[row];
+        if force != 0.0 {
+            let pushed = row_vertex(row);
+            let along = row_direction(*chain, normals, row);
+            for (var hinge = 0u; hinge < pushed; hinge++) {
+                let arm_m = ((*chain)[pushed] - (*chain)[hinge]) * METRES_PER_PX;
+                turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, along);
+            }
         }
     }
     turn_chain(chain, edges, capped(turns), shape.segment_px);
-    return forces;
+    if friction.static_mu > 0.0 {
+        held_back(chain, shape, floors, normals, contacts.engaged, *anchors);
+        *anchors = next_anchors(*chain, contacts, *anchors);
+    } else {
+        *anchors = Anchors();
+    }
+    return contacts;
 }
 
 /// The last step of a dab moves the strand onto floors read before it moved, so it can end
@@ -225,7 +240,7 @@ fn rested(chain: ptr<function, Chain>, sampled: Chain, shape: StrandShape, radiu
             floors.heights_px[vertex] -= FLOOR_SLACK_PX;
         }
         swept = *chain;
-        let lifted = lifted_onto(chain, shape, floors);
+        let lifted = normal_loads(lifted_onto(chain, shape, floors));
         for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
             forces[row] += lifted[row];
         }
