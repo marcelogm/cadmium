@@ -6,6 +6,8 @@ var<workgroup> group_kinetic: GroupVectors;
 var<workgroup> group_sliding: array<array<u32, BRISTLE_VERTICES>, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_slid: array<u32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_regap: array<u32, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_holding: array<u32, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_step_forces: GroupRowValues;
 
 // mirrors kinetic_turns
 fn kinetic_turn(strand: u32, hinge: u32, free: vec3<f32>) -> vec3<f32> {
@@ -140,4 +142,70 @@ fn next_anchor(strand: u32, vertex: u32, at: vec3<f32>) -> vec4<f32> {
         return vec4<f32>(group_anchors[strand][vertex].xyz, load);
     }
     return vec4<f32>(at, load);
+}
+
+// mirrors any_engaged
+fn group_any_engaged(strand: u32) -> bool {
+    var any_row = false;
+    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
+        any_row = any_row || group_engaged[strand][row] != 0u;
+    }
+    return any_row;
+}
+
+// mirrors held_back, from the lane's vertex at `at` after the step; the step's forces are
+// kept for the anchors and the reported load
+fn held_back_position(lane: Lane, at: vec3<f32>, shape: StrandShape) -> vec3<f32> {
+    let s = lane.strand;
+    if lane.live {
+        group_chain[s][lane.vertex] = at;
+    }
+    workgroupBarrier();
+    if owns_hinge(lane) {
+        place_edge(lane);
+        place_directions(s, lane.vertex + 1u);
+        group_turns[s][lane.vertex] = vec3<f32>(0.0);
+    }
+    workgroupBarrier();
+    if leads(lane) {
+        mend_short_edges(s, shape.clamp);
+        group_holding[s] = select(0u, 1u, group_any_engaged(s));
+        group_step_forces[s] = group_forces[s];
+    }
+    workgroupBarrier();
+    let holding = lane.live && group_holding[s] != 0u;
+    if holding && lane.vertex < BRISTLE_SEGMENTS {
+        place_gaps(s, lane.vertex + 1u);
+        place_diagonal(s, lane.vertex + 1u);
+    }
+    workgroupBarrier();
+    if holding && lane.vertex == 0u {
+        group_ridge[s] = group_ridge_of(s);
+    }
+    if holding && lane.vertex < BRISTLE_SEGMENTS {
+        place_matrix_rows(s, lane.vertex + 1u);
+    }
+    workgroupBarrier();
+    if holding && lane.vertex == 0u {
+        group_active_forces(s);
+    }
+    workgroupBarrier();
+    if holding && lane.vertex < BRISTLE_SEGMENTS {
+        group_turns[s][lane.vertex] = rise_turn(s, lane.vertex);
+    }
+    workgroupBarrier();
+    if holding && lane.vertex == 0u {
+        group_scale[s] = cap_scale(s);
+    }
+    workgroupBarrier();
+    var held = at;
+    if holding {
+        held = turned_position(s, lane.vertex, group_scale[s], shape.segment_px);
+    }
+    workgroupBarrier();
+    if leads(lane) {
+        group_forces[s] = group_step_forces[s];
+    }
+    workgroupBarrier();
+    return held;
 }

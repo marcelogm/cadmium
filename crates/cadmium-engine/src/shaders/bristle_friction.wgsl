@@ -221,3 +221,38 @@ fn normal_loads(contacts: Contacts) -> PerContact {
     }
     return forces;
 }
+
+fn any_engaged(engaged: RowFlags) -> bool {
+    var any_row = false;
+    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
+        any_row = any_row || engaged[row];
+    }
+    return any_row;
+}
+
+/// The step turns the hinges by finite rotations, so the rows it closed are closed only to
+/// first order. A strand curled out of the plane it bends in turns about its own edges,
+/// which the next step's bend does not see, so the step never shrinks and a held vertex
+/// stays up to a tenth of a pixel off its floor and its anchor. One contact-only step on
+/// the rows the solve engaged, with no free turn, puts them back.
+fn held_back(chain: ptr<function, Chain>, shape: StrandShape, floors: Floors, normals: Normals, engaged: RowFlags, anchors: Anchors) {
+    if !any_engaged(engaged) {
+        return;
+    }
+    let gaps = gaps_after(*chain, Turns(), floors, normals, anchors);
+    var problem = contact_problem(*chain, shape.compliances, normals, gaps);
+    let forces = active_forces(&problem, engaged);
+    var turns: Turns;
+    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
+        let force = forces[row];
+        if force != 0.0 {
+            let pushed = row_vertex(row);
+            let along = row_direction(*chain, normals, row);
+            for (var hinge = 0u; hinge < pushed; hinge++) {
+                let arm_m = ((*chain)[pushed] - (*chain)[hinge]) * METRES_PER_PX;
+                turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, along);
+            }
+        }
+    }
+    turn_chain(chain, edges_of(*chain, shape.clamp), capped(turns), shape.segment_px);
+}

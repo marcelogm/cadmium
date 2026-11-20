@@ -288,3 +288,53 @@ fn a_held_vertex_stays_on_its_anchor_when_the_one_above_slides() {
     }
     assert!(upper_slid, "no upper neighbour slid over a held one");
 }
+
+/// A rest curl about x tilts the strand out of the plane it is pressed in: the solve then
+/// turns hinges about their own edges, which the next step's bend no longer sees, so the
+/// step stays as large however long the pose is held.
+const OUT_OF_PLANE_CURLS: [[f32; 3]; 2] = [[0.08, 0.0, 0.0], [0.04, 0.02, 0.0]];
+const OUT_OF_PLANE_DEGREES: f32 = 60.0;
+const OUT_OF_PLANE_PRESS_PX: f32 = 8.0;
+const HELD_STILL_STEPS: u32 = 10;
+/// The floor sits this share of the strand's length along its clamp below the root.
+const FLOOR_REACH_SHARE: f32 = 26.0 / 30.0;
+/// The contact tolerance of the solve, px.
+const ON_FLOOR_PX: f32 = 1e-3;
+
+#[test]
+fn a_held_tip_curled_out_of_its_plane_rests_on_its_floor_and_its_anchor() {
+    let gpu = GpuContext::new().unwrap();
+    let clamp = tilted(OUT_OF_PLANE_DEGREES);
+    let floor_px = FLOOR_REACH_SHARE * LENGTH_PX * clamp[2];
+    let strands: Vec<LabStrand> = OUT_OF_PLANE_CURLS
+        .iter()
+        .map(|&curl| {
+            strand(clamp, AT_ORIGIN)
+                .with_curl(curl)
+                .with_floor(floor_px)
+                .with_press(OUT_OF_PLANE_PRESS_PX, PRESS_STEPS)
+                .with_friction(STATIC_MU, KINETIC_MU, 0.0)
+                .with_settle(0.0, HELD_STILL_STEPS)
+        })
+        .collect();
+    for (curl, run) in OUT_OF_PLANE_CURLS.iter().zip(run(&gpu, &strands)) {
+        let engaged: Vec<usize> = (1..BRISTLE_VERTICES)
+            .filter(|&v| run.vertex_forces_n[v] > 0.0)
+            .collect();
+        assert!(!engaged.is_empty(), "curl {curl:?}: nothing touches");
+        for v in engaged {
+            let clearance = run.chain_px[v][2] - floor_px;
+            assert!(
+                clearance.abs() <= ON_FLOOR_PX,
+                "curl {curl:?}: pressed vertex {v} stands {clearance} px off its floor"
+            );
+        }
+        for v in (1..BRISTLE_VERTICES).filter(|&v| run.anchor_modes[v] > 0.0) {
+            let off = xy_span(run.chain_px[v], run.anchors_px[v]);
+            assert!(
+                off <= ON_FLOOR_PX,
+                "curl {curl:?}: stuck vertex {v} is {off} px off its anchor"
+            );
+        }
+    }
+}

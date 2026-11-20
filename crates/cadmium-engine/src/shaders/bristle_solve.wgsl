@@ -213,6 +213,7 @@ fn pushed_step(chain: ptr<function, Chain>, edges: Edges, free: Turns, shape: St
     }
     turn_chain(chain, edges, capped(turns), shape.segment_px);
     if friction.static_mu > 0.0 {
+        held_back(chain, shape, floors, normals, contacts.engaged, *anchors);
         *anchors = next_anchors(*chain, contacts, *anchors);
     } else {
         *anchors = Anchors();

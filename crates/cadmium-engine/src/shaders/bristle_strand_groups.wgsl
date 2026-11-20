@@ -222,6 +222,13 @@ fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     var stepped = Stepped(vec3<f32>(0.0), 0.0);
     if lane.live {
         stepped.at = turned_position(s, lane.vertex, group_scale[s], shape.segment_px);
+    }
+    // tuning's μₛ, not the lane's shape: a lane past the last strand has none
+    if !lifting && tuning.friction.x > 0.0 {
+        workgroupBarrier();
+        stepped.at = held_back_position(lane, stepped.at, shape);
+    }
+    if lane.live {
         if !lifting {
             var anchor = vec4<f32>(0.0);
             if friction.static_mu > 0.0 {
