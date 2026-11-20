@@ -10,7 +10,8 @@ const _: () = assert!(BRISTLE_TUNING_BYTES.is_multiple_of(UNIFORM_ALIGNMENT_BYTE
 const _: () = assert!(HINGES <= COMPLIANCE_SLOTS);
 
 /// Coulomb coefficients of hair on canvas until `Hair` arrives in phase 4 of #62: Baxter &
-/// Lin give 0.3–0.5. Not measured for hair on primed canvas [U].
+/// Lin give 0.3–0.5. Not measured for hair on primed canvas [U]. `HairSpec::static_friction`
+/// and `kinetic_friction` are saved but unused until μ is calibrated in phase 5.
 pub(crate) const STATIC_FRICTION: f32 = 0.5;
 pub(crate) const KINETIC_FRICTION: f32 = 0.3;
 
