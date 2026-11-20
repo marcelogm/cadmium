@@ -16,7 +16,6 @@ var<workgroup> group_edges: GroupHinges;
 var<workgroup> group_short: GroupFlags;
 var<workgroup> group_turns: GroupHinges;
 var<workgroup> group_compliances: GroupRows;
-var<workgroup> group_plastic: GroupHinges;
 var<workgroup> group_rise_turns: GroupHinges;
 var<workgroup> group_directions: array<array<vec3<f32>, MAX_CONTACT_ROWS>, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_gaps: GroupRowValues;
@@ -137,7 +136,7 @@ fn free_turn(lane: Lane, shape: StrandShape) -> vec3<f32> {
         before = group_edges[s][hinge - 1u];
     }
     let curl = transported(shape.curl, shape.clamp, before);
-    let rest = select(vec3<f32>(0.0), curl, hinge > 0u) + transported(group_plastic[s][hinge], shape.clamp, before);
+    let rest = select(vec3<f32>(0.0), curl, hinge > 0u) + transported(shape.plastic[hinge], shape.clamp, before);
     let tip = group_chain[s][BRISTLE_VERTICES - 1u];
     let lever_m = (tip - group_chain[s][hinge]) * METRES_PER_PX;
     let loaded = group_compliances[s][hinge] * cross(lever_m, shape.tip_force_n);
@@ -238,6 +237,37 @@ fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     return stepped;
 }
 
+// mirrors crept, store_plastic: on the chain the floor corrections leave, at the last pose
+fn creep(lane: Lane, at: vec3<f32>, shape: StrandShape, pose: Pose) {
+    let s = lane.strand;
+    if lane.live {
+        group_chain[s][lane.vertex] = at;
+    }
+    workgroupBarrier();
+    if owns_hinge(lane) {
+        place_edge(lane);
+    }
+    workgroupBarrier();
+    if leads(lane) {
+        mend_short_edges(s, shape.clamp);
+    }
+    workgroupBarrier();
+    if !owns_hinge(lane) {
+        return;
+    }
+    let hinge = lane.vertex;
+    let share = creep_share(tuning.friction.w, dab.dt_seconds);
+    var plastic = shape.plastic[hinge];
+    if share > 0.0 {
+        var before = shape.clamp;
+        if hinge > 0u {
+            before = group_edges[s][hinge - 1u];
+        }
+        plastic = crept_hinge(before, group_edges[s][hinge], shape, hinge, share);
+    }
+    states[plastic_slot(lane.bristle, hinge)] = vec4<f32>(direction_in_ferrule(plastic, pose), 0.0);
+}
+
 @compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
 fn solve(
     @builtin(workgroup_id) group: vec3<u32>,
@@ -275,6 +305,9 @@ fn solve(
         let pose = pose_between(start, end, min(f32(iteration + 1u) / f32(substeps), 1.0));
         if lane.live {
             shape = strand_shape(rests[lane.bristle], pose);
+            if lane.vertex < BRISTLE_SEGMENTS {
+                shape.plastic[lane.vertex] = direction_at(states[plastic_slot(lane.bristle, lane.vertex)].xyz, pose);
+            }
             at = carried(at, previous, pose);
             place_vertex(lane, at, sampled, radius_px);
             sampled = at;
@@ -317,6 +350,7 @@ fn solve(
             floored = false;
         }
     }
+    creep(lane, at, shape, previous);
     if lane.live {
         if !floored {
             end_floor = disc_floor_px(at.xy, radius_px);

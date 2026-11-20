@@ -27,8 +27,19 @@ fn excess_sizes(chain: Chain, shape: StrandShape) -> PerContact {
     return sizes;
 }
 
-/// The plastic shifts after the hinges set `share` of their excess over the yield
-/// (Baxter's joint friction, Chu & Tai's zero-shift), each capped; world, at the clamp.
+/// Hinge `hinge`'s plastic shift after it sets `share` of its excess over the yield
+/// (Baxter's joint friction, Chu & Tai's zero-shift), capped; world, at the clamp.
+fn crept_hinge(before: vec3<f32>, edge: vec3<f32>, shape: StrandShape, hinge: u32, share: f32) -> vec3<f32> {
+    let excess = hinge_excess(before, edge, shape, hinge);
+    let size = length(excess);
+    var shift = transported(shape.plastic[hinge], shape.clamp, before);
+    if size > PLASTIC_YIELD_RAD {
+        shift += share * (size - PLASTIC_YIELD_RAD) / size * excess;
+    }
+    shift *= MAX_PLASTIC_SHIFT_RAD / max(length(shift), MAX_PLASTIC_SHIFT_RAD);
+    return transported(shift, before, shape.clamp);
+}
+
 fn crept(chain: Chain, shape: StrandShape, share: f32) -> Turns {
     if share <= 0.0 {
         return shape.plastic;
@@ -37,14 +48,7 @@ fn crept(chain: Chain, shape: StrandShape, share: f32) -> Turns {
     var plastic: Turns;
     var before = shape.clamp;
     for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
-        let excess = hinge_excess(before, edges[hinge], shape, hinge);
-        let size = length(excess);
-        var shift = transported(shape.plastic[hinge], shape.clamp, before);
-        if size > PLASTIC_YIELD_RAD {
-            shift += share * (size - PLASTIC_YIELD_RAD) / size * excess;
-        }
-        shift *= MAX_PLASTIC_SHIFT_RAD / max(length(shift), MAX_PLASTIC_SHIFT_RAD);
-        plastic[hinge] = transported(shift, before, shape.clamp);
+        plastic[hinge] = crept_hinge(before, edges[hinge], shape, hinge, share);
         before = edges[hinge];
     }
     return plastic;

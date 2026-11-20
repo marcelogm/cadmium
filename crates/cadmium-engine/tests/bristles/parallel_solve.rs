@@ -23,12 +23,11 @@ const WORN_SAMPLES: usize = 3;
 const POSITION_TOLERANCE_PX: f32 = 1.0e-3;
 const FORCE_TOLERANCE_SHARE: f32 = 1.0e-3;
 const FORCE_FLOOR_N: f32 = 1.0e-9;
+const SHIFT_TOLERANCE_RAD: f32 = 1.0e-5;
 
 fn on_flat_canvas(gpu: &GpuContext, reference: bool) -> PaintSession {
     let mut s = session(gpu);
     s.engine.use_reference_bristle_solve(reference);
-    // The grouped solve has no plastic creep yet.
-    s.brush.hair.bend_memory = 0.0;
     s
 }
 
@@ -56,8 +55,6 @@ fn on_ridges(gpu: &GpuContext, reference: bool) -> PaintSession {
         .collect();
     s.canvas.write_f32(gpu, StateTexture::DryHeight, &heights);
     s.engine.use_reference_bristle_solve(reference);
-    // The grouped solve has no plastic creep yet.
-    s.brush.hair.bend_memory = 0.0;
     s
 }
 
@@ -88,6 +85,17 @@ fn assert_same_anchors(bristle: usize, serial: &[[f32; 4]], parallel: &[[f32; 4]
     }
 }
 
+fn assert_same_shifts(bristle: usize, serial: &[[f32; 3]], parallel: &[[f32; 3]]) {
+    for (hinge, (x, y)) in serial.iter().zip(parallel).enumerate() {
+        for axis in 0..3 {
+            assert!(
+                (x[axis] - y[axis]).abs() <= SHIFT_TOLERANCE_RAD,
+                "bristle {bristle} hinge {hinge}: shifts {x:?} {y:?}"
+            );
+        }
+    }
+}
+
 fn assert_same_strands(reference: &BristleSnapshot, grouped: &BristleSnapshot) {
     assert_eq!(reference.chains_px.len(), grouped.chains_px.len());
     for (bristle, (serial, parallel)) in reference
@@ -100,6 +108,9 @@ fn assert_same_strands(reference: &BristleSnapshot, grouped: &BristleSnapshot) {
     }
     for (bristle, (a, b)) in reference.anchors.iter().zip(&grouped.anchors).enumerate() {
         assert_same_anchors(bristle, a, b);
+    }
+    for (bristle, (a, b)) in reference.plastic.iter().zip(&grouped.plastic).enumerate() {
+        assert_same_shifts(bristle, a, b);
     }
     for (bristle, (a, b)) in reference
         .normal_forces_n
@@ -143,6 +154,10 @@ fn the_grouped_solve_matches_the_serial_one_over_ridges() {
     let modes: Vec<f32> = serial.anchors.iter().flatten().map(|a| a[3]).collect();
     assert!(modes.iter().any(|&w| w > 0.0), "no contact stuck");
     assert!(modes.iter().any(|&w| w < 0.0), "no contact slid");
+    assert!(
+        serial.plastic.iter().flatten().any(|p| *p != [0.0; 3]),
+        "nothing set"
+    );
     assert_same_strands(&serial, &parallel);
 }
 
@@ -161,6 +176,10 @@ fn the_grouped_solve_matches_the_serial_one_from_a_worn_brush() {
     drag(&gpu, &mut grouped, &samples[..WORN_SAMPLES]);
     let (serial, parallel) = snapshots(&gpu, &reference, &grouped);
     assert!(serial.normal_forces_n.iter().any(|&force| force > 0.0));
+    assert!(
+        serial.plastic.iter().flatten().any(|p| *p != [0.0; 3]),
+        "nothing set"
+    );
     assert_same_strands(&serial, &parallel);
 }
 
