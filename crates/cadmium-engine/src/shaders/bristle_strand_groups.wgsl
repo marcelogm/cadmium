@@ -199,7 +199,7 @@ fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     workgroupBarrier();
     if owns_hinge(lane) {
         place_gaps(s, lane.vertex + 1u);
-        place_diagonal(s, lane.vertex + 1u);
+        place_diagonal(s, lane.vertex + 1u, false);
     }
     workgroupBarrier();
     if leads(lane) {

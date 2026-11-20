@@ -152,6 +152,17 @@ fn group_any_engaged(strand: u32) -> bool {
     return any_row;
 }
 
+fn keep_step_forces(strand: u32, vertex: u32, keeping: bool) {
+    let first = normal_row(vertex);
+    for (var row = first; row < first + ROW_KINDS; row++) {
+        if keeping {
+            group_step_forces[strand][row] = group_forces[strand][row];
+        } else {
+            group_forces[strand][row] = group_step_forces[strand][row];
+        }
+    }
+}
+
 // mirrors held_back, from the lane's vertex at `at` after the step; the step's forces are
 // kept for the anchors and the reported load
 fn held_back_position(lane: Lane, at: vec3<f32>, shape: StrandShape) -> vec3<f32> {
@@ -164,18 +175,18 @@ fn held_back_position(lane: Lane, at: vec3<f32>, shape: StrandShape) -> vec3<f32
         place_edge(lane);
         place_directions(s, lane.vertex + 1u);
         group_turns[s][lane.vertex] = vec3<f32>(0.0);
+        keep_step_forces(s, lane.vertex + 1u, true);
     }
     workgroupBarrier();
     if leads(lane) {
         mend_short_edges(s, shape.clamp);
         group_holding[s] = select(0u, 1u, group_any_engaged(s));
-        group_step_forces[s] = group_forces[s];
     }
     workgroupBarrier();
     let holding = lane.live && group_holding[s] != 0u;
     if holding && lane.vertex < BRISTLE_SEGMENTS {
         place_gaps(s, lane.vertex + 1u);
-        place_diagonal(s, lane.vertex + 1u);
+        place_diagonal(s, lane.vertex + 1u, true);
     }
     workgroupBarrier();
     if holding && lane.vertex == 0u {
@@ -193,15 +204,13 @@ fn held_back_position(lane: Lane, at: vec3<f32>, shape: StrandShape) -> vec3<f32
     if holding && lane.vertex == 0u {
         group_scale[s] = cap_scale(s);
     }
+    if owns_hinge(lane) {
+        keep_step_forces(s, lane.vertex + 1u, false);
+    }
     workgroupBarrier();
     var held = at;
     if holding {
         held = turned_position(s, lane.vertex, group_scale[s], shape.segment_px);
     }
-    workgroupBarrier();
-    if leads(lane) {
-        group_forces[s] = group_step_forces[s];
-    }
-    workgroupBarrier();
     return held;
 }

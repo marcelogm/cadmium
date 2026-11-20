@@ -27,10 +27,13 @@ fn place_gaps(strand: u32, vertex: u32) {
     group_gaps[strand][row + 2u] = -dot(group_directions[strand][row + 2u], off_anchor);
 }
 
-// mirrors contact_problem diagonal
-fn place_diagonal(strand: u32, vertex: u32) {
+// mirrors contact_problem diagonal; with `engaged_only`, the normal and the engaged rows
+fn place_diagonal(strand: u32, vertex: u32, engaged_only: bool) {
     let first = normal_row(vertex);
     for (var row = first; row < first + ROW_KINDS; row++) {
+        if engaged_only && row != first && group_engaged[strand][row] == 0u {
+            continue;
+        }
         let along = group_directions[strand][row];
         var own = 0.0;
         for (var hinge = 0u; hinge < vertex; hinge++) {
