@@ -37,21 +37,6 @@ fn place_diagonal(strand: u32, vertex: u32) {
     }
 }
 
-// mirrors row_compliance
-fn group_compliance(strand: u32, row: u32, column: u32) -> f32 {
-    let vertex = row_vertex(row);
-    let pushed = row_vertex(column);
-    let along = group_directions[strand][row];
-    let push = group_directions[strand][column];
-    var rise = 0.0;
-    for (var hinge = 0u; hinge < min(vertex, pushed); hinge++) {
-        let lever = group_chain[strand][vertex] - group_chain[strand][hinge];
-        let arm_m = (group_chain[strand][pushed] - group_chain[strand][hinge]) * METRES_PER_PX;
-        rise += group_compliances[strand][hinge] * dot(cross(arm_m, push), cross(lever, along));
-    }
-    return rise;
-}
-
 // Whether the rounds can engage `row`: a liftable normal, or a tangent of a contact that
 // opened held. With `engaged_only`, whether it is engaged now.
 fn reachable_row(strand: u32, row: u32, engaged_only: bool) -> bool {
@@ -64,15 +49,35 @@ fn reachable_row(strand: u32, row: u32, engaged_only: bool) -> bool {
     return group_engaged[strand][normal_row(row_vertex(row)) + 2u] != 0u;
 }
 
-// mirrors cholesky_solved's entries: every column left of the vertex's rows the solve can read
+// mirrors cholesky_solved's entries (row_compliance), every column left of the vertex's
+// rows the solve can read: a column's push at each hinge serves the vertex's three rows
 fn place_matrix_rows(strand: u32, vertex: u32, engaged_only: bool) {
     let first = normal_row(vertex);
-    for (var row = first; row < first + ROW_KINDS; row++) {
-        if reachable_row(strand, row, engaged_only) {
-            for (var column = 0u; column < row; column++) {
-                if reachable_row(strand, column, engaged_only) {
-                    group_matrix[strand][row][column] = group_compliance(strand, row, column);
-                }
+    var reached: array<bool, ROW_KINDS>;
+    var alongs: array<vec3<f32>, ROW_KINDS>;
+    for (var kind = 0u; kind < ROW_KINDS; kind++) {
+        reached[kind] = reachable_row(strand, first + kind, engaged_only);
+        alongs[kind] = group_directions[strand][first + kind];
+    }
+    let last = first + ROW_KINDS - 1u;
+    for (var column = 0u; column < last; column++) {
+        if !reachable_row(strand, column, engaged_only) {
+            continue;
+        }
+        let pushed = row_vertex(column);
+        let push = group_directions[strand][column];
+        var rises = array<f32, ROW_KINDS>(0.0, 0.0, 0.0);
+        for (var hinge = 0u; hinge < min(vertex, pushed); hinge++) {
+            let lever = group_chain[strand][vertex] - group_chain[strand][hinge];
+            let arm_m = (group_chain[strand][pushed] - group_chain[strand][hinge]) * METRES_PER_PX;
+            let pushing = cross(arm_m, push);
+            for (var kind = 0u; kind < ROW_KINDS; kind++) {
+                rises[kind] += group_compliances[strand][hinge] * dot(pushing, cross(lever, alongs[kind]));
+            }
+        }
+        for (var kind = 0u; kind < ROW_KINDS; kind++) {
+            if reached[kind] && first + kind > column {
+                group_matrix[strand][first + kind][column] = rises[kind];
             }
         }
     }
