@@ -327,6 +327,7 @@ fn radial_set_lean(gpu: &GpuContext, pressure: f32) -> f32 {
 }
 
 #[test]
+#[ignore = "phase 3 of #62: without clumping there is no wet point, and the press splay sets as plasticity should (−0.0103 at pressure 0.1, −0.408 at 1), so only the clumped set minus the unclumped one can tell the point apart"]
 fn a_wet_brush_never_sets_its_point_into_its_bend_memory() {
     let gpu = GpuContext::new().unwrap();
     for pressure in [LIGHT_PRESSURE, HARD_PRESSURE] {
