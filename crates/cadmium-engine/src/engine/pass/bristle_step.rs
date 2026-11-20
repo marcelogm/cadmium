@@ -58,9 +58,10 @@ impl BristleStepPass {
             &shader_source(
                 &BRISTLE_SNIPPETS,
                 &format!(
-                    "{}\n{}",
+                    "{}\n{}\n{}",
                     include_str!("../../shaders/bristle_step.wgsl"),
                     include_str!("../../shaders/bristle_strand_groups.wgsl"),
+                    include_str!("../../shaders/bristle_group_contacts.wgsl"),
                 ),
             ),
             &[
