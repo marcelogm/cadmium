@@ -6,21 +6,51 @@
 const ROWS_PER_LANE: u32 = (MAX_CONTACT_ROWS + BRISTLE_VERTICES - 1u) / BRISTLE_VERTICES;
 
 var<workgroup> group_rows: array<ActiveRows, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_vertex_rows: GroupFlags;
 var<workgroup> group_count: array<u32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_most_rows: u32;
 var<workgroup> group_lower: array<ContactMatrix, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_inverse_roots: GroupRowValues;
 var<workgroup> group_solved: GroupRowValues;
 
-// mirrors active_rows, and active_forces' single row; the system's diagonal and right side
-fn gather_active_rows(strand: u32) -> u32 {
-    var count = 0u;
-    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
-        group_forces[strand][row] = 0.0;
-        if group_engaged[strand][row] != 0u {
-            group_rows[strand][count] = row;
-            count++;
+// mirrors active_rows, a vertex's rows per lane: each lane marks its engaged rows, then
+// lists them after the ones above
+fn mark_active_rows(lane: Lane) {
+    let s = lane.strand;
+    let first = normal_row(lane.vertex + 1u);
+    var bits = 0u;
+    for (var kind = 0u; kind < ROW_KINDS; kind++) {
+        group_forces[s][first + kind] = 0.0;
+        if group_engaged[s][first + kind] != 0u {
+            bits |= 1u << kind;
         }
+    }
+    group_vertex_rows[s][lane.vertex] = bits;
+}
+
+fn list_active_rows(lane: Lane) {
+    let s = lane.strand;
+    let first = normal_row(lane.vertex + 1u);
+    let bits = group_vertex_rows[s][lane.vertex];
+    var index = 0u;
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        if hinge < lane.vertex {
+            index += countOneBits(group_vertex_rows[s][hinge]);
+        }
+    }
+    for (var kind = 0u; kind < ROW_KINDS; kind++) {
+        if (bits & (1u << kind)) != 0u {
+            group_rows[s][index] = first + kind;
+            index++;
+        }
+    }
+}
+
+// mirrors active_forces' single row; the system's diagonal and right side
+fn place_active_system(strand: u32) -> u32 {
+    var count = 0u;
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        count += countOneBits(group_vertex_rows[strand][hinge]);
     }
     if count == 1u {
         let row = group_rows[strand][0];
@@ -105,10 +135,19 @@ fn backward_row(lane: Lane, step: u32, count: u32) {
 // mirrors active_forces, cholesky_solved, for the strands where `solving`
 fn share_active_forces(lane: Lane, solving: bool) {
     let s = lane.strand;
+    let marking = solving && lane.vertex < BRISTLE_SEGMENTS;
+    if marking {
+        mark_active_rows(lane);
+    }
+    workgroupBarrier();
+    if marking {
+        list_active_rows(lane);
+    }
+    workgroupBarrier();
     if lane.vertex == 0u {
         var count = 0u;
         if solving {
-            count = gather_active_rows(s);
+            count = place_active_system(s);
         }
         group_count[s] = count;
     }
