@@ -67,7 +67,8 @@ tangential displacement from the anchor that the free step would give the vertex
    floor) plus one test: a stuck contact with |fₜ| > μₛ(−f̂ₜ)·fₙ starts to slide. It loses
    its tangential rows and the system is solved again.
 3. After the step, anchors update:
-   - a new contact starts stuck, anchored where it touched;
+   - a new contact lands frictionless on its first iteration and is anchored where that
+     step leaves it, so it is stuck from the next iteration;
    - a stuck contact keeps its anchor;
    - a sliding contact's anchor moves to the vertex. If this step's slip reversed ŝ or
      fell under the slip tolerance, it sticks again. A sliding contact does not retry
@@ -102,8 +103,9 @@ and p.
   Within 2%.
 - **Anisotropy.** The same test pushed and pulled: the thresholds' ratio is
   (1 − C_η·cos²), within 2%.
-- **Two contacts.** The tip and the vertex above it, both stuck: the coupled forces match
-  the CPU solve of the 6×6 system.
+- **Two contacts.** A deep press with at least two stuck contacts, then a small drag:
+  every stuck vertex holds its anchor within 1e-3 px and stays inside its cone, which a
+  per-contact projection would not do.
 - **Plasticity.** A hinge held bent by a tip load over N dabs:
   - p follows the closed form of the creep up to the cap;
   - at dt = 0, p does not change;
