@@ -70,7 +70,7 @@ pub(super) const CONTACT_SNIPPETS: [&str; 6] = [
     include_str!("../shaders/contact_mask.wgsl"),
     include_str!("../shaders/cell_grid.wgsl"),
 ];
-pub(super) const BRISTLE_SNIPPETS: [&str; 10] = [
+pub(super) const BRISTLE_SNIPPETS: [&str; 12] = [
     include_str!("../shaders/brush_tip.wgsl"),
     include_str!("../shaders/bristle_rest.wgsl"),
     include_str!("../shaders/bristle_frame.wgsl"),
@@ -79,13 +79,17 @@ pub(super) const BRISTLE_SNIPPETS: [&str; 10] = [
     include_str!("../shaders/bristle_relief.wgsl"),
     include_str!("../shaders/bristle_solve.wgsl"),
     include_str!("../shaders/bristle_contacts.wgsl"),
+    include_str!("../shaders/bristle_friction.wgsl"),
+    include_str!("../shaders/bristle_plastic.wgsl"),
     include_str!("../shaders/bristle_shape.wgsl"),
     include_str!("../shaders/bristle_floor.wgsl"),
 ];
 #[cfg(test)]
-pub(super) const LAB_SNIPPETS: [&str; 3] = [
+pub(super) const LAB_SNIPPETS: [&str; 5] = [
     include_str!("../shaders/bristle_solve.wgsl"),
     include_str!("../shaders/bristle_contacts.wgsl"),
+    include_str!("../shaders/bristle_friction.wgsl"),
+    include_str!("../shaders/bristle_plastic.wgsl"),
     include_str!("../shaders/bristle_floor.wgsl"),
 ];
 pub(super) const EYEDROPPER_SNIPPETS: [&str; 2] = [

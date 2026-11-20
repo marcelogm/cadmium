@@ -1,12 +1,16 @@
 /// The lab writes, per strand, every vertex as xyz px and w = the canvas's force on it, N,
-/// then the total force in x.
+/// then the total force in x, then per vertex the friction on it, N, with w = its anchor
+/// mode, then per hinge the plastic shift, rad, with w = the excess turn, rad.
 ///
 /// One strand for the lab, all vec4 so the layout is the same on both sides:
 /// root.xyz and w = segment px; clamp.xyz and w = floor height px; curl.xyz and
 /// w = press px; tip_force.xyz N and w = press steps; floor_slope.xy the floor plane's
 /// slope, so the floor is z = height + slope · xy, and zw how far the press slides the
 /// strand, px; step, when its w is 1, replaces the plane with a step of height y for
-/// x > x, read as a hair of radius z rests on it; compliances rad per N·m.
+/// x > x, read as a hair of radius z rests on it; friction = μₛ, μₖ, anisotropy C_η, creep per
+/// second; drag.xy how far the drag phase moves the strand, px, drag.z its steps, drag.w 1 to
+/// drop the tip load for it; timing.x seconds per press step, timing.y per drag step;
+/// compliances rad per N·m.
 struct LabStrand {
     root: vec4<f32>,
     clamp: vec4<f32>,
@@ -14,6 +18,9 @@ struct LabStrand {
     tip_force: vec4<f32>,
     floor_slope: vec4<f32>,
     step: vec4<f32>,
+    friction: vec4<f32>,
+    drag: vec4<f32>,
+    timing: vec4<f32>,
     compliances: array<vec4<f32>, 2>,
 };
 
@@ -21,7 +28,7 @@ struct LabStrand {
 @group(0) @binding(1) var<storage, read_write> lab_out: array<vec4<f32>>;
 
 const LAB_ITERATIONS_PER_STEP: u32 = 2u;
-const LAB_OUT_VECTORS: u32 = BRISTLE_VERTICES + 1u;
+const LAB_OUT_VECTORS: u32 = 2u * BRISTLE_VERTICES + 1u + BRISTLE_SEGMENTS;
 
 fn lab_shape(strand: LabStrand) -> StrandShape {
     var compliances: HingeCompliances;
@@ -102,4 +109,12 @@ fn solve_lab(@builtin(workgroup_id) id: vec3<u32>) {
         lab_out[first + vertex] = vec4<f32>(chain[vertex], forces[vertex - 1u]);
     }
     lab_out[first + BRISTLE_VERTICES] = vec4<f32>(summed(forces), 0.0, 0.0, 0.0);
+    let friction_first = first + BRISTLE_VERTICES + 1u;
+    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+        lab_out[friction_first + vertex] = vec4<f32>(0.0);
+    }
+    let plastic_first = friction_first + BRISTLE_VERTICES;
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        lab_out[plastic_first + hinge] = vec4<f32>(0.0);
+    }
 }
