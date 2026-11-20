@@ -50,49 +50,38 @@ fn owned_row(lane: Lane, slot: u32) -> u32 {
     return lane.vertex + slot * BRISTLE_VERTICES;
 }
 
-// mirrors solved_by_cholesky; the serial `value / root` compiles to `value * inverseSqrt`
+// mirrors solved_by_cholesky's factor and forward pass. Column `column`'s pivot and its
+// rows' sums run together, and so does the forward pass's term of the column before; the
+// serial `value / root` compiles to `value * inverseSqrt`.
 fn factor_column(lane: Lane, column: u32, count: u32) {
     let s = lane.strand;
+    var values: array<f32, ROWS_PER_LANE>;
     for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
         let row = owned_row(lane, slot);
-        if row == column && row < count {
-            var pivot = group_lower[s][row][row];
-            for (var k = 0u; k < row; k++) {
-                pivot -= group_lower[s][row][k] * group_lower[s][row][k];
+        if row >= column && row < count {
+            if column > 0u {
+                group_solved[s][row] -= group_lower[s][row][column - 1u] * group_solved[s][column - 1u];
             }
-            group_lower[s][row][row] = sqrt(max(pivot, MIN_PIVOT));
-            group_inverse_roots[s][row] = inverseSqrt(max(pivot, MIN_PIVOT));
-        }
-    }
-    workgroupBarrier();
-    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
-        let row = owned_row(lane, slot);
-        if row > column && row < count {
             var value = group_lower[s][row][column];
             for (var k = 0u; k < column; k++) {
                 value -= group_lower[s][row][k] * group_lower[s][column][k];
             }
-            group_lower[s][row][column] = value * group_inverse_roots[s][column];
+            values[slot] = value;
+            if row == column {
+                let pivot = max(value, MIN_PIVOT);
+                group_lower[s][row][row] = sqrt(pivot);
+                group_inverse_roots[s][row] = inverseSqrt(pivot);
+            }
         }
     }
     workgroupBarrier();
-}
-
-// mirrors solved_by_cholesky's forward pass, a column at a time: each row still takes its
-// terms in column order
-fn forward_column(lane: Lane, column: u32, count: u32) {
-    let s = lane.strand;
     for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
         let row = owned_row(lane, slot);
         if row == column && row < count {
             group_solved[s][row] /= group_lower[s][row][row];
         }
-    }
-    workgroupBarrier();
-    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
-        let row = owned_row(lane, slot);
         if row > column && row < count {
-            group_solved[s][row] -= group_lower[s][row][column] * group_solved[s][column];
+            group_lower[s][row][column] = values[slot] * group_inverse_roots[s][column];
         }
     }
     workgroupBarrier();
@@ -143,9 +132,6 @@ fn share_active_forces(lane: Lane, solving: bool) {
     workgroupBarrier();
     for (var column = 0u; column < most; column++) {
         factor_column(lane, column, count);
-    }
-    for (var column = 0u; column < most; column++) {
-        forward_column(lane, column, count);
     }
     for (var step = 0u; step < most; step++) {
         backward_row(lane, step, count);
