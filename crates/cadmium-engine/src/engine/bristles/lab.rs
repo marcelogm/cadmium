@@ -11,8 +11,9 @@ use crate::gpu::GpuContext;
 
 const HINGES: usize = BRISTLE_VERTICES - 1;
 /// Per strand: the vertices (xyz, normal force), the total, the friction on each vertex
-/// (xyz, anchor w), each hinge's plastic shift (xyz, excess w), and each vertex's anchor.
-const OUT_VECTORS: usize = 3 * BRISTLE_VERTICES + 1 + HINGES;
+/// (xyz, anchor w), each hinge's plastic shift (xyz, excess w), each vertex's anchor, and
+/// each hinge's summed excess over the yield (x).
+const OUT_VECTORS: usize = 3 * BRISTLE_VERTICES + 1 + 2 * HINGES;
 const VECTOR_FLOATS: usize = 4;
 /// Hinge compliances a `LabStrand` carries: two vec4 in the shader.
 pub(super) const LAB_HINGE_SLOTS: usize = 8;
@@ -114,7 +115,6 @@ impl LabStrand {
     }
 
     /// Creeps the plastic shifts at `per_second`, each step lasting `step_seconds`.
-    #[allow(dead_code)] // the plasticity tests of #62 use it
     pub(super) fn with_creep(mut self, per_second: f32, step_seconds: f32) -> LabStrand {
         self.friction[3] = per_second;
         self.timing[0] = step_seconds;
@@ -123,7 +123,6 @@ impl LabStrand {
     }
 
     /// How long each drag step lasts, for the creep.
-    #[allow(dead_code)] // the plasticity tests of #62 use it
     pub(super) fn with_drag_seconds(mut self, step_seconds: f32) -> LabStrand {
         self.timing[1] = step_seconds;
         self
@@ -144,7 +143,6 @@ impl LabStrand {
     }
 
     /// Drops the tip load for the drag phase.
-    #[allow(dead_code)] // the plasticity tests of #62 use it
     pub(super) fn released_for_the_drag(mut self) -> LabStrand {
         self.drag[3] = 1.0;
         self
@@ -161,13 +159,13 @@ pub(super) struct LabRun {
     /// Each vertex's anchor mode: 0 free, > 0 stuck, < 0 sliding (the normal force).
     pub(super) anchor_modes: Vec<f32>,
     /// Each hinge's plastic shift, world, rad.
-    #[allow(dead_code)] // the plasticity tests of #62 use it
     pub(super) plastic: Vec<[f32; 3]>,
     /// How far each hinge's turn stands from its rest turn plus shift, rad.
-    #[allow(dead_code)] // the plasticity tests of #62 use it
     pub(super) excess_rad: Vec<f32>,
     /// Where friction holds each vertex, px; zero where it holds none.
     pub(super) anchors_px: Vec<[f32; 3]>,
+    /// Each hinge's excess over the yield, rad, summed over the steps that crept.
+    pub(super) crept_excess_rad: Vec<f32>,
 }
 
 fn lab_stage(gpu: &GpuContext) -> (ComputeStage, wgpu::ComputePipeline) {
@@ -220,7 +218,8 @@ fn lab_run(floats: &[f32]) -> LabRun {
     let vectors: Vec<&[f32]> = floats.chunks(VECTOR_FLOATS).collect();
     let friction = &vectors[BRISTLE_VERTICES + 1..2 * BRISTLE_VERTICES + 1];
     let plastic = &vectors[2 * BRISTLE_VERTICES + 1..2 * BRISTLE_VERTICES + 1 + HINGES];
-    let anchors = &vectors[2 * BRISTLE_VERTICES + 1 + HINGES..];
+    let anchors = &vectors[2 * BRISTLE_VERTICES + 1 + HINGES..3 * BRISTLE_VERTICES + 1 + HINGES];
+    let crept_excess = &vectors[3 * BRISTLE_VERTICES + 1 + HINGES..];
     LabRun {
         chain_px: vectors[..BRISTLE_VERTICES]
             .iter()
@@ -233,6 +232,7 @@ fn lab_run(floats: &[f32]) -> LabRun {
         plastic: plastic.iter().map(|v| [v[0], v[1], v[2]]).collect(),
         excess_rad: plastic.iter().map(|v| v[3]).collect(),
         anchors_px: anchors.iter().map(|v| [v[0], v[1], v[2]]).collect(),
+        crept_excess_rad: crept_excess.iter().map(|v| v[0]).collect(),
     }
 }
 
