@@ -183,3 +183,42 @@ Bristles stage, µs/dab (`CADMIUM_BENCH_STAGES=1`, mean of two passes):
 - Friction is half of it: with static friction zeroed the stage reads 182.1 µs/dab, still 2.6× phase 1.
 - The untouched `shade the full canvas` read 0.51 ms in every phase 1 run and 0.41 in every phase 2 run: the lighter phase 1 load let the clocks drop, so phase 1's figures sit high and the phase 1 → 2 step is, if anything, understated.
 - Proposed phase 2 budget: +162% over the baseline (worst scenario, `brush, default size` p95 0.86 → 2.25 ms; worst mean `blender, default size over impasto` +153%).
+
+### Optimisation ladder
+
+The grouped solve's physics unchanged: every kept step leaves its output bit-identical to `a7575cf` (a hash of chains, anchors, plastic shifts and normal forces over ridges with and without friction, and on flat canvas), so the serial reference did not change. Each step against the previous kept one, prebuilt binaries A B B A, Bristles µs/dab at default size (mean of eight stage runs, or four for a step rejected on its first round). The absolute figures drift with the clocks between sessions; each row's pair was measured together.
+
+Attribution at `a7575cf` (default size, throwaway builds that break the physics): with the Cholesky reduced to its diagonal the stage read 157 µs/dab against ~370, without held_back 231, without any contact 82. The solve held two 21×21 private copies of the matrix (in `group_active_forces` and the by-value `solved_by_cholesky`), and spilled 1030 VGPRs into 582 KB of scratch. Moving them to workgroup memory on lane 0 alone changed the output: values loaded from a uniform address run on the scalar ALU, which does not fuse the multiply-adds. Factored across the lanes, each row indexed by its lane, the arithmetic stays on the vector ALU as before. Later attribution, by running one phase twice (idempotent phases, physics intact): the matrix fill cost ~55 µs/dab, the rounds' solves ~36 (their gather ~10), gaps and diagonals ~7.
+
+| step | Bristles µs/dab | kept |
+|---|---|---|
+| Cholesky in workgroup memory, factored across the lanes | 393.2 → 312.6 | yes |
+| a column's pivot with its rows' sums and the forward pass | 311.9 → 308.8 | yes |
+| fill only the entries the rounds can reach | 328.6 → 199.4 | yes |
+| levers cached in registers, hinge loop unrolled | 199.7 → 209.3 | no |
+| a column's push shared by the vertex's three rows | 199.5 → 194.4 | yes |
+| row directions without copying the chain | 195.8 → 191.8 | yes |
+| settled flags folded into the unsettled count | 191.5 → 191.6 | no |
+| active rows listed across the lanes | 170.7 → 168.8 | yes |
+| held_back's copies per lane, unread diagonals skipped | 175.2 → 166.0 | yes |
+| tangent diagonals only for anchored vertices | 168.2 → 167.8 | no |
+
+Not taken: skipping held_back when no tangent row is engaged (the serial solve holds back every engaged row, so it would change the physics); skipping the creep pass when `creep_share` is 0 (every factory brush has bend memory, so the benchmark would not see it); filling a row only once the rounds engage it (a throwaway that skips the rows added later bounds it at −5%, before the extra phase it needs).
+
+Final gate, 5 interleaved repeats after a warm-up, GPU mean / p95 ms per frame, median of A B B A twice (`a7575cf` against the ladder's last commit, in one session):
+
+| scenario | baseline | phase 1 | phase 2 before the ladder | after |
+|---|---|---|---|---|
+| brush, default size | 0.78 / 0.86 | 1.00 / 1.12 | 1.99 / 2.27 | 1.12 / 1.27 |
+| blender, default size over impasto | 0.71 / 0.78 | 0.84 / 0.93 | 1.90 / 2.20 | 1.08 / 1.21 |
+| long brush stroke over impasto | 0.76 / 0.83 | 0.88 / 0.94 | 1.96 / 2.25 | 1.08 / 1.21 |
+| brush, 200 px | 0.91 / 1.47 | 1.26 / 2.30 | 1.40 / 2.18 | 0.86 / 1.37 |
+| brush, max size | 1.64 / 3.23 | 1.55 / 2.85 | 1.98 / 3.34 | 1.82 / 3.40 |
+| brush, 200 px over impasto | 0.78 / 1.24 | 0.98 / 1.78 | 1.42 / 2.17 | 0.81 / 1.27 |
+| brush, max size over impasto | 1.23 / 2.41 | 1.51 / 2.94 | 1.92 / 3.17 | 1.43 / 2.67 |
+| long 200 px stroke over impasto | 0.72 / 1.12 | 0.72 / 1.10 | 1.38 / 2.12 | 0.73 / 1.10 |
+
+Bristles stage, µs/dab (mean of two full stage passes, same session): default size 340.9 → 171.4, blender 230.4 → 93.4, long stroke 229.6 → 90.2, 200 px 755.2 → 336.1, max size 997.5 → 493.1.
+
+- The solve shader now uses no scratch (was 582 KB) and no spilled VGPRs (was 1030); its code fell from 190 KB to 96 KB.
+- Proposed phase 2 budget: +55% over the baseline (worst scenario, `blender, default size over impasto` p95 0.78 → 1.21 ms; worst at default size, `brush, default size` p95 0.86 → 1.27, +48%).
