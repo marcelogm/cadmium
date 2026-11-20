@@ -89,10 +89,9 @@ fn clamp_group_to_cones(strand: u32, friction: Friction) {
     }
 }
 
-// mirrors contact_forces' end
+// mirrors contact_forces' end, after its last solve
 fn close_contacts(strand: u32, friction: Friction) {
     if group_settled[strand] == 0u {
-        group_active_forces(strand);
         clamp_group_to_cones(strand, friction);
     }
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
@@ -186,10 +185,7 @@ fn held_back_position(lane: Lane, at: vec3<f32>, shape: StrandShape) -> vec3<f32
         place_matrix_rows(s, lane.vertex + 1u);
     }
     workgroupBarrier();
-    if holding && lane.vertex == 0u {
-        group_active_forces(s);
-    }
-    workgroupBarrier();
+    share_active_forces(lane, holding);
     if holding && lane.vertex < BRISTLE_SEGMENTS {
         group_turns[s][lane.vertex] = rise_turn(s, lane.vertex);
     }

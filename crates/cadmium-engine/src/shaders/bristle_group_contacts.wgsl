@@ -117,37 +117,6 @@ fn group_pivot(strand: u32, row: u32) -> f32 {
     return own;
 }
 
-// mirrors active_forces, cholesky_solved
-fn group_active_forces(strand: u32) {
-    var rows: ActiveRows;
-    var count = 0u;
-    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
-        group_forces[strand][row] = 0.0;
-        if group_engaged[strand][row] != 0u {
-            rows[count] = row;
-            count++;
-        }
-    }
-    if count == 1u {
-        let row = rows[0];
-        group_forces[strand][row] = group_gaps[strand][row] / group_pivot(strand, row);
-        return;
-    }
-    var lower: ContactMatrix;
-    var rhs: RowValues;
-    for (var i = 0u; i < count; i++) {
-        rhs[i] = group_gaps[strand][rows[i]];
-        for (var j = 0u; j < i; j++) {
-            lower[i][j] = group_matrix[strand][rows[i]][rows[j]];
-        }
-        lower[i][i] = group_pivot(strand, rows[i]);
-    }
-    let solved = solved_by_cholesky(lower, rhs, count);
-    for (var i = 0u; i < count; i++) {
-        group_forces[strand][rows[i]] = solved[i];
-    }
-}
-
 // mirrors released
 fn group_released(strand: u32) -> bool {
     var dropped = false;
@@ -162,9 +131,9 @@ fn group_released(strand: u32) -> bool {
     return dropped;
 }
 
-// mirrors one round of contact_forces up to the gaps' rebuild, which every lane runs
+// mirrors one round of contact_forces after its solve, up to the gaps' rebuild, which every
+// lane runs
 fn solve_round(strand: u32, friction: Friction) {
-    group_active_forces(strand);
     let dropped = group_released(strand);
     var regap = dropped && group_let_go(strand);
     var slid = false;
@@ -251,6 +220,7 @@ fn settle_contacts(lane: Lane, free: vec3<f32>, friction: Friction) {
     let s = lane.strand;
     for (var round = 0u; round < CONTACT_ROUNDS; round++) {
         let solving = lane.live && group_solving[s] != 0u && group_settled[s] == 0u;
+        share_active_forces(lane, solving);
         if solving && lane.vertex == 0u {
             solve_round(s, friction);
         }
@@ -284,6 +254,7 @@ fn settle_contacts(lane: Lane, free: vec3<f32>, friction: Friction) {
             break;
         }
     }
+    share_active_forces(lane, lane.live && group_solving[s] != 0u && group_settled[s] == 0u);
     if leads(lane) && group_solving[s] != 0u {
         close_contacts(s, friction);
     }

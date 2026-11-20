@@ -1,0 +1,160 @@
+// The grouped solve's active-set Cholesky, shared by the strand's lanes: lane v owns the
+// active rows v, v + 8, … Each entry takes the serial arithmetic in the serial order. Every
+// entry is computed at an index the compiler sees vary by lane, so it stays on the vector
+// unit, as in the serial solve: on the scalar unit it would not fuse the multiply-adds.
+
+const ROWS_PER_LANE: u32 = (MAX_CONTACT_ROWS + BRISTLE_VERTICES - 1u) / BRISTLE_VERTICES;
+
+var<workgroup> group_rows: array<ActiveRows, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_count: array<u32, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_most_rows: u32;
+var<workgroup> group_lower: array<ContactMatrix, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_inverse_roots: GroupRowValues;
+var<workgroup> group_solved: GroupRowValues;
+
+// mirrors active_rows, and active_forces' single row; the system's diagonal and right side
+fn gather_active_rows(strand: u32) -> u32 {
+    var count = 0u;
+    for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
+        group_forces[strand][row] = 0.0;
+        if group_engaged[strand][row] != 0u {
+            group_rows[strand][count] = row;
+            count++;
+        }
+    }
+    if count == 1u {
+        let row = group_rows[strand][0];
+        group_forces[strand][row] = group_gaps[strand][row] / group_pivot(strand, row);
+        return 0u;
+    }
+    for (var i = 0u; i < count; i++) {
+        let row = group_rows[strand][i];
+        group_solved[strand][i] = group_gaps[strand][row];
+        group_lower[strand][i][i] = group_pivot(strand, row);
+    }
+    return count;
+}
+
+fn most_active_rows(group: u32) -> u32 {
+    var most = 0u;
+    for (var strand = 0u; strand < BRISTLE_STRANDS_PER_GROUP; strand++) {
+        let live = group * BRISTLE_STRANDS_PER_GROUP + strand < dab.bristle_total;
+        if live {
+            most = max(most, group_count[strand]);
+        }
+    }
+    return most;
+}
+
+fn owned_row(lane: Lane, slot: u32) -> u32 {
+    return lane.vertex + slot * BRISTLE_VERTICES;
+}
+
+// mirrors solved_by_cholesky; the serial `value / root` compiles to `value * inverseSqrt`
+fn factor_column(lane: Lane, column: u32, count: u32) {
+    let s = lane.strand;
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let row = owned_row(lane, slot);
+        if row == column && row < count {
+            var pivot = group_lower[s][row][row];
+            for (var k = 0u; k < row; k++) {
+                pivot -= group_lower[s][row][k] * group_lower[s][row][k];
+            }
+            group_lower[s][row][row] = sqrt(max(pivot, MIN_PIVOT));
+            group_inverse_roots[s][row] = inverseSqrt(max(pivot, MIN_PIVOT));
+        }
+    }
+    workgroupBarrier();
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let row = owned_row(lane, slot);
+        if row > column && row < count {
+            var value = group_lower[s][row][column];
+            for (var k = 0u; k < column; k++) {
+                value -= group_lower[s][row][k] * group_lower[s][column][k];
+            }
+            group_lower[s][row][column] = value * group_inverse_roots[s][column];
+        }
+    }
+    workgroupBarrier();
+}
+
+// mirrors solved_by_cholesky's forward pass, a column at a time: each row still takes its
+// terms in column order
+fn forward_column(lane: Lane, column: u32, count: u32) {
+    let s = lane.strand;
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let row = owned_row(lane, slot);
+        if row == column && row < count {
+            group_solved[s][row] /= group_lower[s][row][row];
+        }
+    }
+    workgroupBarrier();
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let row = owned_row(lane, slot);
+        if row > column && row < count {
+            group_solved[s][row] -= group_lower[s][row][column] * group_solved[s][column];
+        }
+    }
+    workgroupBarrier();
+}
+
+// mirrors solved_by_cholesky's backward pass
+fn backward_row(lane: Lane, step: u32, count: u32) {
+    let s = lane.strand;
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let row = owned_row(lane, slot);
+        if step < count && row == count - 1u - step {
+            for (var k = row + 1u; k < count; k++) {
+                group_solved[s][row] -= group_lower[s][k][row] * group_solved[s][k];
+            }
+            group_solved[s][row] /= group_lower[s][row][row];
+        }
+    }
+    workgroupBarrier();
+}
+
+// mirrors active_forces, cholesky_solved, for the strands where `solving`
+fn share_active_forces(lane: Lane, solving: bool) {
+    let s = lane.strand;
+    if lane.vertex == 0u {
+        var count = 0u;
+        if solving {
+            count = gather_active_rows(s);
+        }
+        group_count[s] = count;
+    }
+    workgroupBarrier();
+    if lane.strand == 0u && lane.vertex == 0u {
+        group_most_rows = most_active_rows(lane.group);
+    }
+    let most = workgroupUniformLoad(&group_most_rows);
+    if most == 0u {
+        return;
+    }
+    let count = select(0u, group_count[s], lane.live);
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let i = owned_row(lane, slot);
+        if i < count {
+            for (var j = 0u; j < i; j++) {
+                group_lower[s][i][j] = group_matrix[s][group_rows[s][i]][group_rows[s][j]];
+            }
+        }
+    }
+    workgroupBarrier();
+    for (var column = 0u; column < most; column++) {
+        factor_column(lane, column, count);
+    }
+    for (var column = 0u; column < most; column++) {
+        forward_column(lane, column, count);
+    }
+    for (var step = 0u; step < most; step++) {
+        backward_row(lane, step, count);
+    }
+    for (var slot = 0u; slot < ROWS_PER_LANE; slot++) {
+        let i = owned_row(lane, slot);
+        if i < count {
+            group_forces[s][group_rows[s][i]] = group_solved[s][i];
+        }
+    }
+    workgroupBarrier();
+}
