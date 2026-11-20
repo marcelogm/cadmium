@@ -23,6 +23,8 @@ const WORN_SAMPLES: usize = 3;
 const POSITION_TOLERANCE_PX: f32 = 1.0e-3;
 const FORCE_TOLERANCE_SHARE: f32 = 1.0e-3;
 const FORCE_FLOOR_N: f32 = 1.0e-9;
+/// The anchors' loads are the force of an earlier iteration; measured worst 1.14e-3.
+const ANCHOR_LOAD_TOLERANCE_SHARE: f32 = 2.0e-3;
 const SHIFT_TOLERANCE_RAD: f32 = 1.0e-5;
 
 fn on_flat_canvas(gpu: &GpuContext, reference: bool) -> PaintSession {
@@ -69,12 +71,34 @@ fn assert_same_vertices(bristle: usize, serial: &[[f32; 3]], parallel: &[[f32; 3
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum Mode {
+    Free,
+    Stuck,
+    Sliding,
+}
+
+fn mode(w: f32) -> Mode {
+    if w > 0.0 {
+        Mode::Stuck
+    } else if w < 0.0 {
+        Mode::Sliding
+    } else {
+        Mode::Free
+    }
+}
+
 fn assert_same_anchors(bristle: usize, serial: &[[f32; 4]], parallel: &[[f32; 4]]) {
     for (vertex, (x, y)) in serial.iter().zip(parallel).enumerate() {
         assert_eq!(
-            x[3].signum(),
-            y[3].signum(),
+            mode(x[3]),
+            mode(y[3]),
             "bristle {bristle} vertex {vertex}: modes {x:?} {y:?}"
+        );
+        let scale = x[3].abs().max(y[3].abs()).max(FORCE_FLOOR_N);
+        assert!(
+            (x[3].abs() - y[3].abs()).abs() <= ANCHOR_LOAD_TOLERANCE_SHARE * scale,
+            "bristle {bristle} vertex {vertex}: loads {x:?} {y:?}"
         );
         for axis in 0..3 {
             assert!(
@@ -176,6 +200,9 @@ fn the_grouped_solve_matches_the_serial_one_from_a_worn_brush() {
     drag(&gpu, &mut grouped, &samples[..WORN_SAMPLES]);
     let (serial, parallel) = snapshots(&gpu, &reference, &grouped);
     assert!(serial.normal_forces_n.iter().any(|&force| force > 0.0));
+    let modes: Vec<f32> = serial.anchors.iter().flatten().map(|a| a[3]).collect();
+    assert!(modes.iter().any(|&w| w > 0.0), "no contact stuck");
+    assert!(modes.iter().any(|&w| w < 0.0), "no contact slid");
     assert!(
         serial.plastic.iter().flatten().any(|p| *p != [0.0; 3]),
         "nothing set"
@@ -197,6 +224,31 @@ fn the_grouped_solve_matches_the_serial_one_along_a_long_stroke_on_flat_canvas()
     }
     let (serial, parallel) = snapshots(&gpu, &reference, &grouped);
     let modes: Vec<f32> = serial.anchors.iter().flatten().map(|a| a[3]).collect();
+    // Without chaos no stuck contact is reachable on flat canvas.
     assert!(modes.iter().any(|&w| w < 0.0), "no contact slid");
+    assert_same_strands(&serial, &parallel);
+}
+
+#[test]
+fn the_grouped_solve_matches_the_serial_one_without_friction_over_ridges() {
+    let gpu = GpuContext::new().unwrap();
+    let mut reference = on_ridges(&gpu, true);
+    let mut grouped = on_ridges(&gpu, false);
+    // Plasticity off too: with it, creep still makes the strokes diverge by 1e-2 px.
+    for s in [&mut reference, &mut grouped] {
+        s.engine.use_frictionless_bristles(true);
+        s.brush.hair.bend_memory = 0.0;
+    }
+    let samples = line(CENTRE_Y, 60.0, 300.0, 0.9, TILT_DEG);
+    drag(&gpu, &mut reference, &samples);
+    drag(&gpu, &mut grouped, &samples);
+    let (serial, parallel) = snapshots(&gpu, &reference, &grouped);
+    assert!(serial.normal_forces_n.iter().any(|&force| force > 0.0));
+    for anchors in [&serial.anchors, &parallel.anchors] {
+        assert!(
+            anchors.iter().flatten().all(|a| *a == [0.0; 4]),
+            "friction anchored a vertex"
+        );
+    }
     assert_same_strands(&serial, &parallel);
 }

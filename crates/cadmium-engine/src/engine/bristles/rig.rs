@@ -55,6 +55,7 @@ pub(crate) struct BristleRig {
     stroke_advanced: bool,
     lift_pending: bool,
     last_motion_ms: f32,
+    frictionless: bool,
 }
 
 impl BristleRig {
@@ -78,6 +79,7 @@ impl BristleRig {
             stroke_advanced: false,
             lift_pending: false,
             last_motion_ms: 0.0,
+            frictionless: false,
         }
     }
 
@@ -91,13 +93,21 @@ impl BristleRig {
 
     /// The step's tuning for the worn hair on the current layout.
     pub(crate) fn tuning(&self, params: &SimParams, canvas_tooth_um: f32) -> BristleTuning {
-        BristleTuning::of(
+        let mut tuning = BristleTuning::of(
             params,
             &self.hair,
             canvas_tooth_um,
             self.ferrule_radius_px,
             self.count as usize,
-        )
+        );
+        if self.frictionless {
+            tuning.friction[0] = 0.0;
+        }
+        tuning
+    }
+
+    pub(crate) fn set_frictionless(&mut self, frictionless: bool) {
+        self.frictionless = frictionless;
     }
 
     pub(crate) fn clusters(&self) -> &[u32] {

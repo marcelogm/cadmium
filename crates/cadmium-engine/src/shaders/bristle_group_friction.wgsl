@@ -20,6 +20,7 @@ fn kinetic_turn(strand: u32, hinge: u32, free: vec3<f32>) -> vec3<f32> {
     return turn;
 }
 
+// the serial solve inlines this sum in slipped and clamp_to_cones
 fn held_friction(strand: u32, row: u32) -> vec3<f32> {
     return group_forces[strand][row + 1u] * group_directions[strand][row + 1u]
         + group_forces[strand][row + 2u] * group_directions[strand][row + 2u];

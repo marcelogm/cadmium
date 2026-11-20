@@ -13,9 +13,14 @@ const CAP_RAD: f32 = 0.1;
 const CREEP_TOLERANCE: f32 = 0.05;
 /// The closed form is checked only this far past the yield, where e/(e − yield) stays small.
 const CLOSED_FORM_YIELDS: f32 = 1.5;
+/// The shader's creep is exact in exact arithmetic; f32 summing over a few steps stays far
+/// inside half a percent.
 const CREEP_LAW_TOLERANCE: f32 = 0.005;
+/// A twentieth of the yield: a released strand must bend far less than it would past the yield.
 const RESTED_RAD: f32 = 1e-3;
-const STAYS_BENT_PX: f32 = 0.1;
+/// The bend is planar, so the bound is nearly tight (measured 0.99).
+const STAYS_BENT_SHARE: f32 = 0.9;
+const STILL_STEPS: u32 = 5;
 
 fn held(steps: u32) -> LabStrand {
     strand(tilted(SLANT_DEGREES), AT_ORIGIN)
@@ -29,6 +34,8 @@ fn length3(v: [f32; 3]) -> f32 {
     (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
 }
 
+/// Σ over the steps relies on a planar bend: every step's excess points the same way, so the
+/// shift's length is the sum of the steps' shares.
 #[test]
 fn a_held_bend_creeps_by_its_excess_over_the_yield_each_step() {
     let gpu = GpuContext::new().unwrap();
@@ -78,10 +85,16 @@ fn a_held_bend_creeps_the_rest_shape_past_the_yield() {
 }
 
 #[test]
-fn a_bend_held_for_no_time_does_not_creep() {
+fn a_bend_held_for_no_time_does_not_creep_further() {
     let gpu = GpuContext::new().unwrap();
-    let runs = run(&gpu, &[held(HOLD_STEPS).with_creep(CREEP_PER_S, 0.0)]);
-    assert!(runs[0].plastic.iter().all(|shift| *shift == [0.0; 3]));
+    let crept = held(HOLD_STEPS);
+    let then_still = held(HOLD_STEPS)
+        .with_drag([0.0, 0.0], STILL_STEPS)
+        .with_drag_seconds(0.0);
+    let runs = run(&gpu, &[crept, then_still]);
+    assert!(runs[0].plastic.iter().any(|shift| *shift != [0.0; 3]));
+    // Bitwise: a zero step adds exactly 0 · excess, so no rounding can enter.
+    assert_eq!(runs[0].plastic, runs[1].plastic);
 }
 
 #[test]
@@ -119,5 +132,20 @@ fn a_released_strand_rests_on_its_shifted_shape() {
         "the released strand still bends {largest_excess} rad"
     );
     let tip = BRISTLE_VERTICES - 1;
-    assert!(span_px(runs[0].chain_px[tip], rested.chain_px[tip]) > STAYS_BENT_PX);
+    // Each shift turns the chain beyond its hinge, moving the tip by about shift · arm; the
+    // sum bounds the tip's move, and the strand must keep at least this share of it.
+    let implied_px: f32 = rested
+        .plastic
+        .iter()
+        .enumerate()
+        .map(|(hinge, shift)| {
+            length3(*shift) * span_px(runs[0].chain_px[hinge], runs[0].chain_px[tip])
+        })
+        .sum();
+    let stays_bent_px = STAYS_BENT_SHARE * implied_px;
+    let bent_px = span_px(runs[0].chain_px[tip], rested.chain_px[tip]);
+    assert!(
+        bent_px > stays_bent_px,
+        "the tip moved {bent_px} px, expected over {stays_bent_px}"
+    );
 }

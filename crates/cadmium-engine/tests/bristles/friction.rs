@@ -23,6 +23,11 @@ const SPRUNG_BACK_PX: f32 = 0.5;
 const TIMELESS_PRESSES: u32 = 12;
 const LIGHT_PRESSURE: f32 = 0.1;
 const MAX_RADIAL_SET_LEAN: f32 = 5e-4;
+const HANDLE_TILT_DEG: f32 = 25.0;
+const SETTLE_DABS: u32 = 8;
+/// The round trip through the world frame each dab wanders by up to 2e-6 rad (measured); a
+/// wrong frame errs by 1e-2.
+const KEPT_SHIFT_TOLERANCE_RAD: f32 = 5e-6;
 
 #[derive(Clone, Copy)]
 struct Heading {
@@ -336,5 +341,57 @@ fn a_wet_brush_never_sets_its_point_into_its_bend_memory() {
             set_lean.abs() <= MAX_RADIAL_SET_LEAN,
             "at pressure {pressure} the point set into the bends: {set_lean:.5}"
         );
+    }
+}
+
+fn tilted_stroke_then_lift(gpu: &GpuContext, s: &mut PaintSession) -> u32 {
+    let mut stroke = Stroke::begin(s, HARD_PRESSURE);
+    let sample = |stroke: &Stroke| StrokeSample {
+        tilt_x_deg: HANDLE_TILT_DEG,
+        tilt_y_deg: -HANDLE_TILT_DEG,
+        ..stroke.sample()
+    };
+    s.begin_stroke(sample(&stroke));
+    for _ in 0..STROKE_SAMPLES {
+        stroke.at[0] += STEP_PX;
+        stroke.time_ms += SAMPLE_INTERVAL_MS;
+        s.add_samples(&[sample(&stroke)]);
+        frame(gpu, s);
+    }
+    s.end_stroke();
+    frame(gpu, s);
+    stroke.time_ms
+}
+
+fn assert_kept(dab: u32, before: &[Vec<[f32; 3]>], after: &[Vec<[f32; 3]>]) {
+    let pairs = before.iter().zip(after).enumerate();
+    for (bristle, (was, now)) in pairs {
+        for (hinge, (a, b)) in was.iter().zip(now).enumerate() {
+            let drift = (0..3)
+                .map(|axis| (a[axis] - b[axis]).abs())
+                .fold(0.0, f32::max);
+            assert!(
+                drift <= KEPT_SHIFT_TOLERANCE_RAD,
+                "dab {dab}, bristle {bristle} hinge {hinge}: {a:?} became {b:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_lifted_brush_keeps_its_plastic_shifts_while_the_handle_holds_its_pose() {
+    let gpu = GpuContext::new().unwrap();
+    let mut s = loose_session(&gpu, HairSpec::default().bend_memory);
+    let mut now_ms = tilted_stroke_then_lift(&gpu, &mut s);
+    let mut kept = settle(&gpu, &mut s, now_ms).plastic;
+    assert!(
+        kept.iter().flatten().any(|p| *p != [0.0; 3]),
+        "the hard stroke set nothing"
+    );
+    for dab in 0..SETTLE_DABS {
+        now_ms += SETTLE_MS;
+        let plastic = settle(&gpu, &mut s, now_ms).plastic;
+        assert_kept(dab, &kept, &plastic);
+        kept = plastic;
     }
 }

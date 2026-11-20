@@ -34,7 +34,7 @@ pub(super) struct LabStrand {
     /// xy: how far the drag phase moves the strand, px; z: its steps; w: 1 drops the tip
     /// load for the drag phase.
     drag: [f32; 4],
-    /// x: seconds each press step lasts, y: each drag step, for the creep; z: the steps of a
+    /// x: seconds each press step lasts, y: each drag and settle step, for the creep; z: the steps of a
     /// settle phase after the drag, w: how far it raises the strand, px.
     timing: [f32; 4],
     compliances: [f32; LAB_HINGE_SLOTS],
@@ -122,7 +122,7 @@ impl LabStrand {
         self
     }
 
-    /// How long each drag step lasts, for the creep.
+    /// How long each drag and settle step lasts, for the creep.
     pub(super) fn with_drag_seconds(mut self, step_seconds: f32) -> LabStrand {
         self.timing[1] = step_seconds;
         self
