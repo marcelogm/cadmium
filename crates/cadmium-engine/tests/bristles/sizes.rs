@@ -188,7 +188,7 @@ fn island_areas_px2(volume: &[f32], hull: &[[f32; 2]]) -> Vec<usize> {
 }
 
 #[test]
-#[ignore = "phase 2 of #62: frictionless strands splay the pressed dab to twice its size, thin enough to leave holes"]
+#[ignore = "phase 3 of #62: a pressed curled tip needs |fₜ| ≈ fₙ to hold, past μₛ, so the dab splays and leaves a 3977 px² hole; held fast it still leaves 3 px²"]
 fn the_largest_brush_pressed_without_clumping_leaves_no_holes() {
     let gpu = GpuContext::new().unwrap();
     let mut s = largest_brush_session(&gpu);
