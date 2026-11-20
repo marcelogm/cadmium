@@ -70,6 +70,10 @@ fn place_at_rest(bristle: u32, pose: Pose) {
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
         let at = from_ferrule(local[vertex], pose);
         states[position_slot(bristle, vertex)] = vec4<f32>(at, disc_floor_px(at.xy, rest.radius_px));
+        states[anchor_slot(bristle, vertex)] = vec4<f32>(0.0);
+    }
+    for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
+        states[plastic_slot(bristle, hinge)] = vec4<f32>(0.0);
     }
 }
 

@@ -16,8 +16,13 @@ pub(crate) const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = 8;
 pub(crate) const BRISTLES_PER_THREAD: u32 = MAX_BRISTLES as u32 / BRISTLE_WORKGROUP_SIZE;
 pub(crate) const BRISTLE_STRANDS_PER_GROUP: u32 =
     BRISTLE_SOLVE_WORKGROUP_SIZE / BRISTLE_VERTICES as u32;
-/// Each vertex's position and the floor under it.
-pub(crate) const BRISTLE_STATE_VECTORS: usize = BRISTLE_VERTICES;
+/// Per strand: each vertex's position and the floor under it; then each vertex's friction
+/// anchor, w the normal force holding it (0 free, > 0 stuck, < 0 sliding); then each
+/// hinge's plastic rest shift, a rotation vector in the ferrule frame.
+pub(crate) const BRISTLE_STATE_VECTORS: usize = 3 * BRISTLE_VERTICES - 1;
+pub(crate) const ANCHOR_VECTORS_FIRST: usize = BRISTLE_VERTICES;
+pub(crate) const PLASTIC_VECTORS_FIRST: usize = 2 * BRISTLE_VERTICES;
+const HINGES: usize = BRISTLE_VERTICES - 1;
 pub(crate) const BRISTLE_FLARE_SHARE: f32 = 0.015;
 pub(crate) const FAN_REST_SPLAY_SHARE: f32 = 1.0;
 pub(crate) const MIN_SEGMENT_SPAN_PX: f32 = 1e-4;
@@ -143,8 +148,13 @@ pub struct BristleSnapshot {
     pub roots_px: Vec<[f32; 2]>,
     pub touching: Vec<bool>,
     pub lowest_clearance_px: f32,
-    /// Each bristle's plastic lean; [0, 0] until phase 2 of #62 brings plasticity back.
+    /// Each strand's plastic lean: Σ over hinges of (−p.y, p.x), rad, the way the shifts
+    /// lean a downward strand's tip.
     pub rest_bends: Vec<[f32; 2]>,
+    /// Per strand and vertex, the friction anchor: xyz px, w the normal force holding it.
+    pub anchors: Vec<Vec<[f32; 4]>>,
+    /// Per strand and hinge, the plastic shift of the rest turn, ferrule frame, rad.
+    pub plastic: Vec<Vec<[f32; 3]>>,
     pub chains_px: Vec<Vec<[f32; 3]>>,
     /// Per bristle and vertex, the height over the floor under it, px.
     pub clearances_px: Vec<Vec<f32>>,
@@ -175,7 +185,9 @@ impl BristleSnapshot {
                 .iter()
                 .flat_map(|state| clearances(state, 0))
                 .fold(f32::INFINITY, f32::min),
-            rest_bends: vec![[0.0; 2]; states.len()],
+            rest_bends: states.iter().copied().map(rest_bend).collect(),
+            anchors: states.iter().copied().map(anchors).collect(),
+            plastic: states.iter().copied().map(plastic).collect(),
             chains_px: states.iter().copied().map(chain).collect(),
             clearances_px: states
                 .iter()
@@ -197,6 +209,32 @@ fn chain(state: &[f32]) -> Vec<[f32; 3]> {
     (0..BRISTLE_VERTICES)
         .map(|index| vertex(state, index))
         .collect()
+}
+
+fn anchors(state: &[f32]) -> Vec<[f32; 4]> {
+    (0..BRISTLE_VERTICES)
+        .map(|index| {
+            let start = (ANCHOR_VECTORS_FIRST + index) * VECTOR_FLOATS;
+            [
+                state[start],
+                state[start + 1],
+                state[start + 2],
+                state[start + 3],
+            ]
+        })
+        .collect()
+}
+
+fn plastic(state: &[f32]) -> Vec<[f32; 3]> {
+    (0..HINGES)
+        .map(|index| vertex(state, PLASTIC_VECTORS_FIRST + index))
+        .collect()
+}
+
+fn rest_bend(state: &[f32]) -> [f32; 2] {
+    plastic(state)
+        .iter()
+        .fold([0.0, 0.0], |[x, y], p| [x - p[1], y + p[0]])
 }
 
 fn tip(state: &[f32]) -> [f32; 3] {
@@ -256,3 +294,6 @@ fn bristle_cells(owners: &[f32], tip: &[f32], count: usize) -> Vec<BristleCell> 
     }
     cells
 }
+
+#[cfg(test)]
+mod tests;

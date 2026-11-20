@@ -252,6 +252,12 @@ fn solve(
     var radius_px = 0.0;
     if lane.live {
         at = held_position(lane, start);
+        if dab.bristle_reset != 0u {
+            states[anchor_slot(lane.bristle, lane.vertex)] = vec4<f32>(0.0);
+            if lane.vertex < BRISTLE_SEGMENTS {
+                states[plastic_slot(lane.bristle, lane.vertex)] = vec4<f32>(0.0);
+            }
+        }
         radius_px = rests[lane.bristle].radius_px;
     }
     if owns_hinge(lane) {
