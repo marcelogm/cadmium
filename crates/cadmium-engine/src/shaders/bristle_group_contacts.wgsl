@@ -66,12 +66,14 @@ fn open_contacts(strand: u32, moves: bool) {
 
 // mirrors active_forces
 fn group_active_forces(strand: u32) -> PerContact {
-    var engaged: Engaged;
-    for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
-        engaged[row] = group_engaged[strand][row] != 0u;
-    }
     var rows: ActiveRows;
-    let count = active_rows(engaged, &rows);
+    var count = 0u;
+    for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
+        if group_engaged[strand][row] != 0u {
+            rows[count] = row;
+            count++;
+        }
+    }
     let ridge = group_ridge[strand];
     var forces: PerContact;
     if count == 1u {
@@ -80,7 +82,7 @@ fn group_active_forces(strand: u32) -> PerContact {
         return forces;
     }
     var lower: ContactMatrix;
-    var rhs: PerContact;
+    var rhs: RowValues;
     for (var i = 0u; i < count; i++) {
         rhs[i] = group_gaps[strand][rows[i]];
         for (var j = 0u; j < i; j++) {

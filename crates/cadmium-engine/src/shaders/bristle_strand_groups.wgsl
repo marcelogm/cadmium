@@ -20,7 +20,7 @@ var<workgroup> group_diagonal: GroupRows;
 var<workgroup> group_forces: GroupRows;
 var<workgroup> group_engaged: GroupFlags;
 var<workgroup> group_added: GroupFlags;
-var<workgroup> group_matrix: array<ContactMatrix, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_matrix: array<array<array<f32, BRISTLE_SEGMENTS>, BRISTLE_SEGMENTS>, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_ridge: array<f32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_scale: array<f32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_solving: array<u32, BRISTLE_STRANDS_PER_GROUP>;

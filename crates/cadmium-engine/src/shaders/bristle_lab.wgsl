@@ -35,7 +35,8 @@ fn lab_shape(strand: LabStrand) -> StrandShape {
     for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {
         compliances[hinge] = strand.compliances[hinge / 4u][hinge % 4u];
     }
-    return StrandShape(strand.clamp.xyz, strand.curl.xyz, strand.root.w, compliances, strand.tip_force.xyz);
+    let friction = Friction(strand.friction.x, strand.friction.y, strand.friction.z);
+    return StrandShape(strand.clamp.xyz, strand.curl.xyz, strand.root.w, compliances, strand.tip_force.xyz, friction, Turns());
 }
 
 fn lab_rest_chain(shape: StrandShape, root: vec3<f32>) -> Chain {
@@ -77,41 +78,71 @@ fn lab_floors(strand: LabStrand, previous: Chain, chain: Chain) -> Floors {
     return plane_floors(strand, chain);
 }
 
+struct LabState {
+    chain: Chain,
+    sampled: Chain,
+    anchors: Anchors,
+    contacts: Contacts,
+};
+
+/// Moves the strand by `shift` and solves: one press or drag step. When `spread`, each
+/// iteration takes its share of the shift first, as each substep of a dab does. Works on
+/// locals, since naga's SPIR-V backend fails on pointers into a struct passed down.
+fn advance_lab(state: ptr<function, LabState>, strand: LabStrand, shape: StrandShape, shift: vec3<f32>, spread: bool) {
+    var chain = (*state).chain;
+    var sampled = (*state).sampled;
+    var anchors = (*state).anchors;
+    var contacts = (*state).contacts;
+    let share = select(shift, shift / f32(LAB_ITERATIONS_PER_STEP), spread);
+    for (var iteration = 0u; iteration < LAB_ITERATIONS_PER_STEP; iteration++) {
+        if spread || iteration == 0u {
+            for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+                chain[vertex] += share;
+            }
+        }
+        let floors = lab_floors(strand, sampled, chain);
+        sampled = chain;
+        contacts = solve_iteration(&chain, shape, floors, &anchors);
+    }
+    if strand.step.w != 0.0 {
+        let lifted = rested(&chain, sampled, shape, strand.step.z);
+        for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+            contacts.forces[normal_row(vertex)] += lifted[vertex - 1u];
+        }
+    }
+    *state = LabState(chain, sampled, anchors, contacts);
+}
+
 @compute @workgroup_size(1)
 fn solve_lab(@builtin(workgroup_id) id: vec3<u32>) {
     let strand = lab_strands[id.x];
     lab_step = strand.step;
-    let shape = lab_shape(strand);
-    var chain = lab_rest_chain(shape, strand.root.xyz);
+    var shape = lab_shape(strand);
+    let chain = lab_rest_chain(shape, strand.root.xyz);
+    var state = LabState(chain, chain, Anchors(), Contacts());
     let steps = max(u32(strand.tip_force.w), 1u);
     let drop = vec3<f32>(-strand.floor_slope.zw, strand.curl.w) / f32(steps);
-    var forces: PerContact;
-    var sampled = chain;
     for (var step = 0u; step < steps; step++) {
-        for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-            chain[vertex] -= drop;
-        }
-        for (var iteration = 0u; iteration < LAB_ITERATIONS_PER_STEP; iteration++) {
-            let floors = lab_floors(strand, sampled, chain);
-            sampled = chain;
-            forces = solve_iteration(&chain, shape, floors);
-        }
-        if strand.step.w != 0.0 {
-            let lifted = rested(&chain, sampled, shape, strand.step.z);
-            for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
-                forces[row] += lifted[row];
-            }
-        }
+        advance_lab(&state, strand, shape, -drop, false);
+    }
+    let drag_steps = u32(strand.drag.z);
+    if strand.drag.w != 0.0 {
+        shape.tip_force_n = vec3<f32>(0.0);
+    }
+    for (var step = 0u; step < drag_steps; step++) {
+        advance_lab(&state, strand, shape, vec3<f32>(strand.drag.xy / f32(drag_steps), 0.0), true);
     }
     let first = id.x * LAB_OUT_VECTORS;
-    lab_out[first] = vec4<f32>(chain[0], 0.0);
+    let normal = normal_loads(state.contacts);
+    let friction = state.contacts.friction;
+    lab_out[first] = vec4<f32>(state.chain[0], 0.0);
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        lab_out[first + vertex] = vec4<f32>(chain[vertex], forces[vertex - 1u]);
+        lab_out[first + vertex] = vec4<f32>(state.chain[vertex], normal[vertex - 1u]);
     }
-    lab_out[first + BRISTLE_VERTICES] = vec4<f32>(summed(forces), 0.0, 0.0, 0.0);
+    lab_out[first + BRISTLE_VERTICES] = vec4<f32>(summed(normal), 0.0, 0.0, 0.0);
     let friction_first = first + BRISTLE_VERTICES + 1u;
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        lab_out[friction_first + vertex] = vec4<f32>(0.0);
+        lab_out[friction_first + vertex] = vec4<f32>(friction[vertex], state.anchors[vertex].w);
     }
     let plastic_first = friction_first + BRISTLE_VERTICES;
     for (var hinge = 0u; hinge < BRISTLE_SEGMENTS; hinge++) {

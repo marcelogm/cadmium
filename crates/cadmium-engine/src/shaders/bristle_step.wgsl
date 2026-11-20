@@ -95,6 +95,20 @@ fn store_chain(bristle: u32, chain: Chain) {
     }
 }
 
+fn held_anchors(bristle: u32) -> Anchors {
+    var anchors: Anchors;
+    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+        anchors[vertex] = states[anchor_slot(bristle, vertex)];
+    }
+    return anchors;
+}
+
+fn store_anchors(bristle: u32, anchors: Anchors) {
+    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
+        states[anchor_slot(bristle, vertex)] = anchors[vertex];
+    }
+}
+
 /// Moves `chain` rigidly with the ferrule from pose `start` to pose `end`.
 fn carry(chain: ptr<function, Chain>, start: Pose, end: Pose) {
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
@@ -113,6 +127,7 @@ fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
     var previous = start;
     var force = 0.0;
     var shape: StrandShape;
+    var anchors = held_anchors(bristle);
     for (var iteration = 0u; iteration < iterations; iteration++) {
         let pose = pose_between(start, end, min(f32(iteration + 1u) / f32(substeps), 1.0));
         carry(&chain, previous, pose);
@@ -120,10 +135,11 @@ fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
         shape = strand_shape(rests[bristle], pose);
         let floors = floors_under(sampled, chain, radius_px);
         sampled = chain;
-        force = summed(solve_iteration(&chain, shape, floors));
+        force = summed(normal_loads(solve_iteration(&chain, shape, floors, &anchors)));
     }
     force += summed(rested(&chain, sampled, shape, radius_px));
     store_chain(bristle, chain);
+    store_anchors(bristle, anchors);
     return force;
 }
 

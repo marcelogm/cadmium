@@ -38,7 +38,6 @@ pub(super) struct LabStrand {
     compliances: [f32; LAB_HINGE_SLOTS],
 }
 
-#[allow(dead_code)] // the friction tests of #62 use the new builders
 impl LabStrand {
     pub(super) fn new(
         root: [f32; 3],
@@ -113,6 +112,7 @@ impl LabStrand {
         self
     }
 
+    #[allow(dead_code)] // the plasticity tests of #62 use it
     /// Creeps the plastic shifts at `per_second`, each step lasting `step_seconds`.
     pub(super) fn with_creep(mut self, per_second: f32, step_seconds: f32) -> LabStrand {
         self.friction[3] = per_second;
@@ -121,6 +121,7 @@ impl LabStrand {
         self
     }
 
+    #[allow(dead_code)] // the plasticity tests of #62 use it
     /// How long each drag step lasts, for the creep.
     pub(super) fn with_drag_seconds(mut self, step_seconds: f32) -> LabStrand {
         self.timing[1] = step_seconds;
@@ -134,6 +135,7 @@ impl LabStrand {
         self
     }
 
+    #[allow(dead_code)] // the plasticity tests of #62 use it
     /// Drops the tip load for the drag phase.
     pub(super) fn released_for_the_drag(mut self) -> LabStrand {
         self.drag[3] = 1.0;
@@ -141,7 +143,6 @@ impl LabStrand {
     }
 }
 
-#[allow(dead_code)] // the friction tests of #62 read the new fields
 pub(super) struct LabRun {
     pub(super) chain_px: Vec<[f32; 3]>,
     /// The canvas's normal force on each vertex, N; the root's is 0.
@@ -151,8 +152,10 @@ pub(super) struct LabRun {
     pub(super) friction_n: Vec<[f32; 3]>,
     /// Each vertex's anchor mode: 0 free, > 0 stuck, < 0 sliding (the normal force).
     pub(super) anchor_modes: Vec<f32>,
+    #[allow(dead_code)] // the plasticity tests of #62 use it
     /// Each hinge's plastic shift, world, rad.
     pub(super) plastic: Vec<[f32; 3]>,
+    #[allow(dead_code)] // the plasticity tests of #62 use it
     /// How far each hinge's turn stands from its rest turn plus shift, rad.
     pub(super) excess_rad: Vec<f32>,
 }
