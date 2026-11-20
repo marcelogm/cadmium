@@ -9,9 +9,20 @@ const SMALL_DRAG_PX: f32 = 0.1;
 const LONG_DRAG_PX: f32 = 3.0;
 const DRAG_STEPS: u32 = 30;
 /// A held vertex creeps by the contact's shear compliance, about `TANGENT_RIDGE_SHARE` of
-/// the drag.
+/// the drive; the creep piles up on one anchor over a drag and was measured under 2e-3 px.
 const HELD_PX: f32 = 0.05 * SMALL_DRAG_PX;
 const COEFFICIENT_TOLERANCE: f32 = 0.02;
+/// The cone test and the friction it bounds are the same solve's, so a held friction can
+/// pass μ·fₙ only by rounding.
+const CONE_SLACK: f32 = 1e-3;
+/// Below the cone, the highest stuck run of the sweep may sit one drag step short of the
+/// let-go point: a step raises the held friction by up to this share of μₛ.
+const LET_GO_RESOLUTION: f32 = 10.0 * COEFFICIENT_TOLERANCE;
+/// Raised this far after the press, the tip leaves the canvas.
+const LIFT_PX: f32 = 2.0 * PRESS_PX;
+const SETTLE_STEPS: u32 = 5;
+/// Axial drags of a deep press: the upper of two held vertices slides, the lower holds.
+const AXIAL_DRAGS_PX: [f32; 3] = [0.02, 0.05, -0.02];
 const THRESHOLD_RUNS: usize = 60;
 const THRESHOLD_STEP_PX: f32 = 0.005;
 const ANISOTROPY: f32 = 0.5;
@@ -92,6 +103,10 @@ fn a_tip_dragged_less_than_its_cone_allows_stays_on_its_anchor() {
     assert!(moved < HELD_PX, "the stuck tip moved {moved} px");
     assert!(dragged.anchor_modes[TIP] > 0.0, "the tip is not stuck");
     assert!(
+        length3(dragged.friction_n[TIP]) > 0.0,
+        "the stuck tip holds no friction"
+    );
+    assert!(
         tip_ratio(dragged) <= STATIC_MU,
         "ratio {}",
         tip_ratio(dragged)
@@ -110,7 +125,7 @@ fn a_tip_dragged_far_slides_at_the_kinetic_coefficient() {
     );
     let (held, dragged) = (&runs[0], &runs[1]);
     assert!(dragged.anchor_modes[TIP] < 0.0, "the tip is not sliding");
-    assert!(xy_span(held.chain_px[TIP], dragged.chain_px[TIP]) > HELD_PX);
+    assert!(xy_span(held.chain_px[TIP], dragged.chain_px[TIP]) > 0.5 * LONG_DRAG_PX);
     let ratio = tip_ratio(dragged);
     assert!(
         (ratio - KINETIC_MU).abs() <= COEFFICIENT_TOLERANCE * KINETIC_MU,
@@ -136,11 +151,11 @@ fn a_tip_lets_go_at_the_static_coefficient() {
     );
     let highest = stuck.iter().copied().fold(0.0, f32::max);
     assert!(
-        highest <= STATIC_MU * (1.0 + 1e-3),
+        highest <= STATIC_MU * (1.0 + CONE_SLACK),
         "a stuck tip held {highest} of its load"
     );
     assert!(
-        highest >= STATIC_MU * (1.0 - 10.0 * COEFFICIENT_TOLERANCE),
+        highest >= STATIC_MU * (1.0 - LET_GO_RESOLUTION),
         "the tip let go at {highest} of its load"
     );
 }
@@ -188,7 +203,7 @@ fn two_stuck_contacts_both_hold_their_anchors() {
         assert!(moved < HELD_PX, "vertex {v} moved {moved} px");
         let ratio = length3(dragged.friction_n[v]) / dragged.vertex_forces_n[v];
         assert!(
-            ratio <= STATIC_MU * (1.0 + 1e-3),
+            ratio <= STATIC_MU * (1.0 + CONE_SLACK),
             "vertex {v} holds {ratio}"
         );
     }
@@ -223,4 +238,53 @@ fn a_drag_in_steps_half_as_long_ends_in_the_same_place() {
     for (a, b) in runs[0].chain_px.iter().zip(&runs[1].chain_px) {
         assert!(span_px(*a, *b) < SAME_PATH_PX, "{a:?} against {b:?}");
     }
+}
+
+#[test]
+fn a_sliding_tip_sticks_again_once_the_drag_stops() {
+    let gpu = GpuContext::new().unwrap();
+    let stopped = pressed()
+        .with_drag([LONG_DRAG_PX, 0.0], DRAG_STEPS)
+        .with_settle(0.0, SETTLE_STEPS);
+    let run = &run(&gpu, &[stopped])[0];
+    assert!(run.anchor_modes[TIP] > 0.0, "the tip is still sliding");
+    let ratio = tip_ratio(run);
+    assert!(
+        ratio <= KINETIC_MU * (1.0 + CONE_SLACK),
+        "the tip sticks again holding {ratio} of its load"
+    );
+}
+
+#[test]
+fn a_held_tip_lifted_off_keeps_no_friction_and_no_anchor() {
+    let gpu = GpuContext::new().unwrap();
+    let run = &run(&gpu, &[pressed().with_settle(LIFT_PX, SETTLE_STEPS)])[0];
+    assert_eq!(run.vertex_forces_n[TIP], 0.0);
+    assert_eq!(run.friction_n[TIP], [0.0; 3]);
+    assert_eq!(run.anchor_modes[TIP], 0.0);
+}
+
+/// The lower of two held neighbours has no toward-root row; once the upper one slides it
+/// must take it back, or it drifts along the strand while it reports stuck.
+#[test]
+fn a_held_vertex_stays_on_its_anchor_when_the_one_above_slides() {
+    let gpu = GpuContext::new().unwrap();
+    let strands: Vec<LabStrand> = AXIAL_DRAGS_PX
+        .iter()
+        .map(|&px| slanted(DEEP_PRESS_PX, DEEP_PRESS_STEPS).with_drag([px, 0.0], DRAG_STEPS))
+        .collect();
+    let mut upper_slid = false;
+    for run in run(&gpu, &strands) {
+        for v in 1..BRISTLE_VERTICES - 1 {
+            upper_slid |= run.anchor_modes[v] < 0.0 && run.anchor_modes[v + 1] > 0.0;
+        }
+        for v in (1..BRISTLE_VERTICES).filter(|&v| run.anchor_modes[v] > 0.0) {
+            let off = xy_span(run.chain_px[v], run.anchors_px[v]);
+            assert!(
+                off <= HELD_PX,
+                "stuck vertex {v} is {off} px off its anchor"
+            );
+        }
+    }
+    assert!(upper_slid, "no upper neighbour slid over a held one");
 }

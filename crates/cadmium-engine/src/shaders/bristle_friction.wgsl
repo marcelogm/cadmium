@@ -21,18 +21,16 @@ fn tangential(v: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     return v - normal * dot(normal, v);
 }
 
-/// The direction toward the root in the relief's tangent plane: the way a pulled vertex
-/// slides.
-fn pull_direction(chain: Chain, normals: Normals, vertex: u32) -> vec3<f32> {
-    let toward_root = tangential(chain[vertex - 1u] - chain[vertex], normals[vertex]);
-    return toward_root / max(length(toward_root), MIN_SEGMENT_SPAN_PX);
-}
-
-/// Baxter & Lin: μ·(1 − C_η·max(0, d_pull·ŝ)²). A pulled vertex slides more easily than a
-/// pushed one.
+/// Baxter & Lin: μ·(1 − C_η·max(0, d_pull·ŝ)ᵏ), with k = 2. A pulled vertex slides more
+/// easily than a pushed one; `pull` is the vertex's first tangent, toward the root.
 fn anisotropic_mu(mu: f32, friction: Friction, pull: vec3<f32>, slip: vec3<f32>) -> f32 {
     let along = max(dot(pull, slip), 0.0);
     return mu * (1.0 - friction.anisotropy * along * along);
+}
+
+/// The cone a held contact's friction must stay inside: μₛ while stuck, μₖ while sliding.
+fn cone_mu(friction: Friction, anchor: vec4<f32>) -> f32 {
+    return select(friction.kinetic_mu, friction.static_mu, anchor.w > 0.0);
 }
 
 fn kinetic_turns(free: Turns, chain: Chain, compliances: HingeCompliances, kinetic: VertexForces) -> Turns {
@@ -57,6 +55,8 @@ fn kinetic_turns(free: Turns, chain: Chain, compliances: HingeCompliances, kinet
 /// the kinetic force takes the last iteration's instead, since a pinning solve's normal can
 /// be orders of magnitude off and a kinetic force built on it throws the vertex off the
 /// canvas. True if any did.
+/// Of two held neighbours the lower one has no toward-root row: when the upper one slides,
+/// the lower one takes it back.
 fn slipped(contacts: ptr<function, Contacts>, problem: ptr<function, ContactProblem>, friction: Friction, anchors: Anchors) -> bool {
     var any_slipped = false;
     let chain = (*problem).chain;
@@ -70,8 +70,8 @@ fn slipped(contacts: ptr<function, Contacts>, problem: ptr<function, ContactProb
             let anchor = anchors[vertex].w;
             let load = max((*contacts).forces[row], 0.0);
             let lagged = abs(anchor);
-            let cone = select(friction.kinetic_mu, friction.static_mu, anchor > 0.0);
-            let pull = pull_direction(chain, normals, vertex);
+            let cone = cone_mu(friction, anchors[vertex]);
+            let pull = row_direction(chain, normals, row + 1u);
             let along = select(vec3<f32>(0.0), held / size, size > 0.0);
             let pulling = (*contacts).forces[row] < 0.0;
             if pulling || (size > 0.0 && size > anisotropic_mu(cone, friction, pull, -along) * load) {
@@ -80,10 +80,49 @@ fn slipped(contacts: ptr<function, Contacts>, problem: ptr<function, ContactProb
                 (*contacts).kinetic[vertex] = anisotropic_mu(friction.kinetic_mu, friction, pull, -along) * lagged * along;
                 (*contacts).sliding[vertex] = true;
                 any_slipped = true;
+                let below = normal_row(vertex + 1u);
+                if vertex + 1u < BRISTLE_VERTICES && (*contacts).engaged[below + 2u] {
+                    (*contacts).engaged[below + 1u] = true;
+                }
             }
         }
     }
     return any_slipped;
+}
+
+/// Clears the kinetic force of the sliding contacts `released` dropped. True if any had
+/// one, so the gaps it went into are stale.
+fn let_go(contacts: ptr<function, Contacts>) -> bool {
+    var any_cleared = false;
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        if (*contacts).sliding[vertex] && !(*contacts).engaged[normal_row(vertex)] {
+            (*contacts).kinetic[vertex] = vec3<f32>(0.0);
+            (*contacts).sliding[vertex] = false;
+            any_cleared = true;
+        }
+    }
+    return any_cleared;
+}
+
+/// When the rounds run out unsettled, scales each held contact's friction back into its
+/// cone, and drops it where the normal force does not press.
+fn clamp_to_cones(contacts: ptr<function, Contacts>, problem: ptr<function, ContactProblem>, friction: Friction, anchors: Anchors) {
+    let chain = (*problem).chain;
+    let normals = (*problem).normals;
+    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
+        let row = normal_row(vertex);
+        let held = (*contacts).forces[row + 1u] * row_direction(chain, normals, row + 1u)
+            + (*contacts).forces[row + 2u] * row_direction(chain, normals, row + 2u);
+        let size = length(held);
+        if size > 0.0 {
+            let pull = row_direction(chain, normals, row + 1u);
+            let cone = anisotropic_mu(cone_mu(friction, anchors[vertex]), friction, pull, -held / size);
+            let bound = cone * max((*contacts).forces[row], 0.0);
+            let scale = min(bound / size, 1.0);
+            (*contacts).forces[row + 1u] *= scale;
+            (*contacts).forces[row + 2u] *= scale;
+        }
+    }
 }
 
 /// The canvas's forces on a strand: one-sided normal contact and Coulomb friction, as an
@@ -117,6 +156,9 @@ fn contact_forces(chain: Chain, free: Turns, compliances: HingeCompliances, floo
         var engaged = contacts.engaged;
         let dropped = released(&engaged, contacts.forces);
         contacts.engaged = engaged;
+        if dropped && let_go(&contacts) {
+            problem.gaps = gaps_after(chain, kinetic_turns(free, chain, compliances, contacts.kinetic), floors, normals, anchors);
+        }
         var slid = false;
         if !dropped && frictional && slipped(&contacts, &problem, friction, anchors) {
             problem.gaps = gaps_after(chain, kinetic_turns(free, chain, compliances, contacts.kinetic), floors, normals, anchors);
@@ -128,6 +170,7 @@ fn contact_forces(chain: Chain, free: Turns, compliances: HingeCompliances, floo
     }
     if !settled {
         contacts.forces = active_forces(&problem, contacts.engaged);
+        clamp_to_cones(&contacts, &problem, friction, anchors);
     }
     for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
         let row = normal_row(vertex);
@@ -162,6 +205,8 @@ fn next_anchors(chain: Chain, contacts: Contacts, anchors: Anchors) -> Anchors {
             } else if contacts.engaged[row + 1u] || contacts.engaged[row + 2u] {
                 next[vertex] = vec4<f32>(anchors[vertex].xyz, load);
             } else {
+                // Also an anchored vertex the free step lifted off and `landed` brought back:
+                // it lands as a new contact.
                 next[vertex] = vec4<f32>(chain[vertex], load);
             }
         }

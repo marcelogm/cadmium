@@ -202,11 +202,13 @@ fn pushed_step(chain: ptr<function, Chain>, edges: Edges, free: Turns, shape: St
     var turns = kinetic_turns(free, *chain, shape.compliances, contacts.kinetic);
     for (var row = 0u; row < MAX_CONTACT_ROWS; row++) {
         let force = contacts.forces[row];
-        let pushed = row_vertex(row);
-        let along = row_direction(*chain, normals, row);
-        for (var hinge = 0u; hinge < pushed; hinge++) {
-            let arm_m = ((*chain)[pushed] - (*chain)[hinge]) * METRES_PER_PX;
-            turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, along);
+        if force != 0.0 {
+            let pushed = row_vertex(row);
+            let along = row_direction(*chain, normals, row);
+            for (var hinge = 0u; hinge < pushed; hinge++) {
+                let arm_m = ((*chain)[pushed] - (*chain)[hinge]) * METRES_PER_PX;
+                turns[hinge] += shape.compliances[hinge] * force * cross(arm_m, along);
+            }
         }
     }
     turn_chain(chain, edges, capped(turns), shape.segment_px);
