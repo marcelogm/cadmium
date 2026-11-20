@@ -10,13 +10,15 @@ use bytemuck::{Pod, Zeroable};
 
 pub(crate) const MAX_BRISTLES: usize = 512;
 pub(super) const MIN_BRISTLES: usize = 3;
-pub(crate) const BRISTLE_VERTICES: usize = 6;
+pub(crate) const BRISTLE_VERTICES: usize = 8;
 pub(super) const MIN_BRISTLE_RADIUS_PX: f32 = 0.6;
 pub(super) const BRISTLES_PER_CLUSTER: usize = 8;
 pub(super) const BRISTLE_JITTER_SHARE: f32 = 0.15;
 pub(super) const BUNDLE_COVERING_GAIN: f32 = 1.75;
 pub(super) const FULL_BUNDLE_GAIN_RADIUS_PX: f32 = MAX_TIP_RADIUS;
 const BASE_STIFFNESS: f32 = 1.0;
+/// Rest turn of every hinge past the clamp, so a pressed strand buckles the same way every time [estimate].
+pub(super) const REST_CURL_RAD: f32 = 0.02;
 
 #[repr(C)]
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
@@ -29,6 +31,8 @@ pub(crate) struct BristleRest {
     pub(crate) cluster: u32,
     pub(crate) lane_start: [f32; 2],
     pub(crate) lane_end: [f32; 2],
+    pub(crate) curl: [f32; 2],
+    pub(crate) _pad: [f32; 2],
 }
 
 pub(crate) struct BristleLayout {
@@ -76,6 +80,8 @@ pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
             cluster: clusters[index],
             lane_start: map.lanes[index].0,
             lane_end: map.lanes[index].1,
+            curl: rest_curl(root),
+            _pad: [0.0; 2],
         })
         .collect();
     BristleLayout {
@@ -85,6 +91,15 @@ pub(crate) fn layout(request: &LayoutRequest) -> BristleLayout {
         owners: map.owners,
         cluster_index: cluster_index(&clusters),
     }
+}
+
+/// Along the root's lane, which points away from the head's middle (radially on the round,
+/// across the thin axis on the flat, out along the fan), so a pressed strand buckles outward
+/// as a real head splays. A random direction let neighbours buckle across each other, and
+/// the mark's edge became the extreme of a sample that grew with the hair count. The lane is
+/// set by the root's index, so the strand at the centre has one too.
+fn rest_curl(root: &Root) -> [f32; 2] {
+    root.lane_direction.map(|share| REST_CURL_RAD * share)
 }
 
 pub(crate) fn reach_bound_px(request: &ReachRequest) -> f32 {

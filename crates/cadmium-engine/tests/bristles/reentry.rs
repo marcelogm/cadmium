@@ -5,6 +5,7 @@ use cadmium_engine::stroke::StrokeSample;
 use crate::support::{drag, session, write_preview};
 
 const CANVAS_WIDTH: usize = 512;
+const CANVAS_HEIGHT: usize = 256;
 const SAMPLE_STEP_PX: f64 = 4.0;
 const SAMPLE_INTERVAL_MS: u32 = 8;
 const PRESSURE: f32 = 0.8;
@@ -17,7 +18,12 @@ const LOOP_AROUND_THE_CORNER: [(f64, f64); 5] = [
     (100.0, 200.0),
 ];
 const UNTOUCHED_COLUMNS: std::ops::Range<usize> = 0..8;
-const UNTOUCHED_ROWS: std::ops::Range<usize> = 100..165;
+const GAP_TOP_ROW: usize = 100;
+const RETURN_ROW: usize = 200;
+const BAND_COLUMN: usize = 64;
+/// The band reaches a few px further above the return leg than below it.
+const BAND_EDGE_MARGIN_PX: usize = 6;
+const MIN_GAP_ROWS: usize = 20;
 
 fn along(corners: &[(f64, f64)]) -> Vec<StrokeSample> {
     let mut points = vec![corners[0]];
@@ -42,6 +48,15 @@ fn along(corners: &[(f64, f64)]) -> Vec<StrokeSample> {
         .collect()
 }
 
+/// How far below the return leg its band reaches. A streak from the exit comes down from
+/// above, so it cannot widen this side.
+fn band_half_width_px(volume: &[f32]) -> usize {
+    let below = (RETURN_ROW..CANVAS_HEIGHT)
+        .find(|&y| volume[y * CANVAS_WIDTH + BAND_COLUMN] <= PAINTED_UM)
+        .unwrap_or(CANVAS_HEIGHT);
+    below - RETURN_ROW
+}
+
 #[test]
 fn a_stroke_that_comes_back_onto_the_canvas_does_not_streak_from_where_it_left() {
     let gpu = GpuContext::new().unwrap();
@@ -49,7 +64,13 @@ fn a_stroke_that_comes_back_onto_the_canvas_does_not_streak_from_where_it_left()
     drag(&gpu, &mut s, &along(&LOOP_AROUND_THE_CORNER));
     write_preview(&gpu, &s, "bristle-reentry.png");
     let volume = s.canvas.read_f32(&gpu, StateTexture::WetVol).unwrap();
-    let streaked = UNTOUCHED_ROWS
+    let band_top = RETURN_ROW - band_half_width_px(&volume) - BAND_EDGE_MARGIN_PX;
+    let gap = GAP_TOP_ROW..band_top;
+    assert!(
+        gap.len() >= MIN_GAP_ROWS,
+        "the return leg's band reaches up to row {band_top}"
+    );
+    let streaked = gap
         .flat_map(|y| UNTOUCHED_COLUMNS.map(move |x| y * CANVAS_WIDTH + x))
         .filter(|&texel| volume[texel] > PAINTED_UM)
         .count();

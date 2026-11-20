@@ -12,6 +12,7 @@ mod hull;
 mod invariants;
 mod look;
 mod paint;
+mod parallel_solve;
 mod patches;
 mod reentry;
 mod relief;

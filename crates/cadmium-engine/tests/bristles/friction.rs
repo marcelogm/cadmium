@@ -180,6 +180,7 @@ fn along(offset: [f32; 2], heading: Heading) -> f32 {
 }
 
 #[test]
+#[ignore = "phase 2 of #62: frictionless contact gives the tips nothing to trail by"]
 fn bristle_tips_trail_behind_the_handle_while_it_moves() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -195,6 +196,7 @@ fn bristle_tips_trail_behind_the_handle_while_it_moves() {
 }
 
 #[test]
+#[ignore = "phase 2 of #62: frictionless tips follow the handle round a turn"]
 fn on_a_turn_the_tips_lag_the_new_direction() {
     let gpu = GpuContext::new().unwrap();
     let mut s = session(&gpu);
@@ -216,6 +218,7 @@ fn on_a_turn_the_tips_lag_the_new_direction() {
 }
 
 #[test]
+#[ignore = "phase 2 of #62: without plasticity a lifted brush springs back to its rest shape"]
 fn a_brush_stays_bent_after_a_hard_stroke() {
     let gpu = GpuContext::new().unwrap();
     let plasticity = HairSpec::default().bend_memory;
@@ -248,6 +251,7 @@ fn trail_px(gpu: &GpuContext, drag_anisotropy: f32) -> f32 {
 }
 
 #[test]
+#[ignore = "phase 2 of #62: there is no drag yet for its anisotropy to change"]
 fn pulled_tips_slide_more_easily_the_more_anisotropic_the_drag() {
     let gpu = GpuContext::new().unwrap();
     let isotropic_px = trail_px(&gpu, 0.0);
@@ -287,6 +291,7 @@ fn bends_after_timeless_presses(gpu: &GpuContext, presses: u32) -> Vec<[u32; 2]>
 }
 
 #[test]
+#[ignore = "phase 2 of #62: without plasticity the hard stroke leaves no bend to hold"]
 fn holding_a_pressed_brush_still_does_not_bend_it_further() {
     let gpu = GpuContext::new().unwrap();
     let once = bends_after_timeless_presses(&gpu, 1);

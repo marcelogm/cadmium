@@ -1,9 +1,8 @@
 use super::bristles::{
-    BRISTLE_FLARE_SHARE, BRISTLE_SOLVER_ITERATIONS, BRISTLE_STATE_VECTORS,
-    BRISTLE_TIP_STIFFNESS_SHARE, BRISTLE_VERTICES, BRISTLE_WORKGROUP_SIZE, BRISTLES_PER_THREAD,
-    CELL_GRID_SIDE, CLUSTER_CENTROIDS, CLUSTER_SPAN_WORDS, FAN_REST_SPLAY_SHARE, LANE_SAMPLES,
-    MAX_BRISTLES, MAX_CLUSTERS, MAX_PLASTIC_LEAN, MIN_LEAN_DROP, MIN_SEGMENT_SPAN_PX, OUTSIDE_TIP,
-    PLASTIC_BEND_THRESHOLD_RAD, RELIEF_UM_PER_PX, TOUCH_TOLERANCE_PX,
+    BRISTLE_FLARE_SHARE, BRISTLE_SOLVE_WORKGROUP_SIZE, BRISTLE_STATE_VECTORS,
+    BRISTLE_STRANDS_PER_GROUP, BRISTLE_VERTICES, BRISTLE_WORKGROUP_SIZE, BRISTLES_PER_THREAD,
+    CELL_GRID_SIDE, FAN_REST_SPLAY_SHARE, MAX_BRISTLES, MIN_SEGMENT_SPAN_PX, OUTSIDE_TIP,
+    RELIEF_UM_PER_PX,
 };
 use super::pass::bristle_contact::{
     BRISTLE_SEGMENTS, CONTACT_ALONG_HIGH, CONTACT_ALONG_LOW, CONTACT_BIN_BITS, CONTACT_BOX_FIRST,
@@ -78,10 +77,16 @@ pub(super) const BRISTLE_SNIPPETS: [&str; 10] = [
     include_str!("../shaders/bristle.wgsl"),
     include_str!("../shaders/bristle_tuning.wgsl"),
     include_str!("../shaders/bristle_relief.wgsl"),
-    include_str!("../shaders/bristle_friction.wgsl"),
-    include_str!("../shaders/bristle_memory.wgsl"),
-    include_str!("../shaders/bristle_point.wgsl"),
-    include_str!("../shaders/bristle_clump.wgsl"),
+    include_str!("../shaders/bristle_solve.wgsl"),
+    include_str!("../shaders/bristle_contacts.wgsl"),
+    include_str!("../shaders/bristle_shape.wgsl"),
+    include_str!("../shaders/bristle_floor.wgsl"),
+];
+#[cfg(test)]
+pub(super) const LAB_SNIPPETS: [&str; 3] = [
+    include_str!("../shaders/bristle_solve.wgsl"),
+    include_str!("../shaders/bristle_contacts.wgsl"),
+    include_str!("../shaders/bristle_floor.wgsl"),
 ];
 pub(super) const EYEDROPPER_SNIPPETS: [&str; 2] = [
     include_str!("../shaders/brush_tip.wgsl"),
@@ -100,22 +105,14 @@ fn bristle_constants() -> String {
         "const MAX_BRISTLES: u32 = {MAX_BRISTLES}u;\n\
          const BRISTLE_VERTICES: u32 = {BRISTLE_VERTICES}u;\n\
          const BRISTLE_WORKGROUP_SIZE: u32 = {BRISTLE_WORKGROUP_SIZE}u;\n\
+         const BRISTLE_SOLVE_WORKGROUP_SIZE: u32 = {BRISTLE_SOLVE_WORKGROUP_SIZE}u;\n\
+         const BRISTLE_STRANDS_PER_GROUP: u32 = {BRISTLE_STRANDS_PER_GROUP}u;\n\
          const BRISTLES_PER_THREAD: u32 = {BRISTLES_PER_THREAD}u;\n\
          const BRISTLE_STATE_VECTORS: u32 = {BRISTLE_STATE_VECTORS}u;\n\
-         const BRISTLE_SOLVER_ITERATIONS: u32 = {BRISTLE_SOLVER_ITERATIONS}u;\n\
-         const BRISTLE_TIP_STIFFNESS_SHARE: f32 = {BRISTLE_TIP_STIFFNESS_SHARE:?};\n\
          const BRISTLE_FLARE_SHARE: f32 = {BRISTLE_FLARE_SHARE:?};\n\
          const FAN_REST_SPLAY_SHARE: f32 = {FAN_REST_SPLAY_SHARE:?};\n\
          const MIN_SEGMENT_SPAN_PX: f32 = {MIN_SEGMENT_SPAN_PX:?};\n\
-         const TOUCH_TOLERANCE_PX: f32 = {TOUCH_TOLERANCE_PX:?};\n\
          const RELIEF_UM_PER_PX: f32 = {RELIEF_UM_PER_PX:?};\n\
-         const PLASTIC_BEND_THRESHOLD_RAD: f32 = {PLASTIC_BEND_THRESHOLD_RAD:?};\n\
-         const MAX_PLASTIC_LEAN: f32 = {MAX_PLASTIC_LEAN:?};\n\
-         const MIN_LEAN_DROP: f32 = {MIN_LEAN_DROP:?};\n\
-         const LANE_SAMPLES: u32 = {LANE_SAMPLES}u;\n\
-         const MAX_CLUSTERS: u32 = {MAX_CLUSTERS}u;\n\
-         const CLUSTER_SPAN_WORDS: u32 = {CLUSTER_SPAN_WORDS}u;\n\
-         const CLUSTER_CENTROIDS: u32 = {CLUSTER_CENTROIDS}u;\n\
          const MAX_TIP_THICKNESS_UM: f32 = {MAX_TIP_THICKNESS_UM:?};\n\
          const OUTSIDE_TIP: u32 = {OUTSIDE_TIP}u;\n\
          const CONTACT_WORKGROUP_SIZE: u32 = {CONTACT_WORKGROUP_SIZE}u;\n\

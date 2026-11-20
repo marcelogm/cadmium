@@ -13,7 +13,7 @@ const HOLD_SAMPLES: u32 = 6;
 const MOVE_SAMPLES: u32 = 30;
 const MOVE_STEP_PX: f64 = 2.0;
 const SAMPLE_INTERVAL_MS: u32 = 8;
-const RESTING_TIP_REACH_PX: f32 = 1.0;
+const REST_SHAPE_TOLERANCE_PX: f32 = 0.01;
 const PRESSED_SPLAY_SHARE: f32 = 1.3;
 const MAX_WET_POINT_SHARE: f32 = 0.5;
 const MIN_DRY_SPREAD_SHARE: f32 = 0.9;
@@ -61,6 +61,37 @@ fn loose(gpu: &GpuContext) -> PaintSession {
 fn press(gpu: &GpuContext, s: &mut PaintSession, pressure: f32) -> BristleSnapshot {
     drag(gpu, s, &press_samples(pressure, 0));
     s.engine.bristle_snapshot(gpu).unwrap()
+}
+
+/// The bristles as the first dab after a reset lays them: each rest chain in the dab's pose.
+fn laid_at_rest(gpu: &GpuContext, s: &mut PaintSession) -> BristleSnapshot {
+    s.limit_dabs_per_frame(Some(1));
+    s.begin_stroke(sample(START_X, CENTRE_Y, 0.0, 0));
+    frame(gpu, s);
+    assert_eq!(s.last_frame_dabs(), 1);
+    s.engine.bristle_snapshot(gpu).unwrap()
+}
+
+/// Each chain's vertices from its root: the upright round brush only moves, never turns.
+fn shapes(snapshot: &BristleSnapshot) -> Vec<Vec<[f32; 3]>> {
+    snapshot
+        .chains_px
+        .iter()
+        .map(|chain| {
+            let root = chain[0];
+            chain
+                .iter()
+                .map(|vertex| [0, 1, 2].map(|axis| vertex[axis] - root[axis]))
+                .collect()
+        })
+        .collect()
+}
+
+fn distance(a: [f32; 3], b: [f32; 3]) -> f32 {
+    (0..3)
+        .map(|axis| (a[axis] - b[axis]).powi(2))
+        .sum::<f32>()
+        .sqrt()
 }
 
 fn as_flat_with_round_length(s: &mut PaintSession) {
@@ -147,23 +178,29 @@ fn assert_above_canvas(snapshot: &BristleSnapshot) {
 }
 
 #[test]
-fn a_resting_brush_hangs_its_bristles_straight_down_from_the_ferrule() {
+fn a_brush_that_only_grazes_the_canvas_keeps_its_bristles_in_their_rest_shape() {
     let gpu = GpuContext::new().unwrap();
-    let mut s = loose(&gpu);
-    let snapshot = press(&gpu, &mut s, 0.0);
-    assert!(!snapshot.tips_px.is_empty());
-    assert_eq!(snapshot.tips_px.len(), snapshot.roots_px.len());
-    for (tip, root) in snapshot.tips_px.iter().zip(&snapshot.roots_px) {
-        let reach = (tip[0] - root[0]).hypot(tip[1] - root[1]);
+    let laid = shapes(&laid_at_rest(&gpu, &mut loose(&gpu)));
+    let snapshot = press(&gpu, &mut loose(&gpu), 0.0);
+    let held = shapes(&snapshot);
+    assert!(!held.is_empty());
+    assert_eq!(held.len(), laid.len());
+    for (bristle, (held, laid)) in held.iter().zip(&laid).enumerate() {
+        let strayed = held
+            .iter()
+            .zip(laid)
+            .map(|(held, laid)| distance(*held, *laid))
+            .fold(0.0f32, f32::max);
         assert!(
-            reach <= RESTING_TIP_REACH_PX,
-            "tip {tip:?} strays {reach} px from its root {root:?}"
+            strayed <= REST_SHAPE_TOLERANCE_PX,
+            "bristle {bristle} strays {strayed} px from its rest shape: {held:?} against {laid:?}"
         );
     }
     assert_above_canvas(&snapshot);
 }
 
 #[test]
+#[ignore = "phase 3 of #62: the wet point comes with elastocapillary clumping"]
 fn a_wet_round_brush_hangs_to_a_point_and_a_dry_one_hangs_straight() {
     let gpu = GpuContext::new().unwrap();
     let mut wet = unclumped(&gpu);

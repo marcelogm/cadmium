@@ -2,399 +2,155 @@
 @group(0) @binding(1) var<storage, read> rests: array<BristleRest>;
 @group(0) @binding(2) var<storage, read_write> states: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read_write> handle: HandleState;
-@group(0) @binding(4) var<storage, read> tip: array<f32>;
-@group(0) @binding(5) var<storage, read> clusters: array<u32>;
-@group(0) @binding(6) var<uniform> tuning: BristleTuning;
-@group(0) @binding(7) var dry_height: texture_storage_2d<r32float, read>;
-@group(0) @binding(8) var wet_vol: texture_storage_2d<r32float, read>;
-@group(0) @binding(9) var<storage, read_write> hair_loads: array<f32>;
-
-/// How fast a hair's own motion dies away between substeps: one set swinging settles
-/// instead of swinging on and touching the canvas at every pass.
-const HAIR_VISCOSITY_PER_SECOND: f32 = 100.0;
+@group(0) @binding(4) var<uniform> tuning: BristleTuning;
+@group(0) @binding(5) var dry_height: texture_storage_2d<r32float, read>;
+@group(0) @binding(6) var wet_vol: texture_storage_2d<r32float, read>;
+@group(0) @binding(7) var<storage, read_write> hair_loads: array<f32>;
+@group(0) @binding(8) var<storage, read_write> normal_forces: array<f32>;
 
 // Mirrors MIN_AXIS_RISE in engine/bristles/handle.rs.
 const MIN_AXIS_RISE: f32 = 0.0175;
-/// Share of the way a hair's shape follows its wetness over one reference dab step: paint it
-/// lays and draws back up changes its wetness every dab, and a shape that followed that
-/// at once would lift the hair off the canvas and set it down again, dab after dab.
-const WETNESS_FOLLOW_SHARE: f32 = 0.1;
-/// Marks a bend slot whose `z` already holds the hair's steady wetness.
-const WETNESS_KNOWN: f32 = 1.0;
+/// Fewest solve iterations a dab runs, so a dab with no travel still settles its strands.
+const MIN_DAB_ITERATIONS: u32 = 2u;
+/// Every hair carries the typical load until phase 4 of #62 hands Exchange the normal force.
+const FLAT_HAIR_LOAD: f32 = 1.0;
 
-/// Share of the handle's drop beyond its resting slack given back over one reference dab step
-/// while the hairs touch.
-const DROP_RELAX_SHARE: f32 = 0.25;
+fn handle_axis() -> vec3<f32> {
+    return vec3<f32>(dab.handle_axis_x, dab.handle_axis_y, dab.handle_axis_z);
+}
 
-struct Travel {
-    start: Pose,
-    end: Pose,
-    substeps: u32,
-    seconds: f32,
-    previous_seconds: f32,
-    velocity_change: vec3<f32>,
-};
-
-struct Motion {
-    start: Pose,
-    end: Pose,
-    seconds: f32,
-    previous_seconds: f32,
-    velocity_change: vec3<f32>,
-};
-
-fn pose_at_height(height_px: f32, base_px: f32) -> Pose {
-    let axis = vec3<f32>(dab.handle_axis_x, dab.handle_axis_y, dab.handle_axis_z);
+fn pose_at_height(height_px: f32) -> Pose {
+    let axis = handle_axis();
     let over_nib = dab.center + axis.xy * (height_px / max(axis.z, MIN_AXIS_RISE));
-    return Pose(vec3<f32>(over_nib, height_px + base_px), axis, dab.bristle_orientation);
+    return Pose(vec3<f32>(over_nib, height_px), axis, dab.bristle_orientation);
 }
 
-fn current_pose(base_px: f32) -> Pose {
-    return pose_at_height(dab.handle_height_px, base_px);
-}
-
-fn lifted_pose(base_px: f32) -> Pose {
-    return pose_at_height(dab.handle_rest_height_px, base_px);
-}
-
-fn starting_pose(base_px: f32) -> Pose {
-    if dab.bristle_reset != 0u {
-        return lifted_pose(base_px);
-    }
-    return pose_of(handle);
-}
-
-fn hung_vertex(rest: BristleRest, pose: Pose, wetness: f32, vertex: u32) -> vec3<f32> {
-    let lean = resting_lean(rest, gathering(wetness));
-    let step = hanging_along(lean, pose) * segment_length(rest);
-    return root_position(rest, pose) + step * f32(vertex);
-}
-
-fn hang_at_rest(bristle: u32, pose: Pose, wetness: f32) {
+fn vertex_touch_px(index: u32, placed: Pose) -> f32 {
+    let bristle = index / BRISTLE_SEGMENTS;
+    let vertex = index % BRISTLE_SEGMENTS + 1u;
     let rest = rests[bristle];
+    var local = rest_chain_local(rest);
+    let at = from_ferrule(local[vertex], placed);
+    return disc_floor_px(at.xy, rest.radius_px) - (at.z - placed.ferrule.z);
+}
+
+/// The height at which the brush's rest shape, in the dab's pose, first touches
+/// (spec §3): p = 0 lands only the lowest tip, whatever the hairs are doing now. The max is
+/// exact, so splitting it per vertex does not change the result.
+fn touch_height_px(thread: u32) -> f32 {
+    let placed = pose_at_height(dab.handle_rest_height_px);
+    var touch = -NO_FLOOR_PX;
+    let vertices = dab.bristle_total * BRISTLE_SEGMENTS;
+    for (var index = thread; index < vertices; index += BRISTLE_WORKGROUP_SIZE) {
+        touch = max(touch, vertex_touch_px(index, placed));
+    }
+    let bounds = workgroup_range(thread, vec2<f32>(NO_FLOOR_PX, touch));
+    return select(bounds.y, 0.0, bounds.y <= -NO_FLOOR_PX);
+}
+
+fn ferrule_clearance_px() -> f32 {
+    return dab.ferrule_radius_px * length(handle_axis().xy);
+}
+
+fn held_pose(offset_px: f32, touch_px: f32) -> Pose {
+    return pose_at_height(max(touch_px + offset_px, ferrule_clearance_px()));
+}
+
+/// Where the dab starts: the last dab's pose, or, after a reset, just touching.
+fn start_pose(touch_px: f32) -> Pose {
+    if dab.bristle_reset != 0u {
+        return held_pose(max(dab.handle_offset_px, 0.0), touch_px);
+    }
+    return pose_of(handle.end);
+}
+
+fn place_at_rest(bristle: u32, pose: Pose) {
+    let rest = rests[bristle];
+    let local = rest_chain_local(rest);
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        let at = hung_vertex(rest, pose, wetness, vertex);
-        let previous = vec4<f32>(at, 0.0);
-        states[position_slot(bristle, vertex)] = vec4<f32>(at, surface_px(at.xy));
-        states[previous_slot(bristle, vertex)] = previous;
-        states[anchor_slot(bristle, vertex)] = vec4<f32>(0.0);
-    }
-    states[bend_slot(bristle)] = vec4<f32>(0.0);
-}
-
-fn hung_clearance_px(bristle: u32, pose: Pose, wetness: f32) -> f32 {
-    var lowest = NO_FLOOR_PX;
-    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        let at = hung_vertex(rests[bristle], pose, wetness, vertex);
-        lowest = min(lowest, at.z - surface_px(at.xy));
-    }
-    return lowest;
-}
-
-/// How far the lifted handle must still come down before its lowest hanging hair touches.
-fn slack_px(thread: u32, base_px: f32, wetness: Wetness) -> f32 {
-    let lifted = lifted_pose(base_px);
-    var lowest = NO_FLOOR_PX;
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            lowest = min(lowest, hung_clearance_px(bristle, lifted, wetness[share]));
-        }
-    }
-    return lowest_over_workgroup(thread, lowest);
-}
-
-fn lowest_over_workgroup(thread: u32, lowest: f32) -> f32 {
-    let bounds = workgroup_range(thread, vec2<f32>(lowest, -NO_FLOOR_PX));
-    return select(max(bounds.x, 0.0), 0.0, bounds.x >= NO_FLOOR_PX);
-}
-
-/// How far above the canvas the hairs hung after the last dab: 0 once any of them touches.
-fn hovering_px(thread: u32) -> f32 {
-    var lowest = NO_FLOOR_PX;
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-                let at = states[position_slot(bristle, vertex)];
-                lowest = min(lowest, at.z - at.w);
-            }
-        }
-    }
-    return lowest_over_workgroup(thread, lowest);
-}
-
-fn lifted_off() -> bool {
-    return dab.handle_height_px > dab.handle_rest_height_px;
-}
-
-/// How far the handle comes down below where the pressure alone puts it, so the lightest
-/// touch still lands its lowest hair: the hanging bundle's slack, plus however far the hairs
-/// were left hovering by clumping and drag. That extra eases back every dab, so once the
-/// hairs touch, it drains away.
-fn handle_drop_px(thread: u32, base_px: f32, wetness: Wetness) -> f32 {
-    let resting = slack_px(thread, base_px, wetness);
-    let hovering = hovering_px(thread);
-    if lifted_off() {
-        return 0.0;
-    }
-    if dab.bristle_reset != 0u {
-        return resting;
-    }
-    let keep = pow(1.0 - DROP_RELAX_SHARE, max(dab.step_ratio, 0.0));
-    return resting + max(handle.drop_px + hovering - resting, 0.0) * keep;
-}
-
-fn resting_floor_px(bristle: u32) -> f32 {
-    let band_px = rests[bristle].radius_px;
-    var support_px = states[position_slot(bristle, BRISTLE_VERTICES - 1u)].w;
-    var touching = false;
-    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        let at = states[position_slot(bristle, vertex)];
-        if at.z - at.w <= band_px {
-            support_px = select(at.w, max(support_px, at.w), touching);
-            touching = true;
-        }
-    }
-    return support_px;
-}
-
-fn support_floor_px(bristle: u32, wetness: f32) -> f32 {
-    if dab.bristle_reset != 0u {
-        let tip = hung_vertex(rests[bristle], lifted_pose(0.0), wetness, BRISTLE_VERTICES - 1u);
-        return surface_px(tip.xy);
-    }
-    return resting_floor_px(bristle);
-}
-
-fn record_owned_loads(thread: u32, base_px: f32) {
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            hair_loads[bristle] = hair_load(resting_floor_px(bristle), base_px);
-        }
+        let at = from_ferrule(local[vertex], pose);
+        states[position_slot(bristle, vertex)] = vec4<f32>(at, disc_floor_px(at.xy, rest.radius_px));
     }
 }
 
-fn heading_of(offset: vec3<f32>, fallback: vec3<f32>) -> vec3<f32> {
-    let span = length(offset);
-    let heading = offset / max(span, MIN_SEGMENT_SPAN_PX);
-    return select(fallback, heading, span > MIN_SEGMENT_SPAN_PX);
-}
-
-fn keep_segment_lengths(chain: ptr<function, Chain>, segment: f32, hanging: vec3<f32>) {
-    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        let parent = (*chain)[vertex - 1u];
-        (*chain)[vertex] = parent + heading_of((*chain)[vertex] - parent, hanging) * segment;
-    }
-}
-
-fn bend_share(rest: BristleRest, vertex: u32) -> f32 {
-    let along = f32(vertex - 1u) / f32(BRISTLE_VERTICES - 2u);
-    let taper = 1.0 - (1.0 - BRISTLE_TIP_STIFFNESS_SHARE) * along;
-    return clamp(dab.bristle_stiffness * rest.stiffness * taper, 0.0, 1.0);
-}
-
-fn bend_toward_rest(chain: ptr<function, Chain>, rest: BristleRest, hanging: vec3<f32>) {
-    let segment = segment_length(rest);
-    var heading = hanging;
-    for (var vertex = 1u; vertex < BRISTLE_VERTICES; vertex++) {
-        let parent = (*chain)[vertex - 1u];
-        let bent = mix((*chain)[vertex], parent + heading * segment, bend_share(rest, vertex));
-        (*chain)[vertex] = bent;
-        heading = heading_of(bent - parent, heading);
-    }
-}
-
-fn solve(
-    chain: ptr<function, Chain>,
-    anchors: ptr<function, Anchors>,
-    rest: BristleRest,
-    hanging: vec3<f32>,
-) -> Floors {
-    let floors = floors_under(*chain);
-    for (var iteration = 0u; iteration < BRISTLE_SOLVER_ITERATIONS; iteration++) {
-        keep_segment_lengths(chain, segment_length(rest), hanging);
-        bend_toward_rest(chain, rest, hanging);
-        touch_canvas(chain, anchors, floors);
-    }
-    return floors;
-}
-
-fn local_velocity(at: vec3<f32>, follow: vec3<f32>, motion: Motion) -> vec3<f32> {
-    if motion.seconds <= 0.0 {
-        return vec3<f32>(0.0);
-    }
-    var carried = vec3<f32>(0.0);
-    if motion.previous_seconds > 0.0 {
-        let kept = exp(-HAIR_VISCOSITY_PER_SECOND * motion.seconds);
-        carried = (at - follow) / motion.previous_seconds * kept;
-    }
-    return carried - dab.bristle_damping * motion.velocity_change;
-}
-
-fn predicted(bristle: u32, carry: vec3<f32>, motion: Motion) -> Chain {
+fn held_chain(bristle: u32) -> Chain {
     var chain: Chain;
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        let at = states[position_slot(bristle, vertex)].xyz;
-        let follow = states[previous_slot(bristle, vertex)].xyz;
-        chain[vertex] = at + carry + local_velocity(at, follow, motion) * motion.seconds;
-        states[previous_slot(bristle, vertex)] = vec4<f32>(at + carry, 0.0);
+        chain[vertex] = states[position_slot(bristle, vertex)].xyz;
     }
     return chain;
 }
 
-fn held_anchors(bristle: u32) -> Anchors {
-    var anchors: Anchors;
+/// Stores the chain with the floor the solve rests each vertex on, so Contact's clearance
+/// matches what the solve enforced.
+fn store_chain(bristle: u32, chain: Chain) {
+    let radius_px = rests[bristle].radius_px;
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        anchors[vertex] = states[anchor_slot(bristle, vertex)];
+        let at = chain[vertex];
+        states[position_slot(bristle, vertex)] = vec4<f32>(at, disc_floor_px(at.xy, radius_px));
     }
-    return anchors;
 }
 
-fn store_positions(bristle: u32, chain: Chain, floors: Floors) {
+/// Moves `chain` rigidly with the ferrule from pose `start` to pose `end`.
+fn carry(chain: ptr<function, Chain>, start: Pose, end: Pose) {
     for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        states[position_slot(bristle, vertex)] = vec4<f32>(chain[vertex], floors[vertex]);
+        (*chain)[vertex] = carried((*chain)[vertex], start, end);
     }
 }
 
-fn store(bristle: u32, chain: Chain, anchors: Anchors, floors: Floors, seconds: f32) {
-    store_positions(bristle, chain, floors);
-    for (var vertex = 0u; vertex < BRISTLE_VERTICES; vertex++) {
-        states[anchor_slot(bristle, vertex)] = anchors[vertex];
-        if seconds <= 0.0 {
-            states[previous_slot(bristle, vertex)] = vec4<f32>(chain[vertex], 0.0);
-        }
-    }
-}
-
-fn advance(bristle: u32, motion: Motion, wetness: f32) {
-    let rest = rests[bristle];
-    let root = root_position(rest, motion.end);
-    var chain = predicted(bristle, root - root_position(rest, motion.start), motion);
-    var anchors = held_anchors(bristle);
-    chain[0] = root;
-    let held_bend = states[bend_slot(bristle)];
-    let bend = held_bend.xy;
-    let lean = resting_lean(rest, gathering(wetness));
-    let floors = solve(&chain, &anchors, rest, hanging_along(lean + bend, motion.end));
-    let span = chain[BRISTLE_VERTICES - 1u] - root;
-    let kept = remembered_bend(bend, lean, span, motion.end, motion.seconds);
-    states[bend_slot(bristle)] = vec4<f32>(kept, held_bend.zw);
-    store(bristle, chain, anchors, floors, motion.seconds);
-}
-
-fn handle_velocity(start: Pose, end: Pose) -> vec3<f32> {
-    if dab.dt_seconds <= 0.0 {
-        return vec3<f32>(0.0);
-    }
-    return (end.ferrule - start.ferrule) / dab.dt_seconds;
-}
-
-fn owned_bristle(thread: u32, share: u32) -> u32 {
-    return thread + share * BRISTLE_WORKGROUP_SIZE;
-}
-
-fn remember_pose(pose: Pose, substep_seconds: f32, velocity: vec3<f32>, drop_px: f32) {
-    handle = HandleState(
-        pose.ferrule,
-        substep_seconds,
-        pose.axis,
-        drop_px,
-        velocity,
-        0.0,
-        pose.orientation,
-        vec2<f32>(0.0),
-    );
-}
-
-fn steady_wetness(thread: u32) -> Wetness {
-    let fresh = owned_wetness(thread);
-    let follow = 1.0 - pow(1.0 - WETNESS_FOLLOW_SHARE, max(dab.step_ratio, 0.0));
-    var steady = fresh;
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            let held = states[bend_slot(bristle)];
-            let known = held.w == WETNESS_KNOWN && dab.bristle_reset == 0u;
-            steady[share] = select(fresh[share], mix(held.z, fresh[share], follow), known);
-        }
-    }
-    return steady;
-}
-
-fn remember_wetness(thread: u32, wetness: Wetness) {
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            let bend = states[bend_slot(bristle)].xy;
-            states[bend_slot(bristle)] = vec4<f32>(bend, wetness[share], WETNESS_KNOWN);
-        }
-    }
-}
-
-fn hang_owned_at_rest(thread: u32, pose: Pose, wetness: Wetness) {
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            hang_at_rest(bristle, pose, wetness[share]);
-        }
-    }
-}
-
-fn motion_of(travel: Travel, substep: u32) -> Motion {
-    let first = substep == 0u;
-    let count = f32(travel.substeps);
-    return Motion(
-        pose_between(travel.start, travel.end, f32(substep) / count),
-        pose_between(travel.start, travel.end, f32(substep + 1u) / count),
-        travel.seconds,
-        select(travel.seconds, travel.previous_seconds, first),
-        select(vec3<f32>(0.0), travel.velocity_change, first),
-    );
-}
-
-fn advance_owned(thread: u32, motion: Motion, wetness: Wetness) {
-    for (var share = 0u; share < BRISTLES_PER_THREAD; share++) {
-        let bristle = owned_bristle(thread, share);
-        if bristle < dab.bristle_total {
-            advance(bristle, motion, wetness[share]);
-        }
-    }
-}
-
-@compute @workgroup_size(BRISTLE_WORKGROUP_SIZE)
-fn step(@builtin(local_invocation_index) thread: u32) {
-    let resetting = dab.bristle_reset != 0u;
-    let wetness = steady_wetness(thread);
-    let found_base_px = resting_base_px(thread, wetness);
-    let drop_px = handle_drop_px(thread, found_base_px, wetness);
-    let base_px = found_base_px - drop_px;
-    let start = starting_pose(base_px);
-    let end = current_pose(base_px);
-    let velocity = handle_velocity(start, end);
+/// Moves the strand along the dab's ferrule path, one solve iteration per substep, and
+/// returns the canvas's normal force at the end, N.
+fn solved_dab(bristle: u32, start: Pose, end: Pose) -> f32 {
+    var chain = held_chain(bristle);
+    var sampled = chain;
+    let radius_px = rests[bristle].radius_px;
     let substeps = max(dab.substeps, 1u);
-    let travel = Travel(
-        start,
-        end,
-        substeps,
-        dab.dt_seconds / f32(substeps),
-        select(handle.substep_seconds, 0.0, resetting),
-        velocity - select(handle.velocity, vec3<f32>(0.0), resetting),
-    );
-    if resetting {
-        hang_owned_at_rest(thread, start, wetness);
+    let iterations = max(substeps, MIN_DAB_ITERATIONS);
+    var previous = start;
+    var force = 0.0;
+    var shape: StrandShape;
+    for (var iteration = 0u; iteration < iterations; iteration++) {
+        let pose = pose_between(start, end, min(f32(iteration + 1u) / f32(substeps), 1.0));
+        carry(&chain, previous, pose);
+        previous = pose;
+        shape = strand_shape(rests[bristle], pose);
+        let floors = floors_under(sampled, chain, radius_px);
+        sampled = chain;
+        force = summed(solve_iteration(&chain, shape, floors));
     }
-    remember_wetness(thread, wetness);
-    share_pulls(thread, wetness);
-    storageBarrier();
-    for (var substep = 0u; substep < substeps; substep++) {
-        advance_owned(thread, motion_of(travel, substep), wetness);
-        storageBarrier();
-        clump_owned(thread);
-    }
-    record_owned_loads(thread, base_px);
+    force += summed(rested(&chain, sampled, shape, radius_px));
+    store_chain(bristle, chain);
+    return force;
+}
+
+/// Measures the dab's touch height across all strands and records its ferrule path: the
+/// start is read from the last dab's end before the end is overwritten.
+@compute @workgroup_size(BRISTLE_WORKGROUP_SIZE)
+fn touch(@builtin(local_invocation_index) thread: u32) {
+    let touch_px = touch_height_px(thread);
     if thread == 0u {
-        remember_pose(end, travel.seconds, velocity, drop_px);
+        let start = start_pose(touch_px);
+        let end = held_pose(dab.handle_offset_px, touch_px);
+        handle = HandleState(stored_pose(start), stored_pose(end));
     }
+}
+
+/// Solves one strand along the path `touch` recorded. No barriers, so the workgroup can be
+/// small and each thread gets the registers the solve needs.
+@compute @workgroup_size(BRISTLE_SOLVE_WORKGROUP_SIZE)
+fn solve_reference(@builtin(global_invocation_id) id: vec3<u32>) {
+    solve_serially(id.x);
+}
+
+fn solve_serially(bristle: u32) {
+    if bristle >= dab.bristle_total {
+        return;
+    }
+    let start = pose_of(handle.start);
+    let end = pose_of(handle.end);
+    if dab.bristle_reset != 0u {
+        place_at_rest(bristle, start);
+    }
+    normal_forces[bristle] = solved_dab(bristle, start, end);
+    hair_loads[bristle] = FLAT_HAIR_LOAD;
 }

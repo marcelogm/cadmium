@@ -20,6 +20,7 @@ mod placement;
 mod readout;
 mod reservoir;
 pub(crate) mod shader;
+mod stage_timer;
 
 pub use bristles::{
     BRISTLE_SETTLE_MS, BristleCell, BristleSnapshot, RELIEF_UM_PER_PX, bristle_reach_px,
@@ -28,16 +29,19 @@ pub use dab_record::blade_gap_um;
 pub use footprint::BrushOutline;
 pub use held_paint::HeldPaint;
 pub use readout::BrushReadout;
+pub use stage_timer::DabStageTime;
 
 pub(crate) use pass::pick::PickRequest;
 
-use bristles::{BristleBuffers, BristleRig, BristleTuning, LayoutRequest, MAX_BRISTLES};
+use bristles::{BristleBuffers, BristleRig, LayoutRequest, MAX_BRISTLES};
 use dab_record::{upload_dab_records, upload_records};
+use pass::bristle_step::StrandSolve;
 use pass::dip::DipPass;
 use pass::dry::DryPass;
 use pass::pick::PickPass;
 use pass::{DabPasses, DabResources};
 use placement::{FirstRest, PreviousDab, mark_dab_regions};
+use stage_timer::DabStageTimer;
 
 pub const TIP_SIZE: u32 = 512;
 pub const TIP_MARGIN: u32 = 12;
@@ -191,6 +195,7 @@ pub struct WetOilEngine {
     pick_pass: PickPass,
     dry_pass: DryPass,
     dip_pass: DipPass,
+    stage_timer: Option<DabStageTimer>,
 }
 
 impl WetOilEngine {
@@ -208,7 +213,18 @@ impl WetOilEngine {
             pick_pass: PickPass::new(gpu),
             dry_pass: DryPass::new(gpu),
             dip_pass: DipPass::new(gpu),
+            stage_timer: None,
         }
+    }
+
+    #[doc(hidden)]
+    pub fn use_reference_bristle_solve(&mut self, reference: bool) {
+        let strand_solve = if reference {
+            StrandSolve::Serial
+        } else {
+            StrandSolve::Grouped
+        };
+        self.dab_passes.choose_strand_solve(strand_solve);
     }
 
     pub fn resize_tip(&mut self, radius_px: f32) {
@@ -244,7 +260,7 @@ impl WetOilEngine {
         };
         self.bristles
             .fit(gpu, &self.buffers.bristles, &request, encoder);
-        let tuning = BristleTuning::of(&self.params, &head, &hair, canvas.tooth_height_um());
+        let tuning = self.bristles.tuning(&self.params, canvas.tooth_height_um());
         self.buffers.bristles.tune(gpu, &tuning, encoder);
     }
 
@@ -311,12 +327,16 @@ impl PaintEngine for WetOilEngine {
             buffers: &self.buffers,
         };
         let bind_groups = self.dab_passes.bind_groups(&resources, &pencil_lead);
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("dab_exchange"),
-            timestamp_writes: None,
-        });
-        self.dab_passes.encode(&bind_groups, &mut pass, &placements);
-        drop(pass);
+        if let Some(timer) = self.stage_timer.as_mut() {
+            self.dab_passes
+                .encode_timed(&bind_groups, encoder, &placements, timer);
+        } else {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("dab_exchange"),
+                timestamp_writes: None,
+            });
+            self.dab_passes.encode(&bind_groups, &mut pass, &placements);
+        }
         mark_dab_regions(canvas, &placements);
     }
 
@@ -330,12 +350,7 @@ impl PaintEngine for WetOilEngine {
         let Some(record) = self.bristles.settle(now_ms) else {
             return;
         };
-        let tuning = BristleTuning::of(
-            &self.params,
-            &self.bristles.head(),
-            &self.bristles.hair(),
-            canvas.tooth_height_um(),
-        );
+        let tuning = self.bristles.tuning(&self.params, canvas.tooth_height_um());
         self.buffers.bristles.tune(gpu, &tuning, encoder);
         let records = upload_records(gpu, &[record]);
         let resources = DabResources {
