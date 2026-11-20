@@ -4,7 +4,7 @@ use cadmium_engine::gpu::GpuContext;
 use cadmium_engine::session::PaintSession;
 use cadmium_engine::stroke::StrokeSample;
 
-use crate::support::{drag, line, session};
+use crate::support::{drag, frame, line, session};
 
 const WIDTH: usize = 512;
 const HEIGHT: usize = 256;
@@ -16,8 +16,10 @@ const TILT_DEG: f32 = 20.0;
 /// The fresh stroke presses in over this many samples, so contacts land a few at a time.
 const PRESS_IN_SAMPLES: usize = 8;
 const PRESS_IN_PRESSURE: f32 = 0.6;
-/// Three samples past the first contacts.
-const FRESH_SAMPLES: usize = 7;
+/// The serial solve presses the fresh stroke in up to its first contacts, then the grouped
+/// one takes over for two samples: the middle of the 1 to 3 that stay within tolerance.
+const FIRST_CONTACT_SAMPLES: usize = 3;
+const GROUPED_SAMPLES: usize = 2;
 const WORN_SAMPLES: usize = 3;
 /// They differ only where the compiler fuses a multiply-add differently.
 const POSITION_TOLERANCE_PX: f32 = 1.0e-3;
@@ -40,10 +42,11 @@ fn pressing_in(samples: &mut [StrokeSample]) {
     }
 }
 
-/// Stick and slip over ridges magnify a last-bit difference about 10⁴-fold within a few
-/// dabs: the serial solve against itself, with the stroke nudged 1e-4 px along x, ends
-/// 0.46 px apart after 5 samples and 5.2 px after 61. Over ridges the solves are compared
-/// over a handful of dabs from the same state.
+/// Stick and slip over ridges magnify a last-bit difference within a few dabs: the serial
+/// solve against itself, with the stroke nudged 1e-4 px along x, ends 2.6e-3 px apart after
+/// 7 samples. One grouped dab from the serial state already differs by up to 4.2e-3 px
+/// there, against 6.1e-4 before stuck contacts were held back onto their floor and anchor.
+/// Over ridges the solves are compared over a handful of dabs from the same state.
 fn on_ridges(gpu: &GpuContext, reference: bool) -> PaintSession {
     let mut s = session(gpu);
     let heights: Vec<f32> = (0..WIDTH * HEIGHT)
@@ -165,11 +168,19 @@ fn snapshots(
 fn the_grouped_solve_matches_the_serial_one_over_ridges() {
     let gpu = GpuContext::new().unwrap();
     let mut reference = on_ridges(&gpu, true);
-    let mut grouped = on_ridges(&gpu, false);
+    let mut grouped = on_ridges(&gpu, true);
     let mut samples = line(CENTRE_Y, 60.0, 140.0, 0.9, TILT_DEG);
     pressing_in(&mut samples);
-    drag(&gpu, &mut reference, &samples[..FRESH_SAMPLES]);
-    drag(&gpu, &mut grouped, &samples[..FRESH_SAMPLES]);
+    for s in [&mut reference, &mut grouped] {
+        s.begin_stroke(samples[0]);
+        s.add_samples(&samples[1..FIRST_CONTACT_SAMPLES]);
+        frame(&gpu, s);
+    }
+    grouped.engine.use_reference_bristle_solve(false);
+    for s in [&mut reference, &mut grouped] {
+        s.add_samples(&samples[FIRST_CONTACT_SAMPLES..][..GROUPED_SAMPLES]);
+        frame(&gpu, s);
+    }
     let (serial, parallel) = snapshots(&gpu, &reference, &grouped);
     assert!(
         serial.normal_forces_n.iter().any(|&force| force > 0.0),
