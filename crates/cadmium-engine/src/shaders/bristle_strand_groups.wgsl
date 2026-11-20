@@ -1,11 +1,13 @@
 // Every helper mirrors the serial function of the same role, term for term, so the two
-// solves stay equivalent. Lane v owns vertex v, hinge v and contact row v (vertex v + 1).
+// solves stay equivalent. Lane v owns vertex v, hinge v and the contact rows of vertex v + 1.
 // Every loop holding a workgroup barrier runs a workgroup-uniform count.
 
 alias GroupVectors = array<array<vec3<f32>, BRISTLE_VERTICES>, BRISTLE_STRANDS_PER_GROUP>;
 alias GroupHinges = array<array<vec3<f32>, BRISTLE_SEGMENTS>, BRISTLE_STRANDS_PER_GROUP>;
 alias GroupRows = array<array<f32, BRISTLE_SEGMENTS>, BRISTLE_STRANDS_PER_GROUP>;
 alias GroupFlags = array<array<u32, BRISTLE_SEGMENTS>, BRISTLE_STRANDS_PER_GROUP>;
+alias GroupRowValues = array<RowValues, BRISTLE_STRANDS_PER_GROUP>;
+alias GroupRowFlags = array<array<u32, MAX_CONTACT_ROWS>, BRISTLE_STRANDS_PER_GROUP>;
 
 var<workgroup> group_chain: GroupVectors;
 var<workgroup> group_normals: GroupVectors;
@@ -14,13 +16,15 @@ var<workgroup> group_edges: GroupHinges;
 var<workgroup> group_short: GroupFlags;
 var<workgroup> group_turns: GroupHinges;
 var<workgroup> group_compliances: GroupRows;
+var<workgroup> group_plastic: GroupHinges;
 var<workgroup> group_rise_turns: GroupHinges;
-var<workgroup> group_gaps: GroupRows;
-var<workgroup> group_diagonal: GroupRows;
-var<workgroup> group_forces: GroupRows;
-var<workgroup> group_engaged: GroupFlags;
+var<workgroup> group_directions: array<array<vec3<f32>, MAX_CONTACT_ROWS>, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_gaps: GroupRowValues;
+var<workgroup> group_diagonal: GroupRowValues;
+var<workgroup> group_forces: GroupRowValues;
+var<workgroup> group_engaged: GroupRowFlags;
 var<workgroup> group_added: GroupFlags;
-var<workgroup> group_matrix: array<array<array<f32, BRISTLE_SEGMENTS>, BRISTLE_SEGMENTS>, BRISTLE_STRANDS_PER_GROUP>;
+var<workgroup> group_matrix: array<ContactMatrix, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_ridge: array<f32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_scale: array<f32, BRISTLE_STRANDS_PER_GROUP>;
 var<workgroup> group_solving: array<u32, BRISTLE_STRANDS_PER_GROUP>;
@@ -133,22 +137,11 @@ fn free_turn(lane: Lane, shape: StrandShape) -> vec3<f32> {
         before = group_edges[s][hinge - 1u];
     }
     let curl = transported(shape.curl, shape.clamp, before);
-    let rest = select(vec3<f32>(0.0), curl, hinge > 0u);
+    let rest = select(vec3<f32>(0.0), curl, hinge > 0u) + transported(group_plastic[s][hinge], shape.clamp, before);
     let tip = group_chain[s][BRISTLE_VERTICES - 1u];
     let lever_m = (tip - group_chain[s][hinge]) * METRES_PER_PX;
     let loaded = group_compliances[s][hinge] * cross(lever_m, shape.tip_force_n);
     return rest - rotation_between(before, group_edges[s][hinge]) + loaded;
-}
-
-// mirrors solve_iteration
-fn pushed_turn(strand: u32, hinge: u32, free: vec3<f32>) -> vec3<f32> {
-    var turn = free;
-    for (var pushed = hinge + 1u; pushed < BRISTLE_VERTICES; pushed++) {
-        let force = group_forces[strand][pushed - 1u];
-        let arm_m = (group_chain[strand][pushed] - group_chain[strand][hinge]) * METRES_PER_PX;
-        turn += group_compliances[strand][hinge] * force * cross(arm_m, group_normals[strand][pushed]);
-    }
-    return turn;
 }
 
 // mirrors capped
@@ -176,7 +169,7 @@ fn turned_position(strand: u32, vertex: u32, scale: f32, segment_px: f32) -> vec
 fn summed_group_forces(strand: u32) -> f32 {
     var total = 0.0;
     for (var row = 0u; row < BRISTLE_SEGMENTS; row++) {
-        total += group_forces[strand][row];
+        total += group_forces[strand][normal_row(row + 1u)];
     }
     return total;
 }
@@ -184,8 +177,13 @@ fn summed_group_forces(strand: u32) -> f32 {
 // mirrors solve_iteration, or lifted_onto when `lifting`
 fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     let s = lane.strand;
+    var friction = shape.friction;
+    if lifting {
+        friction = Friction(0.0, 0.0, 0.0);
+    }
     if owns_hinge(lane) {
         place_edge(lane);
+        place_directions(s, lane.vertex + 1u);
     }
     workgroupBarrier();
     if leads(lane) {
@@ -201,23 +199,19 @@ fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     }
     workgroupBarrier();
     if owns_hinge(lane) {
-        let vertex = lane.vertex + 1u;
-        group_gaps[s][lane.vertex] = gap_of(s, vertex);
-        group_diagonal[s][lane.vertex] = diagonal_of(s, vertex);
+        place_gaps(s, lane.vertex + 1u);
+        place_diagonal(s, lane.vertex + 1u);
     }
     workgroupBarrier();
     if leads(lane) {
-        open_contacts(s, !lifting || group_lifting[s] != 0u);
+        open_contacts(s, !lifting || group_lifting[s] != 0u, friction);
     }
     workgroupBarrier();
     if owns_hinge(lane) && group_solving[s] != 0u {
-        for (var column = 0u; column < lane.vertex; column++) {
-            group_matrix[s][lane.vertex][column] =
-                group_compliance(s, lane.vertex + 1u, column + 1u);
-        }
+        place_matrix_rows(s, lane.vertex + 1u);
     }
     workgroupBarrier();
-    settle_contacts(lane);
+    settle_contacts(lane, free, friction);
     if owns_hinge(lane) {
         group_turns[s][lane.vertex] = pushed_turn(s, lane.vertex, free);
     }
@@ -229,6 +223,13 @@ fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     var stepped = Stepped(vec3<f32>(0.0), 0.0);
     if lane.live {
         stepped.at = turned_position(s, lane.vertex, group_scale[s], shape.segment_px);
+        if !lifting {
+            var anchor = vec4<f32>(0.0);
+            if friction.static_mu > 0.0 {
+                anchor = next_anchor(s, lane.vertex, stepped.at);
+            }
+            group_anchors[s][lane.vertex] = anchor;
+        }
     }
     if leads(lane) {
         stepped.force = summed_group_forces(s);
@@ -258,6 +259,7 @@ fn solve(
                 states[plastic_slot(lane.bristle, lane.vertex)] = vec4<f32>(0.0);
             }
         }
+        group_anchors[lane.strand][lane.vertex] = states[anchor_slot(lane.bristle, lane.vertex)];
         radius_px = rests[lane.bristle].radius_px;
     }
     if owns_hinge(lane) {
@@ -320,6 +322,7 @@ fn solve(
             end_floor = disc_floor_px(at.xy, radius_px);
         }
         states[position_slot(lane.bristle, lane.vertex)] = vec4<f32>(at, end_floor);
+        states[anchor_slot(lane.bristle, lane.vertex)] = group_anchors[lane.strand][lane.vertex];
         if lane.vertex == 0u {
             normal_forces[lane.bristle] = force;
             hair_loads[lane.bristle] = FLAT_HAIR_LOAD;

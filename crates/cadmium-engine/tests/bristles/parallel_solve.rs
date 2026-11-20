@@ -30,6 +30,8 @@ fn on_ridges(gpu: &GpuContext, reference: bool) -> PaintSession {
         .collect();
     s.canvas.write_f32(gpu, StateTexture::DryHeight, &heights);
     s.engine.use_reference_bristle_solve(reference);
+    // The grouped solve has no plastic creep yet.
+    s.brush.hair.bend_memory = 0.0;
     s
 }
 
@@ -44,6 +46,22 @@ fn assert_same_vertices(bristle: usize, serial: &[[f32; 3]], parallel: &[[f32; 3
     }
 }
 
+fn assert_same_anchors(bristle: usize, serial: &[[f32; 4]], parallel: &[[f32; 4]]) {
+    for (vertex, (x, y)) in serial.iter().zip(parallel).enumerate() {
+        assert_eq!(
+            x[3].signum(),
+            y[3].signum(),
+            "bristle {bristle} vertex {vertex}: modes {x:?} {y:?}"
+        );
+        for axis in 0..3 {
+            assert!(
+                (x[axis] - y[axis]).abs() <= POSITION_TOLERANCE_PX,
+                "bristle {bristle} vertex {vertex}: anchors {x:?} {y:?}"
+            );
+        }
+    }
+}
+
 fn assert_same_strands(reference: &BristleSnapshot, grouped: &BristleSnapshot) {
     assert_eq!(reference.chains_px.len(), grouped.chains_px.len());
     for (bristle, (serial, parallel)) in reference
@@ -53,6 +71,9 @@ fn assert_same_strands(reference: &BristleSnapshot, grouped: &BristleSnapshot) {
         .enumerate()
     {
         assert_same_vertices(bristle, serial, parallel);
+    }
+    for (bristle, (a, b)) in reference.anchors.iter().zip(&grouped.anchors).enumerate() {
+        assert_same_anchors(bristle, a, b);
     }
     for (bristle, (a, b)) in reference
         .normal_forces_n
@@ -93,6 +114,9 @@ fn the_grouped_solve_matches_the_serial_one_over_ridges() {
         serial.normal_forces_n.iter().any(|&force| force > 0.0),
         "the stroke pressed no strand onto the ridges"
     );
+    let modes: Vec<f32> = serial.anchors.iter().flatten().map(|a| a[3]).collect();
+    assert!(modes.iter().any(|&w| w > 0.0), "no contact stuck");
+    assert!(modes.iter().any(|&w| w < 0.0), "no contact slid");
     assert_same_strands(&serial, &parallel);
 }
 
