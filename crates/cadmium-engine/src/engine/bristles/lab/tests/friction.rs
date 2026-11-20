@@ -1,13 +1,13 @@
 use super::*;
 
-const STATIC_MU: f32 = 0.5;
+pub(super) const STATIC_MU: f32 = 0.5;
 const KINETIC_MU: f32 = 0.3;
 const SLANT_DEGREES: f32 = 45.0;
 const PRESS_PX: f32 = 1.0;
 const PRESS_STEPS: u32 = 10;
 const SMALL_DRAG_PX: f32 = 0.1;
 const LONG_DRAG_PX: f32 = 3.0;
-const DRAG_STEPS: u32 = 30;
+pub(super) const DRAG_STEPS: u32 = 30;
 /// A held vertex creeps by the contact's shear compliance, about `TANGENT_RIDGE_SHARE` of
 /// the drive; the creep piles up on one anchor over a drag and was measured under 2e-3 px.
 const HELD_PX: f32 = 0.05 * SMALL_DRAG_PX;
@@ -20,7 +20,7 @@ const CONE_SLACK: f32 = 1e-3;
 const LET_GO_RESOLUTION: f32 = 10.0 * COEFFICIENT_TOLERANCE;
 /// Raised this far after the press, the tip leaves the canvas.
 const LIFT_PX: f32 = 2.0 * PRESS_PX;
-const SETTLE_STEPS: u32 = 5;
+pub(super) const SETTLE_STEPS: u32 = 5;
 /// Axial drags of a deep press: the upper of two held vertices slides, the lower holds.
 const AXIAL_DRAGS_PX: [f32; 3] = [0.02, 0.05, -0.02];
 const THRESHOLD_RUNS: usize = 60;
@@ -29,7 +29,7 @@ const ANISOTROPY: f32 = 0.5;
 const DEEP_PRESS_PX: f32 = 15.0;
 const DEEP_PRESS_STEPS: u32 = 30;
 const SAME_PATH_PX: f32 = 0.05;
-const TIP: usize = BRISTLE_VERTICES - 1;
+pub(super) const TIP: usize = BRISTLE_VERTICES - 1;
 /// Hold tests drag sideways, where bending holds the tip; along the strand (x) it is
 /// inextensible, so even a small axial drag crosses the cone and slides it at once.
 const SIDEWAYS: [f32; 2] = [0.0, 1.0];
@@ -55,7 +55,7 @@ fn rest_tip_z(clamp: [f32; 3]) -> f32 {
 }
 
 /// A curled strand slanted toward +x, its tip resting on the floor, then pressed.
-fn slanted(press_px: f32, steps: u32) -> LabStrand {
+pub(super) fn slanted(press_px: f32, steps: u32) -> LabStrand {
     let clamp = tilted(SLANT_DEGREES);
     strand(clamp, AT_ORIGIN)
         .with_curl(REST_CURL)
@@ -72,11 +72,11 @@ fn length3(v: [f32; 3]) -> f32 {
     (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
 }
 
-fn tip_ratio(run: &LabRun) -> f32 {
+pub(super) fn tip_ratio(run: &LabRun) -> f32 {
     length3(run.friction_n[TIP]) / run.vertex_forces_n[TIP]
 }
 
-fn sideways(px: f32) -> [f32; 2] {
+pub(super) fn sideways(px: f32) -> [f32; 2] {
     [SIDEWAYS[0] * px, SIDEWAYS[1] * px]
 }
 
