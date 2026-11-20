@@ -3,10 +3,14 @@
 
 // mirrors row_direction, once per row and iteration
 fn place_directions(strand: u32, vertex: u32) {
-    let first = normal_row(vertex);
-    for (var row = first; row < first + ROW_KINDS; row++) {
-        group_directions[strand][row] = row_direction(group_chain[strand], group_normals[strand], row);
-    }
+    let row = normal_row(vertex);
+    let normal = group_normals[strand][vertex];
+    let toward_root = tangential(group_chain[strand][vertex - 1u] - group_chain[strand][vertex], normal);
+    let size = length(toward_root);
+    let first = select(perpendicular(normal), toward_root / size, size > MIN_SEGMENT_SPAN_PX);
+    group_directions[strand][row] = normal;
+    group_directions[strand][row + 1u] = first;
+    group_directions[strand][row + 2u] = cross(normal, first);
 }
 
 // mirrors gaps_after
