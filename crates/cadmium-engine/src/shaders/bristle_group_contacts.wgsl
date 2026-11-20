@@ -52,12 +52,28 @@ fn group_compliance(strand: u32, row: u32, column: u32) -> f32 {
     return rise;
 }
 
-// mirrors cholesky_solved's entries: every column left of the vertex's rows
-fn place_matrix_rows(strand: u32, vertex: u32) {
+// Whether the rounds can engage `row`: a liftable normal, or a tangent of a contact that
+// opened held. With `engaged_only`, whether it is engaged now.
+fn reachable_row(strand: u32, row: u32, engaged_only: bool) -> bool {
+    if engaged_only {
+        return group_engaged[strand][row] != 0u;
+    }
+    if row % ROW_KINDS == 0u {
+        return group_diagonal[strand][row] > group_ridge[strand];
+    }
+    return group_engaged[strand][normal_row(row_vertex(row)) + 2u] != 0u;
+}
+
+// mirrors cholesky_solved's entries: every column left of the vertex's rows the solve can read
+fn place_matrix_rows(strand: u32, vertex: u32, engaged_only: bool) {
     let first = normal_row(vertex);
     for (var row = first; row < first + ROW_KINDS; row++) {
-        for (var column = 0u; column < row; column++) {
-            group_matrix[strand][row][column] = group_compliance(strand, row, column);
+        if reachable_row(strand, row, engaged_only) {
+            for (var column = 0u; column < row; column++) {
+                if reachable_row(strand, column, engaged_only) {
+                    group_matrix[strand][row][column] = group_compliance(strand, row, column);
+                }
+            }
         }
     }
 }

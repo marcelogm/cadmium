@@ -207,7 +207,7 @@ fn solve_step(lane: Lane, shape: StrandShape, lifting: bool) -> Stepped {
     }
     workgroupBarrier();
     if owns_hinge(lane) && group_solving[s] != 0u {
-        place_matrix_rows(s, lane.vertex + 1u);
+        place_matrix_rows(s, lane.vertex + 1u, false);
     }
     workgroupBarrier();
     settle_contacts(lane, free, friction);

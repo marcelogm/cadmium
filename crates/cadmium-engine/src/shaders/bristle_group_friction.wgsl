@@ -182,7 +182,7 @@ fn held_back_position(lane: Lane, at: vec3<f32>, shape: StrandShape) -> vec3<f32
         group_ridge[s] = group_ridge_of(s);
     }
     if holding && lane.vertex < BRISTLE_SEGMENTS {
-        place_matrix_rows(s, lane.vertex + 1u);
+        place_matrix_rows(s, lane.vertex + 1u, true);
     }
     workgroupBarrier();
     share_active_forces(lane, holding);
