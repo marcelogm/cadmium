@@ -88,7 +88,10 @@ impl BristleRig {
     }
 
     pub(crate) fn wear(&mut self, hair: HairSpec) {
-        self.hair = hair;
+        if hair != self.hair {
+            self.hair = hair;
+            self.reset();
+        }
     }
 
     /// The step's tuning for the worn hair on the current layout.
